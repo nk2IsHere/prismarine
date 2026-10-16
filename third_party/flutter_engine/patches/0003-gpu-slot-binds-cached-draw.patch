@@ -1,0 +1,365 @@
+From bc0f40fa7392343ee144810ef9a1c2e62ebee508 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 17 Oct 2026 01:31:34 +0200
+Subject: [PATCH 3/3] flutter_gpu: binds by a resolved slot index and a draw
+ that never blocks, both leaf-callable (mcsm perf E3)
+
+---
+ engine/src/flutter/lib/gpu/render_pass.cc | 104 +++++++++++++++++++---
+ engine/src/flutter/lib/gpu/render_pass.h  |  36 ++++++++
+ engine/src/flutter/lib/gpu/shader.cc      |  54 +++++++++++
+ engine/src/flutter/lib/gpu/shader.h       |  38 ++++++++
+ 4 files changed, 219 insertions(+), 13 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 9c80e0ff4e9..6a63d2b505a 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -243,6 +243,24 @@ RenderPass::GetCachedPipeline() {
+   return pipeline;
+ }
+ 
++bool RenderPass::HasCachedPipeline() {
++  if (last_pipeline_ && render_pipeline_.get() == last_render_pipeline_ &&
++      pipeline_state_version_ == last_pipeline_state_version_) {
++    return true;
++  }
++  if (!render_pipeline_) {
++    return false;
++  }
++  PipelineStateKey key = MakePipelineStateKey();
++  for (const auto& entry : pipeline_cache_) {
++    if (entry.render_pipeline.get() == render_pipeline_.get() &&
++        entry.key == key) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ bool RenderPass::SendBuffer(impeller::ShaderStage stage,
+                             size_t index,
+                             const void* writer,
+@@ -555,16 +573,13 @@ void InternalFlutterGpu_RenderPass_BindIndexBufferDevice(
+                   length_in_bytes, index_type);
+ }
+ 
+-static bool BindUniform(
++static bool BindUniformStruct(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+-    Dart_Handle uniform_name_handle,
++    const flutter::gpu::Shader::UniformBinding* uniform_struct,
+     const std::shared_ptr<const impeller::DeviceBuffer>& buffer,
+     int offset_in_bytes,
+     int length_in_bytes) {
+-  auto uniform_name = tonic::StdStringFromDart(uniform_name_handle);
+-  const flutter::gpu::Shader::UniformBinding* uniform_struct =
+-      shader->GetUniformStruct(uniform_name);
+   // TODO(bdero): Return an error string stating that no uniform struct with
+   //              this name exists and throw an exception.
+   if (!uniform_struct) {
+@@ -609,15 +624,30 @@ bool InternalFlutterGpu_RenderPass_BindUniformDevice(
+     flutter::gpu::DeviceBuffer* device_buffer,
+     int offset_in_bytes,
+     int length_in_bytes) {
+-  return BindUniform(wrapper, shader, uniform_name_handle,
+-                     device_buffer->GetBuffer(), offset_in_bytes,
+-                     length_in_bytes);
++  auto uniform_name = tonic::StdStringFromDart(uniform_name_handle);
++  return BindUniformStruct(wrapper, shader,
++                           shader->GetUniformStruct(uniform_name),
++                           device_buffer->GetBuffer(), offset_in_bytes,
++                           length_in_bytes);
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_BindTexture(
++bool InternalFlutterGpu_RenderPass_BindUniformIndexed(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+-    Dart_Handle uniform_name_handle,
++    int uniform_index,
++    flutter::gpu::DeviceBuffer* device_buffer,
++    int offset_in_bytes,
++    int length_in_bytes) {
++  return BindUniformStruct(wrapper, shader,
++                           shader->GetResolvedUniformStruct(uniform_index),
++                           device_buffer->GetBuffer(), offset_in_bytes,
++                           length_in_bytes);
++}
++
++static bool BindTextureBinding(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    const flutter::gpu::Shader::TextureBinding* texture_binding,
+     flutter::gpu::Texture* texture,
+     int min_filter,
+     int mag_filter,
+@@ -625,9 +655,6 @@ bool InternalFlutterGpu_RenderPass_BindTexture(
+     int width_address_mode,
+     int height_address_mode,
+     int max_anisotropy) {
+-  auto uniform_name = tonic::StdStringFromDart(uniform_name_handle);
+-  const flutter::gpu::Shader::TextureBinding* texture_binding =
+-      shader->GetUniformTexture(uniform_name);
+   // TODO(bdero): Return an error string stating that no uniform texture with
+   //              this name exists and throw an exception.
+   if (!texture_binding) {
+@@ -676,6 +703,43 @@ bool InternalFlutterGpu_RenderPass_BindTexture(
+   return true;
+ }
+ 
++bool InternalFlutterGpu_RenderPass_BindTexture(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    Dart_Handle uniform_name_handle,
++    flutter::gpu::Texture* texture,
++    int min_filter,
++    int mag_filter,
++    int mip_filter,
++    int width_address_mode,
++    int height_address_mode,
++    int max_anisotropy) {
++  auto uniform_name = tonic::StdStringFromDart(uniform_name_handle);
++  return BindTextureBinding(wrapper, shader,
++                            shader->GetUniformTexture(uniform_name), texture,
++                            min_filter, mag_filter, mip_filter,
++                            width_address_mode, height_address_mode,
++                            max_anisotropy);
++}
++
++bool InternalFlutterGpu_RenderPass_BindTextureIndexed(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int texture_index,
++    flutter::gpu::Texture* texture,
++    int min_filter,
++    int mag_filter,
++    int mip_filter,
++    int width_address_mode,
++    int height_address_mode,
++    int max_anisotropy) {
++  return BindTextureBinding(wrapper, shader,
++                            shader->GetResolvedUniformTexture(texture_index),
++                            texture, min_filter, mag_filter, mip_filter,
++                            width_address_mode, height_address_mode,
++                            max_anisotropy);
++}
++
+ void InternalFlutterGpu_RenderPass_ClearBindings(
+     flutter::gpu::RenderPass* wrapper) {
+   wrapper->ClearBindings();
+@@ -845,6 +909,20 @@ bool InternalFlutterGpu_RenderPass_Draw(flutter::gpu::RenderPass* wrapper,
+          wrapper->Draw(vertex_count, instance_count, /*indexed=*/false);
+ }
+ 
++int InternalFlutterGpu_RenderPass_DrawCached(
++    flutter::gpu::RenderPass* wrapper,
++    int element_count,
++    int instance_count,
++    bool indexed) {
++  if (element_count < 0 || instance_count < 0) {
++    return 0;
++  }
++  if (!wrapper->HasCachedPipeline()) {
++    return 2;
++  }
++  return wrapper->Draw(element_count, instance_count, indexed) ? 1 : 0;
++}
++
+ bool InternalFlutterGpu_RenderPass_DrawIndexed(
+     flutter::gpu::RenderPass* wrapper,
+     int index_count,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 84a496d8d42..a905b20bada 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -110,6 +110,10 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   /// depth, stencil, cull, winding, primitive, polygon mode).
+   void MarkPipelineStateChanged() { ++pipeline_state_version_; }
+ 
++  /// mcsm E3: whether a draw now would find its pipeline in this pass's
++  /// cache (so it can't block on a pipeline compile).
++  bool HasCachedPipeline();
++
+  private:
+   // mcsm E1: the pipeline state that, with the RenderPipeline and this
+   // pass's render target, decides the Impeller pipeline.
+@@ -272,6 +276,38 @@ extern bool InternalFlutterGpu_RenderPass_BindUniformDevice(
+     int offset_in_bytes,
+     int length_in_bytes);
+ 
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_BindUniformIndexed(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int uniform_index,
++    flutter::gpu::DeviceBuffer* device_buffer,
++    int offset_in_bytes,
++    int length_in_bytes);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_BindTextureIndexed(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int texture_index,
++    flutter::gpu::Texture* texture,
++    int min_filter,
++    int mag_filter,
++    int mip_filter,
++    int width_address_mode,
++    int height_address_mode,
++    int max_anisotropy);
++
++/// mcsm E3: draws only when the pipeline is already cached on this pass
++/// (never blocks): 1 drawn, 0 failed, 2 not cached (nothing done; use
++/// Draw/DrawIndexed).
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_RenderPass_DrawCached(
++    flutter::gpu::RenderPass* wrapper,
++    int element_count,
++    int instance_count,
++    bool indexed);
++
+ FLUTTER_GPU_EXPORT
+ extern bool InternalFlutterGpu_RenderPass_BindTexture(
+     flutter::gpu::RenderPass* wrapper,
+diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
+index 31c94704040..561303439ff 100644
+--- a/engine/src/flutter/lib/gpu/shader.cc
++++ b/engine/src/flutter/lib/gpu/shader.cc
+@@ -110,6 +110,7 @@ void Shader::ResetFrom(Shader& other) {
+   uniform_structs_ = std::move(other.uniform_structs_);
+   uniform_textures_ = std::move(other.uniform_textures_);
+   descriptor_set_layouts_ = std::move(other.descriptor_set_layouts_);
++  ReresolveUniforms();
+   if (code_changed) {
+     is_dirty_ = true;
+   }
+@@ -191,6 +192,45 @@ const Shader::TextureBinding* Shader::GetUniformTexture(
+   return &uniform->second;
+ }
+ 
++int Shader::ResolveUniformStruct(const std::string& name) {
++  for (size_t i = 0; i < resolved_struct_names_.size(); i++) {
++    if (resolved_struct_names_[i] == name) {
++      return resolved_structs_[i] ? static_cast<int>(i) : -1;
++    }
++  }
++  const UniformBinding* binding = GetUniformStruct(name);
++  if (!binding) {
++    return -1;
++  }
++  resolved_struct_names_.push_back(name);
++  resolved_structs_.push_back(binding);
++  return static_cast<int>(resolved_structs_.size() - 1);
++}
++
++int Shader::ResolveUniformTexture(const std::string& name) {
++  for (size_t i = 0; i < resolved_texture_names_.size(); i++) {
++    if (resolved_texture_names_[i] == name) {
++      return resolved_textures_[i] ? static_cast<int>(i) : -1;
++    }
++  }
++  const TextureBinding* binding = GetUniformTexture(name);
++  if (!binding) {
++    return -1;
++  }
++  resolved_texture_names_.push_back(name);
++  resolved_textures_.push_back(binding);
++  return static_cast<int>(resolved_textures_.size() - 1);
++}
++
++void Shader::ReresolveUniforms() {
++  for (size_t i = 0; i < resolved_struct_names_.size(); i++) {
++    resolved_structs_[i] = GetUniformStruct(resolved_struct_names_[i]);
++  }
++  for (size_t i = 0; i < resolved_texture_names_.size(); i++) {
++    resolved_textures_[i] = GetUniformTexture(resolved_texture_names_[i]);
++  }
++}
++
+ }  // namespace gpu
+ }  // namespace flutter
+ 
+@@ -210,6 +250,20 @@ int InternalFlutterGpu_Shader_GetUniformStructSize(
+   return uniform->size_in_bytes;
+ }
+ 
++int InternalFlutterGpu_Shader_ResolveUniformStruct(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle struct_name_handle) {
++  return wrapper->ResolveUniformStruct(
++      tonic::StdStringFromDart(struct_name_handle));
++}
++
++int InternalFlutterGpu_Shader_ResolveUniformTexture(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle texture_name_handle) {
++  return wrapper->ResolveUniformTexture(
++      tonic::StdStringFromDart(texture_name_handle));
++}
++
+ int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle struct_name_handle,
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index feae2821a8c..93a59bb9681 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -90,7 +90,35 @@ class Shader : public RefCountedDartWrappable<Shader> {
+   const Shader::TextureBinding* GetUniformTexture(
+       const std::string& name) const;
+ 
++  /// mcsm E3: a small index for a uniform struct (or texture) name, stable
++  /// for this shader's life (a reload re-resolves the names), or -1 when the
++  /// shader has no such uniform. Binds can then pass the index instead of
++  /// the name.
++  int ResolveUniformStruct(const std::string& name);
++  int ResolveUniformTexture(const std::string& name);
++
++  /// The binding for a resolved index; null for an unknown index or a name
++  /// a reload removed.
++  const UniformBinding* GetResolvedUniformStruct(int index) const {
++    return index >= 0 && static_cast<size_t>(index) < resolved_structs_.size()
++               ? resolved_structs_[index]
++               : nullptr;
++  }
++  const TextureBinding* GetResolvedUniformTexture(int index) const {
++    return index >= 0 &&
++                   static_cast<size_t>(index) < resolved_textures_.size()
++               ? resolved_textures_[index]
++               : nullptr;
++  }
++
+  private:
++  void ReresolveUniforms();
++
++  std::vector<std::string> resolved_struct_names_;
++  std::vector<const UniformBinding*> resolved_structs_;
++  std::vector<std::string> resolved_texture_names_;
++  std::vector<const TextureBinding*> resolved_textures_;
++
+   Shader();
+ 
+   // Stable per-source identifier used to namespace this shader's entrypoint
+@@ -129,6 +157,16 @@ extern int InternalFlutterGpu_Shader_GetUniformStructSize(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle struct_name_handle);
+ 
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_ResolveUniformStruct(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle struct_name_handle);
++
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_ResolveUniformTexture(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle texture_name_handle);
++
+ FLUTTER_GPU_EXPORT
+ extern int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+     flutter::gpu::Shader* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+

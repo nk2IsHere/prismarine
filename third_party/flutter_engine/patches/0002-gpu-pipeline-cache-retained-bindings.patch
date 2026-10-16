@@ -1,0 +1,505 @@
+From ccc019021786d4a4277eae50e15241e0f0f1642f Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 17 Oct 2026 01:28:41 +0200
+Subject: [PATCH 2/3] flutter_gpu: pipeline cached per pass and state; on
+ Metal, bindings by metadata pointer and only changed ones sent (mcsm perf
+ E1+E2)
+
+---
+ engine/src/flutter/lib/gpu/render_pass.cc | 225 +++++++++++++++++++---
+ engine/src/flutter/lib/gpu/render_pass.h  |  80 +++++++-
+ 2 files changed, 274 insertions(+), 31 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 3f2ec0152d4..9c80e0ff4e9 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -21,6 +21,7 @@
+ #include "impeller/renderer/pipeline.h"
+ #include "impeller/renderer/pipeline_descriptor.h"
+ #include "impeller/renderer/pipeline_library.h"
++#include "impeller/renderer/vertex_descriptor.h"
+ #include "lib/gpu/context.h"
+ #include "lib/ui/ui_dart_state.h"
+ #include "tonic/converter/dart_converter.h"
+@@ -81,6 +82,12 @@ bool RenderPass::Begin(flutter::gpu::CommandBuffer& command_buffer) {
+     return false;
+   }
+   command_buffer.AddRenderPass(render_pass_);
++  // mcsm E2: Metal's encoder keeps buffers, textures and samplers bound
++  // between draws (RenderPassMTL binds straight into it through
++  // PassBindingsCacheMTL and ignores binding metadata), so a draw only needs
++  // to send what changed. The other backends record each command's bindings.
++  retained_bindings_ = GetContext()->GetBackendType() ==
++                       impeller::Context::BackendType::kMetal;
+   return true;
+ }
+ 
+@@ -98,6 +105,7 @@ void RenderPass::ClearBindings() {
+   for (auto& buffer : vertex_buffers) {
+     buffer = {};
+   }
++  vertex_buffer_dirty.fill(true);
+   vertex_buffer_count = 0;
+   index_buffer = {};
+   index_buffer_type = impeller::IndexType::kNone;
+@@ -183,6 +191,92 @@ RenderPass::GetOrCreatePipeline() {
+   return pipeline;
+ }
+ 
++RenderPass::PipelineStateKey RenderPass::MakePipelineStateKey() const {
++  return PipelineStateKey{
++      .cull_mode = pipeline_descriptor_.GetCullMode(),
++      .winding_order = pipeline_descriptor_.GetWindingOrder(),
++      .primitive_type = pipeline_descriptor_.GetPrimitiveType(),
++      .polygon_mode = pipeline_descriptor_.GetPolygonMode(),
++      .color = color_descriptors_,
++      .depth = depth_desc_,
++      .stencil_front = stencil_front_desc_,
++      .stencil_back = stencil_back_desc_,
++  };
++}
++
++std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
++RenderPass::GetCachedPipeline() {
++  // Fast path: the same RenderPipeline and no state change since the last
++  // draw. Everything else that goes into the descriptor (the render target's
++  // sample count and formats) is fixed for the life of this pass.
++  if (last_pipeline_ && render_pipeline_.get() == last_render_pipeline_ &&
++      pipeline_state_version_ == last_pipeline_state_version_) {
++    return last_pipeline_;
++  }
++  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>> pipeline;
++  {
++    PipelineStateKey key = MakePipelineStateKey();
++    for (const auto& entry : pipeline_cache_) {
++      if (entry.render_pipeline.get() == render_pipeline_.get() &&
++          entry.key == key) {
++        pipeline = entry.pipeline;
++        break;
++      }
++    }
++  }
++  if (!pipeline) {
++    pipeline = GetOrCreatePipeline();
++    if (!pipeline) {
++      return pipeline;
++    }
++    // GetOrCreatePipeline fills in the colour attachments' formats, so the
++    // key is taken after it.
++    pipeline_cache_.push_back(CachedPipeline{
++        .render_pipeline = render_pipeline_,
++        .key = MakePipelineStateKey(),
++        .pipeline = pipeline,
++    });
++  }
++  last_render_pipeline_ = render_pipeline_.get();
++  last_pipeline_state_version_ = pipeline_state_version_;
++  last_pipeline_ = pipeline;
++  return pipeline;
++}
++
++bool RenderPass::SendBuffer(impeller::ShaderStage stage,
++                            size_t index,
++                            const void* writer,
++                            bool dirty) {
++  if (index >= kTrackedIndices) {
++    return true;
++  }
++  IndexWriters& writers = stage == impeller::ShaderStage::kVertex
++                              ? vertex_buffer_writers_
++                              : fragment_buffer_writers_;
++  if (!dirty && writers[index] == writer) {
++    return false;
++  }
++  writers[index] = writer;
++  return true;
++}
++
++bool RenderPass::SendTexture(impeller::ShaderStage stage,
++                             size_t index,
++                             const void* writer,
++                             bool dirty) {
++  if (index >= kTrackedIndices) {
++    return true;
++  }
++  IndexWriters& writers = stage == impeller::ShaderStage::kVertex
++                              ? vertex_texture_writers_
++                              : fragment_texture_writers_;
++  if (!dirty && writers[index] == writer) {
++    return false;
++  }
++  writers[index] = writer;
++  return true;
++}
++
+ bool RenderPass::Draw(size_t element_count,
+                       size_t instance_count,
+                       bool indexed) {
+@@ -195,8 +289,83 @@ bool RenderPass::Draw(size_t element_count,
+     return false;
+   }
+ 
+-  render_pass_->SetPipeline(impeller::PipelineRef(GetOrCreatePipeline()));
++  render_pass_->SetPipeline(impeller::PipelineRef(GetCachedPipeline()));
++
++  if (retained_bindings_) {
++    // mcsm E2: the reflected metadata by pointer (the shader owns it and
++    // RenderPassMTL doesn't read it), and only bindings the encoder doesn't
++    // already hold from this same entry.
++    auto send_buffers = [&](impeller::ShaderStage stage,
++                            BufferUniformMap& map) {
++      for (auto& [key, buffer] : map) {
++        if (SendBuffer(stage, buffer.slot.ext_res_0, key, buffer.dirty)) {
++          render_pass_->BindResource(
++              stage, impeller::DescriptorType::kUniformBuffer, buffer.slot,
++              buffer.view.GetMetadata(), buffer.view.resource);
++        }
++        buffer.dirty = false;
++      }
++    };
++    auto send_textures = [&](impeller::ShaderStage stage,
++                             TextureUniformMap& map) {
++      for (auto& [key, entry] : map) {
++        const auto& texture = entry.binding;
++        if (SendTexture(stage, texture.slot.texture_index, key, entry.dirty)) {
++          render_pass_->BindResource(
++              stage, impeller::DescriptorType::kSampledImage, texture.slot,
++              texture.texture.GetMetadata(), texture.texture.resource,
++              texture.sampler);
++        }
++        entry.dirty = false;
++      }
++    };
++    send_buffers(impeller::ShaderStage::kVertex, vertex_uniform_bindings);
++    send_textures(impeller::ShaderStage::kVertex, vertex_texture_bindings);
++    send_buffers(impeller::ShaderStage::kFragment, fragment_uniform_bindings);
++    send_textures(impeller::ShaderStage::kFragment,
++                  fragment_texture_bindings);
++    bool send_vertex_buffers = false;
++    for (size_t i = 0; i < vertex_buffer_count; i++) {
++      // RenderPassMTL binds vertex buffer i at buffer index
++      // kReservedVertexBufferIndex - i of the vertex stage.
++      send_vertex_buffers |= SendBuffer(
++          impeller::ShaderStage::kVertex,
++          impeller::VertexDescriptor::kReservedVertexBufferIndex - i,
++          &vertex_buffers[i], vertex_buffer_dirty[i]);
++      vertex_buffer_dirty[i] = false;
++    }
++    if (send_vertex_buffers) {
++      render_pass_->SetVertexBuffer(vertex_buffers.data(),
++                                    vertex_buffer_count);
++    }
++  } else {
++    SendAllBindings();
++  }
++  if (indexed) {
++    render_pass_->SetIndexBuffer(index_buffer, index_buffer_type);
++  } else {
++    render_pass_->SetIndexBuffer(impeller::BufferView{},
++                                 impeller::IndexType::kNone);
++  }
++  render_pass_->SetElementCount(element_count);
++  render_pass_->SetInstanceCount(instance_count);
++
++  render_pass_->SetStencilReference(stencil_reference);
++
++  if (viewport.has_value()) {
++    render_pass_->SetViewport(viewport.value());
++  }
+ 
++  if (scissor.has_value()) {
++    render_pass_->SetScissor(scissor.value());
++  }
++
++  bool result = render_pass_->Draw().ok();
++
++  return result;
++}
++
++void RenderPass::SendAllBindings() {
+   for (const auto& [_, buffer] : vertex_uniform_bindings) {
+     render_pass_->BindDynamicResource(
+         impeller::ShaderStage::kVertex,
+@@ -204,7 +373,8 @@ bool RenderPass::Draw(size_t element_count,
+         std::make_unique<impeller::ShaderMetadata>(*buffer.view.GetMetadata()),
+         buffer.view.resource);
+   }
+-  for (const auto& [_, texture] : vertex_texture_bindings) {
++  for (const auto& [_, entry] : vertex_texture_bindings) {
++    const auto& texture = entry.binding;
+     render_pass_->BindDynamicResource(
+         impeller::ShaderStage::kVertex, impeller::DescriptorType::kSampledImage,
+         texture.slot,
+@@ -219,7 +389,8 @@ bool RenderPass::Draw(size_t element_count,
+         std::make_unique<impeller::ShaderMetadata>(*buffer.view.GetMetadata()),
+         buffer.view.resource);
+   }
+-  for (const auto& [_, texture] : fragment_texture_bindings) {
++  for (const auto& [_, entry] : fragment_texture_bindings) {
++    const auto& texture = entry.binding;
+     render_pass_->BindDynamicResource(
+         impeller::ShaderStage::kFragment,
+         impeller::DescriptorType::kSampledImage, texture.slot,
+@@ -229,28 +400,6 @@ bool RenderPass::Draw(size_t element_count,
+   }
+ 
+   render_pass_->SetVertexBuffer(vertex_buffers.data(), vertex_buffer_count);
+-  if (indexed) {
+-    render_pass_->SetIndexBuffer(index_buffer, index_buffer_type);
+-  } else {
+-    render_pass_->SetIndexBuffer(impeller::BufferView{},
+-                                 impeller::IndexType::kNone);
+-  }
+-  render_pass_->SetElementCount(element_count);
+-  render_pass_->SetInstanceCount(instance_count);
+-
+-  render_pass_->SetStencilReference(stencil_reference);
+-
+-  if (viewport.has_value()) {
+-    render_pass_->SetViewport(viewport.value());
+-  }
+-
+-  if (scissor.has_value()) {
+-    render_pass_->SetScissor(scissor.value());
+-  }
+-
+-  bool result = render_pass_->Draw().ok();
+-
+-  return result;
+ }
+ 
+ }  // namespace gpu
+@@ -369,6 +518,7 @@ static void BindVertexBuffer(
+   }
+   wrapper->vertex_buffers[slot] = impeller::BufferView(
+       buffer, impeller::Range(offset_in_bytes, length_in_bytes));
++  wrapper->vertex_buffer_dirty[slot] = true;
+   if (static_cast<size_t>(slot) >= wrapper->vertex_buffer_count) {
+     wrapper->vertex_buffer_count = static_cast<size_t>(slot) + 1;
+   }
+@@ -447,7 +597,8 @@ static bool BindUniform(
+               &uniform_struct->metadata,
+               impeller::BufferView(
+                   buffer, impeller::Range(offset_in_bytes, length_in_bytes)),
+-          }});
++          },
++          .dirty = true});
+   return true;
+ }
+ 
+@@ -512,10 +663,15 @@ bool InternalFlutterGpu_RenderPass_BindTexture(
+   }
+   uniform_map->insert_or_assign(
+       texture_binding,
+-      impeller::TextureAndSampler{
+-          .slot = texture_binding->slot,
+-          .texture = {&texture_binding->metadata, texture->GetTexture()},
+-          .sampler = sampler,
++      flutter::gpu::RenderPass::TextureBindingEntry{
++          .binding =
++              impeller::TextureAndSampler{
++                  .slot = texture_binding->slot,
++                  .texture = {&texture_binding->metadata,
++                              texture->GetTexture()},
++                  .sampler = sampler,
++              },
++          .dirty = true,
+       });
+   return true;
+ }
+@@ -529,6 +685,7 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEnable(
+     flutter::gpu::RenderPass* wrapper,
+     int color_attachment_index,
+     bool enable) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
+   color.blending_enabled = enable;
+ }
+@@ -542,6 +699,7 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+     int alpha_blend_operation,
+     int source_alpha_blend_factor,
+     int destination_alpha_blend_factor) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
+   color.color_blend_op =
+       flutter::gpu::ToImpellerBlendOperation(color_blend_operation);
+@@ -560,6 +718,7 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+ void InternalFlutterGpu_RenderPass_SetDepthWriteEnable(
+     flutter::gpu::RenderPass* wrapper,
+     bool enable) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& depth = wrapper->GetDepthAttachmentDescriptor();
+   depth.depth_write_enabled = enable;
+ }
+@@ -567,6 +726,7 @@ void InternalFlutterGpu_RenderPass_SetDepthWriteEnable(
+ void InternalFlutterGpu_RenderPass_SetDepthCompareOperation(
+     flutter::gpu::RenderPass* wrapper,
+     int compare_operation) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& depth = wrapper->GetDepthAttachmentDescriptor();
+   depth.depth_compare =
+       flutter::gpu::ToImpellerCompareFunction(compare_operation);
+@@ -616,6 +776,7 @@ void InternalFlutterGpu_RenderPass_SetStencilConfig(
+     int read_mask,
+     int write_mask,
+     int target_face) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::StencilAttachmentDescriptor desc;
+   desc.stencil_compare =
+       flutter::gpu::ToImpellerCompareFunction(stencil_compare_operation);
+@@ -640,6 +801,7 @@ void InternalFlutterGpu_RenderPass_SetStencilConfig(
+ void InternalFlutterGpu_RenderPass_SetCullMode(
+     flutter::gpu::RenderPass* wrapper,
+     int cull_mode) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+   pipeline_descriptor.SetCullMode(flutter::gpu::ToImpellerCullMode(cull_mode));
+@@ -648,6 +810,7 @@ void InternalFlutterGpu_RenderPass_SetCullMode(
+ void InternalFlutterGpu_RenderPass_SetPrimitiveType(
+     flutter::gpu::RenderPass* wrapper,
+     int primitive_type) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+   pipeline_descriptor.SetPrimitiveType(
+@@ -657,6 +820,7 @@ void InternalFlutterGpu_RenderPass_SetPrimitiveType(
+ void InternalFlutterGpu_RenderPass_SetWindingOrder(
+     flutter::gpu::RenderPass* wrapper,
+     int winding_order) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+   pipeline_descriptor.SetWindingOrder(
+@@ -666,6 +830,7 @@ void InternalFlutterGpu_RenderPass_SetWindingOrder(
+ void InternalFlutterGpu_RenderPass_SetPolygonMode(
+     flutter::gpu::RenderPass* wrapper,
+     int polygon_mode) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+   pipeline_descriptor.SetPolygonMode(
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 2a40293a0b4..84a496d8d42 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -9,6 +9,7 @@
+ #include <cstdint>
+ #include <map>
+ #include <memory>
++#include <vector>
+ #include "flutter/lib/gpu/command_buffer.h"
+ #include "flutter/lib/gpu/export.h"
+ #include "flutter/lib/ui/dart_wrapper.h"
+@@ -64,6 +65,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   struct BufferAndUniformSlot {
+     impeller::ShaderUniformSlot slot;
+     impeller::BufferResource view;
++    // mcsm E2: false once this exact binding has been sent to the encoder.
++    bool dirty = true;
++  };
++
++  // mcsm E2: a texture binding and whether it still has to be sent.
++  struct TextureBindingEntry {
++    impeller::TextureAndSampler binding;
++    bool dirty = true;
+   };
+ 
+   using BufferUniformMap =
+@@ -71,7 +80,7 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+                          BufferAndUniformSlot>;
+   using TextureUniformMap =
+       std::unordered_map<const flutter::gpu::Shader::TextureBinding*,
+-                         impeller::TextureAndSampler>;
++                         TextureBindingEntry>;
+ 
+   BufferUniformMap vertex_uniform_bindings;
+   TextureUniformMap vertex_texture_bindings;
+@@ -86,6 +95,8 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   // buffers.
+   static constexpr size_t kMaxVertexBufferSlots = 16;
+   std::array<impeller::BufferView, kMaxVertexBufferSlots> vertex_buffers;
++  // mcsm E2: per slot, false once that buffer has been sent to the encoder.
++  std::array<bool, kMaxVertexBufferSlots> vertex_buffer_dirty{};
+   // Highest slot index that has been bound on this pass (plus one).
+   size_t vertex_buffer_count = 0;
+   impeller::BufferView index_buffer;
+@@ -95,7 +106,74 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   std::optional<impeller::IRect32> scissor;
+   std::optional<impeller::Viewport> viewport;
+ 
++  /// mcsm E1: called by every export that changes pipeline state (blend,
++  /// depth, stencil, cull, winding, primitive, polygon mode).
++  void MarkPipelineStateChanged() { ++pipeline_state_version_; }
++
+  private:
++  // mcsm E1: the pipeline state that, with the RenderPipeline and this
++  // pass's render target, decides the Impeller pipeline.
++  struct PipelineStateKey {
++    impeller::CullMode cull_mode;
++    impeller::WindingOrder winding_order;
++    impeller::PrimitiveType primitive_type;
++    impeller::PolygonMode polygon_mode;
++    std::map<size_t, impeller::ColorAttachmentDescriptor> color;
++    impeller::DepthAttachmentDescriptor depth;
++    impeller::StencilAttachmentDescriptor stencil_front;
++    impeller::StencilAttachmentDescriptor stencil_back;
++
++    bool operator==(const PipelineStateKey& o) const {
++      return cull_mode == o.cull_mode && winding_order == o.winding_order &&
++             primitive_type == o.primitive_type &&
++             polygon_mode == o.polygon_mode && color == o.color &&
++             depth == o.depth && stencil_front == o.stencil_front &&
++             stencil_back == o.stencil_back;
++    }
++  };
++
++  struct CachedPipeline {
++    fml::RefPtr<RenderPipeline> render_pipeline;
++    PipelineStateKey key;
++    std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
++        pipeline;
++  };
++
++  PipelineStateKey MakePipelineStateKey() const;
++
++  /// Every binding, vertex and index buffer, each time (non-Metal backends).
++  void SendAllBindings();
++
++  /// mcsm E1: the pipeline for the bound RenderPipeline and the current
++  /// state, from this pass's cache; GetOrCreatePipeline on a miss.
++  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
++  GetCachedPipeline();
++
++  // mcsm E2: whether the encoder keeps bindings between draws (Metal), and
++  // which binding last wrote each encoder index, per stage.
++  static constexpr size_t kTrackedIndices = 32;
++  using IndexWriters = std::array<const void*, kTrackedIndices>;
++  bool SendBuffer(impeller::ShaderStage stage,
++                  size_t index,
++                  const void* writer,
++                  bool dirty);
++  bool SendTexture(impeller::ShaderStage stage,
++                   size_t index,
++                   const void* writer,
++                   bool dirty);
++  bool retained_bindings_ = false;
++  IndexWriters vertex_buffer_writers_{};
++  IndexWriters fragment_buffer_writers_{};
++  IndexWriters vertex_texture_writers_{};
++  IndexWriters fragment_texture_writers_{};
++
++  uint64_t pipeline_state_version_ = 1;
++  const RenderPipeline* last_render_pipeline_ = nullptr;
++  uint64_t last_pipeline_state_version_ = 0;
++  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
++      last_pipeline_;
++  std::vector<CachedPipeline> pipeline_cache_;
++
+   /// Lookup an Impeller pipeline by building a descriptor based on the current
+   /// command state.
+   std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+-- 
+2.54.0 (Apple Git-157)
+
