@@ -4,7 +4,7 @@ mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs
 
 **The patched engine is optional.** Everything builds and runs on Flutter's stock engine too, only slower, and the frames are byte-identical either way. The patches apply to the engine of the project's Flutter (3.47.7 stable, engine revision `deb287481e3ce9468f3434937ced4240a70539ca`). They live here as reviewable files; the downloaded or built engine is data (`$MCSM_DATA/engine`, gitignored).
 
-**Where it's useful today:** the game player (`apps/mcsm_player`) runs on macOS only for now; its Windows and Linux versions aren't built yet. On Windows and Linux the engine is for development and testing: `tools/gpu_smoke` runs on it, and so will the players once they exist.
+**Where it's useful today:** the game player (`apps/mcsm_player`) on macOS, Linux and Windows: each play script (`tool/play.sh`, `tool/linux/play.sh`, `tool/windows/play.ps1`) builds on it when it is there. `tools/gpu_smoke` runs on it too.
 
 Contents:
 - [Get the engine: download it](#download-it-a-minute)
@@ -131,7 +131,7 @@ What else to know on macOS:
 - **Universal app** (to share it): build once per engine and copy each `.app` aside, then run `apps/mcsm_player/tool/universal_app.sh <arm64.app> <x86_64.app> <out.app>`.
 - The patched and stock engines can take turns in one build dir; the Flutter tool rebuilds what changed.
 
-**Linux and Windows:** pass the flags to `flutter build`:
+**Linux and Windows:** `apps/mcsm_player/tool/linux/play.sh` and `tool/windows/play.ps1` find a fetched or built engine as `play.sh` does on macOS (`MCSM_LOCAL_ENGINE`, `MCSM_LOCAL_ENGINE_NAME`). By hand, pass the flags to `flutter build`:
 
     flutter build linux   --release --local-engine-src-path=<…>/engine/src --local-engine=host_release --local-engine-host=host_release
     flutter build windows --release --local-engine-src-path=<…>\engine\src --local-engine=host_release --local-engine-host=host_release
@@ -220,6 +220,7 @@ The workstation keeps its checkout in `/mnt/storage/mcsm/engine` (11 GB of sourc
     - A rendering check on Linux needs a different readback, or a real GPU.
   - **Windows x64** (the VM: ANGLE on WARP, the arm64 engine building alongside; stock → patched): it builds and runs on both engines. Draw 3.39 → 0.45–0.49 µs; draw + bind 5.38 → 0.48–0.59 µs. The readback is zero on both engines, as on Linux.
     - Patch 0005's cache works: the patched app wrote 73 programs (301 KB) to `%LOCALAPPDATA%\gpu_smoke\flutter_angle_cache`.
-    - The smoke's own first draw is 8 ms cold and 5 ms warm, which is too little work to show the cache's effect. The player's ~100 programs would show it, but the player has no Windows runner.
+    - The smoke's own first draw is 8 ms cold and 5 ms warm, which is too little work to show the cache's effect. The player (2026-10-17, VM, WARP) wrote 89 programs; its treehouse D1 capture took 32 s cold and 29 s warm, so in a capture the cache saves ~3 s.
+- **The player on Linux x64 and Windows x64** (2026-10-17): built on the stock and the patched engine; the treehouse D1 capture (frames, events, audio) is byte-identical between the two engines on each OS (docs/superpowers/plans/2026-10-17-players-linux-windows.md).
 - **Linux arm64 and Windows arm64:** these were only checked for building. Linux arm64's `libflutter_linux_gtk.so` is an aarch64 ELF with the patch exports, and gen_snapshot is x64-hosted. Neither ran: there is no arm64 machine, and qemu-user wasn't tried.
 
