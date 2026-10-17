@@ -1,0 +1,21 @@
+name: gpu_smoke
+description: "Flutter GPU smoke test for a (patched) engine: renders through flutter_scene's base shaders, reads the pixels back, times draws and binds, exits."
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ^3.10.0
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_gpu:
+    sdk: flutter
+  flutter_scene:
+    path: ../../third_party/flutter_scene
+  vector_math: ^2.1.4
+dependency_overrides:
+  # The vendored Dart side (third_party/flutter_gpu/PATCHES.md): uses the
+  # patched engine's slot binds when present, the stock calls otherwise.
+  flutter_gpu:
+    path: ../../third_party/flutter_gpu
+flutter:
+  uses-material-design: false
