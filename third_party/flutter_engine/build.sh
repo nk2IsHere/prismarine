@@ -5,7 +5,8 @@
 #          (~13 GB in $MCSM_DATA/engine; network, 20–40 min).
 #   patch  applies patches/*.patch on a branch `mcsm-engine` (idempotent: a
 #          fresh branch from the revision each time).
-#   build  gn + ninja for out/host_release_arm64: only the targets a release
+#   build  gn + ninja for out/host_release_arm64 (MCSM_ENGINE_CPU=x64:
+#          out/host_release, an x86_64 engine): only the targets a release
 #          `flutter build macos --local-engine` reads (~4.5 GB; ~1 h the first
 #          time on the M2 Pro, a few minutes after a lib/gpu edit).
 #   all    the three in order.
@@ -57,9 +58,12 @@ fi
 
 if [[ $step == build || $step == all ]]; then
   cd $src
-  ./flutter/tools/gn --runtime-mode=release --mac-cpu=arm64 --no-lto \
+  cpu=${MCSM_ENGINE_CPU:-arm64}
+  out=out/host_release
+  if [[ $cpu == arm64 ]]; then out=out/host_release_arm64; fi
+  ./flutter/tools/gn --runtime-mode=release --mac-cpu=$cpu --no-lto \
     --prebuilt-dart-sdk --no-enable-unittests
-  ninja -C out/host_release_arm64 -j${MCSM_ENGINE_JOBS:-6} \
+  ninja -C $out -j${MCSM_ENGINE_JOBS:-6} \
     flutter/shell/platform/darwin/macos:flutter_framework \
     flutter/lib/snapshot:create_macos_gen_snapshots \
     flutter/lib/snapshot:kernel_platform_files \
@@ -69,5 +73,9 @@ if [[ $step == build || $step == all ]]; then
     flutter/tools/const_finder
   # A release out dir's patched SDK is the product one; the Flutter tool looks
   # for it under the cache's name.
-  ln -sfn flutter_patched_sdk out/host_release_arm64/flutter_patched_sdk_product
+  ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product
+  # MCSM_ENGINE_TRIM=1: drop the object files (~2–4 GB); the next build of
+  # this out dir is then a full one.
+  [[ -n $MCSM_ENGINE_TRIM ]] && rm -rf "${src:?}/$out/obj"
+  true
 fi

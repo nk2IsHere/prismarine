@@ -1,0 +1,168 @@
+From 522282247ac767b8db0f53ce7144d0b6cf71ba7f Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 17 Oct 2026 11:53:48 +0200
+Subject: [PATCH] =?UTF-8?q?windows:=20persist=20ANGLE's=20compiled=20progr?=
+ =?UTF-8?q?ams=20(EGL=5FANDROID=5Fblob=5Fcache)=20under=20%LOCALAPPDATA%\<?=
+ =?UTF-8?q?exe>\flutter=5Fangle=5Fcache,=20so=20later=20launches=20skip=20?=
+ =?UTF-8?q?GLSL=E2=86=92HLSL=E2=86=92D3DCompile=20(mcsm=20perf=20E=20stage?=
+ =?UTF-8?q?=205,=20patch=200005)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../shell/platform/windows/egl/manager.cc     | 124 ++++++++++++++++++
+ 1 file changed, 124 insertions(+)
+
+diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/src/flutter/shell/platform/windows/egl/manager.cc
+index 64fb765bf54..c254d80c333 100644
+--- a/engine/src/flutter/shell/platform/windows/egl/manager.cc
++++ b/engine/src/flutter/shell/platform/windows/egl/manager.cc
+@@ -4,6 +4,15 @@
+ 
+ #include "flutter/shell/platform/windows/egl/manager.h"
+ 
++#include <windows.h>
++
++#include <cstdint>
++#include <cstdlib>
++#include <cstring>
++#include <filesystem>
++#include <fstream>
++#include <sstream>
++#include <string>
+ #include <vector>
+ 
+ #include "flutter/fml/logging.h"
+@@ -23,6 +32,120 @@ std::unique_ptr<Manager> Manager::Create(GpuPreference gpu_preference) {
+   return std::move(manager);
+ }
+ 
++namespace {
++
++// mcsm 0005: ANGLE's compiled programs persisted on disk (EGL_ANDROID_blob_cache).
++// Each launch otherwise translates every GLSL program to HLSL and compiles it
++// with D3DCompile again. One file per entry, named by a hash of the key, in
++// %LOCALAPPDATA%\<exe name>\flutter_angle_cache; the file holds the key, so a
++// hash collision reads as a miss. FLUTTER_ANGLE_BLOB_CACHE=0 turns it off.
++std::filesystem::path BlobCacheDir() {
++  static const std::filesystem::path dir = []() -> std::filesystem::path {
++    const wchar_t* off = _wgetenv(L"FLUTTER_ANGLE_BLOB_CACHE");
++    if (off != nullptr && std::wcscmp(off, L"0") == 0) {
++      return {};
++    }
++    const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
++    if (local == nullptr) {
++      return {};
++    }
++    wchar_t exe[MAX_PATH];
++    DWORD n = ::GetModuleFileNameW(nullptr, exe, MAX_PATH);
++    if (n == 0 || n >= MAX_PATH) {
++      return {};
++    }
++    std::filesystem::path result = std::filesystem::path(local) /
++                                   std::filesystem::path(exe).stem() /
++                                   L"flutter_angle_cache";
++    std::error_code ec;
++    std::filesystem::create_directories(result, ec);
++    return ec ? std::filesystem::path() : result;
++  }();
++  return dir;
++}
++
++std::filesystem::path BlobPath(const void* key, EGLsizeiANDROID key_size) {
++  uint64_t hash = 14695981039346656037ull;  // FNV-1a
++  const auto* bytes = static_cast<const uint8_t*>(key);
++  for (EGLsizeiANDROID i = 0; i < key_size; i++) {
++    hash = (hash ^ bytes[i]) * 1099511628211ull;
++  }
++  std::wostringstream name;
++  name << std::hex << hash << L".blob";
++  return BlobCacheDir() / name.str();
++}
++
++void SetBlob(const void* key,
++             EGLsizeiANDROID key_size,
++             const void* value,
++             EGLsizeiANDROID value_size) {
++  if (BlobCacheDir().empty() || key_size <= 0 || value_size <= 0) {
++    return;
++  }
++  const std::filesystem::path path = BlobPath(key, key_size);
++  std::filesystem::path tmp = path;
++  tmp += L"." + std::to_wstring(::GetCurrentThreadId()) + L".tmp";
++  {
++    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
++    const uint32_t size = static_cast<uint32_t>(key_size);
++    out.write(reinterpret_cast<const char*>(&size), sizeof(size));
++    out.write(static_cast<const char*>(key), key_size);
++    out.write(static_cast<const char*>(value), value_size);
++    if (!out) {
++      return;
++    }
++  }
++  ::MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
++}
++
++EGLsizeiANDROID GetBlob(const void* key,
++                        EGLsizeiANDROID key_size,
++                        void* value,
++                        EGLsizeiANDROID value_size) {
++  if (BlobCacheDir().empty() || key_size <= 0) {
++    return 0;
++  }
++  std::ifstream in(BlobPath(key, key_size), std::ios::binary | std::ios::ate);
++  if (!in) {
++    return 0;
++  }
++  const std::streamoff file_size = in.tellg();
++  if (file_size < static_cast<std::streamoff>(sizeof(uint32_t)) + key_size) {
++    return 0;
++  }
++  in.seekg(0);
++  uint32_t stored_key_size = 0;
++  in.read(reinterpret_cast<char*>(&stored_key_size), sizeof(stored_key_size));
++  if (stored_key_size != static_cast<uint32_t>(key_size)) {
++    return 0;
++  }
++  std::vector<char> stored_key(key_size);
++  in.read(stored_key.data(), key_size);
++  if (!in || std::memcmp(stored_key.data(), key, key_size) != 0) {
++    return 0;
++  }
++  const EGLsizeiANDROID size = static_cast<EGLsizeiANDROID>(
++      file_size - sizeof(uint32_t) - key_size);
++  if (value != nullptr && value_size >= size) {
++    in.read(static_cast<char*>(value), size);
++    if (!in) {
++      return 0;
++    }
++  }
++  return size;
++}
++
++void SetUpBlobCache(EGLDisplay display) {
++  auto set_funcs = reinterpret_cast<PFNEGLSETBLOBCACHEFUNCSANDROIDPROC>(
++      ::eglGetProcAddress("eglSetBlobCacheFuncsANDROID"));
++  if (set_funcs == nullptr || BlobCacheDir().empty()) {
++    return;
++  }
++  set_funcs(display, SetBlob, GetBlob);
++}
++
++}  // namespace
++
+ Manager::Manager(GpuPreference gpu_preference) {
+   ++instance_count_;
+ 
+@@ -178,6 +301,7 @@ bool Manager::InitializeDisplay(GpuPreference gpu_preference) {
+       continue;
+     }
+ 
++    SetUpBlobCache(display_);  // mcsm 0005
+     return true;
+   }
+ 
+-- 
+2.54.0 (Apple Git-157)
+
