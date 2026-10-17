@@ -217,7 +217,7 @@ The workstation keeps its checkout in `/mnt/storage/mcsm/engine` (11 GB of sourc
   - **macOS arm64:** pixel ok; draw 0.117 µs, draw + texture bind 0.194 µs.
   - **Linux x64** (Docker `mcsm-linux-smoke`, Xvfb + Mesa llvmpipe; stock → patched): it builds and runs on both engines. Draw 0.878 → 0.197–0.221 µs; draw + bind 0.98–1.06 → 0.20–0.22 µs.
     - The pixel read back is `[0, 0, 0, 0]` on the **stock engine too**, so it isn't the patches: `Texture.asImage` readback on GLES/llvmpipe gives zeros even after the command buffer completes.
-    - A rendering check on Linux needs a different readback, or a real GPU.
+    - A rendering check on Linux needs a different readback, or a real GPU. Since 2026-10-17 gpu_smoke draws the texture into a `Picture` and reads that back, as the player's captures do: the pixel is right on llvmpipe.
   - **Windows x64** (the VM: ANGLE on WARP, the arm64 engine building alongside; stock → patched): it builds and runs on both engines. Draw 3.39 → 0.45–0.49 µs; draw + bind 5.38 → 0.48–0.59 µs. The readback is zero on both engines, as on Linux.
     - Patch 0005's cache works: the patched app wrote 73 programs (301 KB) to `%LOCALAPPDATA%\gpu_smoke\flutter_angle_cache`.
     - The smoke's own first draw is 8 ms cold and 5 ms warm, which is too little work to show the cache's effect. The player (2026-10-17, VM, WARP) wrote 89 programs; its treehouse D1 capture took 32 s cold and 29 s warm, so in a capture the cache saves ~3 s.
