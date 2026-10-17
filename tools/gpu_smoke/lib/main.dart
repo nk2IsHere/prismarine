@@ -38,6 +38,7 @@ Future<void> main() async {
 Future<int> _smoke() async {
   _log('SMOKE platform ${Platform.operatingSystem} '
       '${Platform.version.split(' ').last}');
+  final startup = Stopwatch()..start();
   await Scene.initializeStaticResources();
   final ctx = gpu.gpuContext;
   final vertex = (baseShaderLibrary['FullscreenVertex'] as Object) as gpu.Shader;
@@ -74,7 +75,9 @@ Future<int> _smoke() async {
   // Wait for the GPU (GLES runs the pass on the raster thread later).
   final done = Completer<bool>();
   cb.submit(completionCallback: (ok) => done.complete(ok));
-  _log('SMOKE submit ${await done.future ? 'completed' : 'FAILED'}');
+  _log('SMOKE submit ${await done.future ? 'completed' : 'FAILED'}, '
+      'first draw done ${startup.elapsedMilliseconds} ms after init began '
+      '(shader and pipeline compiles included)');
   final bytes = (await target.asImage().toByteData())!;
   final c = bytes.buffer.asUint8List(bytes.offsetInBytes + (32 * 64 + 32) * 4, 4);
   final ok = c[0] == 10 && c[1] == 200 && c[2] == 30 && c[3] == 255;
