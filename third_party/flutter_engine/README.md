@@ -1,6 +1,156 @@
-# The Flutter engine, patched for mcsm (perf E)
+# The Flutter engine, patched for mcsm
 
-Flutter GPU's per-draw CPU cost was the floor of the paint in TownFair (spec `docs/superpowers/specs/2026-10-16-perf-e-engine-design.md`, plan `docs/superpowers/plans/2026-10-16-perf-e-engine.md`). These patches apply to the engine of our Flutter (`data/flutter`, 3.47.7 stable, engine revision `deb287481e3ce9468f3434937ced4240a70539ca`, `bin/internal/engine.version`). They live here as reviewable patches (docs/memory/feedback-own-the-tooling.md); the checkout and its build are data (`$MCSM_DATA/engine`, gitignored).
+mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs about 0.9 µs of CPU before our own code runs. The patches here cut that to ~0.12 µs on Macs (TownFair's paint −1.7 ms a frame). They also load our Metal shaders precompiled (a fresh build's first scene no longer stalls ~3 s) and cache ANGLE's compiled programs on Windows.
+
+**The patched engine is optional.** Everything builds and runs on Flutter's stock engine too, only slower, and the frames are byte-identical either way. The patches apply to the engine of the project's Flutter (3.47.7 stable, engine revision `deb287481e3ce9468f3434937ced4240a70539ca`). They live here as reviewable files; the downloaded or built engine is data (`$MCSM_DATA/engine`, gitignored).
+
+**Where it's useful today:** the game player (`apps/mcsm_player`) runs on macOS only for now; its Windows and Linux versions aren't built yet. On Windows and Linux the engine is for development and testing: `tools/gpu_smoke` runs on it, and so will the players once they exist.
+
+Contents:
+- [Get the engine: download it](#download-it-a-minute)
+- [Or build it yourself](#or-build-it-yourself): [macOS](#macos-arm64-and-x86_64), [Linux](#linux-x64-native-and-arm64-cross-built), [Windows](#windows-x64-native-and-arm64-cross-built)
+- [Use it](#use-it)
+- [Publish a new build](#publish-a-new-build-maintainers)
+- [Patches](#patches)
+- [Reference](#reference-targets-backends-test-results-2026-10-17)
+
+## Download it (a minute)
+
+The repo's GitHub release `engine-deb287481e3c-mcsm5` (tag in `RELEASE`) holds the engine for six targets, 14–21 MB each. Each archive contains only what a release `flutter build … --local-engine` reads.
+
+| Target | Archive | Out dir (`--local-engine`) |
+|---|---|---|
+| macOS arm64 | `mcsm-engine-macos-arm64.tar.xz` | `host_release_arm64` |
+| macOS Intel | `mcsm-engine-macos-x64.tar.xz` | `host_release` |
+| Linux x64 | `mcsm-engine-linux-x64.tar.xz` | `host_release` |
+| Linux arm64 (for arm64 Linux machines) | `mcsm-engine-linux-arm64.tar.xz` | `linux_release_arm64` |
+| Windows x64 | `mcsm-engine-windows-x64.tar.xz` | `host_release` |
+| Windows arm64 (for arm64 Windows machines) | `mcsm-engine-windows-arm64.tar.xz` | `host_release_arm64` |
+
+**You need** the GitHub CLI (`gh`), logged in (`gh auth login`) to an account that can read the repo. The release is on the private repo.
+
+macOS or Linux, from the repo root:
+
+    third_party/flutter_engine/fetch.sh            # this machine's target
+    third_party/flutter_engine/fetch.sh macos-x64  # or another one
+
+Windows (PowerShell, from the repo root):
+
+    powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1
+
+The scripts:
+1. download the archive and its `.sha256`, and check it;
+2. unpack it to `$MCSM_DATA/engine/<target>/` (default `data/engine/<target>/`);
+3. link the engine's `dart-sdk` to your Flutter SDK's (the same Dart).
+
+On macOS, `play.sh` picks the engine up by itself. Elsewhere the scripts print the `flutter build` flags.
+- **Offline:** download the archive and its `.sha256` from the release page by hand, then set `MCSM_ENGINE_ARCHIVE=<file>` (or pass `fetch.ps1 -Archive <file>`).
+- **Verified:** a fresh `fetch.sh` on an arm64 Mac, then `play.sh`, builds and plays on it (`--gpu-bench` bare draw 0.12–0.13 µs, against 0.87–0.89 on the stock engine). The Intel Mac, Linux x64 and Windows x64 archives were each checked by building from the unpacked archive. The arm64 Linux and Windows archives were built but not run (no arm64 machine).
+
+## Or build it yourself
+
+Each build checks out Flutter at the engine revision, applies `patches/*.patch`, fetches the engine's dependencies with Chromium's `gclient` (depot_tools; the scripts install it), and builds only the release targets the Flutter tool reads. Plan on several GB of disk and an hour or so per machine. The Flutter SDK you build the app with must be the project's 3.47.7 (`data/flutter`, or `MCSM_FLUTTER`).
+
+### macOS (arm64 and x86_64)
+
+**You need:**
+- Xcode (27 tested), with its command-line tools;
+- the Metal Toolchain: `xcodebuild -downloadComponent MetalToolchain` (~0.8 GB; Xcode 27 ships without `metal`, and the engine's own shaders need it);
+- ~20 GB free: 13 GB of sources in `$MCSM_DATA/engine/flutter` (a `--shared` clone of `data/flutter`) plus 2.6–4.6 GB per out dir.
+
+**Build:**
+
+    third_party/flutter_engine/build.sh all                      # arm64: out/host_release_arm64
+    MCSM_ENGINE_CPU=x64 third_party/flutter_engine/build.sh build  # Intel: out/host_release
+
+- `all` = `setup` (depot_tools, clone, `gclient sync`, 20–40 min of downloads) + `patch` + `build`.
+- **Time:** the first arm64 build took ~1 h on an M2 Pro (6 jobs; `MCSM_ENGINE_JOBS`). x64 took 13 min more with the sources already built.
+- **Rebuilds:** after a patch edit, run `build.sh patch` then `build.sh build` (minutes).
+- **Disk:** `MCSM_ENGINE_TRIM=1` deletes the out dir's object files afterwards (~2 GB), at the price of a full rebuild next time.
+- **Using it:** `play.sh` uses the result by itself (see [Use it](#use-it)).
+
+### Linux (x64 native, and arm64 cross-built)
+
+**You need** an x86_64 Linux machine (Ubuntu 24.04/26.04 tested) with:
+- `git`, `python3`, `curl`, `xz-utils`, `pkg-config` (`gclient` brings the compiler and the Debian sysroots for both CPUs);
+- ~30 GB free: ~11 GB of sources, ~1 GB per release out dir, 5.4 GB for the optional test build;
+- ~10 min (x64) + ~13 min (arm64) on 16 cores after the download.
+
+**Build:**
+
+    export MCSM_ENGINE_DIR=$HOME/mcsm-engine
+    third_party/flutter_engine/linux.sh setup   # depot_tools, clone, patches, gclient sync
+    third_party/flutter_engine/linux.sh build   # out/host_release (x64), out/linux_release_arm64 (arm64)
+    third_party/flutter_engine/linux.sh test    # optional: the gpu_unittests our patches touch
+
+**The impeller tests** (Vulkan on SwiftShader, optional) need a display. In Docker with `tools/gpu_smoke/Dockerfile.linux` (Ubuntu + GTK + Xvfb + Mesa), with `O=$MCSM_ENGINE_DIR/flutter/engine/src/out/host_debug_unopt_tests`, run
+`VK_ICD_FILENAMES=$O/vk_swiftshader_icd.json VK_LAYER_PATH=$O/vulkan-data VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation LD_LIBRARY_PATH=$O xvfb-run -a -s "-screen 0 1280x800x24 -extension MIT-SHM" $O/impeller_unittests "--gtest_filter=*/Vulkan:-*Playground*"`.
+Result: 711 passed, 21 skipped.
+
+**To build Flutter apps for Linux** you also need Flutter's usual Linux desktop packages: `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev`. `tools/gpu_smoke/Dockerfile.linux` installs them.
+
+### Windows (x64 native, and arm64 cross-built)
+
+**You need:**
+- Windows 10/11 x64.
+- ~30 GB free: ~10 GB of sources, 2.5 GB (x64) and 3.6 GB (arm64) out dirs, plus the tools.
+- An elevated PowerShell. Long builds should run where closing a terminal or an SSH session won't stop them, for example a scheduled task.
+- **The tools:** `third_party\flutter_engine\windows-toolchain.ps1` installs them all (Git, Python 3.12, VS Build Tools, the Debugging Tools, long paths):
+  - Git and Python 3.12 (winget);
+  - Visual Studio 2022 Build Tools, with:
+    - `Microsoft.VisualStudio.Workload.VCTools`;
+    - `Microsoft.VisualStudio.Component.VC.Tools.x86.x64` and `…VC.Tools.ARM64`;
+    - `…VC.ATL` and `…VC.ATL.ARM64`;
+    - `Microsoft.VisualStudio.Component.Windows11SDK.22621`;
+  - the Windows SDK 10.0.22621's Debugging Tools for Windows (winget `Microsoft.WindowsSDK.10.0.22621`, feature `OptionId.WindowsDesktopDebuggers`);
+  - long paths: `LongPathsEnabled=1` and `git config --system core.longpaths true`.
+
+**Build:**
+
+    powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\windows-toolchain.ps1
+    powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\windows.ps1 -EngineDir C:\mcsm-engine
+
+- `windows.ps1` builds `out\host_release` (x64) and `out\host_release_arm64` (arm64, cross-built). `-Cpu x64|arm64|both` picks which; logs go to `<EngineDir>\logs`.
+- **Time:** ~25 min (x64) and ~35 min (arm64) on 10–12 cores, after a ~30 min download.
+- **The arm64 engine** is for arm64 Windows machines: its `gen_snapshot.exe` is an arm64 program. The Flutter tool builds a Windows app only for the machine's own CPU.
+
+## Use it
+
+**macOS: `play.sh` uses the patched engine by default** when one is there. `tools/toolchain/env.sh` looks for it in this order:
+1. `$MCSM_DATA/engine/macos-arm64/src`, or `…/macos-x64/src` on an Intel Mac (fetched);
+2. `$MCSM_DATA/engine/flutter/engine/src` (built by `build.sh`).
+
+Otherwise it uses Flutter's stock engine. `play.sh` prints which one it builds on: `mcsm: building on the patched engine host_release_arm64 (…)`. In `.env`:
+- `MCSM_LOCAL_ENGINE=off` (or empty) always uses the stock engine;
+- `MCSM_LOCAL_ENGINE=<path to an engine/src>` uses that engine;
+- `MCSM_LOCAL_ENGINE_NAME=host_release` picks the x86_64 out dir (the default is `host_release_arm64` on an arm64 Mac, `host_release` on an Intel one).
+
+What else to know on macOS:
+- Profile and debug builds (`profile.sh`, `flutter run`) always use the stock engine.
+- An app built on the patched engine is for one CPU only: the Flutter tool sets `ARCHS` from the engine's name.
+- **Universal app** (to share it): build once per engine and copy each `.app` aside, then run `apps/mcsm_player/tool/universal_app.sh <arm64.app> <x86_64.app> <out.app>`.
+- The patched and stock engines can take turns in one build dir; the Flutter tool rebuilds what changed.
+
+**Linux and Windows:** pass the flags to `flutter build`:
+
+    flutter build linux   --release --local-engine-src-path=<…>/engine/src --local-engine=host_release --local-engine-host=host_release
+    flutter build windows --release --local-engine-src-path=<…>\engine\src --local-engine=host_release --local-engine-host=host_release
+
+- **`<…>/engine/src`** is `$MCSM_DATA/engine/<target>/src` for a fetched engine, or `<MCSM_ENGINE_DIR or EngineDir>/flutter/engine/src` for a built one.
+- **Arm64 machines:** use `linux_release_arm64` or `host_release_arm64` for both flags.
+- **A self-built out dir** needs the `flutter_patched_sdk_product` link; the build scripts make it.
+- **Try it with `tools/gpu_smoke`:** `flutter build <os>` it with those flags and run it. It prints `SMOKE` lines with the per-draw times. On Windows, `tools\gpu_smoke\windows_smoke.ps1 -EngineSrc <…>\engine\src` builds and runs it on the stock engine and then the patched one.
+
+## Publish a new build (maintainers)
+
+1. Bump `RELEASE` (e.g. `engine-<engine revision, 12 chars>-mcsm<patch count>`).
+2. Package each target where it was built:
+   - macOS and Linux: `package.sh <engine/src> <out dir> <target> <dest> [<host out dir>]`;
+   - Windows: `package.ps1 -Src … -Out … -Target … -Dest … [-HostOut …]`.
+   
+   Each makes `mcsm-engine-<target>.tar.xz` and `.sha256`. `package.sh` records `MCSM_ENGINE_REV` (default `deb287481e3c…`).
+3. Check each archive the way users get it: `fetch.sh` with `MCSM_ENGINE_ARCHIVE=<file>`, or `fetch.ps1 -Archive <file>`, into a scratch `MCSM_DATA`, then build the player or gpu_smoke from it.
+4. Run `gh release create <tag> -R <owner>/<repo> --title … --notes-file … mcsm-engine-* SHA256SUMS`. An asset must be under 2 GiB; ours are ~20 MB.
 
 ## Patches
 
@@ -23,26 +173,7 @@ Flutter GPU's per-draw CPU cost was the floor of the paint in TownFair (spec `do
 
 The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exports and falls back to the stock calls on Flutter's prebuilt engine.
 
-## Building
-
-`third_party/flutter_engine/build.sh all`. It needs `xcodebuild -downloadComponent MetalToolchain` once (Xcode 27 ships without `metal`, and Impeller's own shaders need it).
-
-1. **setup:** depot_tools, a `--shared` clone of `data/flutter` at the revision, `.gclient` without Android/JDK/esbuild/Fuchsia, then `gclient sync --no-history`. This takes ~13 GB and 20–40 min.
-2. **patch:** `git am` of `patches/*.patch` on branch `mcsm-engine`.
-3. **build:** gn for `host_release_arm64` (release, no LTO, prebuilt Dart SDK, no unit tests), then ninja of only what a release `flutter build macos --local-engine` reads: FlutterMacOS.xcframework, gen_snapshot, the patched SDK, sky_engine, frontend_server, font-subset and const_finder. Then the `flutter_patched_sdk_product` link.
-   - `out/` is ~4.6 GB.
-   - The first build took ~1 h of CPU (6 jobs).
-   - A rebuild after a `lib/gpu` edit is 1–3 min: `ninja -C out/host_release_arm64 flutter/shell/platform/darwin/macos:flutter_framework`, with depot_tools on PATH for `vpython3`.
-
-Don't build `flutter/build/archives:artifacts`: it pulls in flutter_tester and ANGLE, which fails under the macOS 27 SDK (`-Wignored-attributes`). The app doesn't need it; impellerc falls back to the cache's.
-
-**Disk trimmed on this Mac** (all can be re-fetched by `gclient sync`; no target we build uses them):
-- `flutter/buildtools/{linux-x64,mac-x64}` (other hosts' clang);
-- `flutter/third_party/java/openjdk`;
-- `flutter/third_party/swiftshader/{tests,third_party/llvm-16.0}`;
-- `swiftshader/third_party/llvm-10.0`'s non-`.gn` files.
-
-## Every desktop target (2026-10-17)
+## Reference: targets, backends, test results (2026-10-17)
 
 The same patches on each platform. E1 and E3 are backend-neutral. E2's retained bindings and 0004 are Metal-only: other backends take the stock paths.
 
@@ -92,11 +223,3 @@ The workstation keeps its checkout in `/mnt/storage/mcsm/engine` (11 GB of sourc
     - The smoke's own first draw is 8 ms cold and 5 ms warm, which is too little work to show the cache's effect. The player's ~100 programs would show it, but the player has no Windows runner.
 - **Linux arm64 and Windows arm64:** these were only checked for building. Linux arm64's `libflutter_linux_gtk.so` is an aarch64 ELF with the patch exports, and gen_snapshot is x64-hosted. Neither ran: there is no arm64 machine, and qemu-user wasn't tried.
 
-## Using it
-
-- Set `MCSM_LOCAL_ENGINE=$MCSM_DATA/engine/flutter/engine/src` in `.env`. `tools/toolchain/env.sh` then sets `mcsm_engine_args`. `MCSM_LOCAL_ENGINE_NAME` picks the out dir: `host_release_arm64` (the default) or `host_release` (x86_64).
-- `apps/mcsm_player/tool/play.sh` passes those args to its release build: `--local-engine-src-path=… --local-engine=host_release_arm64 --local-engine-host=host_release_arm64`.
-- The app becomes arm64-only, because the Flutter tool sets `ARCHS=arm64` for an `_arm64` local engine. The Rust hooks (mcsm_cargo) build for the architectures the tool asks for, so only `aarch64-apple-darwin`. A mirror that built universally before may keep a cached universal dylib, which still runs.
-- Unset (the default), everything builds with Flutter's prebuilt engine.
-- Profile and debug builds always use the prebuilt engine.
-- After a Flutter upgrade: point `build.sh` at the new `engine.version`, re-apply the patches (fix conflicts), and rebuild.
