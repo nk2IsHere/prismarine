@@ -14,6 +14,13 @@ Flutter GPU's per-draw CPU cost was the floor of the paint in TownFair (spec `do
   - `RenderPass_DrawCached` draws only when the pipeline is already cached on the pass (so it never blocks). Dart can call all of these as leaf calls.
   - The old exports are unchanged.
 
+- `0004-metal-precompiled-shader-libraries.patch` (stage 5):
+  - the shader bundle schema gets `BackendShader.compiled`;
+  - Flutter GPU registers that `.metallib` with `newLibraryWithData`;
+  - it compiles the source only when there is none or it doesn't load.
+
+  flutter_scene P8 fills the field in the build hook. Cold first-launch shader compile stalls drop from ~3 s to ~0.5 s, and the rest is pipeline-state compiles.
+
 The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exports and falls back to the stock calls on Flutter's prebuilt engine.
 
 ## Building
