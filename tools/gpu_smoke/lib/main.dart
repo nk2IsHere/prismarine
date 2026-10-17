@@ -7,6 +7,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_gpu/gpu.dart' as gpu;
@@ -78,7 +79,17 @@ Future<int> _smoke() async {
   _log('SMOKE submit ${await done.future ? 'completed' : 'FAILED'}, '
       'first draw done ${startup.elapsedMilliseconds} ms after init began '
       '(shader and pipeline compiles included)');
-  final bytes = (await target.asImage().toByteData())!;
+  // Read back through a Picture, as the player's captures do: on GLES
+  // (Linux, Windows/ANGLE) `asImage().toByteData()` straight on a Flutter GPU
+  // texture returns zeros, while drawing it into a picture and reading that
+  // gives the pixels.
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder).drawImage(target.asImage(), ui.Offset.zero, ui.Paint());
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(64, 64);
+  picture.dispose();
+  final bytes = (await image.toByteData())!;
+  image.dispose();
   final c = bytes.buffer.asUint8List(bytes.offsetInBytes + (32 * 64 + 32) * 4, 4);
   final ok = c[0] == 10 && c[1] == 200 && c[2] == 30 && c[3] == 255;
   _log('SMOKE pixel ${c.toList()} ${ok ? 'ok' : 'WRONG (want [10, 200, 30, 255])'}');
