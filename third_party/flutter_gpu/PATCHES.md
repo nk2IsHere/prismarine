@@ -18,6 +18,10 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - `drawIndexed`/`draw` first try `_drawCached` (leaf): it draws when the pass already has the pipeline. If not, it returns 2 and does nothing, and the stock non-leaf draw runs, which may wait for a Metal pipeline compile. A leaf call never blocks, so the sim and audio isolates' safepoints never wait on it.
 - `_bindVertexBufferDevice`, `_bindIndexBufferDevice` and `_clearBindings` are leaf calls: no Dart handles and nothing that blocks (also on the stock engine).
 
+## G4: live GPU memory (accounting only)
+
+- `memory.dart` (new, `GpuMemory`): every texture and device buffer made through the package adds its bytes to a tally by kind (`buffer`; `rt`, `rt.msaa`, `rt.transient`; `tex.shared` / `tex.private`, `.compressed` when block-compressed); a `Finalizer` takes a collected one off. `texture.dart` computes a texture's bytes from its format's blocks, mip levels and sample count (the driver's padding isn't counted). The player's `--profile` writes it every 30 frames as `mem.gpu.<kind>` (MB) with `mem.footprint`. It excludes what the engine allocates itself (the Flutter surface, Impeller's host buffers).
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").

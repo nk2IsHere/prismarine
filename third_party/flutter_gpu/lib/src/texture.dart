@@ -67,6 +67,21 @@ base class Texture extends NativeFieldWrapperClass1 {
       // used with render target or shader write usage, which is sample-only).
       throw Exception('Texture creation failed');
     }
+    // mcsm G4: live GPU memory by kind.
+    GpuMemory._track(this, GpuMemory._textureKind(this), _bytes());
+  }
+
+  /// The bytes this texture's levels occupy (mcsm G4; an estimate: the
+  /// driver's alignment and padding aren't counted).
+  int _bytes() {
+    var total = 0;
+    final bw = format.blockWidth, bh = format.blockHeight;
+    for (var l = 0; l < mipLevelCount; l++) {
+      final w = (width >> l) < 1 ? 1 : width >> l;
+      final h = (height >> l) < 1 ? 1 : height >> l;
+      total += ((w + bw - 1) ~/ bw) * ((h + bh - 1) ~/ bh) * format.bytesPerBlock;
+    }
+    return total * sampleCount;
   }
 
   Texture._surface(
