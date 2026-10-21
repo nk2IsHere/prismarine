@@ -22,6 +22,10 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 
 - `memory.dart` (new, `GpuMemory`): every texture and device buffer made through the package adds its bytes to a tally by kind (`buffer`; `rt`, `rt.msaa`, `rt.transient`; `tex.shared` / `tex.private`, `.compressed` when block-compressed); a `Finalizer` takes a collected one off. `texture.dart` computes a texture's bytes from its format's blocks, mip levels and sample count (the driver's padding isn't counted). The player's `--profile` writes it every 30 frames as `mem.gpu.<kind>` (MB) with `mem.footprint`. It excludes what the engine allocates itself (the Flutter surface, Impeller's host buffers).
 
+## G5: repeated texture binds skipped
+
+`render_pass.dart`: a pass remembers, per shader and resolved texture slot, the texture and sampler object it bound since the last `clearBindings` (bindings persist across draws until then, on every backend). Binding the same pair again returns before the native call: flutter_scene and mcsm's encoders rebind every slot per draw, and consecutive draws mostly share the shadow atlas, the occlusion buffer, placeholders and the block atlas. Only with the perf E engine (the indexed bind); the stock path is unchanged.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").

@@ -353,6 +353,13 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// the entire bitmask.
   int _maxBoundVertexSlot = -1;
 
+  // mcsm G5: each shader's texture slots as bound since the last
+  // [clearBindings] (texture, sampler; by the slot's resolved index). The
+  // pass keeps a binding until cleared, so binding the same texture and
+  // sampler object again changes nothing and is skipped.
+  final Map<Shader, List<Object?>> _boundTextures =
+      Map<Shader, List<Object?>>.identity();
+
   /// Creates a new RenderPass.
   RenderPass._(
     GpuContext gpuContext,
@@ -513,6 +520,16 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (_mcsmEngineE3) {
       // mcsm G2: by the resolved index, as a leaf call.
       final index = slot._resolvedTextureIndex;
+      // mcsm G5: the slot holds this texture and sampler already.
+      final List<Object?>? bound = index < 0
+          ? null
+          : _boundTextures[slot.shader];
+      if (bound != null &&
+          2 * index + 1 < bound.length &&
+          identical(bound[2 * index], texture) &&
+          identical(bound[2 * index + 1], sampler)) {
+        return;
+      }
       if (index < 0 ||
           !_bindTextureIndexed(
             slot.shader,
@@ -527,6 +544,12 @@ base class RenderPass extends NativeFieldWrapperClass1 {
           )) {
         throw Exception("Failed to bind texture");
       }
+      var list = bound ?? (_boundTextures[slot.shader] = <Object?>[]);
+      if (list.length < 2 * index + 2) {
+        list.length = 2 * index + 2;
+      }
+      list[2 * index] = texture;
+      list[2 * index + 1] = sampler;
       return;
     }
     bool success = _bindTexture(
@@ -549,6 +572,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _clearBindings();
     _boundVertexSlotsMask = 0;
     _maxBoundVertexSlot = -1;
+    _boundTextures.clear();
   }
 
   void setColorBlendEnable(bool enable, {int colorAttachmentIndex = 0}) {
