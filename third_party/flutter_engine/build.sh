@@ -9,6 +9,9 @@
 #          out/host_release, an x86_64 engine): only the targets a release
 #          `flutter build macos --local-engine` reads (~4.5 GB; ~1 h the first
 #          time on the M2 Pro, a few minutes after a lib/gpu edit).
+#          MCSM_ENGINE_MODE=profile: out/host_profile_arm64 (or host_profile)
+#          for `flutter build macos --profile` (tool/profile.sh; Dart flags
+#          like --no-inline-alloc and --profile_vm, patch 0007).
 #   all    the three in order.
 # Then set MCSM_LOCAL_ENGINE=$MCSM_DATA/engine/flutter/engine/src in .env.
 # Needs the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`).
@@ -59,9 +62,10 @@ fi
 if [[ $step == build || $step == all ]]; then
   cd $src
   cpu=${MCSM_ENGINE_CPU:-arm64}
-  out=out/host_release
-  if [[ $cpu == arm64 ]]; then out=out/host_release_arm64; fi
-  ./flutter/tools/gn --runtime-mode=release --mac-cpu=$cpu --no-lto \
+  mode=${MCSM_ENGINE_MODE:-release}
+  out=out/host_$mode
+  if [[ $cpu == arm64 ]]; then out=out/host_${mode}_arm64; fi
+  ./flutter/tools/gn --runtime-mode=$mode --mac-cpu=$cpu --no-lto \
     --prebuilt-dart-sdk --no-enable-unittests
   ninja -C $out -j${MCSM_ENGINE_JOBS:-6} \
     flutter/shell/platform/darwin/macos:flutter_framework \
@@ -73,7 +77,7 @@ if [[ $step == build || $step == all ]]; then
     flutter/tools/const_finder
   # A release out dir's patched SDK is the product one; the Flutter tool looks
   # for it under the cache's name.
-  ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product
+  [[ $mode == release ]] && ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product
   # MCSM_ENGINE_TRIM=1: drop the object files (~2–4 GB); the next build of
   # this out dir is then a full one.
   [[ -n $MCSM_ENGINE_TRIM ]] && rm -rf "${src:?}/$out/obj"

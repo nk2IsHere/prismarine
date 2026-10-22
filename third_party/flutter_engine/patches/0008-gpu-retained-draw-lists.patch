@@ -1,0 +1,355 @@
+From 4bfc581690904d3e775ec1207fb5873703d9432d Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Thu, 22 Oct 2026 01:42:12 +0200
+Subject: [PATCH] flutter_gpu: retained draws: a DrawList records everything a
+ RenderPass's draws sent (RenderPass_BeginRecording/EndRecording) and
+ RenderPass_Replay sends chosen ones again in later passes; McsmFeatures bit 8
+ (mcsm6)
+
+---
+ engine/src/flutter/lib/gpu/context.cc     |   2 +-
+ engine/src/flutter/lib/gpu/context.h      |   1 +
+ engine/src/flutter/lib/gpu/render_pass.cc | 161 ++++++++++++++++++++++
+ engine/src/flutter/lib/gpu/render_pass.h  |  91 ++++++++++++
+ 4 files changed, 254 insertions(+), 1 deletion(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index c460121a9e1..f5d7682c019 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -193,5 +193,5 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ }
+ 
+ extern int64_t InternalFlutterGpu_McsmFeatures() {
+-  return 1 | 2 | 4;
++  return 1 | 2 | 4 | 8;
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index b77d3ec3fa1..44b2cb6343d 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -114,6 +114,7 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   2: RenderPass_SetColorWriteMask
+ ///   4: release builds take GC sizing Dart flags from
+ ///      FLUTTER_ENGINE_SWITCHES (dart-flags only; shell/common/switches.cc)
++///   8: retained draws (DrawList, RenderPass_BeginRecording/Replay)
+ FLUTTER_GPU_EXPORT
+ extern int64_t InternalFlutterGpu_McsmFeatures();
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index fe2da5f70ed..d742b292b62 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -25,11 +25,17 @@
+ #include "lib/gpu/context.h"
+ #include "lib/ui/ui_dart_state.h"
+ #include "tonic/converter/dart_converter.h"
++#include "tonic/typed_data/typed_list.h"
+ 
+ namespace flutter {
+ namespace gpu {
+ 
+ IMPLEMENT_WRAPPERTYPEINFO(flutter_gpu, RenderPass);
++IMPLEMENT_WRAPPERTYPEINFO(flutter_gpu, DrawList);
++
++DrawList::DrawList() = default;
++
++DrawList::~DrawList() = default;
+ 
+ RenderPass::RenderPass() = default;
+ 
+@@ -386,9 +392,127 @@ bool RenderPass::Draw(size_t element_count,
+ 
+   bool result = render_pass_->Draw().ok();
+ 
++  if (recording_ && result) {
++    Record(GetCachedPipeline(), element_count, instance_count, indexed);
++  }
++
+   return result;
+ }
+ 
++void RenderPass::Record(
++    const std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>&
++        pipeline,
++    size_t element_count,
++    size_t instance_count,
++    bool indexed) {
++  DrawList::Draw d;
++  d.render_pipeline = render_pipeline_;
++  d.pipeline = pipeline;
++  auto add_buffers = [&](impeller::ShaderStage stage,
++                         const BufferUniformMap& map) {
++    for (const auto& [_, buffer] : map) {
++      d.buffers.push_back({stage, buffer.slot, buffer.view.GetMetadata(),
++                           buffer.view.resource});
++    }
++  };
++  auto add_textures = [&](impeller::ShaderStage stage,
++                          const TextureUniformMap& map) {
++    for (const auto& [_, entry] : map) {
++      const auto& t = entry.binding;
++      d.textures.push_back({stage, t.slot, t.texture.GetMetadata(),
++                            t.texture.resource, t.sampler});
++    }
++  };
++  add_buffers(impeller::ShaderStage::kVertex, vertex_uniform_bindings);
++  add_textures(impeller::ShaderStage::kVertex, vertex_texture_bindings);
++  add_buffers(impeller::ShaderStage::kFragment, fragment_uniform_bindings);
++  add_textures(impeller::ShaderStage::kFragment, fragment_texture_bindings);
++  d.vertex_buffers.assign(vertex_buffers.begin(),
++                          vertex_buffers.begin() + vertex_buffer_count);
++  if (indexed) {
++    d.index_buffer = index_buffer;
++    d.index_buffer_type = index_buffer_type;
++  }
++  d.element_count = element_count;
++  d.instance_count = instance_count;
++  d.stencil_reference = stencil_reference;
++  d.scissor = scissor;
++  d.viewport = viewport;
++  recording_->draws.push_back(std::move(d));
++}
++
++bool RenderPass::Replay(const DrawList& list,
++                        const int32_t* indices,
++                        size_t count) {
++  bool ok = true;
++  for (size_t n = 0; n < count; n++) {
++    const int32_t i = indices[n];
++    if (i < 0 || static_cast<size_t>(i) >= list.draws.size()) {
++      ok = false;
++      continue;
++    }
++    const DrawList::Draw& d = list.draws[i];
++    render_pass_->SetPipeline(impeller::PipelineRef(d.pipeline));
++    for (const auto& b : d.buffers) {
++      if (retained_bindings_) {
++        render_pass_->BindResource(b.stage,
++                                   impeller::DescriptorType::kUniformBuffer,
++                                   b.slot, b.metadata, b.view);
++      } else {
++        render_pass_->BindDynamicResource(
++            b.stage, impeller::DescriptorType::kUniformBuffer, b.slot,
++            std::make_unique<impeller::ShaderMetadata>(*b.metadata), b.view);
++      }
++    }
++    for (const auto& t : d.textures) {
++      if (retained_bindings_) {
++        render_pass_->BindResource(t.stage,
++                                   impeller::DescriptorType::kSampledImage,
++                                   t.slot, t.metadata, t.texture, t.sampler);
++      } else {
++        render_pass_->BindDynamicResource(
++            t.stage, impeller::DescriptorType::kSampledImage, t.slot,
++            std::make_unique<impeller::ShaderMetadata>(*t.metadata), t.texture,
++            t.sampler);
++      }
++    }
++    // SetVertexBuffer takes a mutable array; the recorded views are copied.
++    std::array<impeller::BufferView, kMaxVertexBufferSlots> vb;
++    const size_t vb_count = std::min(d.vertex_buffers.size(), vb.size());
++    std::copy_n(d.vertex_buffers.begin(), vb_count, vb.begin());
++    render_pass_->SetVertexBuffer(vb.data(), vb_count);
++    render_pass_->SetIndexBuffer(d.index_buffer, d.index_buffer_type);
++    render_pass_->SetElementCount(d.element_count);
++    render_pass_->SetInstanceCount(d.instance_count);
++    render_pass_->SetStencilReference(d.stencil_reference);
++    if (d.viewport.has_value()) {
++      render_pass_->SetViewport(d.viewport.value());
++    }
++    if (d.scissor.has_value()) {
++      render_pass_->SetScissor(d.scissor.value());
++    }
++    ok = render_pass_->Draw().ok() && ok;
++  }
++  // The encoder no longer holds what this pass's own draws sent: the next
++  // draw sends every binding and vertex buffer again.
++  vertex_buffer_writers_.fill(nullptr);
++  fragment_buffer_writers_.fill(nullptr);
++  vertex_texture_writers_.fill(nullptr);
++  fragment_texture_writers_.fill(nullptr);
++  for (auto* map : {&vertex_uniform_bindings, &fragment_uniform_bindings}) {
++    for (auto& [_, buffer] : *map) {
++      buffer.dirty = true;
++    }
++  }
++  for (auto* map : {&vertex_texture_bindings, &fragment_texture_bindings}) {
++    for (auto& [_, entry] : *map) {
++      entry.dirty = true;
++    }
++  }
++  vertex_buffer_dirty.fill(true);
++  return ok;
++}
++
+ void RenderPass::SendAllBindings() {
+   for (const auto& [_, buffer] : vertex_uniform_bindings) {
+     render_pass_->BindDynamicResource(
+@@ -946,3 +1070,40 @@ bool InternalFlutterGpu_RenderPass_DrawIndexed(
+   return index_count >= 0 && instance_count >= 0 &&
+          wrapper->Draw(index_count, instance_count, /*indexed=*/true);
+ }
++
++// mcsm6 (patch 0008): retained command encoding.
++
++void InternalFlutterGpu_DrawList_Initialize(Dart_Handle wrapper) {
++  auto res = fml::MakeRefCounted<flutter::gpu::DrawList>();
++  res->AssociateWithDartWrapper(wrapper);
++}
++
++void InternalFlutterGpu_DrawList_Clear(flutter::gpu::DrawList* wrapper) {
++  wrapper->draws.clear();
++}
++
++int InternalFlutterGpu_DrawList_GetLength(flutter::gpu::DrawList* wrapper) {
++  return static_cast<int>(wrapper->draws.size());
++}
++
++void InternalFlutterGpu_RenderPass_BeginRecording(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DrawList* list) {
++  wrapper->SetRecording(fml::Ref(list));
++}
++
++void InternalFlutterGpu_RenderPass_EndRecording(
++    flutter::gpu::RenderPass* wrapper) {
++  wrapper->SetRecording(nullptr);
++}
++
++bool InternalFlutterGpu_RenderPass_Replay(flutter::gpu::RenderPass* wrapper,
++                                          flutter::gpu::DrawList* list,
++                                          Dart_Handle indices_handle,
++                                          int count) {
++  tonic::Int32List indices(indices_handle);
++  if (count < 0 || count > indices.num_elements()) {
++    return false;
++  }
++  return wrapper->Replay(*list, indices.data(), static_cast<size_t>(count));
++}
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 00ff2ba58b0..b6c645ee95e 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -26,6 +26,53 @@
+ namespace flutter {
+ namespace gpu {
+ 
++class RenderPass;
++
++/// mcsm6 (patch 0008): draws recorded from a RenderPass, everything its Draw
++/// sent to the encoder, to be sent again by RenderPass::Replay in later
++/// passes with the same targets' formats (retained command encoding: the
++/// caller re-records a draw when anything it holds changes; buffer contents
++/// may change freely, the buffers themselves are kept alive here).
++class DrawList : public RefCountedDartWrappable<DrawList> {
++  DEFINE_WRAPPERTYPEINFO();
++  FML_FRIEND_MAKE_REF_COUNTED(DrawList);
++
++ public:
++  struct BufferBinding {
++    impeller::ShaderStage stage;
++    impeller::ShaderUniformSlot slot;
++    const impeller::ShaderMetadata* metadata;
++    impeller::BufferView view;
++  };
++  struct TextureBinding {
++    impeller::ShaderStage stage;
++    impeller::SampledImageSlot slot;
++    const impeller::ShaderMetadata* metadata;
++    std::shared_ptr<const impeller::Texture> texture;
++    impeller::raw_ptr<const impeller::Sampler> sampler;
++  };
++  struct Draw {
++    // Keeps the shaders, and so the bindings' metadata, alive.
++    fml::RefPtr<RenderPipeline> render_pipeline;
++    std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>> pipeline;
++    std::vector<BufferBinding> buffers;
++    std::vector<TextureBinding> textures;
++    std::vector<impeller::BufferView> vertex_buffers;
++    impeller::BufferView index_buffer;
++    impeller::IndexType index_buffer_type = impeller::IndexType::kNone;
++    size_t element_count = 0;
++    size_t instance_count = 0;
++    uint32_t stencil_reference = 0;
++    std::optional<impeller::IRect32> scissor;
++    std::optional<impeller::Viewport> viewport;
++  };
++
++  DrawList();
++  ~DrawList() override;
++
++  std::vector<Draw> draws;
++};
++
+ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   DEFINE_WRAPPERTYPEINFO();
+   FML_FRIEND_MAKE_REF_COUNTED(RenderPass);
+@@ -114,6 +161,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   /// cache (so it can't block on a pipeline compile).
+   bool HasCachedPipeline();
+ 
++  /// mcsm6 (patch 0008): while set, every draw is also appended to [list].
++  void SetRecording(fml::RefPtr<DrawList> list) { recording_ = std::move(list); }
++
++  /// mcsm6 (patch 0008): sends [list]'s draws at [indices] (in that order)
++  /// as Draw sent them. Afterwards every binding of this pass is sent again
++  /// with its next draw.
++  bool Replay(const DrawList& list, const int32_t* indices, size_t count);
++
+  private:
+   // mcsm E1: the pipeline state that, with the RenderPipeline and this
+   // pass's render target, decides the Impeller pipeline.
+@@ -178,6 +233,15 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+       last_pipeline_;
+   std::vector<CachedPipeline> pipeline_cache_;
+ 
++  // mcsm6 (patch 0008): the list draws are recorded into, if any.
++  fml::RefPtr<DrawList> recording_;
++  void Record(
++      const std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>&
++          pipeline,
++      size_t element_count,
++      size_t instance_count,
++      bool indexed);
++
+   /// Lookup an Impeller pipeline by building a descriptor based on the current
+   /// command state.
+   std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+@@ -325,6 +389,33 @@ FLUTTER_GPU_EXPORT
+ extern void InternalFlutterGpu_RenderPass_ClearBindings(
+     flutter::gpu::RenderPass* wrapper);
+ 
++/// mcsm6 (patch 0008): retained command encoding.
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_DrawList_Initialize(Dart_Handle wrapper);
++
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_DrawList_Clear(flutter::gpu::DrawList* wrapper);
++
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_DrawList_GetLength(
++    flutter::gpu::DrawList* wrapper);
++
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_RenderPass_BeginRecording(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DrawList* list);
++
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_RenderPass_EndRecording(
++    flutter::gpu::RenderPass* wrapper);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_Replay(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DrawList* list,
++    Dart_Handle indices,
++    int count);
++
+ FLUTTER_GPU_EXPORT
+ extern void InternalFlutterGpu_RenderPass_SetColorBlendEnable(
+     flutter::gpu::RenderPass* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+

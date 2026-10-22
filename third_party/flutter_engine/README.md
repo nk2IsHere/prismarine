@@ -1,6 +1,6 @@
 # The Flutter engine, patched for mcsm
 
-mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs about 0.9 µs of CPU before our own code runs. The patches here cut that to ~0.12 µs on Macs (TownFair's paint −1.7 ms a frame). They also load our Metal shaders precompiled (a fresh build's first scene no longer stalls ~3 s) and cache ANGLE's compiled programs on Windows.
+mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs about 0.9 µs of CPU before our own code runs. The patches here cut that to ~0.12 µs on Macs (TownFair's paint −1.7 ms a frame). They also load our Metal shaders precompiled (a fresh build's first scene no longer stalls ~3 s) and cache ANGLE's compiled programs on Windows. Since mcsm6 a render pass may mix target formats (the shadow occlusion buffer is RGBA8 as the exe's) and release builds take the Dart new generation's size (fewer stop-the-world scavenges).
 
 **The patched engine is optional.** Everything builds and runs on Flutter's stock engine too, only slower, and the frames are byte-identical either way. The patches apply to the engine of the project's Flutter (3.47.7 stable, engine revision `deb287481e3ce9468f3434937ced4240a70539ca`). They live here as reviewable files; the downloaded or built engine is data (`$MCSM_DATA/engine`, gitignored).
 
@@ -16,7 +16,7 @@ Contents:
 
 ## Download it (a minute)
 
-The repo's GitHub release `engine-deb287481e3c-mcsm5` (tag in `RELEASE`) holds the engine for six targets, 14–21 MB each. Each archive contains only what a release `flutter build … --local-engine` reads.
+The repo's GitHub release `engine-deb287481e3c-mcsm6` (tag in `RELEASE`) holds the engine for six targets, 14–21 MB each. Each archive contains only what a release `flutter build … --local-engine` reads.
 
 | Target | Archive | Out dir (`--local-engine`) |
 |---|---|---|
@@ -45,7 +45,7 @@ The scripts:
 
 On macOS, `play.sh` picks the engine up by itself. Elsewhere the scripts print the `flutter build` flags.
 - **Offline:** download the archive and its `.sha256` from the release page by hand, then set `MCSM_ENGINE_ARCHIVE=<file>` (or pass `fetch.ps1 -Archive <file>`).
-- **Verified:** a fresh `fetch.sh` on an arm64 Mac, then `play.sh`, builds and plays on it (`--gpu-bench` bare draw 0.12–0.13 µs, against 0.87–0.89 on the stock engine). The Intel Mac, Linux x64 and Windows x64 archives were each checked by building from the unpacked archive. The arm64 Linux and Windows archives were built but not run (no arm64 machine).
+- **Verified (mcsm6):** the macOS arm64, macOS x86_64 and Linux x64 archives, fetched from the file, build a player whose treehouse D1 capture is byte-identical to the self-built and stock engines' (see the mcsm6 results below). Windows x64 was checked through the player built on the engine (the runner's Dart flags, captures). The arm64 Linux and Windows archives were built but not run (no arm64 machine).
 
 ## Or build it yourself
 
@@ -126,10 +126,15 @@ Otherwise it uses Flutter's stock engine. `play.sh` prints which one it builds o
 - `MCSM_LOCAL_ENGINE_NAME=host_release` picks the x86_64 out dir (the default is `host_release_arm64` on an arm64 Mac, `host_release` on an Intel one).
 
 What else to know on macOS:
-- Profile and debug builds (`profile.sh`, `flutter run`) always use the stock engine.
+- Debug builds (`flutter run`) always use the stock engine. Profile builds (`profile.sh`) use a self-built profile engine when there is one (`MCSM_ENGINE_MODE=profile build.sh build` → `out/host_profile_arm64`; it takes `--no-inline-alloc` and `--profile_vm` through `MCSM_DART_FLAGS`), else the stock one.
 - An app built on the patched engine is for one CPU only: the Flutter tool sets `ARCHS` from the engine's name.
 - **Universal app** (to share it): build once per engine and copy each `.app` aside, then run `apps/mcsm_player/tool/universal_app.sh <arm64.app> <x86_64.app> <out.app>`.
 - The patched and stock engines can take turns in one build dir; the Flutter tool rebuilds what changed.
+
+**What mcsm6 changes in the player** (any OS; an older engine or Flutter's own simply doesn't have it):
+- **Dart's new generation.** The runners (`macos/Runner/MainFlutterWindow.swift`, `linux/runner/main.cc`, `windows/runner/main.cpp`) set `--new_gen_semi_max_size` before the engine starts: the default below, `--new-gen=<MB>` for another (0: the VM's own 16 MB), `MCSM_DART_FLAGS=<flags,…>` adds flags (e.g. `--verbose_gc`, which prints each collection to stderr). A `FLUTTER_ENGINE_SWITCHES` already in the environment wins (`tool/profile.sh`).
+- **Mixed target formats** (macOS/Metal): the occlusion buffer is RGBA8 with the depth in R32F targets, as the exe has them (mcsm_look_scene `shadows.dart`). Frames are byte-identical to the stock engine's.
+- `MCSM_ENGINE_FEATURES=0` (a bit mask, flutter_scene P23) makes the Dart code take the paths it takes on other engines, in the same build: for A/B runs.
 
 **Linux and Windows:** `apps/mcsm_player/tool/linux/play.sh` and `tool/windows/play.ps1` find a fetched or built engine as `play.sh` does on macOS (`MCSM_LOCAL_ENGINE`, `MCSM_LOCAL_ENGINE_NAME`). By hand, pass the flags to `flutter build`:
 
@@ -171,7 +176,26 @@ What else to know on macOS:
 
   flutter_scene P8 fills the field in the build hook. Cold first-launch shader compile stalls drop from ~3 s to ~0.5 s, and the rest is pipeline-state compiles.
 
-The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exports and falls back to the stock calls on Flutter's prebuilt engine.
+- `0005-windows-angle-blob-cache.patch` (stage 5, `shell/platform/windows`): persists ANGLE's compiled programs through `EGL_ANDROID_blob_cache` (see the reference below).
+- `0006-gpu-per-attachment-formats-write-mask.patch` (mcsm6, `lib/gpu/{render_pass,context}.{h,cc}`):
+  - a pipeline's colour attachments take their own textures' formats (`GetOrCreatePipeline` gave every attachment the render target's, attachment 0's, so a pass mixing RGBA8 and R32F built pipelines that didn't match its targets);
+  - `RenderPass_SetColorWriteMask(index, mask)`, part of the pipeline state like the blend;
+  - `InternalFlutterGpu_McsmFeatures()`: bits 1 (mixed formats), 2 (write masks), 4 (Dart GC flags in release), 8 (retained draws, 0008). Our Dart (flutter_scene P23) and the runners look it up by symbol.
+- `0007-release-dart-gc-flags.patch` (mcsm6, `shell/common/switches.cc`, `shell/platform/common/engine_switches.cc` + its test):
+  - release builds accept `--new_gen_semi_max_size`, `--new_gen_semi_initial_size` and `--verbose_gc` as Dart flags (both spellings), and read `FLUTTER_ENGINE_SWITCHES`, keeping only `dart-flags=…` (upstream ignores the environment in release);
+  - profile builds also accept `--no-inline-alloc` and `--profile_vm` (complete allocation profiles, native stacks).
+
+- `0008-gpu-retained-draw-lists.patch` (mcsm6, `lib/gpu/{render_pass,context}.{h,cc}`): retained draws. A `DrawList` (Dart wrapper) holds everything a pass's draws sent to the encoder while `RenderPass_BeginRecording` was on (the Impeller pipeline, the uniform and texture bindings with their metadata, vertex and index buffers, counts, stencil, viewport, scissor; each draw is encoded as usual too). `RenderPass_Replay(list, indices, count)` sends chosen draws again, in the given order, through the same encoder calls (Metal: bindings by metadata pointer; other backends: copies), then marks the pass's own bindings to be sent again. Feature bit 8. mcsm's occlusion pass replays each static item's draw (flutter_scene P23/P24, mcsm_look_scene `retained_occlusion.dart`).
+
+The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exports and falls back to the stock calls on Flutter's prebuilt engine. mcsm6's capabilities are found by flutter_scene P23 (it builds against Flutter's own flutter_gpu).
+
+## mcsm6 results (2026-10-22, M2 Pro, interleaved A/B under measure.sh; the machine was loaded, so pairs, not absolutes)
+
+- **Occlusion buffer in the exe's layout** (0006): render targets in WildernessTile 1,327 → 963 MB. On Metal both engines run the same shaders (`tt_shadow_*8`; Flutter's engine with every target RGBA32F), so their frames are byte-identical (six capture sets). Against mcsm5's frames: 8 pixels over 19 frames, at most 2 levels, at far pixels where the filter's taps fall between texels. The taps are now done in the shader as the hardware's bilinear on the exe's RGBA8 bytes with an 8-bit weight; Metal's own sampler filtered the RGBA32F values with other arithmetic. GLES is unchanged.
+- **Dart new generation** (0007, runners): default 64 MB. Scavenge pauses per second at 16 → 32 → 64 MB: MagnusCourtyard 36 → 26 → 19 ms, EllieWitherstorm 38 → 22 → 14, TownFairDestroyed 43 → 31 → 22, WildernessTile 49 → 32 → 21, TownFair 41 → 29 → 17. Scavenges ~38 → ~10 a second, each ~2 ms instead of ~1.1. Frame times are unchanged within noise. Checked on Linux and Windows through the runners (`MCSM_DART_FLAGS=--verbose_gc`).
+- **Retained draws** (0008) for the occlusion pass: byte-identical (six capture sets). The pass's CPU time per frame, immediate → retained: WildernessTile 1.59 → 1.36 ms, EllieWitherstorm 1.88 → 1.60, TownFair 2.16 → 1.87, MagnusCourtyard 1.28 → 0.99; ~70 % of its draws are replays. What is left per replayed draw is Metal's own encoding (pipeline state, bindings, the draw: ~0.9 µs) and the per-item culling and checks (~0.8 µs). Going further needs Metal indirect command buffers, or fewer draws.
+- **Glow mask over the depth prepass** (uses no new engine API; `--glow-mask=prepass`, off by default until judged against the exe): TtGlow 1.0 → 0.25 ms, scene render −0.4 to −0.8 ms a frame (four scenes). It changes the frame where a glow set and a non-glow set of one mesh meet at one depth: as the exe's Glow pass does (LESSEQUAL over the G-buffer depth), the glow shows (glowstone lamps get a halo). Before/after frames and exe shots: `data/reference/oracle/mcsm6-glow`.
+- **Archives checked the way users get them:** macOS arm64 and x86_64, and Linux x64 — `fetch.sh` from the file, then the player built on it: the treehouse D1 capture (frames, events, audio) identical to the build on the self-built engine and on the stock engine.
 
 ## Reference: targets, backends, test results (2026-10-17)
 
