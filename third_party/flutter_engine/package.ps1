@@ -1,8 +1,9 @@
 # package.ps1 <engine\src> <out name> <target> <dest dir> [<host out name>]:
 # the Windows twin of package.sh. Packs what a release
 # `flutter build windows --local-engine` reads into
-# <dest>\mcsm-engine-<target>.tar.xz (+ .sha256): flutter_windows.dll and its
-# import library and headers, the C++ client wrapper, gen_snapshot, icudtl,
+# <dest>\mcsm-engine-<target>.tar.xz (+ .sha256): flutter_windows.dll, its
+# import library, export file and headers (an empty .pdb in place of its
+# debug symbols), the C++ client wrapper, gen_snapshot, icudtl,
 # the patched SDK (also as flutter_patched_sdk_product: a copy, since
 # extracting symlinks needs privileges on Windows), sky_engine, const_finder,
 # font-subset, impellerc with its shader_lib. fetch.ps1 adds the dart-sdk link.
@@ -19,10 +20,13 @@ if (!(Test-Path $from)) { throw "no $from" }
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("mcsm-engine-pack-" + [guid]::NewGuid())
 $to = Join-Path $stage "$Target\src\out\$Out"
 New-Item -ItemType Directory -Force $to | Out-Null
-$files = @('flutter_windows.dll', 'flutter_windows.dll.lib', 'flutter_export.h', 'flutter_macros.h',
+$files = @('flutter_windows.dll', 'flutter_windows.dll.lib', 'flutter_windows.dll.exp', 'flutter_export.h', 'flutter_macros.h',
   'flutter_messenger.h', 'flutter_plugin_registrar.h', 'flutter_texture_registrar.h', 'flutter_windows.h',
   'gen_snapshot.exe', 'icudtl.dat', 'font-subset.exe', 'impellerc.exe', 'LICENSE')
 foreach ($f in $files) { if (Test-Path "$from\$f") { Copy-Item "$from\$f" $to } }
+# The Flutter tool's unpack_windows copies flutter_windows.dll.pdb too (the
+# debug symbols, ~260 MB): an empty one stands in for it.
+if (!(Test-Path "$to\flutter_windows.dll.pdb")) { New-Item -ItemType File "$to\flutter_windows.dll.pdb" | Out-Null }
 foreach ($d in 'cpp_client_wrapper', 'flutter_patched_sdk', 'shader_lib') {
   if (Test-Path "$from\$d") { Copy-Item -Recurse "$from\$d" $to }
 }

@@ -45,7 +45,7 @@ The scripts:
 
 On macOS, `play.sh` picks the engine up by itself. Elsewhere the scripts print the `flutter build` flags.
 - **Offline:** download the archive and its `.sha256` from the release page by hand, then set `MCSM_ENGINE_ARCHIVE=<file>` (or pass `fetch.ps1 -Archive <file>`).
-- **Verified (mcsm6):** the macOS arm64, macOS x86_64 and Linux x64 archives, fetched from the file, build a player whose treehouse D1 capture is byte-identical to the self-built and stock engines' (see the mcsm6 results below). Windows x64 was checked through the player built on the engine (the runner's Dart flags, captures). The arm64 Linux and Windows archives were built but not run (no arm64 machine).
+- **Verified (mcsm6):** the macOS arm64, macOS x86_64, Linux x64 and Windows x64 archives, fetched from the file, build a player whose treehouse D1 capture (frames, events, audio) is byte-identical to the stock engine's on the same OS (see the mcsm6 results below). The arm64 Linux and Windows archives were built but not run (no arm64 machine).
 
 ## Or build it yourself
 
@@ -195,7 +195,7 @@ The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exp
 - **Dart new generation** (0007, runners): default 64 MB. Scavenge pauses per second at 16 → 32 → 64 MB: MagnusCourtyard 36 → 26 → 19 ms, EllieWitherstorm 38 → 22 → 14, TownFairDestroyed 43 → 31 → 22, WildernessTile 49 → 32 → 21, TownFair 41 → 29 → 17. Scavenges ~38 → ~10 a second, each ~2 ms instead of ~1.1. Frame times are unchanged within noise. Checked on Linux and Windows through the runners (`MCSM_DART_FLAGS=--verbose_gc`).
 - **Retained draws** (0008) for the occlusion pass: byte-identical (six capture sets). The pass's CPU time per frame, immediate → retained: WildernessTile 1.59 → 1.36 ms, EllieWitherstorm 1.88 → 1.60, TownFair 2.16 → 1.87, MagnusCourtyard 1.28 → 0.99; ~70 % of its draws are replays. What is left per replayed draw is Metal's own encoding (pipeline state, bindings, the draw: ~0.9 µs) and the per-item culling and checks (~0.8 µs). Going further needs Metal indirect command buffers, or fewer draws.
 - **Glow mask over the depth prepass** (uses no new engine API; `--glow-mask=prepass`, off by default until judged against the exe): TtGlow 1.0 → 0.25 ms, scene render −0.4 to −0.8 ms a frame (four scenes). It changes the frame where a glow set and a non-glow set of one mesh meet at one depth: as the exe's Glow pass does (LESSEQUAL over the G-buffer depth), the glow shows (glowstone lamps get a halo). Before/after frames and exe shots: `data/reference/oracle/mcsm6-glow`.
-- **Archives checked the way users get them:** macOS arm64 and x86_64, and Linux x64 — `fetch.sh` from the file, then the player built on it: the treehouse D1 capture (frames, events, audio) identical to the build on the self-built engine and on the stock engine.
+- **Archives checked the way users get them:** macOS arm64 and x86_64, Linux x64 and Windows x64 — `fetch.sh`/`fetch.ps1` from the file, then the player built on it: the treehouse D1 capture (frames, events, audio) identical to the stock engine's on that OS. The Windows archives now carry `flutter_windows.dll.exp` and an empty `.pdb` (the Flutter tool's `unpack_windows` copies both; without them a build from the archive failed, as it would have with mcsm5's).
 
 ## Reference: targets, backends, test results (2026-10-17)
 
