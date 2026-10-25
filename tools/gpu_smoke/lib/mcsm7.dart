@@ -279,7 +279,11 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     log('SMOKE direct texture write: not on this engine');
   }
 
-  // 4. Scene-like draws: µs per draw (CPU), best of 7 rounds of 2,000.
+  // 4. Viewport arrays (feature 256): one instanced draw into four tiles
+  // must give the same bytes as four draws with one tile's viewport each.
+  allOk &= await _viewportArrays(log, ctx, rt);
+
+  // 5. Scene-like draws: µs per draw (CPU), best of 7 rounds of 2,000.
   {
     final pipeline = ctx.createRenderPipeline(vInst, fTex, vertexLayout: layout);
     final geometry = [
@@ -346,4 +350,132 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
         '(2 vertex buffers, 2 uniform blocks, 3 textures, cull + winding per draw)');
   }
   return allOk;
+}
+
+Future<bool> _viewportArrays(
+  void Function(String) log,
+  gpu.GpuContext ctx,
+  gpu.Texture Function(gpu.PixelFormat) rt,
+) async {
+  if (!fs.mcsmViewportArrays) {
+    log('SMOKE viewport arrays: not on this engine');
+    return true;
+  }
+  final lib = await fs.loadShaderLibraryAsync(
+    await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
+  );
+  if (lib == null) return false;
+  final v = lib['SmokeTilesVertex']!, f = lib['SmokeTilesFragment']!;
+  final layout = gpu.VertexLayout(buffers: [
+    gpu.VertexBuffer(
+      strideInBytes: 8,
+      attributes: [
+        gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
+      ],
+    ),
+    gpu.VertexBuffer(
+      strideInBytes: 28,
+      stepMode: gpu.VertexStepMode.instance,
+      attributes: [
+        gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
+        gpu.VertexAttribute(
+          name: 'color',
+          format: gpu.VertexFormat.float32x4,
+          offsetInBytes: 8,
+        ),
+        gpu.VertexAttribute(
+          name: 'tile',
+          format: gpu.VertexFormat.float32,
+          offsetInBytes: 24,
+        ),
+      ],
+    ),
+  ]);
+  final pipeline = ctx.createRenderPipeline(v, f, vertexLayout: layout);
+  // A thin slanted triangle: edges that cross pixel centres at odd places.
+  final tri = gpu.BufferView(
+    ctx.createDeviceBufferWithCopy(ByteData.sublistView(
+      Float32List.fromList([-0.93, -0.71, 0.87, -0.97, 0.13, 0.94]),
+    )),
+    offsetInBytes: 0,
+    lengthInBytes: 24,
+  );
+  final inst = Float32List(4 * 7);
+  final colors = [
+    [1.0, 0.25, 0.0, 1.0],
+    [0.0, 0.8, 0.3, 1.0],
+    [0.2, 0.1, 0.9, 1.0],
+    [0.7, 0.7, 0.1, 1.0],
+  ];
+  for (var i = 0; i < 4; i++) {
+    inst.setAll(7 * i, [0.03 * i, -0.02 * i, ...colors[i], i.toDouble()]);
+  }
+  final instances = ctx.createDeviceBufferWithCopy(ByteData.sublistView(inst));
+  final scale = ctx.createDeviceBufferWithCopy(
+    ByteData.sublistView(Float32List.fromList([0.9, 0, 0, 0])),
+  );
+  final tiles = [
+    for (var i = 0; i < 4; i++)
+      gpu.Viewport(x: (i % 2) * 32 + 1, y: (i ~/ 2) * 32 + 1, width: 30, height: 30),
+  ];
+  final scissors = [
+    for (final t in tiles)
+      gpu.Scissor(x: t.x, y: t.y, width: t.width, height: t.height),
+  ];
+  gpu.RenderPass begin(gpu.CommandBuffer cb, gpu.Texture t) =>
+      cb.createRenderPass(gpu.RenderTarget.singleColor(
+        gpu.ColorAttachment(texture: t, clearValue: Vector4(0, 0, 0, 1)),
+      ))
+        ..bindPipeline(pipeline)
+        ..bindVertexBuffer(tri)
+        ..bindUniform(
+          v.getUniformSlot('FrameInfo'),
+          gpu.BufferView(scale, offsetInBytes: 0, lengthInBytes: 16),
+        );
+  // A: one draw per tile, each with its own viewport and scissor.
+  final a = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
+  var cb = ctx.createCommandBuffer();
+  final pa = begin(cb, a);
+  for (var i = 0; i < 4; i++) {
+    pa
+      ..setViewport(tiles[i])
+      ..setScissor(scissors[i])
+      ..bindVertexBuffer(
+        gpu.BufferView(instances, offsetInBytes: 28 * i, lengthInBytes: 28),
+        slot: 1,
+      )
+      ..draw(3);
+  }
+  await _done(cb);
+  // B: one instanced draw, four instances, each into its tile.
+  final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
+  cb = ctx.createCommandBuffer();
+  final pb = begin(cb, b);
+  final set = fs.mcsmSetViewports(pb, tiles, scissors: scissors);
+  pb
+    ..bindVertexBuffer(
+      gpu.BufferView(instances, offsetInBytes: 0, lengthInBytes: 28 * 4),
+      slot: 1,
+    )
+    ..draw(3, instanceCount: 4);
+  // A later draw without them goes back to one viewport (the whole target):
+  // nothing here, but it must not fail.
+  fs.mcsmSetViewports(pb, const []);
+  await _done(cb);
+  final ra = await _readRgba8(a), rb = await _readRgba8(b);
+  var differ = 0, covered = 0;
+  for (var i = 0; i < ra.length; i += 4) {
+    if (ra[i] != 0 || ra[i + 1] != 0 || ra[i + 2] != 0) covered++;
+    for (var k = 0; k < 4; k++) {
+      if (ra[i + k] != rb[i + k]) {
+        differ++;
+        break;
+      }
+    }
+  }
+  final ok = set && differ == 0 && covered > 400;
+  log('SMOKE viewport arrays ${ok ? 'ok' : 'WRONG'} (set: $set; 4 tiles: '
+      'one instanced draw vs one draw per tile: $differ of ${ra.length ~/ 4} '
+      'pixels differ, $covered covered)');
+  return ok;
 }

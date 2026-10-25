@@ -14,5 +14,13 @@
   "SmokeTexturedFragment": {
     "type": "fragment",
     "file": "shaders/smoke_textured.frag"
+  },
+  "SmokeTilesVertex": {
+    "type": "vertex",
+    "file": "shaders/smoke_tiles.vert"
+  },
+  "SmokeTilesFragment": {
+    "type": "fragment",
+    "file": "shaders/smoke_tiles.frag"
   }
 }

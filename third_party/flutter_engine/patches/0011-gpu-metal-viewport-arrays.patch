@@ -1,0 +1,345 @@
+From a19c295ed81ef2334736e906a272ed432bb987dd Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sun, 25 Oct 2026 11:53:07 +0100
+Subject: [PATCH 1/2] =?UTF-8?q?flutter=5Fgpu,=20impeller=20(mcsm7):=20view?=
+ =?UTF-8?q?port=20arrays=20on=20Metal=20=E2=80=94=20RenderPass=5FMcsmSetVi?=
+ =?UTF-8?q?ewports=20sets=20up=20to=2016=20viewports=20and=20scissor=20rec?=
+ =?UTF-8?q?ts=20on=20the=20encoder=20for=20the=20draws=20that=20follow=20(?=
+ =?UTF-8?q?each=20primitive=20picks=20one=20with=20the=20vertex=20stage's?=
+ =?UTF-8?q?=20viewport=20array=20index);=20false=20on=20other=20backends;?=
+ =?UTF-8?q?=20McsmFeatures=20bit=20256?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../backend/metal/pass_bindings_cache_mtl.h   |  7 ++
+ .../backend/metal/pass_bindings_cache_mtl.mm  | 34 +++++++++
+ .../renderer/backend/metal/render_pass_mtl.h  |  5 ++
+ .../renderer/backend/metal/render_pass_mtl.mm |  7 ++
+ .../flutter/impeller/renderer/render_pass.cc  |  6 ++
+ .../flutter/impeller/renderer/render_pass.h   | 10 +++
+ engine/src/flutter/lib/gpu/context.cc         |  7 +-
+ engine/src/flutter/lib/gpu/context.h          |  1 +
+ engine/src/flutter/lib/gpu/render_pass.cc     | 74 +++++++++++++++++--
+ engine/src/flutter/lib/gpu/render_pass.h      | 23 ++++++
+ 10 files changed, 166 insertions(+), 8 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
+index f24984ba516..06bd1e46df7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
+@@ -79,6 +79,13 @@ struct PassBindingsCacheMTL {
+   ///        current encoder state.
+   void SetScissor(const IRect32& scissor);
+ 
++  /// mcsm7: several viewports and scissor rects (at most 16); the single
++  /// viewport and scissor caches are cleared, so the next SetViewport or
++  /// SetScissor goes back to one.
++  bool SetViewports(const Viewport* viewports,
++                    const IRect32* scissors,
++                    size_t count);
++
+   /// @brief Set the encoder's stencil reference if the value is different from
+   ///        the current encoder state.
+   void SetStencilRef(uint32_t stencil_ref);
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+index f36609b9be9..e79cb9bd36c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+@@ -199,6 +199,40 @@
+   scissor_ = scissor;
+ }
+ 
++bool PassBindingsCacheMTL::SetViewports(const Viewport* viewports,
++                                        const IRect32* scissors,
++                                        size_t count) {
++  constexpr size_t kMax = 16;
++  if (count == 0 || count > kMax) {
++    return false;
++  }
++  MTLViewport vp[kMax];
++  MTLScissorRect sc[kMax];
++  for (size_t i = 0; i < count; i++) {
++    const auto& v = viewports[i];
++    vp[i] = MTLViewport{
++        .originX = v.rect.GetX(),
++        .originY = v.rect.GetY(),
++        .width = v.rect.GetWidth(),
++        .height = v.rect.GetHeight(),
++        .znear = v.depth_range.z_near,
++        .zfar = v.depth_range.z_far,
++    };
++    const auto& s = scissors[i];
++    sc[i] = MTLScissorRect{
++        .x = static_cast<NSUInteger>(s.GetX()),
++        .y = static_cast<NSUInteger>(s.GetY()),
++        .width = static_cast<NSUInteger>(s.GetWidth()),
++        .height = static_cast<NSUInteger>(s.GetHeight()),
++    };
++  }
++  [encoder_ setViewports:vp count:count];
++  [encoder_ setScissorRects:sc count:count];
++  viewport_.reset();
++  scissor_.reset();
++  return true;
++}
++
+ void PassBindingsCacheMTL::SetStencilRef(uint32_t stencil_ref) {
+   if (stencil_ref_.has_value() && stencil_ref_.value() == stencil_ref) {
+     return;
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+index c503cce4d76..1d510d5a8b7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+@@ -77,6 +77,11 @@ class RenderPassMTL final : public RenderPass {
+   // |RenderPass|
+   void SetScissor(IRect32 scissor) override;
+ 
++  // |RenderPass|
++  bool McsmSetViewports(const Viewport* viewports,
++                        const IRect32* scissors,
++                        size_t count) override;
++
+   // |RenderPass|
+   void SetElementCount(size_t count) override;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+index 356fa75f79c..c94ac246e1a 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+@@ -286,6 +286,13 @@ static bool Bind(PassBindingsCacheMTL& pass,
+   pass_bindings_.SetScissor(scissor);
+ }
+ 
++// |RenderPass|
++bool RenderPassMTL::McsmSetViewports(const Viewport* viewports,
++                                     const IRect32* scissors,
++                                     size_t count) {
++  return pass_bindings_.SetViewports(viewports, scissors, count);
++}
++
+ // |RenderPass|
+ void RenderPassMTL::SetElementCount(size_t count) {
+   vertex_count_ = count;
+diff --git a/engine/src/flutter/impeller/renderer/render_pass.cc b/engine/src/flutter/impeller/renderer/render_pass.cc
+index ae880d5e92c..8cadd6c57dc 100644
+--- a/engine/src/flutter/impeller/renderer/render_pass.cc
++++ b/engine/src/flutter/impeller/renderer/render_pass.cc
+@@ -116,6 +116,12 @@ void RenderPass::SetScissor(IRect32 scissor) {
+   pending_.scissor = scissor;
+ }
+ 
++bool RenderPass::McsmSetViewports(const Viewport* viewports,
++                                  const IRect32* scissors,
++                                  size_t count) {
++  return false;
++}
++
+ void RenderPass::SetElementCount(size_t count) {
+   pending_.element_count = count;
+ }
+diff --git a/engine/src/flutter/impeller/renderer/render_pass.h b/engine/src/flutter/impeller/renderer/render_pass.h
+index 0d66519230e..24a0af6bc3f 100644
+--- a/engine/src/flutter/impeller/renderer/render_pass.h
++++ b/engine/src/flutter/impeller/renderer/render_pass.h
+@@ -82,6 +82,16 @@ class RenderPass : public ResourceBinder {
+   ///
+   virtual void SetScissor(IRect32 scissor);
+ 
++  //----------------------------------------------------------------------------
++  /// mcsm7: several viewports and their scissor rects at once (the vertex
++  /// stage picks one per primitive with its viewport array index). False
++  /// where the backend can't (only Metal can); a later SetViewport or
++  /// SetScissor goes back to one.
++  ///
++  virtual bool McsmSetViewports(const Viewport* viewports,
++                                const IRect32* scissors,
++                                size_t count);
++
+   //----------------------------------------------------------------------------
+   /// The number of elements to draw. When only a vertex buffer is set, this is
+   /// the vertex count. When an index buffer is set, this is the index count.
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 781cc09558f..e3703371c2a 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -196,7 +196,8 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // mcsm7: 16 = Texture_McsmWriteDirect (host-visible textures written
+   // without a staging buffer or command buffer), 64 = several passes in
+   // turn on one command buffer (Metal), 128 = several colour attachments on
+-  // GLES (impeller render_pass_gles). (32 is unused: a batched encoding was
+-  // tried and measured no cheaper than the leaf calls.)
+-  return 1 | 2 | 4 | 8 | 16 | 64 | 128;
++  // GLES (impeller render_pass_gles), 256 = viewport arrays on Metal
++  // (RenderPass_McsmSetViewports; false on other backends). (32 is unused: a
++  // batched encoding was tried and measured no cheaper than the leaf calls.)
++  return 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256;
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index 53a7824fe12..21388e6204f 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -118,6 +118,7 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   16: Texture_McsmWriteDirect (mcsm7)
+ ///   64: several render passes in turn on one command buffer (mcsm7)
+ ///   128: several colour attachments in one pass on GLES (mcsm7)
++///   256: viewport arrays, RenderPass_McsmSetViewports (Metal only) (mcsm7)
+ FLUTTER_GPU_EXPORT
+ extern int64_t InternalFlutterGpu_McsmFeatures();
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 786b5037777..b8d5847479d 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -384,6 +384,41 @@ bool RenderPass::HasCachedPipeline() {
+   return true;
+ }
+ 
++void RenderPass::McsmEndViewports() {
++  if (!mcsm_viewports_sent_) {
++    return;
++  }
++  mcsm_viewports_sent_ = false;
++  // The array set them all; the whole target, unless the draw sets its own.
++  const auto size = render_pass_->GetRenderTargetSize();
++  render_pass_->SetViewport(
++      impeller::Viewport{.rect = impeller::Rect::MakeSize(size)});
++  render_pass_->SetScissor(impeller::IRect32::MakeSize(size));
++}
++
++bool RenderPass::McsmSetViewports(const float* viewports,
++                                  const int32_t* scissors,
++                                  size_t count) {
++  if (count > 16 || GetContext()->GetBackendType() !=
++                        impeller::Context::BackendType::kMetal) {
++    return false;
++  }
++  mcsm_viewports_.clear();
++  mcsm_scissors_.clear();
++  for (size_t i = 0; i < count; i++) {
++    const float* v = viewports + 6 * i;
++    impeller::Viewport viewport;
++    viewport.rect = impeller::Rect::MakeXYWH(v[0], v[1], v[2], v[3]);
++    viewport.depth_range.z_near = v[4];
++    viewport.depth_range.z_far = v[5];
++    mcsm_viewports_.push_back(viewport);
++    const int32_t* s = scissors + 4 * i;
++    mcsm_scissors_.push_back(impeller::IRect32::MakeXYWH(s[0], s[1], s[2], s[3]));
++  }
++  mcsm_viewports_sent_ = false;
++  return true;
++}
++
+ impeller::raw_ptr<const impeller::Sampler> RenderPass::GetSampler(
+     const impeller::SamplerDescriptor& desc,
+     uint32_t packed) {
+@@ -510,12 +545,25 @@ bool RenderPass::Draw(size_t element_count,
+ 
+   render_pass_->SetStencilReference(stencil_reference);
+ 
+-  if (viewport.has_value()) {
+-    render_pass_->SetViewport(viewport.value());
+-  }
++  // mcsm7: several viewports (each primitive picks one with its viewport
++  // array index); a draw without them goes back to one viewport.
++  if (!mcsm_viewports_.empty()) {
++    if (!mcsm_viewports_sent_ &&
++        !render_pass_->McsmSetViewports(mcsm_viewports_.data(),
++                                        mcsm_scissors_.data(),
++                                        mcsm_viewports_.size())) {
++      return false;
++    }
++    mcsm_viewports_sent_ = true;
++  } else {
++    McsmEndViewports();
++    if (viewport.has_value()) {
++      render_pass_->SetViewport(viewport.value());
++    }
+ 
+-  if (scissor.has_value()) {
+-    render_pass_->SetScissor(scissor.value());
++    if (scissor.has_value()) {
++      render_pass_->SetScissor(scissor.value());
++    }
+   }
+ 
+   bool result = render_pass_->Draw().ok();
+@@ -575,6 +623,7 @@ bool RenderPass::Replay(const DrawList& list,
+   if (ended_ && *ended_) {
+     return false;  // mcsm7
+   }
++  McsmEndViewports();  // mcsm7: replays draw with one viewport
+   bool ok = true;
+   // mcsm7: on Metal the encoder keeps bindings between draws, so a replayed
+   // draw sends only what differs from the draw replayed before it (in this
+@@ -1334,3 +1383,18 @@ bool InternalFlutterGpu_RenderPass_Replay(flutter::gpu::RenderPass* wrapper,
+   }
+   return wrapper->Replay(*list, indices.data(), static_cast<size_t>(count));
+ }
++
++bool InternalFlutterGpu_RenderPass_McsmSetViewports(
++    flutter::gpu::RenderPass* wrapper,
++    Dart_Handle viewports_handle,
++    Dart_Handle scissors_handle,
++    int count) {
++  tonic::Float32List viewports(viewports_handle);
++  tonic::Int32List scissors(scissors_handle);
++  if (count < 0 || viewports.num_elements() < 6 * count ||
++      scissors.num_elements() < 4 * count) {
++    return false;
++  }
++  return wrapper->McsmSetViewports(viewports.data(), scissors.data(),
++                                   static_cast<size_t>(count));
++}
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 03a2387a9b8..3d5ba6733dd 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -217,6 +217,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   /// mcsm6 (patch 0008): while set, every draw is also appended to [list].
+   void SetRecording(fml::RefPtr<DrawList> list) { recording_ = std::move(list); }
+ 
++  /// mcsm7: several viewports (x, y, width, height, z near, z far each) and
++  /// scissor rects (x, y, width, height each) for the draws that follow;
++  /// [count] 0 goes back to one. Metal only (false elsewhere: draw per
++  /// viewport there), at most 16.
++  bool McsmSetViewports(const float* viewports,
++                        const int32_t* scissors,
++                        size_t count);
++
+   /// mcsm6 (patch 0008): sends [list]'s draws at [indices] (in that order)
+   /// as Draw sent them. Afterwards every binding of this pass is sent again
+   /// with its next draw.
+@@ -278,6 +286,12 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+       last_pipeline_;
+ 
++  // mcsm7: viewport arrays.
++  std::vector<impeller::Viewport> mcsm_viewports_;
++  std::vector<impeller::IRect32> mcsm_scissors_;
++  bool mcsm_viewports_sent_ = false;
++  void McsmEndViewports();
++
+   // mcsm7: GetSampler's cache.
+   struct SamplerEntry {
+     uint32_t packed = 0;
+@@ -473,6 +487,15 @@ extern bool InternalFlutterGpu_RenderPass_Replay(
+     Dart_Handle indices,
+     int count);
+ 
++/// mcsm7: RenderPass::McsmSetViewports (a Float32List of 6 per viewport, an
++/// Int32List of 4 per scissor rect).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmSetViewports(
++    flutter::gpu::RenderPass* wrapper,
++    Dart_Handle viewports,
++    Dart_Handle scissors,
++    int count);
++
+ FLUTTER_GPU_EXPORT
+ extern void InternalFlutterGpu_RenderPass_SetColorBlendEnable(
+     flutter::gpu::RenderPass* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+
