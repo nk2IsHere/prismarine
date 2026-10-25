@@ -12,6 +12,7 @@ dependencies:
   flutter_scene:
     path: ../../third_party/flutter_scene
   vector_math: ^2.1.4
+  hooks: ^2.0.0
 dependency_overrides:
   # The vendored Dart side (third_party/flutter_gpu/PATCHES.md): uses the
   # patched engine's slot binds when present, the stock calls otherwise.
@@ -19,3 +20,20 @@ dependency_overrides:
     path: ../../third_party/flutter_gpu
 flutter:
   uses-material-design: false
+  # The smoke test's shader bundle (hook/build.dart).
+  assets:
+    - flutter_scene_generated/
+    - path: flutter_scene_generated/metal_ios/
+      platforms:
+        - ios
+    - path: flutter_scene_generated/metal_desktop/
+      platforms:
+        - macos
+    - path: flutter_scene_generated/opengl_es_vulkan/
+      platforms:
+        - android
+        - linux
+        - windows
+    - path: flutter_scene_generated/opengl_es/
+      platforms:
+        - web

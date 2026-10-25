@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <cstring>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -52,7 +53,34 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "gpu_smoke");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // A test tool runs unattended (as the player's --background=on): small,
+  // in the work area's bottom-right corner, never taking focus, out of the
+  // taskbar. --show shows a normal window.
+  bool show = false;
+  for (char** a = self->dart_entrypoint_arguments; a != nullptr && *a; a++) {
+    if (strcmp(*a, "--show") == 0) show = true;
+  }
+  if (show) {
+    gtk_window_set_default_size(window, 1280, 720);
+  } else {
+    const int w = 160, h = 90;
+    gtk_window_set_default_size(window, w, h);
+    gtk_window_set_accept_focus(window, FALSE);
+    gtk_window_set_focus_on_map(window, FALSE);
+    gtk_window_set_skip_taskbar_hint(window, TRUE);
+    gtk_window_set_skip_pager_hint(window, TRUE);
+    gtk_window_set_keep_above(window, TRUE);
+    gtk_window_set_gravity(window, GDK_GRAVITY_SOUTH_EAST);
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(window));
+    GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
+    if (monitor == nullptr) monitor = gdk_display_get_monitor(display, 0);
+    if (monitor != nullptr) {
+      GdkRectangle area;
+      gdk_monitor_get_workarea(monitor, &area);
+      gtk_window_move(window, area.x + area.width - w - 12,
+                      area.y + area.height - h - 12);
+    }
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   // Flutter GPU needs Impeller.

@@ -14,6 +14,8 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:flutter_scene/scene.dart' show Scene, baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
+import 'mcsm7.dart';
+
 // Each SMOKE line goes to stdout and, when GPU_SMOKE_OUT names a file, to it
 // too (a Windows GUI app has no console).
 final _out = Platform.environment['GPU_SMOKE_OUT'];
@@ -126,5 +128,6 @@ Future<int> _smoke() async {
   });
   _log('SMOKE draw ${bare.toStringAsFixed(3)} us, '
       'draw+texture bind ${bind.toStringAsFixed(3)} us');
-  return ok ? 0 : 2;
+  final mcsm7 = await mcsm7Checks(_log);
+  return ok && mcsm7 ? 0 : 2;
 }

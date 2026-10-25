@@ -1,0 +1,18 @@
+{
+  "SmokeInstancedVertex": {
+    "type": "vertex",
+    "file": "shaders/smoke_instanced.vert"
+  },
+  "SmokeColorFragment": {
+    "type": "fragment",
+    "file": "shaders/smoke_color.frag"
+  },
+  "SmokeMrtFragment": {
+    "type": "fragment",
+    "file": "shaders/smoke_mrt.frag"
+  },
+  "SmokeTexturedFragment": {
+    "type": "fragment",
+    "file": "shaders/smoke_textured.frag"
+  }
+}
