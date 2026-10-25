@@ -48,6 +48,13 @@ base class Shader extends NativeFieldWrapperClass1 {
   // [Shader] handles are instantiated when interacting with a [ShaderLibrary].
   Shader._();
 
+  // mcsm G6: the textures and samplers bound per resolved texture index on
+  // [_mcsmBoundPass] since its clear number [_mcsmBoundEpoch] (G5's memo,
+  // kept here instead of in a per-pass identity map).
+  RenderPass? _mcsmBoundPass;
+  int _mcsmBoundEpoch = -1;
+  final List<Object?> _mcsmBound = <Object?>[];
+
   UniformSlot getUniformSlot(String uniformName) {
     return UniformSlot._(this, uniformName);
   }

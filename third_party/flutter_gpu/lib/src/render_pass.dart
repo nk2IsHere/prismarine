@@ -356,9 +356,16 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   // mcsm G5: each shader's texture slots as bound since the last
   // [clearBindings] (texture, sampler; by the slot's resolved index). The
   // pass keeps a binding until cleared, so binding the same texture and
-  // sampler object again changes nothing and is skipped.
-  final Map<Shader, List<Object?>> _boundTextures =
-      Map<Shader, List<Object?>>.identity();
+  // sampler object again changes nothing and is skipped. mcsm G6: the memo
+  // lives on the Shader (pass, clear number), not in an identity map.
+  int _clearEpoch = 0;
+
+  // mcsm G6: pipeline state as last set on this pass (-1: not yet), so
+  // setting the same value again doesn't cross into the engine.
+  int _cullMode = -1;
+  int _windingOrder = -1;
+  int _primitiveType = -1;
+  int _polygonMode = -1;
 
   /// Creates a new RenderPass.
   RenderPass._(
@@ -416,7 +423,12 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     }
   }
 
+  // mcsm G6: the pipeline bound last (binding it again changes nothing).
+  RenderPipeline? _pipeline;
+
   void bindPipeline(RenderPipeline pipeline) {
+    if (identical(pipeline, _pipeline)) return;
+    _pipeline = pipeline;
     _bindPipeline(pipeline);
   }
 
@@ -521,10 +533,14 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       // mcsm G2: by the resolved index, as a leaf call.
       final index = slot._resolvedTextureIndex;
       // mcsm G5: the slot holds this texture and sampler already.
-      final List<Object?>? bound = index < 0
-          ? null
-          : _boundTextures[slot.shader];
-      if (bound != null &&
+      final shader = slot.shader;
+      final List<Object?> bound = shader._mcsmBound;
+      if (!identical(shader._mcsmBoundPass, this) ||
+          shader._mcsmBoundEpoch != _clearEpoch) {
+        shader._mcsmBoundPass = this;
+        shader._mcsmBoundEpoch = _clearEpoch;
+        bound.length = 0;
+      } else if (index >= 0 &&
           2 * index + 1 < bound.length &&
           identical(bound[2 * index], texture) &&
           identical(bound[2 * index + 1], sampler)) {
@@ -544,12 +560,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
           )) {
         throw Exception("Failed to bind texture");
       }
-      var list = bound ?? (_boundTextures[slot.shader] = <Object?>[]);
-      if (list.length < 2 * index + 2) {
-        list.length = 2 * index + 2;
+      if (bound.length < 2 * index + 2) {
+        bound.length = 2 * index + 2;
       }
-      list[2 * index] = texture;
-      list[2 * index + 1] = sampler;
+      bound[2 * index] = texture;
+      bound[2 * index + 1] = sampler;
       return;
     }
     bool success = _bindTexture(
@@ -572,7 +587,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _clearBindings();
     _boundVertexSlotsMask = 0;
     _maxBoundVertexSlot = -1;
-    _boundTextures.clear();
+    _clearEpoch++;
   }
 
   void setColorBlendEnable(bool enable, {int colorAttachmentIndex = 0}) {
@@ -655,20 +670,33 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _setScissor(scissor.x, scissor.y, scissor.width, scissor.height);
   }
 
+  // mcsm G6: an unchanged value doesn't cross into the engine.
   void setCullMode(CullMode cullMode) {
-    _setCullMode(cullMode.index);
+    final v = cullMode.index;
+    if (v == _cullMode) return;
+    _cullMode = v;
+    _setCullMode(v);
   }
 
   void setPolygonMode(PolygonMode polygonMode) {
-    _setPolygonMode(polygonMode.index);
+    final v = polygonMode.index;
+    if (v == _polygonMode) return;
+    _polygonMode = v;
+    _setPolygonMode(v);
   }
 
   void setPrimitiveType(PrimitiveType primitiveType) {
-    _setPrimitiveType(primitiveType.index);
+    final v = primitiveType.index;
+    if (v == _primitiveType) return;
+    _primitiveType = v;
+    _setPrimitiveType(v);
   }
 
   void setWindingOrder(WindingOrder windingOrder) {
-    _setWindingOrder(windingOrder.index);
+    final v = windingOrder.index;
+    if (v == _windingOrder) return;
+    _windingOrder = v;
+    _setWindingOrder(v);
   }
 
   /// Appends a non-indexed draw of [vertexCount] vertices.
@@ -832,6 +860,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindPipeline',
+    isLeaf: true, // mcsm G6
   )
   external void _bindPipeline(RenderPipeline pipeline);
 
@@ -917,6 +946,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Float, Float)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetViewport',
+    isLeaf: true, // mcsm G6
   )
   external void _setViewport(
     int x,
@@ -961,11 +991,13 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Int, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEnable',
+    isLeaf: true, // mcsm G6
   )
   external void _setColorBlendEnable(int colorAttachmentIndex, bool enable);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEquation',
+    isLeaf: true, // mcsm G6
   )
   external void _setColorBlendEquation(
     int colorAttachmentIndex,
@@ -979,21 +1011,25 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthWriteEnable',
+    isLeaf: true, // mcsm G6
   )
   external void _setDepthWriteEnable(bool enable);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthCompareOperation',
+    isLeaf: true, // mcsm G6
   )
   external void _setDepthCompareOperation(int compareOperation);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilReference',
+    isLeaf: true, // mcsm G6
   )
   external void _setStencilReference(int referenceValue);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilConfig',
+    isLeaf: true, // mcsm G6
   )
   external void _setStencilConfig(
     int compareFunction,
@@ -1007,26 +1043,31 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetScissor',
+    isLeaf: true, // mcsm G6
   )
   external void _setScissor(int x, int y, int width, int height);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetCullMode',
+    isLeaf: true, // mcsm G6
   )
   external void _setCullMode(int cullMode);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPrimitiveType',
+    isLeaf: true, // mcsm G6
   )
   external void _setPrimitiveType(int primitiveType);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetWindingOrder',
+    isLeaf: true, // mcsm G6
   )
   external void _setWindingOrder(int windingOrder);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPolygonMode',
+    isLeaf: true, // mcsm G6
   )
   external void _setPolygonMode(int polygonMode);
 

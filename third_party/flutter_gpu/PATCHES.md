@@ -26,6 +26,12 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 
 `render_pass.dart`: a pass remembers, per shader and resolved texture slot, the texture and sampler object it bound since the last `clearBindings` (bindings persist across draws until then, on every backend). Binding the same pair again returns before the native call: flutter_scene and mcsm's encoders rebind every slot per draw, and consecutive draws mostly share the shadow atlas, the occlusion buffer, placeholders and the block atlas. Only with the perf E engine (the indexed bind); the stock path is unchanged.
 
+## G6: cheaper calls per draw (mcsm7)
+
+- `render_pass.dart`: the pipeline-state setters (`bindPipeline`, blend, depth, stencil, scissor, viewport, cull, winding, primitive, polygon mode) are leaf calls: they only store state natively (also on the stock engine).
+- A pass remembers the pipeline, cull mode, winding, primitive type and polygon mode it set last; setting the same again doesn't cross into the engine (flutter_scene sets winding and primitive type before every draw).
+- G5's memo lives on the `Shader` (the pass and its clear number it holds bindings for, then the texture and sampler per index) instead of a per-pass identity map: no hash lookup per texture bind.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
