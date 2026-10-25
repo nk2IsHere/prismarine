@@ -1,0 +1,1114 @@
+From 67fed384844057a359f65f45fa35fe066bdde932 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sun, 25 Oct 2026 11:37:55 +0100
+Subject: [PATCH 1/2] flutter_gpu: cheaper draws and passes (mcsm7): pipelines
+ cached on each RenderPipeline across passes (plain-word keys) and a
+ recent-pipeline cache for cull/winding/primitive changes; state versions
+ moved only by real changes; bindings in bind-order arrays; a sampler cache;
+ replays skip repeated binds; direct writes to host-visible textures
+ (Texture_McsmWriteDirect); several passes in turn on one command buffer;
+ McsmFeatures bits 16, 64, 128
+
+---
+ engine/src/flutter/lib/gpu/command_buffer.cc  |  32 +-
+ engine/src/flutter/lib/gpu/command_buffer.h   |  13 +-
+ engine/src/flutter/lib/gpu/context.cc         |   7 +-
+ engine/src/flutter/lib/gpu/context.h          |   3 +
+ engine/src/flutter/lib/gpu/render_pass.cc     | 347 +++++++++++++++---
+ engine/src/flutter/lib/gpu/render_pass.h      | 129 +++++--
+ engine/src/flutter/lib/gpu/render_pipeline.cc |  29 ++
+ engine/src/flutter/lib/gpu/render_pipeline.h  |  63 ++++
+ engine/src/flutter/lib/gpu/shader.cc          |   1 +
+ engine/src/flutter/lib/gpu/shader.h           |   5 +
+ engine/src/flutter/lib/gpu/texture.cc         |  31 ++
+ engine/src/flutter/lib/gpu/texture.h          |  17 +
+ 12 files changed, 577 insertions(+), 100 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
+index fb557956982..9946bd585f9 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.cc
++++ b/engine/src/flutter/lib/gpu/command_buffer.cc
+@@ -26,6 +26,13 @@ CommandBuffer::CommandBuffer(
+ CommandBuffer::~CommandBuffer() = default;
+ 
+ bool CommandBuffer::Encodable::EncodeCommands() const {
++  // mcsm7: an encodable ended early isn't encoded again at submit.
++  if (ended && *ended) {
++    return true;
++  }
++  if (ended) {
++    *ended = true;
++  }
+   if (render_pass) {
+     return render_pass->EncodeCommands();
+   }
+@@ -35,21 +42,42 @@ bool CommandBuffer::Encodable::EncodeCommands() const {
+   return false;
+ }
+ 
++void CommandBuffer::McsmEndOpenEncoder() {
++  // Only Metal encodes as it goes; the other backends record commands and
++  // encode them all at submit.
++  if (encodables_.empty() ||
++      context_->GetBackendType() != impeller::Context::BackendType::kMetal) {
++    return;
++  }
++  auto& last = encodables_.back();
++  if (last.ended && *last.ended) {
++    return;
++  }
++  if (!last.ended) {
++    last.ended = std::make_shared<bool>(false);
++  }
++  last.EncodeCommands();
++}
++
+ std::shared_ptr<impeller::CommandBuffer> CommandBuffer::GetCommandBuffer() {
+   return command_buffer_;
+ }
+ 
+ void CommandBuffer::AddRenderPass(
+-    std::shared_ptr<impeller::RenderPass> render_pass) {
++    std::shared_ptr<impeller::RenderPass> render_pass,
++    std::shared_ptr<bool> ended) {
+   Encodable encodable;
+   encodable.render_pass = std::move(render_pass);
++  encodable.ended = std::move(ended);
+   encodables_.push_back(std::move(encodable));
+ }
+ 
+ std::shared_ptr<impeller::BlitPass> CommandBuffer::GetOrCreateBlitPass() {
+-  if (!encodables_.empty() && encodables_.back().blit_pass) {
++  if (!encodables_.empty() && encodables_.back().blit_pass &&
++      !(encodables_.back().ended && *encodables_.back().ended)) {
+     return encodables_.back().blit_pass;
+   }
++  McsmEndOpenEncoder();  // mcsm7
+   auto blit_pass = command_buffer_->CreateBlitPass();
+   if (!blit_pass) {
+     return nullptr;
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.h b/engine/src/flutter/lib/gpu/command_buffer.h
+index 840bf645a41..20c21e13658 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.h
++++ b/engine/src/flutter/lib/gpu/command_buffer.h
+@@ -33,7 +33,15 @@ class CommandBuffer : public RefCountedDartWrappable<CommandBuffer> {
+ 
+   std::shared_ptr<impeller::CommandBuffer> GetCommandBuffer();
+ 
+-  void AddRenderPass(std::shared_ptr<impeller::RenderPass> render_pass);
++  void AddRenderPass(std::shared_ptr<impeller::RenderPass> render_pass,
++                     std::shared_ptr<bool> ended = nullptr);
++
++  /// mcsm7: ends the encoder of this command buffer's last pass, if still
++  /// open, before a new one starts (Metal creates each pass's encoder at
++  /// once and allows one open encoder per command buffer, so upstream could
++  /// hold only one pass per command buffer). A pass that was ended this way
++  /// refuses further draws.
++  void McsmEndOpenEncoder();
+ 
+   bool AddCompletionCallback(
+       impeller::CommandBuffer::CompletionCallback completion_callback);
+@@ -69,6 +77,9 @@ class CommandBuffer : public RefCountedDartWrappable<CommandBuffer> {
+   struct Encodable {
+     std::shared_ptr<impeller::RenderPass> render_pass;
+     std::shared_ptr<impeller::BlitPass> blit_pass;
++    // mcsm7: set once encoded (ended early or at submit); shared with the
++    // flutter::gpu::RenderPass so it refuses later draws.
++    std::shared_ptr<bool> ended;
+ 
+     bool EncodeCommands() const;
+   };
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index f5d7682c019..781cc09558f 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -193,5 +193,10 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ }
+ 
+ extern int64_t InternalFlutterGpu_McsmFeatures() {
+-  return 1 | 2 | 4 | 8;
++  // mcsm7: 16 = Texture_McsmWriteDirect (host-visible textures written
++  // without a staging buffer or command buffer), 64 = several passes in
++  // turn on one command buffer (Metal), 128 = several colour attachments on
++  // GLES (impeller render_pass_gles). (32 is unused: a batched encoding was
++  // tried and measured no cheaper than the leaf calls.)
++  return 1 | 2 | 4 | 8 | 16 | 64 | 128;
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index 44b2cb6343d..53a7824fe12 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -115,6 +115,9 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   4: release builds take GC sizing Dart flags from
+ ///      FLUTTER_ENGINE_SWITCHES (dart-flags only; shell/common/switches.cc)
+ ///   8: retained draws (DrawList, RenderPass_BeginRecording/Replay)
++///   16: Texture_McsmWriteDirect (mcsm7)
++///   64: several render passes in turn on one command buffer (mcsm7)
++///   128: several colour attachments in one pass on GLES (mcsm7)
+ FLUTTER_GPU_EXPORT
+ extern int64_t InternalFlutterGpu_McsmFeatures();
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index d742b292b62..786b5037777 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "flutter/lib/gpu/render_pass.h"
+ #include <algorithm>
++#include <cstring>
+ #include <future>
+ #include <memory>
+ 
+@@ -82,12 +83,28 @@ impeller::PipelineDescriptor& RenderPass::GetPipelineDescriptor() {
+ }
+ 
+ bool RenderPass::Begin(flutter::gpu::CommandBuffer& command_buffer) {
++  // mcsm7: a command buffer may hold several passes in turn: the previous
++  // one's encoder ends here.
++  command_buffer.McsmEndOpenEncoder();
+   render_pass_ =
+       command_buffer.GetCommandBuffer()->CreateRenderPass(render_target_);
+   if (!render_pass_) {
+     return false;
+   }
+-  command_buffer.AddRenderPass(render_pass_);
++  // (Metal only: the other backends encode every pass at submit.)
++  if (GetContext()->GetBackendType() ==
++      impeller::Context::BackendType::kMetal) {
++    ended_ = std::make_shared<bool>(false);
++  }
++  command_buffer.AddRenderPass(render_pass_, ended_);
++  // mcsm7: every target's colour descriptor exists from the start (as
++  // GetOrCreatePipeline would add it at the first draw), so the pipeline key
++  // doesn't change shape when it does.
++  render_target_.IterateAllColorAttachments(
++      [&](size_t index, const impeller::ColorAttachment&) -> bool {
++        GetColorAttachmentDescriptor(index);
++        return true;
++      });
+   // mcsm E2: Metal's encoder keeps buffers, textures and samplers bound
+   // between draws (RenderPassMTL binds straight into it through
+   // PassBindingsCacheMTL and ignores binding metadata), so a draw only needs
+@@ -203,17 +220,103 @@ RenderPass::GetOrCreatePipeline() {
+   return pipeline;
+ }
+ 
+-RenderPass::PipelineStateKey RenderPass::MakePipelineStateKey() const {
+-  return PipelineStateKey{
+-      .cull_mode = pipeline_descriptor_.GetCullMode(),
+-      .winding_order = pipeline_descriptor_.GetWindingOrder(),
+-      .primitive_type = pipeline_descriptor_.GetPrimitiveType(),
+-      .polygon_mode = pipeline_descriptor_.GetPolygonMode(),
+-      .color = color_descriptors_,
+-      .depth = depth_desc_,
+-      .stencil_front = stencil_front_desc_,
+-      .stencil_back = stencil_back_desc_,
+-  };
++const McsmPipelineKey& RenderPass::CurrentPipelineKey() {
++  if (current_key_version_ == pipeline_state_version_ &&
++      current_key_.count != 0) {
++    return current_key_;
++  }
++  McsmPipelineKey& k = current_key_;
++  k.Clear();
++  k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetCullMode()));
++  k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetWindingOrder()));
++  k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetPrimitiveType()));
++  k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetPolygonMode()));
++  k.Push(static_cast<uint32_t>(render_target_.GetSampleCount()));
++  // Each colour descriptor as GetOrCreatePipeline builds it: the format is
++  // its target's (the render target's when the attachment has no texture),
++  // or its own for an index with no attachment.
++  for (const auto& [index, color] : color_descriptors_) {
++    uint32_t format = static_cast<uint32_t>(color.format);
++    if (render_target_.HasColorAttachment(index)) {
++      const auto& attachment = render_target_.GetColorAttachment(index);
++      format = static_cast<uint32_t>(
++          attachment.texture
++              ? attachment.texture->GetTextureDescriptor().format
++              : render_target_.GetRenderTargetPixelFormat());
++    }
++    k.Push(static_cast<uint32_t>(index));
++    k.Push(format);
++    k.Push(color.blending_enabled ? 1u : 0u);
++    k.Push(static_cast<uint32_t>(color.src_color_blend_factor));
++    k.Push(static_cast<uint32_t>(color.color_blend_op));
++    k.Push(static_cast<uint32_t>(color.dst_color_blend_factor));
++    k.Push(static_cast<uint32_t>(color.src_alpha_blend_factor));
++    k.Push(static_cast<uint32_t>(color.alpha_blend_op));
++    k.Push(static_cast<uint32_t>(color.dst_alpha_blend_factor));
++    k.Push(static_cast<uint32_t>(static_cast<uint64_t>(color.write_mask)));
++  }
++  k.Push(0xFFFFFFFFu);
++  {
++    auto stencil = render_target_.GetStencilAttachment();
++    if (stencil && impeller::IsStencilWritable(
++                       stencil->texture->GetTextureDescriptor().format)) {
++      k.Push(static_cast<uint32_t>(
++          stencil->texture->GetTextureDescriptor().format));
++      for (const auto* d : {&stencil_front_desc_, &stencil_back_desc_}) {
++        k.Push(static_cast<uint32_t>(d->stencil_compare));
++        k.Push(static_cast<uint32_t>(d->stencil_failure));
++        k.Push(static_cast<uint32_t>(d->depth_failure));
++        k.Push(static_cast<uint32_t>(d->depth_stencil_pass));
++        k.Push(d->read_mask);
++        k.Push(d->write_mask);
++      }
++    } else {
++      k.Push(0);
++    }
++  }
++  {
++    auto depth = render_target_.GetDepthAttachment();
++    if (depth && impeller::IsDepthWritable(
++                     depth->texture->GetTextureDescriptor().format)) {
++      k.Push(static_cast<uint32_t>(
++          depth->texture->GetTextureDescriptor().format));
++      k.Push(static_cast<uint32_t>(depth_desc_.depth_compare));
++      k.Push(depth_desc_.depth_write_enabled ? 1u : 0u);
++    } else {
++      k.Push(0);
++    }
++  }
++  k.Finish();
++  current_key_version_ = pipeline_state_version_;
++  return k;
++}
++
++uint32_t RenderPass::ScalarState() const {
++  return static_cast<uint32_t>(pipeline_descriptor_.GetCullMode()) |
++         (static_cast<uint32_t>(pipeline_descriptor_.GetWindingOrder()) << 4) |
++         (static_cast<uint32_t>(pipeline_descriptor_.GetPrimitiveType()) << 8) |
++         (static_cast<uint32_t>(pipeline_descriptor_.GetPolygonMode()) << 12);
++}
++
++RenderPass::RecentPipeline* RenderPass::FindRecent(uint32_t scalar) {
++  const uintptr_t rp = reinterpret_cast<uintptr_t>(render_pipeline_.get());
++  auto& e = recent_[((rp >> 4) ^ scalar * 2654435761u) % recent_.size()];
++  return (e.pipeline && e.render_pipeline == render_pipeline_.get() &&
++          e.scalar == scalar && e.slow_version == slow_state_version_)
++             ? &e
++             : nullptr;
++}
++
++void RenderPass::AddRecent(
++    uint32_t scalar,
++    const std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>&
++        pipeline) {
++  const uintptr_t rp = reinterpret_cast<uintptr_t>(render_pipeline_.get());
++  auto& e = recent_[((rp >> 4) ^ scalar * 2654435761u) % recent_.size()];
++  e.render_pipeline = render_pipeline_.get();
++  e.scalar = scalar;
++  e.slow_version = slow_state_version_;
++  e.pipeline = pipeline;
+ }
+ 
+ std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+@@ -225,30 +328,30 @@ RenderPass::GetCachedPipeline() {
+       pipeline_state_version_ == last_pipeline_state_version_) {
+     return last_pipeline_;
+   }
+-  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>> pipeline;
+-  {
+-    PipelineStateKey key = MakePipelineStateKey();
+-    for (const auto& entry : pipeline_cache_) {
+-      if (entry.render_pipeline.get() == render_pipeline_.get() &&
+-          entry.key == key) {
+-        pipeline = entry.pipeline;
+-        break;
+-      }
+-    }
++  if (!render_pipeline_) {
++    return nullptr;
+   }
++  // mcsm7: the pipelines this pass used lately, by RenderPipeline and the
++  // state that changes from draw to draw (cull, winding, primitive,
++  // polygon mode), while the rest of the state holds.
++  const uint32_t scalar = ScalarState();
++  if (auto* recent = FindRecent(scalar)) {
++    last_render_pipeline_ = render_pipeline_.get();
++    last_pipeline_state_version_ = pipeline_state_version_;
++    last_pipeline_ = recent->pipeline;
++    return last_pipeline_;
++  }
++  // mcsm7: the RenderPipeline's own cache, shared by every pass.
++  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>> pipeline =
++      render_pipeline_->McsmFindPipeline(CurrentPipelineKey());
+   if (!pipeline) {
+     pipeline = GetOrCreatePipeline();
+     if (!pipeline) {
+       return pipeline;
+     }
+-    // GetOrCreatePipeline fills in the colour attachments' formats, so the
+-    // key is taken after it.
+-    pipeline_cache_.push_back(CachedPipeline{
+-        .render_pipeline = render_pipeline_,
+-        .key = MakePipelineStateKey(),
+-        .pipeline = pipeline,
+-    });
++    render_pipeline_->McsmAddPipeline(CurrentPipelineKey(), pipeline);
+   }
++  AddRecent(scalar, pipeline);
+   last_render_pipeline_ = render_pipeline_.get();
+   last_pipeline_state_version_ = pipeline_state_version_;
+   last_pipeline_ = pipeline;
+@@ -263,14 +366,36 @@ bool RenderPass::HasCachedPipeline() {
+   if (!render_pipeline_) {
+     return false;
+   }
+-  PipelineStateKey key = MakePipelineStateKey();
+-  for (const auto& entry : pipeline_cache_) {
+-    if (entry.render_pipeline.get() == render_pipeline_.get() &&
+-        entry.key == key) {
+-      return true;
++  const uint32_t scalar = ScalarState();
++  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>> pipeline;
++  if (auto* recent = FindRecent(scalar)) {
++    pipeline = recent->pipeline;
++  } else {
++    pipeline = render_pipeline_->McsmFindPipeline(CurrentPipelineKey());
++    if (!pipeline) {
++      return false;
+     }
++    AddRecent(scalar, pipeline);
+   }
+-  return false;
++  // The draw that follows takes the fast path.
++  last_render_pipeline_ = render_pipeline_.get();
++  last_pipeline_state_version_ = pipeline_state_version_;
++  last_pipeline_ = std::move(pipeline);
++  return true;
++}
++
++impeller::raw_ptr<const impeller::Sampler> RenderPass::GetSampler(
++    const impeller::SamplerDescriptor& desc,
++    uint32_t packed) {
++  for (const auto& entry : samplers_) {
++    if (entry.sampler && entry.packed == packed) {
++      return entry.sampler;
++    }
++  }
++  auto sampler = GetContext()->GetSamplerLibrary()->GetSampler(desc);
++  samplers_[next_sampler_] = SamplerEntry{packed, sampler};
++  next_sampler_ = (next_sampler_ + 1) % samplers_.size();
++  return sampler;
+ }
+ 
+ bool RenderPass::SendBuffer(impeller::ShaderStage stage,
+@@ -318,6 +443,9 @@ bool RenderPass::Draw(size_t element_count,
+     // drawIndexed was called without an index buffer bound.
+     return false;
+   }
++  if (ended_ && *ended_) {
++    return false;  // mcsm7: the command buffer ended this pass.
++  }
+ 
+   render_pass_->SetPipeline(impeller::PipelineRef(GetCachedPipeline()));
+ 
+@@ -444,7 +572,28 @@ void RenderPass::Record(
+ bool RenderPass::Replay(const DrawList& list,
+                         const int32_t* indices,
+                         size_t count) {
++  if (ended_ && *ended_) {
++    return false;  // mcsm7
++  }
+   bool ok = true;
++  // mcsm7: on Metal the encoder keeps bindings between draws, so a replayed
++  // draw sends only what differs from the draw replayed before it (in this
++  // call; the encoder's state before it is unknown).
++  struct LastBuffer {
++    const void* buffer = nullptr;
++    size_t offset = 0, length = 0;
++  };
++  struct LastTexture {
++    const void* texture = nullptr;
++    const void* sampler = nullptr;
++  };
++  std::array<LastBuffer, kTrackedIndices> last_buffers[2];
++  std::array<LastTexture, kTrackedIndices> last_textures[2];
++  std::array<LastBuffer, kMaxVertexBufferSlots> last_vertex;
++  size_t last_vertex_count = static_cast<size_t>(-1);
++  auto stage_index = [](impeller::ShaderStage stage) {
++    return stage == impeller::ShaderStage::kVertex ? 0 : 1;
++  };
+   for (size_t n = 0; n < count; n++) {
+     const int32_t i = indices[n];
+     if (i < 0 || static_cast<size_t>(i) >= list.draws.size()) {
+@@ -455,6 +604,17 @@ bool RenderPass::Replay(const DrawList& list,
+     render_pass_->SetPipeline(impeller::PipelineRef(d.pipeline));
+     for (const auto& b : d.buffers) {
+       if (retained_bindings_) {
++        const size_t index = b.slot.ext_res_0;
++        if (index < kTrackedIndices) {
++          auto& last = last_buffers[stage_index(b.stage)][index];
++          const LastBuffer now{b.view.GetBuffer(), b.view.GetRange().offset,
++                               b.view.GetRange().length};
++          if (last.buffer == now.buffer && last.offset == now.offset &&
++              last.length == now.length) {
++            continue;
++          }
++          last = now;
++        }
+         render_pass_->BindResource(b.stage,
+                                    impeller::DescriptorType::kUniformBuffer,
+                                    b.slot, b.metadata, b.view);
+@@ -466,6 +626,15 @@ bool RenderPass::Replay(const DrawList& list,
+     }
+     for (const auto& t : d.textures) {
+       if (retained_bindings_) {
++        const size_t index = t.slot.texture_index;
++        if (index < kTrackedIndices) {
++          auto& last = last_textures[stage_index(t.stage)][index];
++          const LastTexture now{t.texture.get(), t.sampler.operator->()};
++          if (last.texture == now.texture && last.sampler == now.sampler) {
++            continue;
++          }
++          last = now;
++        }
+         render_pass_->BindResource(t.stage,
+                                    impeller::DescriptorType::kSampledImage,
+                                    t.slot, t.metadata, t.texture, t.sampler);
+@@ -477,10 +646,26 @@ bool RenderPass::Replay(const DrawList& list,
+       }
+     }
+     // SetVertexBuffer takes a mutable array; the recorded views are copied.
+-    std::array<impeller::BufferView, kMaxVertexBufferSlots> vb;
+-    const size_t vb_count = std::min(d.vertex_buffers.size(), vb.size());
+-    std::copy_n(d.vertex_buffers.begin(), vb_count, vb.begin());
+-    render_pass_->SetVertexBuffer(vb.data(), vb_count);
++    const size_t vb_count =
++        std::min(d.vertex_buffers.size(), size_t{kMaxVertexBufferSlots});
++    bool same_vertex = retained_bindings_ && vb_count == last_vertex_count;
++    for (size_t k = 0; same_vertex && k < vb_count; k++) {
++      const auto& v = d.vertex_buffers[k];
++      same_vertex = last_vertex[k].buffer == v.GetBuffer() &&
++                    last_vertex[k].offset == v.GetRange().offset &&
++                    last_vertex[k].length == v.GetRange().length;
++    }
++    if (!same_vertex) {
++      std::array<impeller::BufferView, kMaxVertexBufferSlots> vb;
++      std::copy_n(d.vertex_buffers.begin(), vb_count, vb.begin());
++      render_pass_->SetVertexBuffer(vb.data(), vb_count);
++      last_vertex_count = vb_count;
++      for (size_t k = 0; k < vb_count; k++) {
++        const auto& v = d.vertex_buffers[k];
++        last_vertex[k] = {v.GetBuffer(), v.GetRange().offset,
++                          v.GetRange().length};
++      }
++    }
+     render_pass_->SetIndexBuffer(d.index_buffer, d.index_buffer_type);
+     render_pass_->SetElementCount(d.element_count);
+     render_pass_->SetInstanceCount(d.instance_count);
+@@ -803,8 +988,15 @@ static bool BindTextureBinding(
+   // Capabilities::GetMaxSamplerAnisotropy.
+   sampler_desc.max_anisotropy =
+       static_cast<uint8_t>(std::clamp(max_anisotropy, 1, 255));
+-  auto sampler =
+-      wrapper->GetContext()->GetSamplerLibrary()->GetSampler(sampler_desc);
++  // mcsm7: through the pass's small cache, by the packed fields.
++  const uint32_t packed =
++      (static_cast<uint32_t>(min_filter) & 0xF) |
++      ((static_cast<uint32_t>(mag_filter) & 0xF) << 4) |
++      ((static_cast<uint32_t>(mip_filter) & 0xF) << 8) |
++      ((static_cast<uint32_t>(width_address_mode) & 0xF) << 12) |
++      ((static_cast<uint32_t>(height_address_mode) & 0xF) << 16) |
++      (static_cast<uint32_t>(sampler_desc.max_anisotropy) << 20);
++  auto sampler = wrapper->GetSampler(sampler_desc, packed);
+ 
+   flutter::gpu::RenderPass::TextureUniformMap* uniform_map = nullptr;
+   switch (shader->GetShaderStage()) {
+@@ -879,8 +1071,14 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEnable(
+     flutter::gpu::RenderPass* wrapper,
+     int color_attachment_index,
+     bool enable) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
++  // mcsm7: the state version moves only when something changes (a new
++  // descriptor entry counts).
++  const size_t before = wrapper->McsmColorDescriptorCount();
+   auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
++  if (color.blending_enabled != enable ||
++      wrapper->McsmColorDescriptorCount() != before) {
++    wrapper->MarkPipelineStateChanged();  // mcsm E1
++  }
+   color.blending_enabled = enable;
+ }
+ 
+@@ -893,8 +1091,9 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+     int alpha_blend_operation,
+     int source_alpha_blend_factor,
+     int destination_alpha_blend_factor) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
++  const size_t before = wrapper->McsmColorDescriptorCount();
+   auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
++  const impeller::ColorAttachmentDescriptor old = color;
+   color.color_blend_op =
+       flutter::gpu::ToImpellerBlendOperation(color_blend_operation);
+   color.src_color_blend_factor =
+@@ -907,32 +1106,46 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+       flutter::gpu::ToImpellerBlendFactor(source_alpha_blend_factor);
+   color.dst_alpha_blend_factor =
+       flutter::gpu::ToImpellerBlendFactor(destination_alpha_blend_factor);
++  if (!(old == color) || wrapper->McsmColorDescriptorCount() != before) {
++    wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++  }
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetColorWriteMask(
+     flutter::gpu::RenderPass* wrapper,
+     int color_attachment_index,
+     int write_mask) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
++  const size_t before = wrapper->McsmColorDescriptorCount();
+   auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
+-  color.write_mask = static_cast<impeller::ColorWriteMaskBits>(write_mask & 0xF);
++  const impeller::ColorWriteMask mask =
++      static_cast<impeller::ColorWriteMaskBits>(write_mask & 0xF);
++  if (!(color.write_mask == mask) ||
++      wrapper->McsmColorDescriptorCount() != before) {
++    wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++  }
++  color.write_mask = mask;
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetDepthWriteEnable(
+     flutter::gpu::RenderPass* wrapper,
+     bool enable) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& depth = wrapper->GetDepthAttachmentDescriptor();
++  if (depth.depth_write_enabled != enable) {
++    wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++  }
+   depth.depth_write_enabled = enable;
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetDepthCompareOperation(
+     flutter::gpu::RenderPass* wrapper,
+     int compare_operation) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   auto& depth = wrapper->GetDepthAttachmentDescriptor();
+-  depth.depth_compare =
++  const auto compare =
+       flutter::gpu::ToImpellerCompareFunction(compare_operation);
++  if (depth.depth_compare != compare) {
++    wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++  }
++  depth.depth_compare = compare;
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetStencilReference(
+@@ -979,7 +1192,6 @@ void InternalFlutterGpu_RenderPass_SetStencilConfig(
+     int read_mask,
+     int write_mask,
+     int target_face) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::StencilAttachmentDescriptor desc;
+   desc.stencil_compare =
+       flutter::gpu::ToImpellerCompareFunction(stencil_compare_operation);
+@@ -994,9 +1206,15 @@ void InternalFlutterGpu_RenderPass_SetStencilConfig(
+ 
+   // Corresponds to the `StencilFace` enum in `gpu/lib/src/render_pass.dart`.
+   if (target_face != 2 /* both or front */) {
++    if (!(wrapper->GetStencilFrontAttachmentDescriptor() == desc)) {
++      wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++    }
+     wrapper->GetStencilFrontAttachmentDescriptor() = desc;
+   }
+   if (target_face != 1 /* both or back */) {
++    if (!(wrapper->GetStencilBackAttachmentDescriptor() == desc)) {
++      wrapper->MarkPipelineStateChanged();  // mcsm E1, mcsm7
++    }
+     wrapper->GetStencilBackAttachmentDescriptor() = desc;
+   }
+ }
+@@ -1004,40 +1222,49 @@ void InternalFlutterGpu_RenderPass_SetStencilConfig(
+ void InternalFlutterGpu_RenderPass_SetCullMode(
+     flutter::gpu::RenderPass* wrapper,
+     int cull_mode) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+-  pipeline_descriptor.SetCullMode(flutter::gpu::ToImpellerCullMode(cull_mode));
++  const auto value = flutter::gpu::ToImpellerCullMode(cull_mode);
++  if (pipeline_descriptor.GetCullMode() != value) {
++    wrapper->MarkScalarStateChanged();  // mcsm E1, mcsm7
++    pipeline_descriptor.SetCullMode(value);
++  }
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetPrimitiveType(
+     flutter::gpu::RenderPass* wrapper,
+     int primitive_type) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+-  pipeline_descriptor.SetPrimitiveType(
+-      flutter::gpu::ToImpellerPrimitiveType(primitive_type));
++  const auto value = flutter::gpu::ToImpellerPrimitiveType(primitive_type);
++  if (pipeline_descriptor.GetPrimitiveType() != value) {
++    wrapper->MarkScalarStateChanged();  // mcsm E1, mcsm7
++    pipeline_descriptor.SetPrimitiveType(value);
++  }
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetWindingOrder(
+     flutter::gpu::RenderPass* wrapper,
+     int winding_order) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+-  pipeline_descriptor.SetWindingOrder(
+-      flutter::gpu::ToImpellerWindingOrder(winding_order));
++  const auto value = flutter::gpu::ToImpellerWindingOrder(winding_order);
++  if (pipeline_descriptor.GetWindingOrder() != value) {
++    wrapper->MarkScalarStateChanged();  // mcsm E1, mcsm7
++    pipeline_descriptor.SetWindingOrder(value);
++  }
+ }
+ 
+ void InternalFlutterGpu_RenderPass_SetPolygonMode(
+     flutter::gpu::RenderPass* wrapper,
+     int polygon_mode) {
+-  wrapper->MarkPipelineStateChanged();  // mcsm E1
+   impeller::PipelineDescriptor& pipeline_descriptor =
+       wrapper->GetPipelineDescriptor();
+-  pipeline_descriptor.SetPolygonMode(
+-      flutter::gpu::ToImpellerPolygonMode(polygon_mode));
++  const auto value = flutter::gpu::ToImpellerPolygonMode(polygon_mode);
++  if (pipeline_descriptor.GetPolygonMode() != value) {
++    wrapper->MarkScalarStateChanged();  // mcsm E1, mcsm7
++    pipeline_descriptor.SetPolygonMode(value);
++  }
+ }
+ 
+ bool InternalFlutterGpu_RenderPass_Draw(flutter::gpu::RenderPass* wrapper,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index b6c645ee95e..03a2387a9b8 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -28,6 +28,44 @@ namespace gpu {
+ 
+ class RenderPass;
+ 
++/// mcsm7: a pass's bindings in bind order, looked up by a linear scan (a pass
++/// holds a handful; upstream's unordered_maps cost a hash and a node per
++/// bind and pointer chasing per draw).
++template <typename K, typename V>
++class McsmSmallMap {
++ public:
++  using Entry = std::pair<K, V>;
++  V* find_value(K key) {
++    for (auto& entry : entries_) {
++      if (entry.first == key) {
++        return &entry.second;
++      }
++    }
++    return nullptr;
++  }
++  void insert_or_assign(K key, V value) {
++    if (V* existing = find_value(key)) {
++      *existing = std::move(value);
++    } else {
++      entries_.emplace_back(key, std::move(value));
++    }
++  }
++  void clear() { entries_.clear(); }
++  bool empty() const { return entries_.empty(); }
++  size_t size() const { return entries_.size(); }
++  typename std::vector<Entry>::iterator begin() { return entries_.begin(); }
++  typename std::vector<Entry>::iterator end() { return entries_.end(); }
++  typename std::vector<Entry>::const_iterator begin() const {
++    return entries_.begin();
++  }
++  typename std::vector<Entry>::const_iterator end() const {
++    return entries_.end();
++  }
++
++ private:
++  std::vector<Entry> entries_;
++};
++
+ /// mcsm6 (patch 0008): draws recorded from a RenderPass, everything its Draw
+ /// sent to the encoder, to be sent again by RenderPass::Replay in later
+ /// passes with the same targets' formats (retained command encoding: the
+@@ -122,12 +160,13 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+     bool dirty = true;
+   };
+ 
++  // mcsm7: in bind order (McsmSmallMap) instead of unordered_maps.
+   using BufferUniformMap =
+-      std::unordered_map<const flutter::gpu::Shader::UniformBinding*,
+-                         BufferAndUniformSlot>;
++      McsmSmallMap<const flutter::gpu::Shader::UniformBinding*,
++                   BufferAndUniformSlot>;
+   using TextureUniformMap =
+-      std::unordered_map<const flutter::gpu::Shader::TextureBinding*,
+-                         TextureBindingEntry>;
++      McsmSmallMap<const flutter::gpu::Shader::TextureBinding*,
++                   TextureBindingEntry>;
+ 
+   BufferUniformMap vertex_uniform_bindings;
+   TextureUniformMap vertex_texture_bindings;
+@@ -154,8 +193,22 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   std::optional<impeller::Viewport> viewport;
+ 
+   /// mcsm E1: called by every export that changes pipeline state (blend,
+-  /// depth, stencil, cull, winding, primitive, polygon mode).
+-  void MarkPipelineStateChanged() { ++pipeline_state_version_; }
++  /// depth, stencil, cull, winding, primitive, polygon mode). mcsm7: only
++  /// when the value actually changes.
++  void MarkPipelineStateChanged() {
++    ++pipeline_state_version_;
++    ++slow_state_version_;
++  }
++  /// mcsm7: for cull, winding, primitive and polygon mode, which change from
++  /// draw to draw (the recent-pipeline cache keys on them directly).
++  void MarkScalarStateChanged() { ++pipeline_state_version_; }
++  size_t McsmColorDescriptorCount() const { return color_descriptors_.size(); }
++
++  /// mcsm7: the sampler for packed SamplerDescriptor fields (a small cache
++  /// in front of the context's sampler library).
++  impeller::raw_ptr<const impeller::Sampler> GetSampler(
++      const impeller::SamplerDescriptor& desc,
++      uint32_t packed);
+ 
+   /// mcsm E3: whether a draw now would find its pipeline in this pass's
+   /// cache (so it can't block on a pipeline compile).
+@@ -170,35 +223,12 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   bool Replay(const DrawList& list, const int32_t* indices, size_t count);
+ 
+  private:
+-  // mcsm E1: the pipeline state that, with the RenderPipeline and this
+-  // pass's render target, decides the Impeller pipeline.
+-  struct PipelineStateKey {
+-    impeller::CullMode cull_mode;
+-    impeller::WindingOrder winding_order;
+-    impeller::PrimitiveType primitive_type;
+-    impeller::PolygonMode polygon_mode;
+-    std::map<size_t, impeller::ColorAttachmentDescriptor> color;
+-    impeller::DepthAttachmentDescriptor depth;
+-    impeller::StencilAttachmentDescriptor stencil_front;
+-    impeller::StencilAttachmentDescriptor stencil_back;
+-
+-    bool operator==(const PipelineStateKey& o) const {
+-      return cull_mode == o.cull_mode && winding_order == o.winding_order &&
+-             primitive_type == o.primitive_type &&
+-             polygon_mode == o.polygon_mode && color == o.color &&
+-             depth == o.depth && stencil_front == o.stencil_front &&
+-             stencil_back == o.stencil_back;
+-    }
+-  };
+-
+-  struct CachedPipeline {
+-    fml::RefPtr<RenderPipeline> render_pipeline;
+-    PipelineStateKey key;
+-    std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+-        pipeline;
+-  };
+-
+-  PipelineStateKey MakePipelineStateKey() const;
++  // mcsm7: the current pipeline state and targets as a key, rebuilt when
++  // the state version moves (the pipelines themselves are cached on each
++  // RenderPipeline, across passes).
++  const McsmPipelineKey& CurrentPipelineKey();
++  McsmPipelineKey current_key_;
++  uint64_t current_key_version_ = 0;
+ 
+   /// Every binding, vertex and index buffer, each time (non-Metal backends).
+   void SendAllBindings();
+@@ -227,11 +257,38 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   IndexWriters fragment_texture_writers_{};
+ 
+   uint64_t pipeline_state_version_ = 1;
++  // mcsm7: the recent-pipeline cache (GetCachedPipeline).
++  uint64_t slow_state_version_ = 1;
++  struct RecentPipeline {
++    const RenderPipeline* render_pipeline = nullptr;
++    uint32_t scalar = 0;
++    uint64_t slow_version = 0;
++    std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
++        pipeline;
++  };
++  std::array<RecentPipeline, 32> recent_;
++  uint32_t ScalarState() const;
++  RecentPipeline* FindRecent(uint32_t scalar);
++  void AddRecent(
++      uint32_t scalar,
++      const std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>&
++          pipeline);
+   const RenderPipeline* last_render_pipeline_ = nullptr;
+   uint64_t last_pipeline_state_version_ = 0;
+   std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+       last_pipeline_;
+-  std::vector<CachedPipeline> pipeline_cache_;
++
++  // mcsm7: GetSampler's cache.
++  struct SamplerEntry {
++    uint32_t packed = 0;
++    impeller::raw_ptr<const impeller::Sampler> sampler;
++  };
++  std::array<SamplerEntry, 8> samplers_{};
++  size_t next_sampler_ = 0;
++
++  // mcsm7: set when the command buffer ended this pass's encoder (a later
++  // pass on it started): draws are refused.
++  std::shared_ptr<bool> ended_;
+ 
+   // mcsm6 (patch 0008): the list draws are recorded into, if any.
+   fml::RefPtr<DrawList> recording_;
+diff --git a/engine/src/flutter/lib/gpu/render_pipeline.cc b/engine/src/flutter/lib/gpu/render_pipeline.cc
+index 8402ea8fa51..7822b719a6b 100644
+--- a/engine/src/flutter/lib/gpu/render_pipeline.cc
++++ b/engine/src/flutter/lib/gpu/render_pipeline.cc
+@@ -54,6 +54,35 @@ void RenderPipeline::BindToPipelineDescriptor(
+ 
+ RenderPipeline::~RenderPipeline() = default;
+ 
++std::shared_ptr<RenderPipeline::ImpellerPipeline>
++RenderPipeline::McsmFindPipeline(const McsmPipelineKey& key) {
++  if (vertex_shader_->GetGeneration() != mcsm_vertex_generation_ ||
++      fragment_shader_->GetGeneration() != mcsm_fragment_generation_) {
++    mcsm_pipelines_.clear();
++    mcsm_vertex_generation_ = vertex_shader_->GetGeneration();
++    mcsm_fragment_generation_ = fragment_shader_->GetGeneration();
++    return nullptr;
++  }
++  if (key.overflow) {
++    return nullptr;
++  }
++  for (const auto& entry : mcsm_pipelines_) {
++    if (entry.key == key) {
++      return entry.pipeline;
++    }
++  }
++  return nullptr;
++}
++
++void RenderPipeline::McsmAddPipeline(
++    const McsmPipelineKey& key,
++    std::shared_ptr<ImpellerPipeline> pipeline) {
++  if (key.overflow || !pipeline) {
++    return;
++  }
++  mcsm_pipelines_.push_back(McsmEntry{key, std::move(pipeline)});
++}
++
+ namespace {
+ 
+ // Translation table from the Dart-side `VertexFormat` enum (encoded as the
+diff --git a/engine/src/flutter/lib/gpu/render_pipeline.h b/engine/src/flutter/lib/gpu/render_pipeline.h
+index a8d1e19032e..ce8d0a96717 100644
+--- a/engine/src/flutter/lib/gpu/render_pipeline.h
++++ b/engine/src/flutter/lib/gpu/render_pipeline.h
+@@ -5,18 +5,62 @@
+ #ifndef FLUTTER_LIB_GPU_RENDER_PIPELINE_H_
+ #define FLUTTER_LIB_GPU_RENDER_PIPELINE_H_
+ 
++#include <array>
++#include <cstdint>
++#include <cstring>
+ #include <memory>
++#include <vector>
+ 
+ #include "flutter/lib/gpu/context.h"
+ #include "flutter/lib/gpu/export.h"
+ #include "flutter/lib/gpu/shader.h"
+ #include "flutter/lib/ui/dart_wrapper.h"
++#include "impeller/renderer/pipeline.h"
+ #include "impeller/renderer/pipeline_descriptor.h"
+ #include "impeller/renderer/vertex_descriptor.h"
+ 
+ namespace flutter {
+ namespace gpu {
+ 
++/// mcsm7: everything besides the RenderPipeline that decides the Impeller
++/// pipeline a draw uses (the pass's pipeline state and its targets' formats
++/// and sample count), as plain words, so a lookup is a hash and a memcmp
++/// (upstream copied, hashed and compared a whole PipelineDescriptor and a
++/// std::map of colour descriptors per lookup).
++struct McsmPipelineKey {
++  static constexpr size_t kMaxWords = 160;
++  uint32_t count = 0;
++  bool overflow = false;
++  uint64_t hash = 0;
++  std::array<uint32_t, kMaxWords> words;
++
++  void Clear() {
++    count = 0;
++    overflow = false;
++    hash = 0;
++  }
++  void Push(uint32_t word) {
++    if (count < kMaxWords) {
++      words[count++] = word;
++    } else {
++      overflow = true;
++    }
++  }
++  /// FNV-1a over the words.
++  void Finish() {
++    uint64_t h = 1469598103934665603ull;
++    for (uint32_t i = 0; i < count; i++) {
++      h = (h ^ words[i]) * 1099511628211ull;
++    }
++    hash = h;
++  }
++  bool operator==(const McsmPipelineKey& o) const {
++    return count == o.count && hash == o.hash &&
++           std::memcmp(words.data(), o.words.data(), count * sizeof(uint32_t)) ==
++               0;
++  }
++};
++
+ class RenderPipeline : public RefCountedDartWrappable<RenderPipeline> {
+   DEFINE_WRAPPERTYPEINFO();
+   FML_FRIEND_MAKE_REF_COUNTED(RenderPipeline);
+@@ -31,7 +75,26 @@ class RenderPipeline : public RefCountedDartWrappable<RenderPipeline> {
+   void BindToPipelineDescriptor(impeller::ShaderLibrary& library,
+                                 impeller::PipelineDescriptor& desc);
+ 
++  using ImpellerPipeline =
++      impeller::Pipeline<impeller::PipelineDescriptor>;
++
++  /// mcsm7: the Impeller pipeline built for [key] by any pass, or null. The
++  /// entries live as long as this RenderPipeline (a new pass no longer
++  /// starts from an empty cache); a shader reloaded with new code drops them.
++  std::shared_ptr<ImpellerPipeline> McsmFindPipeline(
++      const McsmPipelineKey& key);
++  void McsmAddPipeline(const McsmPipelineKey& key,
++                       std::shared_ptr<ImpellerPipeline> pipeline);
++
+  private:
++  struct McsmEntry {
++    McsmPipelineKey key;
++    std::shared_ptr<ImpellerPipeline> pipeline;
++  };
++  std::vector<McsmEntry> mcsm_pipelines_;
++  uint64_t mcsm_vertex_generation_ = 0;
++  uint64_t mcsm_fragment_generation_ = 0;
++
+   fml::RefPtr<flutter::gpu::Shader> vertex_shader_;
+   fml::RefPtr<flutter::gpu::Shader> fragment_shader_;
+   // Vertex descriptor used at pipeline-build time. When the caller passes
+diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
+index cefafa6ba9a..89356622b02 100644
+--- a/engine/src/flutter/lib/gpu/shader.cc
++++ b/engine/src/flutter/lib/gpu/shader.cc
+@@ -114,6 +114,7 @@ void Shader::ResetFrom(Shader& other) {
+   ReresolveUniforms();
+   if (code_changed) {
+     is_dirty_ = true;
++    ++generation_;  // mcsm7
+   }
+ }
+ 
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index 7cb6bfa3b73..4319f5e135f 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -73,6 +73,10 @@ class Shader : public RefCountedDartWrappable<Shader> {
+ 
+   void SetClean();
+ 
++  /// mcsm7: bumped whenever ResetFrom brings new code, so pipelines built
++  /// from the old code (RenderPipeline's cache) are dropped.
++  uint64_t GetGeneration() const { return generation_; }
++
+   /// Replaces this shader's payload (code, layouts, uniforms) with the data
+   /// from `other`, preserving the library_id / entrypoint registry key and
+   /// marking this shader dirty. Used by `ShaderLibrary` to reload a shader
+@@ -142,6 +146,7 @@ class Shader : public RefCountedDartWrappable<Shader> {
+   std::unordered_map<std::string, TextureBinding> uniform_textures_;
+   std::vector<impeller::DescriptorSetLayout> descriptor_set_layouts_;
+   bool is_dirty_ = true;
++  uint64_t generation_ = 0;  // mcsm7
+ 
+   // Returns the scoped name to use when registering or looking up this
+   // shader's function in a shared impeller::ShaderLibrary.
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 56f327ea4f1..1ea066b49bf 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -145,6 +145,24 @@ bool Texture::Overwrite(Context& gpu_context,
+   return true;
+ }
+ 
++bool Texture::McsmWriteDirect(Context& gpu_context,
++                              const tonic::DartByteData& source_bytes,
++                              uint32_t slice) {
++  auto& impeller_context = gpu_context.GetContext();
++  if (impeller_context.GetBackendType() !=
++      impeller::Context::BackendType::kMetal) {
++    return false;
++  }
++  const auto& desc = texture_->GetTextureDescriptor();
++  if (desc.storage_mode != impeller::StorageMode::kHostVisible ||
++      source_bytes.length_in_bytes() != desc.GetByteSizeOfBaseMipLevel()) {
++    return false;
++  }
++  return texture_->SetContents(
++      static_cast<const uint8_t*>(source_bytes.data()),
++      source_bytes.length_in_bytes(), slice, texture_->IsOpaque());
++}
++
+ #if IMPELLER_SUPPORTS_RENDERING
+ // Extracts the impeller::Texture that backs the ui.Image `image_wrapper`.
+ // Returns nullptr if the image is not backed by a Flutter GPU compatible
+@@ -273,6 +291,19 @@ bool InternalFlutterGpu_Texture_Overwrite(flutter::gpu::Texture* texture,
+                             static_cast<uint32_t>(slice));
+ }
+ 
++bool InternalFlutterGpu_Texture_McsmWriteDirect(
++    flutter::gpu::Texture* texture,
++    flutter::gpu::Context* gpu_context,
++    Dart_Handle source_byte_data,
++    int slice) {
++  if (slice < 0) {
++    return false;
++  }
++  return texture->McsmWriteDirect(*gpu_context,
++                                  tonic::DartByteData(source_byte_data),
++                                  static_cast<uint32_t>(slice));
++}
++
+ Dart_Handle InternalFlutterGpu_Texture_AsImage(flutter::gpu::Texture* wrapper) {
+   return wrapper->AsImage();
+ }
+diff --git a/engine/src/flutter/lib/gpu/texture.h b/engine/src/flutter/lib/gpu/texture.h
+index 50ad8a42695..4e0491bb1da 100644
+--- a/engine/src/flutter/lib/gpu/texture.h
++++ b/engine/src/flutter/lib/gpu/texture.h
+@@ -30,6 +30,15 @@ class Texture : public RefCountedDartWrappable<Texture> {
+                  uint32_t mip_level,
+                  uint32_t slice);
+ 
++  /// mcsm7: writes the whole base level of a host-visible texture straight
++  /// into its memory (Metal: replaceRegion), with no staging buffer and no
++  /// command buffer. False (nothing written) where that isn't possible: the
++  /// caller uploads another way. The caller makes sure no submitted GPU work
++  /// still reads the texture.
++  bool McsmWriteDirect(Context& gpu_context,
++                       const tonic::DartByteData& source_bytes,
++                       uint32_t slice);
++
+   Dart_Handle AsImage() const;
+ 
+  private:
+@@ -70,6 +79,14 @@ extern bool InternalFlutterGpu_Texture_Overwrite(
+     int mip_level,
+     int slice);
+ 
++/// mcsm7: Texture::McsmWriteDirect.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_Texture_McsmWriteDirect(
++    flutter::gpu::Texture* wrapper,
++    flutter::gpu::Context* gpu_context,
++    Dart_Handle source_byte_data,
++    int slice);
++
+ FLUTTER_GPU_EXPORT
+ extern Dart_Handle InternalFlutterGpu_Texture_AsImage(
+     flutter::gpu::Texture* wrapper);
+-- 
+2.54.0 (Apple Git-157)
+

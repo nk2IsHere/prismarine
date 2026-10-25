@@ -47,7 +47,8 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $patches = (Get-ChildItem "$here\patches\*.patch" | Sort-Object Name | ForEach-Object Name) -join ' '
 # The engine revision the patches apply to (the Flutter SDK's engine.version).
 $rev = if ($env:MCSM_ENGINE_REV) { $env:MCSM_ENGINE_REV } else { 'deb287481e3ce9468f3434937ced4240a70539ca' }
-@("target=$Target", "out=$Out", "engine_revision=$rev", "patches=$patches") |
+$release = (Get-Content (Join-Path $here 'RELEASE') -Raw).Trim()
+@("target=$Target", "release=$release", "out=$Out", "engine_revision=$rev", "patches=$patches") |
   Set-Content -Encoding ascii (Join-Path $stage "$Target\mcsm-engine.txt")
 New-Item -ItemType Directory -Force $Dest | Out-Null
 $archive = Join-Path $Dest "mcsm-engine-$Target.tar.xz"
