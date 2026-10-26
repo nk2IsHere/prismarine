@@ -32,6 +32,12 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - A pass remembers the pipeline, cull mode, winding, primitive type and polygon mode it set last; setting the same again doesn't cross into the engine (flutter_scene sets winding and primitive type before every draw).
 - G5's memo lives on the `Shader` (the pass and its clear number it holds bindings for, then the texture and sampler per index) instead of a per-pass identity map: no hash lookup per texture bind.
 
+## G7: draws from a first instance (mcsm7)
+
+- `render_pass.dart`: `draw` and `drawIndexed` take `firstInstance` (default 0): every instance-rate vertex buffer starts at that instance, as if its view were bound `firstInstance` elements further on; the shader's instance index still counts from 0. On the mcsm7 engine (`InternalFlutterGpu_RenderPass_McsmDrawInstanced`, patch 0012) it is one leaf call; on other engines, or before the pass has built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored (the pass remembers each slot's view; the pipeline its `VertexLayout`).
+- `render_pipeline.dart`: a `RenderPipeline` keeps the `VertexLayout` it was made with.
+- gpu_smoke checks it against offset bindings (plain and indexed: 0 px differ) on the stock, mcsm6 and mcsm7 engines.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
