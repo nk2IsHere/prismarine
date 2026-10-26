@@ -463,7 +463,7 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
         '(written: $wrote) ${_px(r, 64, 32, 32)}');
     allOk &= ok;
   } else {
-    log('SMOKE direct texture write: not on this engine');
+    log('SMOKE direct texture write: not on this engine or backend (uploads the usual way)');
   }
 
   // 4. Viewport arrays (feature 256): one instanced draw into four tiles
