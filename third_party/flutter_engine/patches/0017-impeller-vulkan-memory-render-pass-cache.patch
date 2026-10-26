@@ -521,37 +521,43 @@ index 1ce7053a830..eb0427a24e0 100644
 2.54.0 (Apple Git-157)
 
 
-From d0f15ecf1e36e0ee78bfa62c8323a1c179a6246f Mon Sep 17 00:00:00 2001
+From a1b97a9ef724d7409076ac42274041d5b4967cf7 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 22:41:44 +0100
 Subject: [PATCH 3/3] =?UTF-8?q?impeller,=20flutter=5Fgpu=20(mcsm8):=20a=20?=
  =?UTF-8?q?new=20Flutter=20GPU=20colour=20texture=20leaves=20UNDEFINED=20a?=
  =?UTF-8?q?t=20once=20on=20Vulkan=20=E2=80=94=20ContextVK::McsmInitializeL?=
- =?UTF-8?q?ayout=20moves=20it=20to=20SHADER=5FREAD=5FONLY=5FOPTIMAL=20on?=
- =?UTF-8?q?=20a=20command=20buffer=20submitted=20right=20away,=20so=20the?=
- =?UTF-8?q?=20image's=20layout=20on=20the=20GPU=20matches=20Impeller's=20t?=
- =?UTF-8?q?racked=20one=20before=20anything=20else=20is=20recorded=20with?=
- =?UTF-8?q?=20it.=20Flutter=20GPU=20may=20sample=20a=20texture=20nothing?=
- =?UTF-8?q?=20wrote=20yet,=20or=20record=20its=20first=20write=20in=20a=20?=
- =?UTF-8?q?command=20buffer=20submitted=20after=20(or=20never=20submitted?=
- =?UTF-8?q?=20before)=20one=20that=20samples=20it;=20the=20tracked=20layou?=
- =?UTF-8?q?t=20then=20said=20SHADER=5FREAD=5FONLY=20while=20the=20image=20?=
- =?UTF-8?q?was=20still=20UNDEFINED=20(validation=20VUID-vkCmdDraw-None-096?=
- =?UTF-8?q?00=20in=20TempleHub,=20TempleHubInterior,=20TownFair=20and=20To?=
- =?UTF-8?q?wnFairDestroyed).=20The=20other=20backends=20read=20undefined?=
- =?UTF-8?q?=20contents=20there;=20so=20does=20Vulkan=20now.?=
+ =?UTF-8?q?ayout=20clears=20it=20to=20zero=20(UNDEFINED=20->=20TRANSFER=5F?=
+ =?UTF-8?q?DST,=20vkCmdClearColorImage,=20->=20SHADER=5FREAD=5FONLY=5FOPTI?=
+ =?UTF-8?q?MAL)=20on=20a=20command=20buffer=20submitted=20right=20away,=20?=
+ =?UTF-8?q?so=20the=20image's=20layout=20on=20the=20GPU=20matches=20Impell?=
+ =?UTF-8?q?er's=20tracked=20one=20before=20anything=20else=20is=20recorded?=
+ =?UTF-8?q?=20with=20it.=20Flutter=20GPU=20may=20sample=20a=20texture=20no?=
+ =?UTF-8?q?thing=20wrote=20yet,=20or=20record=20its=20first=20write=20in?=
+ =?UTF-8?q?=20a=20command=20buffer=20submitted=20after=20(or=20never=20sub?=
+ =?UTF-8?q?mitted=20before)=20one=20that=20samples=20it;=20the=20tracked?=
+ =?UTF-8?q?=20layout=20then=20said=20SHADER=5FREAD=5FONLY=20while=20the=20?=
+ =?UTF-8?q?image=20was=20still=20UNDEFINED=20(validation=20VUID-vkCmdDraw-?=
+ =?UTF-8?q?None-09600=20in=20TempleHub,=20TempleHubInterior,=20TownFair=20?=
+ =?UTF-8?q?and=20TownFairDestroyed).=20The=20clear=20matters:=20a=20bare?=
+ =?UTF-8?q?=20UNDEFINED=20->=20SHADER=5FREAD=5FONLY=20transition=20left=20?=
+ =?UTF-8?q?the=20UHD=20620=20driver's=20compression=20state=20undefined=20?=
+ =?UTF-8?q?and=20textures=20uploaded=20afterwards=20showed=20garbage=20blo?=
+ =?UTF-8?q?cks=20(tablet=20D1:=2010-40k=20px=20off=20GLES;=20with=20the=20?=
+ =?UTF-8?q?clear,=20GPU=20rounding=20as=20before).=20New=20textures=20read?=
+ =?UTF-8?q?=20as=20zeros,=20as=20on=20GL.?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 ---
- .../renderer/backend/vulkan/context_vk.cc     | 28 +++++++++++++++++++
- .../renderer/backend/vulkan/context_vk.h      |  8 ++++++
- engine/src/flutter/lib/gpu/texture.cc         | 16 +++++++++++
- 3 files changed, 52 insertions(+)
+ .../renderer/backend/vulkan/context_vk.cc     | 56 +++++++++++++++++++
+ .../renderer/backend/vulkan/context_vk.h      |  8 +++
+ engine/src/flutter/lib/gpu/texture.cc         | 16 ++++++
+ 3 files changed, 80 insertions(+)
 
 diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
-index e6f20de1b68..c5c4ff9149c 100644
+index e6f20de1b68..35f9880b8ce 100644
 --- a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
 +++ b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
 @@ -32,6 +32,7 @@
@@ -570,7 +576,7 @@ index e6f20de1b68..c5c4ff9149c 100644
  #include "impeller/renderer/backend/vulkan/yuv_conversion_library_vk.h"
  #include "impeller/renderer/capabilities.h"
  
-@@ -584,6 +586,32 @@ std::shared_ptr<CommandBuffer> ContextVK::CreateCommandBuffer() const {
+@@ -584,6 +586,60 @@ std::shared_ptr<CommandBuffer> ContextVK::CreateCommandBuffer() const {
        ));
  }
  
@@ -588,13 +594,41 @@ index e6f20de1b68..c5c4ff9149c 100644
 +    return false;
 +  }
 +  auto& command_buffer_vk = CommandBufferVK::Cast(*command_buffer);
-+  BarrierVK barrier;
-+  barrier.cmd_buffer = command_buffer_vk.GetCommandBuffer();
-+  barrier.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-+  barrier.src_stage = vk::PipelineStageFlagBits::eTopOfPipe;
-+  barrier.dst_stage = vk::PipelineStageFlagBits::eAllCommands;
-+  barrier.dst_access = vk::AccessFlagBits::eShaderRead;
-+  if (!texture_vk.SetLayout(barrier) || !command_buffer_vk.Track(texture)) {
++  const vk::CommandBuffer cmd = command_buffer_vk.GetCommandBuffer();
++  // Cleared to zero on the way (GL drivers typically give a new texture
++  // zeros): a bare UNDEFINED -> SHADER_READ_ONLY transition left the UHD 620's
++  // driver with undefined compression state, and textures uploaded afterwards
++  // showed garbage blocks; going through TRANSFER_DST and a clear defines it.
++  BarrierVK to_transfer;
++  to_transfer.cmd_buffer = cmd;
++  to_transfer.new_layout = vk::ImageLayout::eTransferDstOptimal;
++  to_transfer.src_stage = vk::PipelineStageFlagBits::eTopOfPipe;
++  to_transfer.dst_stage = vk::PipelineStageFlagBits::eTransfer;
++  to_transfer.dst_access = vk::AccessFlagBits::eTransferWrite;
++  if (!texture_vk.SetLayout(to_transfer)) {
++    return false;
++  }
++  const auto& desc = texture->GetTextureDescriptor();
++  vk::ImageSubresourceRange range;
++  range.aspectMask = vk::ImageAspectFlagBits::eColor;
++  range.baseMipLevel = 0u;
++  range.levelCount = desc.mip_count;
++  range.baseArrayLayer = 0u;
++  range.layerCount = ToArrayLayerCount(desc.type);
++  vk::ClearColorValue zero;
++  zero.setFloat32({0.0f, 0.0f, 0.0f, 0.0f});
++  cmd.clearColorImage(texture_vk.GetImage(),
++                      vk::ImageLayout::eTransferDstOptimal, zero, range);
++  BarrierVK to_read;
++  to_read.cmd_buffer = cmd;
++  to_read.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
++  to_read.src_stage = vk::PipelineStageFlagBits::eTransfer;
++  to_read.src_access = vk::AccessFlagBits::eTransferWrite;
++  to_read.dst_stage = vk::PipelineStageFlagBits::eAllCommands;
++  to_read.dst_access = vk::AccessFlagBits::eShaderRead |
++                       vk::AccessFlagBits::eTransferRead |
++                       vk::AccessFlagBits::eTransferWrite;
++  if (!texture_vk.SetLayout(to_read) || !command_buffer_vk.Track(texture)) {
 +    return false;
 +  }
 +  return GetCommandQueue()->Submit({std::move(command_buffer)}).ok();
