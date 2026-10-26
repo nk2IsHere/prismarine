@@ -1,0 +1,522 @@
+From 17048637f8756440b0212ba32c746f468cd9fff6 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 18:17:43 +0100
+Subject: [PATCH 1/2] impeller (mcsm8): a host-visible buffer that doesn't fit
+ the Vulkan staging pool's memory type (the 256 MB device-local + host-visible
+ heap on a discrete GPU without resizable BAR) is allocated outside the pool,
+ where VMA falls back to other host-visible memory (TownFair ran out of device
+ memory on the RTX 4060 Ti)
+
+---
+ .../renderer/backend/vulkan/allocator_vk.cc        | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+index 20313ea2aad..024d45feca9 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+@@ -588,6 +588,20 @@ std::shared_ptr<DeviceBuffer> AllocatorVK::OnCreateBuffer(
+                                              &buffer_allocation,      //
+                                              &buffer_allocation_info  //
+                                              )};
++  // mcsm8: the staging pool is tied to one memory type, which on a discrete
++  // GPU without resizable BAR is the small device-local + host-visible heap
++  // (256 MB): a scene's host-visible buffers then run out of it. Outside the
++  // pool VMA falls back to other host-visible memory.
++  if (result != vk::Result::eSuccess && allocation_info.pool != nullptr) {
++    allocation_info.pool = nullptr;
++    result = vk::Result{::vmaCreateBuffer(allocator_.get(),        //
++                                          &buffer_info_native,     //
++                                          &allocation_info,        //
++                                          &buffer,                 //
++                                          &buffer_allocation,      //
++                                          &buffer_allocation_info  //
++                                          )};
++  }
+ 
+   auto type = memory_properties_.memoryTypes[buffer_allocation_info.memoryType];
+   bool is_host_coherent =
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 12c8a9419f73c1fad2dddbb908ff69f9e78d3957 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 21:18:21 +0100
+Subject: [PATCH 2/2] impeller (mcsm8): a Vulkan render pass's cached render
+ pass and framebuffer are keyed on the whole attachment set (every
+ attachment's texture by a never-reused id, load and store actions,
+ subresource, a loaded attachment's layout), not only colour 0's subresource:
+ a Flutter GPU pass loading a target first cleared by another pass cleared it
+ again, and one with another depth target drew into the first one's; loaded
+ attachments start in their tracked layout (depth/stencil started undefined,
+ colour attachments past the first were never tracked: both now end in the
+ render pass's finalLayout), and a loaded attachment never written is moved to
+ an attachment layout first (a load from UNDEFINED is invalid)
+
+---
+ .../backend/vulkan/render_pass_builder_vk.cc  |  16 ++-
+ .../backend/vulkan/render_pass_builder_vk.h   |  24 ++--
+ .../renderer/backend/vulkan/render_pass_vk.cc | 136 +++++++++++++++++-
+ .../backend/vulkan/texture_source_vk.cc       |  29 +++-
+ .../backend/vulkan/texture_source_vk.h        |  25 +++-
+ .../renderer/backend/vulkan/texture_vk.cc     |  12 +-
+ .../renderer/backend/vulkan/texture_vk.h      |  14 +-
+ 7 files changed, 221 insertions(+), 35 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
+index d55cedfe488..4915d87e375 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
+@@ -87,7 +87,8 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetDepthStencilAttachment(
+     PixelFormat format,
+     SampleCount sample_count,
+     LoadAction load_action,
+-    StoreAction store_action) {
++    StoreAction store_action,
++    vk::ImageLayout current_layout) {
+   vk::AttachmentDescription desc;
+   desc.format = ToVKImageFormat(format);
+   desc.samples = ToVKSampleCount(sample_count);
+@@ -95,7 +96,11 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetDepthStencilAttachment(
+   desc.storeOp = ToVKAttachmentStoreOp(store_action, false);
+   desc.stencilLoadOp = desc.loadOp;    // Not separable in Impeller.
+   desc.stencilStoreOp = desc.storeOp;  // Not separable in Impeller.
+-  desc.initialLayout = vk::ImageLayout::eUndefined;
++  // mcsm8: a loaded depth attachment keeps its contents (from eUndefined
++  // they are undefined).
++  desc.initialLayout = load_action == LoadAction::kLoad
++                           ? current_layout
++                           : vk::ImageLayout::eUndefined;
+   desc.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+   depth_stencil_ = desc;
+   return *this;
+@@ -105,7 +110,8 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetStencilAttachment(
+     PixelFormat format,
+     SampleCount sample_count,
+     LoadAction load_action,
+-    StoreAction store_action) {
++    StoreAction store_action,
++    vk::ImageLayout current_layout) {
+   vk::AttachmentDescription desc;
+   desc.format = ToVKImageFormat(format);
+   desc.samples = ToVKSampleCount(sample_count);
+@@ -113,7 +119,9 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetStencilAttachment(
+   desc.storeOp = vk::AttachmentStoreOp::eDontCare;
+   desc.stencilLoadOp = ToVKAttachmentLoadOp(load_action);
+   desc.stencilStoreOp = ToVKAttachmentStoreOp(store_action, false);
+-  desc.initialLayout = vk::ImageLayout::eUndefined;
++  desc.initialLayout = load_action == LoadAction::kLoad
++                           ? current_layout
++                           : vk::ImageLayout::eUndefined;
+   desc.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+   depth_stencil_ = desc;
+   return *this;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
+index 6021f32a2ba..f888d62aebd 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
+@@ -37,15 +37,21 @@ class RenderPassBuilderVK {
+       vk::ImageLayout current_layout = vk::ImageLayout::eUndefined,
+       bool is_swapchain = false);
+ 
+-  RenderPassBuilderVK& SetDepthStencilAttachment(PixelFormat format,
+-                                                 SampleCount sample_count,
+-                                                 LoadAction load_action,
+-                                                 StoreAction store_action);
+-
+-  RenderPassBuilderVK& SetStencilAttachment(PixelFormat format,
+-                                            SampleCount sample_count,
+-                                            LoadAction load_action,
+-                                            StoreAction store_action);
++  // mcsm8: [current_layout] is the attachment's layout before the pass,
++  // its initial layout when it is loaded (eUndefined discards it).
++  RenderPassBuilderVK& SetDepthStencilAttachment(
++      PixelFormat format,
++      SampleCount sample_count,
++      LoadAction load_action,
++      StoreAction store_action,
++      vk::ImageLayout current_layout = vk::ImageLayout::eUndefined);
++
++  RenderPassBuilderVK& SetStencilAttachment(
++      PixelFormat format,
++      SampleCount sample_count,
++      LoadAction load_action,
++      StoreAction store_action,
++      vk::ImageLayout current_layout = vk::ImageLayout::eUndefined);
+ 
+   vk::UniqueRenderPass Build(const vk::Device& device) const;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index f66edc2d1bc..4343f1c7efe 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -121,7 +121,8 @@ SharedHandleVK<vk::RenderPass> RenderPassVK::CreateVKRenderPass(
+         depth->texture->GetTextureDescriptor().format,        //
+         depth->texture->GetTextureDescriptor().sample_count,  //
+         depth->load_action,                                   //
+-        depth->store_action                                   //
++        depth->store_action,                                  //
++        TextureVK::Cast(*depth->texture).GetLayout()          // mcsm8
+     );
+   } else if (auto stencil = render_target_.GetStencilAttachment();
+              stencil.has_value()) {
+@@ -129,7 +130,8 @@ SharedHandleVK<vk::RenderPass> RenderPassVK::CreateVKRenderPass(
+         stencil->texture->GetTextureDescriptor().format,        //
+         stencil->texture->GetTextureDescriptor().sample_count,  //
+         stencil->load_action,                                   //
+-        stencil->store_action                                   //
++        stencil->store_action,                                  //
++        TextureVK::Cast(*stencil->texture).GetLayout()          // mcsm8
+     );
+   }
+ 
+@@ -145,6 +147,57 @@ SharedHandleVK<vk::RenderPass> RenderPassVK::CreateVKRenderPass(
+   return MakeSharedVK(std::move(pass));
+ }
+ 
++namespace {
++
++// mcsm8: what a render pass and framebuffer built for [target] depend on
++// besides colour 0's subresource and sample count: every attachment's
++// texture (by its never-reused id), resolve texture, load and store actions,
++// subresource, and the layout a loaded attachment starts in. Mixed with
++// splitmix64 steps; a cached pair is reused only for an equal key.
++uint64_t McsmAttachmentsKey(const RenderTarget& target, bool is_swapchain) {
++  uint64_t key = 0x6d63736d38ull;
++  auto mix = [&key](uint64_t v) {
++    uint64_t z = (key ^ v) + 0x9e3779b97f4a7c15ull;
++    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
++    z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
++    key = z ^ (z >> 31);
++  };
++  auto id = [](const std::shared_ptr<Texture>& texture) -> uint64_t {
++    return texture ? TextureVK::Cast(*texture).McsmSourceId() : 0u;
++  };
++  auto layout = [](const Attachment& a) -> uint64_t {
++    return a.load_action == LoadAction::kLoad && a.texture
++               ? static_cast<uint64_t>(TextureVK::Cast(*a.texture).GetLayout())
++               : 0xffffu;
++  };
++  auto attachment = [&](const Attachment& a) {
++    mix(id(a.texture));
++    mix(id(a.resolve_texture));
++    mix(static_cast<uint64_t>(a.load_action) << 16 |
++        static_cast<uint64_t>(a.store_action));
++    mix(static_cast<uint64_t>(a.mip_level) << 32 | a.slice);
++    mix(layout(a));
++  };
++  target.IterateAllColorAttachments(
++      [&](size_t index, const ColorAttachment& a) -> bool {
++        mix(0xc0u + index);
++        attachment(a);
++        return true;
++      });
++  if (auto depth = target.GetDepthAttachment(); depth.has_value()) {
++    mix(0xd0u);
++    attachment(*depth);
++  }
++  if (auto stencil = target.GetStencilAttachment(); stencil.has_value()) {
++    mix(0x5cu);
++    attachment(*stencil);
++  }
++  mix(is_swapchain ? 1u : 2u);
++  return key;
++}
++
++}  // namespace
++
+ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+                            const RenderTarget& target,
+                            std::shared_ptr<CommandBufferVK> command_buffer)
+@@ -160,6 +213,39 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+     command_buffer_->Track(attachment.resolve_texture);
+     return true;
+   });
++  // mcsm8: a loaded attachment never written yet (its layout undefined) is
++  // moved to an attachment layout first, which the render pass then starts
++  // from (a load from UNDEFINED is invalid; the contents stay undefined, as
++  // on the other backends).
++  render_target_.IterateAllAttachments([&](const auto& attachment) -> bool {
++    if (attachment.load_action != LoadAction::kLoad || !attachment.texture) {
++      return true;
++    }
++    const auto& texture = TextureVK::Cast(*attachment.texture);
++    if (texture.GetLayout() != vk::ImageLayout::eUndefined) {
++      return true;
++    }
++    const PixelFormat format = attachment.texture->GetTextureDescriptor().format;
++    const bool depth_stencil =
++        IsDepthWritable(format) || IsStencilWritable(format);
++    BarrierVK barrier;
++    barrier.cmd_buffer = command_buffer_vk_;
++    barrier.src_stage = vk::PipelineStageFlagBits::eTopOfPipe;
++    if (depth_stencil) {
++      barrier.new_layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
++      barrier.dst_stage = vk::PipelineStageFlagBits::eEarlyFragmentTests |
++                          vk::PipelineStageFlagBits::eLateFragmentTests;
++      barrier.dst_access = vk::AccessFlagBits::eDepthStencilAttachmentRead |
++                           vk::AccessFlagBits::eDepthStencilAttachmentWrite;
++    } else {
++      barrier.new_layout = vk::ImageLayout::eColorAttachmentOptimal;
++      barrier.dst_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
++      barrier.dst_access = vk::AccessFlagBits::eColorAttachmentRead |
++                           vk::AccessFlagBits::eColorAttachmentWrite;
++    }
++    texture.SetLayout(barrier);
++    return true;
++  });
+ 
+   FramebufferAndRenderPass frame_data;
+   bool is_swapchain = false;
+@@ -174,8 +260,10 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+   TextureVK& frame_data_texture = TextureVK::Cast(
+       resolve_image_vk_ ? *resolve_image_vk_ : *color_image_vk_);
+   is_swapchain = frame_data_texture.IsSwapchainImage();
++  const uint64_t attachments_key =
++      McsmAttachmentsKey(render_target_, is_swapchain);  // mcsm8
+   frame_data = frame_data_texture.GetCachedFrameData(
+-      sample_count, cache_mip_level, cache_slice);
++      sample_count, cache_mip_level, cache_slice, attachments_key);
+ 
+   const auto& target_size = render_target_.GetRenderTargetSize();
+ 
+@@ -206,7 +294,8 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+   frame_data.render_pass = render_pass_;
+ 
+   frame_data_texture.SetCachedFrameData(frame_data, sample_count,
+-                                        cache_mip_level, cache_slice);
++                                        cache_mip_level, cache_slice,
++                                        attachments_key);
+ 
+   // If the resolve image exists and has mipmaps, transition mip levels besides
+   // the base to shader read only in preparation for mipmap generation.
+@@ -246,6 +335,31 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+             is_swapchain ? vk::ImageLayout::eGeneral
+                          : vk::ImageLayout::eShaderReadOnlyOptimal);
+   }
++  // mcsm8: every other colour attachment (and its resolve texture) ends in
++  // its finalLayout too, as colour 0 below (a later pass loading one starts
++  // from it).
++  render_target_.IterateAllColorAttachments(
++      [&](size_t index, const ColorAttachment& attachment) -> bool {
++        if (index == 0u) {
++          return true;
++        }
++        if (attachment.resolve_texture) {
++          TextureVK::Cast(*attachment.resolve_texture)
++              .SetLayoutWithoutEncoding(
++                  is_swapchain ? vk::ImageLayout::eGeneral
++                               : vk::ImageLayout::eShaderReadOnlyOptimal);
++        }
++        if (attachment.texture) {
++          const bool general =
++              is_swapchain || attachment.texture->GetTextureDescriptor()
++                                      .sample_count != SampleCount::kCount1;
++          TextureVK::Cast(*attachment.texture)
++              .SetLayoutWithoutEncoding(
++                  general ? vk::ImageLayout::eGeneral
++                          : vk::ImageLayout::eShaderReadOnlyOptimal);
++        }
++        return true;
++      });
+   if (color_image_vk_) {
+     // Mirror the Vulkan render pass's `finalLayout` for the color attachment
+     // (see ComputeFinalLayout in render_pass_builder_vk.cc): swapchain and
+@@ -261,6 +375,20 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+                 : vk::ImageLayout::eShaderReadOnlyOptimal);
+   }
+ 
++  // mcsm8: depth and stencil end the pass in the render pass's finalLayout
++  // (a later pass that loads them starts from it).
++  if (auto depth = render_target_.GetDepthAttachment(); depth.has_value()) {
++    TextureVK::Cast(*depth->texture)
++        .SetLayoutWithoutEncoding(
++            vk::ImageLayout::eDepthStencilAttachmentOptimal);
++  }
++  if (auto stencil = render_target_.GetStencilAttachment();
++      stencil.has_value()) {
++    TextureVK::Cast(*stencil->texture)
++        .SetLayoutWithoutEncoding(
++            vk::ImageLayout::eDepthStencilAttachmentOptimal);
++  }
++
+   // Set the initial viewport.
+   const auto vp = Viewport{.rect = Rect::MakeSize(target_size)};
+   vk::Viewport viewport = ToVkViewport(vp);
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
+index b8dae55071a..69793627a2e 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
+@@ -4,9 +4,19 @@
+ 
+ #include "impeller/renderer/backend/vulkan/texture_source_vk.h"
+ 
++#include <atomic>
++
+ namespace impeller {
+ 
+-TextureSourceVK::TextureSourceVK(TextureDescriptor desc) : desc_(desc) {}
++namespace {
++uint64_t McsmNextTextureSourceId() {
++  static std::atomic<uint64_t> next{1};
++  return next.fetch_add(1, std::memory_order_relaxed);
++}
++}  // namespace
++
++TextureSourceVK::TextureSourceVK(TextureDescriptor desc)
++    : desc_(desc), mcsm_id_(McsmNextTextureSourceId()) {}
+ 
+ TextureSourceVK::~TextureSourceVK() = default;
+ 
+@@ -61,24 +71,31 @@ fml::Status TextureSourceVK::SetLayout(const BarrierVK& barrier) const {
+ void TextureSourceVK::SetCachedFrameData(const FramebufferAndRenderPass& data,
+                                          SampleCount sample_count,
+                                          uint32_t mip_level,
+-                                         uint32_t slice) {
++                                         uint32_t slice,
++                                         uint64_t attachments_key) {
+   for (auto& entry : frame_data_) {
+     if (entry.sample_count == sample_count && entry.mip_level == mip_level &&
+-        entry.slice == slice) {
++        entry.slice == slice && entry.attachments_key == attachments_key) {
+       entry.data = data;
+       return;
+     }
+   }
+-  frame_data_.push_back({sample_count, mip_level, slice, data});
++  // mcsm8: bounded (a colour target paired with transient targets would
++  // otherwise keep a framebuffer per pairing).
++  if (frame_data_.size() >= 16u) {
++    frame_data_.erase(frame_data_.begin());
++  }
++  frame_data_.push_back({sample_count, mip_level, slice, attachments_key, data});
+ }
+ 
+ FramebufferAndRenderPass TextureSourceVK::GetCachedFrameData(
+     SampleCount sample_count,
+     uint32_t mip_level,
+-    uint32_t slice) const {
++    uint32_t slice,
++    uint64_t attachments_key) const {
+   for (const auto& entry : frame_data_) {
+     if (entry.sample_count == sample_count && entry.mip_level == mip_level &&
+-        entry.slice == slice) {
++        entry.slice == slice && entry.attachments_key == attachments_key) {
+       return entry.data;
+     }
+   }
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
+index 3d53dfec832..7b46689de18 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
+@@ -145,10 +145,19 @@ class TextureSourceVK {
+   /// non-MSAA color) target of a render pass. By construction, the cached
+   /// objects are compatible with any future render pass that targets the
+   /// same subresource.
++  ///
++  /// mcsm8: [attachments_key] identifies the rest of the pass's attachment
++  /// set (every attachment's texture, load and store actions and loaded
++  /// layouts: McsmAttachmentsKey in render_pass_vk.cc). Flutter GPU passes may pair
++  /// one colour target with different depth targets, other colour targets
++  /// or load actions, which the render pass and framebuffer depend on; an
++  /// entry is reused only for the same set. Up to 16 sets per subresource
++  /// are kept (the oldest dropped).
+   void SetCachedFrameData(const FramebufferAndRenderPass& data,
+                           SampleCount sample_count,
+                           uint32_t mip_level = 0u,
+-                          uint32_t slice = 0u);
++                          uint32_t slice = 0u,
++                          uint64_t attachments_key = 0u);
+ 
+   /// Retrieve the cached framebuffer and render pass for the given
+   /// `(sample_count, mip_level, slice)` subresource.
+@@ -156,9 +165,15 @@ class TextureSourceVK {
+   /// An empty `FramebufferAndRenderPass` is returned when no cached entry
+   /// exists for that key. Entries are populated lazily on first use and
+   /// live for the lifetime of the texture.
+-  FramebufferAndRenderPass GetCachedFrameData(SampleCount sample_count,
+-                                              uint32_t mip_level = 0u,
+-                                              uint32_t slice = 0u) const;
++  FramebufferAndRenderPass GetCachedFrameData(
++      SampleCount sample_count,
++      uint32_t mip_level = 0u,
++      uint32_t slice = 0u,
++      uint64_t attachments_key = 0u) const;
++
++  /// mcsm8: an id no other texture source in the process has had (unlike its
++  /// address, never reused), for keys that must not match a dead texture.
++  uint64_t McsmId() const { return mcsm_id_; }
+ 
+  protected:
+   const TextureDescriptor desc_;
+@@ -170,8 +185,10 @@ class TextureSourceVK {
+     SampleCount sample_count;
+     uint32_t mip_level;
+     uint32_t slice;
++    uint64_t attachments_key;
+     FramebufferAndRenderPass data;
+   };
++  const uint64_t mcsm_id_;
+   // Linear-scanned because N is typically 1 and bounded by
+   // `sample_counts * mip_count * layer_count` for the rare textures that
+   // are rendered to across many subresources (e.g. a fully populated cube
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.cc
+index 3d45f452603..9a329df4f19 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.cc
+@@ -201,14 +201,18 @@ vk::ImageView TextureVK::GetRenderTargetView(uint32_t mip_level,
+ void TextureVK::SetCachedFrameData(const FramebufferAndRenderPass& data,
+                                    SampleCount sample_count,
+                                    uint32_t mip_level,
+-                                   uint32_t slice) {
+-  source_->SetCachedFrameData(data, sample_count, mip_level, slice);
++                                   uint32_t slice,
++                                   uint64_t attachments_key) {
++  source_->SetCachedFrameData(data, sample_count, mip_level, slice,
++                              attachments_key);
+ }
+ 
+ FramebufferAndRenderPass TextureVK::GetCachedFrameData(SampleCount sample_count,
+                                                        uint32_t mip_level,
+-                                                       uint32_t slice) const {
+-  return source_->GetCachedFrameData(sample_count, mip_level, slice);
++                                                       uint32_t slice,
++                                                       uint64_t attachments_key) const {
++  return source_->GetCachedFrameData(sample_count, mip_level, slice,
++                                     attachments_key);
+ }
+ 
+ void TextureVK::SetMipMapGenerated() {
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.h
+index 1ce7053a830..eb0427a24e0 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_vk.h
+@@ -58,14 +58,20 @@ class TextureVK final : public Texture, public BackendCast<TextureVK, Texture> {
+   void SetCachedFrameData(const FramebufferAndRenderPass& data,
+                           SampleCount sample_count,
+                           uint32_t mip_level = 0u,
+-                          uint32_t slice = 0u);
++                          uint32_t slice = 0u,
++                          uint64_t attachments_key = 0u);
+ 
+   /// Retrieve the cached framebuffer and render pass for the given
+   /// `(sample_count, mip_level, slice)` subresource. Returns an empty
+   /// `FramebufferAndRenderPass` if no entry exists.
+-  FramebufferAndRenderPass GetCachedFrameData(SampleCount sample_count,
+-                                              uint32_t mip_level = 0u,
+-                                              uint32_t slice = 0u) const;
++  FramebufferAndRenderPass GetCachedFrameData(
++      SampleCount sample_count,
++      uint32_t mip_level = 0u,
++      uint32_t slice = 0u,
++      uint64_t attachments_key = 0u) const;
++
++  /// mcsm8: the texture source's process-unique id (0 without one).
++  uint64_t McsmSourceId() const { return source_ ? source_->McsmId() : 0u; }
+ 
+  private:
+   std::weak_ptr<Context> context_;
+-- 
+2.54.0 (Apple Git-157)
+

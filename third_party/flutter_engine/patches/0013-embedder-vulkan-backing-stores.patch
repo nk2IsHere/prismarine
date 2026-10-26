@@ -1,0 +1,524 @@
+From 8ef641e934bb7d0a86938219bffa27c6f8a82593 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 17:31:11 +0100
+Subject: [PATCH 1/2] =?UTF-8?q?embedder=20(mcsm8):=20Vulkan=20backing=20st?=
+ =?UTF-8?q?ores=20for=20Impeller=20=E2=80=94=20the=20embedder's=20VkImage?=
+ =?UTF-8?q?=20wrapped=20as=20the=20resolve=20target=20of=20a=204x=20MSAA?=
+ =?UTF-8?q?=20layer=20(as=20the=20Metal=20backing=20store),=20left=20in=20?=
+ =?UTF-8?q?COLOR=5FATTACHMENT=5FOPTIMAL=20with=20a=20host=20sync=20after?=
+ =?UTF-8?q?=20the=20layer=20renders;=20the=20Impeller=20Vulkan=20surface?=
+ =?UTF-8?q?=20renders=20nothing=20itself=20when=20a=20compositor=20is=20in?=
+ =?UTF-8?q?stalled=20(render=5Fto=5Fsurface)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../shell/gpu/gpu_surface_vulkan_impeller.cc  |  16 +-
+ .../shell/gpu/gpu_surface_vulkan_impeller.h   |   7 +-
+ .../shell/platform/embedder/embedder.cc       | 198 +++++++++++++++++-
+ .../embedder_external_view_embedder.cc        |   1 +
+ .../embedder/embedder_render_target.h         |   4 +
+ .../embedder_render_target_impeller.cc        |   6 +
+ .../embedder_render_target_impeller.h         |  10 +
+ .../embedder_surface_vulkan_impeller.cc       |   5 +-
+ 8 files changed, 242 insertions(+), 5 deletions(-)
+
+diff --git a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
+index c5cd2e9d007..d8795eee4e3 100644
+--- a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
++++ b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
+@@ -55,8 +55,9 @@ class WrappedTextureSourceVK : public impeller::TextureSourceVK {
+ 
+ GPUSurfaceVulkanImpeller::GPUSurfaceVulkanImpeller(
+     GPUSurfaceVulkanDelegate* delegate,
+-    std::shared_ptr<impeller::Context> context)
+-    : delegate_(delegate) {
++    std::shared_ptr<impeller::Context> context,
++    bool render_to_surface)
++    : delegate_(delegate), render_to_surface_(render_to_surface) {
+   if (!context || !context->IsValid()) {
+     return;
+   }
+@@ -93,6 +94,17 @@ std::unique_ptr<SurfaceFrame> GPUSurfaceVulkanImpeller::AcquireFrame(
+     return nullptr;
+   }
+ 
++  // mcsm8: the external view embedder renders into the compositor's backing
++  // stores; this frame only carries the layer tree.
++  if (!render_to_surface_) {
++    return std::make_unique<SurfaceFrame>(
++        nullptr, SurfaceFrame::FramebufferInfo(),
++        [](const SurfaceFrame& surface_frame, DlCanvas* canvas) {
++          return true;
++        },
++        [](const SurfaceFrame& surface_frame) { return true; }, size);
++  }
++
+   if (delegate_ == nullptr) {
+     auto& context_vk = impeller::SurfaceContextVK::Cast(*impeller_context_);
+     std::unique_ptr<impeller::Surface> surface =
+diff --git a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.h b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.h
+index 09322a63b6b..0ea576c4663 100644
+--- a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.h
++++ b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.h
+@@ -23,8 +23,12 @@ FML_TEST_CLASS(GPUSurfaceVulkanImpeller,
+ 
+ class GPUSurfaceVulkanImpeller final : public Surface {
+  public:
++  /// mcsm8: [render_to_surface] false when an external view embedder
++  /// renders every layer into its own backing store (an embedder compositor):
++  /// frames then acquire no image from the delegate.
+   explicit GPUSurfaceVulkanImpeller(GPUSurfaceVulkanDelegate* delegate,
+-                                    std::shared_ptr<impeller::Context> context);
++                                    std::shared_ptr<impeller::Context> context,
++                                    bool render_to_surface = true);
+ 
+   // |Surface|
+   ~GPUSurfaceVulkanImpeller() override;
+@@ -43,6 +47,7 @@ class GPUSurfaceVulkanImpeller final : public Surface {
+   /// The size of the textures in [transients_]
+   impeller::ISize transients_size_ = {};
+   bool is_valid_ = false;
++  bool render_to_surface_ = true;
+ 
+   // |Surface|
+   std::unique_ptr<SurfaceFrame> AcquireFrame(const DlISize& size) override;
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder.cc b/engine/src/flutter/shell/platform/embedder/embedder.cc
+index d7f02e79018..fab137f8809 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder.cc
++++ b/engine/src/flutter/shell/platform/embedder/embedder.cc
+@@ -104,6 +104,18 @@ extern const intptr_t kPlatformStrongDillSize;
+ #ifdef SHELL_ENABLE_VULKAN
+ #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
+ #include "third_party/skia/include/gpu/ganesh/vk/GrVkTypes.h"
++#ifdef IMPELLER_SUPPORTS_RENDERING
++#include "flutter/fml/synchronization/waitable_event.h"
++#include "flutter/shell/platform/embedder/embedder_render_target_impeller.h"  // nogncheck
++#include "impeller/core/texture.h"                                      // nogncheck
++#include "impeller/renderer/backend/vulkan/barrier_vk.h"                // nogncheck
++#include "impeller/renderer/backend/vulkan/command_buffer_vk.h"         // nogncheck
++#include "impeller/renderer/backend/vulkan/context_vk.h"                // nogncheck
++#include "impeller/renderer/backend/vulkan/formats_vk.h"                // nogncheck
++#include "impeller/renderer/backend/vulkan/texture_source_vk.h"         // nogncheck
++#include "impeller/renderer/backend/vulkan/texture_vk.h"                // nogncheck
++#include "impeller/renderer/render_target.h"                            // nogncheck
++#endif  // IMPELLER_SUPPORTS_RENDERING
+ #endif  // SHELL_ENABLE_VULKAN
+ 
+ const int32_t kFlutterSemanticsNodeIdBatchEnd = -1;
+@@ -1310,6 +1322,187 @@ MakeRenderTargetFromBackingStoreImpeller(
+ #endif
+ }
+ 
++#if defined(SHELL_ENABLE_VULKAN) && defined(IMPELLER_SUPPORTS_RENDERING)
++namespace {
++// mcsm8: an embedder's VkImage as an Impeller texture source.
++class EmbedderTextureSourceVK final : public impeller::TextureSourceVK {
++ public:
++  EmbedderTextureSourceVK(impeller::TextureDescriptor desc,
++                          impeller::vk::Image image,
++                          impeller::vk::UniqueImageView view,
++                          fml::closure on_destruct)
++      : TextureSourceVK(desc),
++        image_(image),
++        view_(std::move(view)),
++        on_destruct_(std::move(on_destruct)) {}
++
++  ~EmbedderTextureSourceVK() override {
++    view_.reset();
++    if (on_destruct_) {
++      on_destruct_();
++    }
++  }
++
++ private:
++  impeller::vk::Image GetImage() const override { return image_; }
++  impeller::vk::ImageView GetImageView() const override { return view_.get(); }
++  impeller::vk::ImageView GetRenderTargetView(
++      uint32_t mip_level,
++      uint32_t array_layer) const override {
++    return view_.get();
++  }
++  bool IsSwapchainImage() const override { return false; }
++
++  impeller::vk::Image image_;
++  impeller::vk::UniqueImageView view_;
++  fml::closure on_destruct_;
++};
++}  // namespace
++#endif  // SHELL_ENABLE_VULKAN && IMPELLER_SUPPORTS_RENDERING
++
++// mcsm8: a Vulkan backing store for Impeller (upstream: "Unimplemented").
++// The layer renders into a 4x MSAA transient resolved into the embedder's
++// image, as the Metal backing store does. After the layer is rendered the
++// image is moved to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL on the engine's
++// queue. Unlike Skia's path there is no host sync: the embedder's own work
++// on the image must be submitted to the same queue (or wait on it), behind a
++// barrier; it returns the image to that layout before the engine renders
++// into it again.
++static std::unique_ptr<flutter::EmbedderRenderTarget>
++MakeRenderTargetFromBackingStoreImpeller(
++    FlutterBackingStore backing_store,
++    const fml::closure& on_release,
++    const std::shared_ptr<impeller::AiksContext>& aiks_context,
++    const FlutterBackingStoreConfig& config,
++    const FlutterVulkanBackingStore* vulkan) {
++#if defined(SHELL_ENABLE_VULKAN) && defined(IMPELLER_SUPPORTS_RENDERING)
++  if (!vulkan->image || !vulkan->image->image) {
++    FML_LOG(ERROR) << "Embedder supplied null Vulkan image.";
++    return nullptr;
++  }
++  const auto vk_format =
++      static_cast<impeller::vk::Format>(vulkan->image->format);
++  const auto format = impeller::VkFormatToImpellerFormat(vk_format);
++  if (!format.has_value()) {
++    FML_LOG(ERROR) << "Unsupported Vulkan backing store format: "
++                   << impeller::vk::to_string(vk_format);
++    return nullptr;
++  }
++  const auto& context = aiks_context->GetContext();
++  auto& context_vk = impeller::ContextVK::Cast(*context);
++  const auto size = impeller::ISize(config.size.width, config.size.height);
++
++  impeller::TextureDescriptor resolve_desc;
++  resolve_desc.format = format.value();
++  resolve_desc.size = size;
++  resolve_desc.mip_count = 1;
++  resolve_desc.sample_count = impeller::SampleCount::kCount1;
++  resolve_desc.storage_mode = impeller::StorageMode::kDevicePrivate;
++  resolve_desc.usage = impeller::TextureUsage::kRenderTarget |
++                       impeller::TextureUsage::kShaderRead;
++
++  const auto image = impeller::vk::Image(
++      reinterpret_cast<VkImage>(vulkan->image->image));
++  impeller::vk::ImageViewCreateInfo view_info = {};
++  view_info.viewType = impeller::vk::ImageViewType::e2D;
++  view_info.format = vk_format;
++  view_info.subresourceRange.aspectMask =
++      impeller::vk::ImageAspectFlagBits::eColor;
++  view_info.subresourceRange.levelCount = 1;
++  view_info.subresourceRange.layerCount = 1;
++  view_info.image = image;
++  auto [result, view] = context_vk.GetDevice().createImageViewUnique(view_info);
++  if (result != impeller::vk::Result::eSuccess) {
++    FML_LOG(ERROR) << "Could not create a view of the embedder's VkImage: "
++                   << impeller::vk::to_string(result);
++    return nullptr;
++  }
++  auto source = std::make_shared<EmbedderTextureSourceVK>(
++      resolve_desc, image, std::move(view),
++      [callback = vulkan->destruction_callback,
++       user_data = vulkan->user_data]() {
++        if (callback) {
++          callback(user_data);
++        }
++      });
++  std::shared_ptr<impeller::Texture> resolve_tex =
++      std::make_shared<impeller::TextureVK>(context, source);
++  resolve_tex->SetLabel("ImpellerBackingStoreResolve");
++  context->UpdateOffscreenLayerPixelFormat(format.value());
++
++  impeller::TextureDescriptor msaa_desc;
++  msaa_desc.storage_mode = impeller::StorageMode::kDeviceTransient;
++  msaa_desc.type = impeller::TextureType::kTexture2DMultisample;
++  msaa_desc.sample_count = impeller::SampleCount::kCount4;
++  msaa_desc.format = format.value();
++  msaa_desc.size = size;
++  msaa_desc.usage = impeller::TextureUsage::kRenderTarget;
++  auto msaa_tex = context->GetResourceAllocator()->CreateTexture(msaa_desc);
++  if (!msaa_tex) {
++    FML_LOG(ERROR) << "Could not allocate MSAA color texture.";
++    return nullptr;
++  }
++  msaa_tex->SetLabel("ImpellerBackingStoreColorMSAA");
++
++  impeller::ColorAttachment color0;
++  color0.texture = msaa_tex;
++  color0.clear_color = impeller::Color::DarkSlateGray();
++  color0.load_action = impeller::LoadAction::kClear;
++  color0.store_action = impeller::StoreAction::kMultisampleResolve;
++  color0.resolve_texture = resolve_tex;
++
++  impeller::RenderTarget render_target_desc;
++  render_target_desc.SetColorAttachment(color0, 0u);
++  // A depth/stencil of the backing store's own, as Impeller's swapchain keeps
++  // one per image: RenderPassVK caches the framebuffer on the resolve texture
++  // and assumes the other attachments don't change, so a stencil Impeller
++  // would allocate per frame leaves the cached framebuffer pointing at a
++  // destroyed view.
++  render_target_desc.SetupDepthStencilAttachments(
++      *context, *context->GetResourceAllocator(), size, /*msaa=*/true,
++      "ImpellerBackingStore");
++
++  auto target = std::make_unique<flutter::EmbedderRenderTargetImpeller>(
++      backing_store, aiks_context,
++      std::make_unique<impeller::RenderTarget>(std::move(render_target_desc)),
++      on_release, fml::closure());
++  std::weak_ptr<impeller::Context> weak_context = context;
++  target->SetDidRenderCallback([weak_context, resolve_tex]() {
++    auto strong = weak_context.lock();
++    if (!strong) {
++      return;
++    }
++    const auto& vk_context = impeller::ContextVK::Cast(*strong);
++    auto cmd_buffer = vk_context.CreateCommandBuffer();
++    if (!cmd_buffer) {
++      return;
++    }
++    impeller::BarrierVK barrier;
++    barrier.cmd_buffer =
++        impeller::CommandBufferVK::Cast(*cmd_buffer).GetCommandBuffer();
++    barrier.new_layout = impeller::vk::ImageLayout::eColorAttachmentOptimal;
++    barrier.src_access = impeller::vk::AccessFlagBits::eColorAttachmentWrite |
++                         impeller::vk::AccessFlagBits::eTransferWrite;
++    barrier.src_stage =
++        impeller::vk::PipelineStageFlagBits::eColorAttachmentOutput |
++        impeller::vk::PipelineStageFlagBits::eTransfer;
++    barrier.dst_access = {};
++    barrier.dst_stage = impeller::vk::PipelineStageFlagBits::eBottomOfPipe;
++    if (!impeller::TextureVK::Cast(*resolve_tex).SetLayout(barrier)) {
++      return;
++    }
++    // No host wait: the desktop compositors (shell/platform/common's
++    // McsmVulkanDevice and swapchain) submit their copies on the same queue
++    // after this, behind a barrier, so the GPU orders them; the CPU doesn't
++    // stall on every layer.
++    vk_context.GetCommandQueue()->Submit({cmd_buffer});
++  });
++  return target;
++#else
++  return nullptr;
++#endif
++}
++
+ static sk_sp<SkSurface> MakeSkSurfaceFromBackingStore(
+     GrDirectContext* context,
+     const FlutterBackingStoreConfig& config,
+@@ -1522,7 +1715,10 @@ CreateEmbedderRenderTarget(
+     }
+     case kFlutterBackingStoreTypeVulkan: {
+       if (enable_impeller) {
+-        FML_LOG(ERROR) << "Unimplemented";
++        // mcsm8
++        render_target = MakeRenderTargetFromBackingStoreImpeller(
++            backing_store, collect_callback.Release(), aiks_context, config,
++            &backing_store.vulkan);
+         break;
+       } else {
+         auto skia_surface = MakeSkSurfaceFromBackingStore(
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_external_view_embedder.cc b/engine/src/flutter/shell/platform/embedder/embedder_external_view_embedder.cc
+index 1d3ff65c77f..f8e06242ba6 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_external_view_embedder.cc
++++ b/engine/src/flutter/shell/platform/embedder/embedder_external_view_embedder.cc
+@@ -380,6 +380,7 @@ class Layer {
+                              /*reset_host_buffer=*/frame_boundary,  //
+                              /*is_onscreen=*/false                  //
+     );
++    render_target_->DidRenderImpeller();  // mcsm8
+   }
+ #endif  // IMPELLER_SUPPORTS_RENDERING
+ 
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_render_target.h b/engine/src/flutter/shell/platform/embedder/embedder_render_target.h
+index 80d08c66f48..7461eb66a9e 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_render_target.h
++++ b/engine/src/flutter/shell/platform/embedder/embedder_render_target.h
+@@ -79,6 +79,10 @@ class EmbedderRenderTarget {
+   ///
+   virtual DlISize GetRenderTargetSize() const = 0;
+ 
++  //----------------------------------------------------------------------------
++  /// mcsm8: called after Impeller rendered a layer into this target.
++  virtual void DidRenderImpeller() const {}
++
+   //----------------------------------------------------------------------------
+   /// @brief      The embedder backing store descriptor. This is the descriptor
+   ///             that was given to the engine by the embedder. This descriptor
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.cc b/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.cc
+index 451b738167f..29047a8c8c6 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.cc
++++ b/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.cc
+@@ -44,6 +44,12 @@ EmbedderRenderTargetImpeller::GetAiksContext() const {
+   return aiks_context_;
+ }
+ 
++void EmbedderRenderTargetImpeller::DidRenderImpeller() const {
++  if (did_render_) {
++    did_render_();
++  }
++}
++
+ DlISize EmbedderRenderTargetImpeller::GetRenderTargetSize() const {
+   auto size = impeller_target_->GetRenderTargetSize();
+   return DlISize(size);
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.h b/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.h
+index c36ab87f0cb..49c59e2c8b3 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.h
++++ b/engine/src/flutter/shell/platform/embedder/embedder_render_target_impeller.h
+@@ -33,10 +33,20 @@ class EmbedderRenderTargetImpeller final : public EmbedderRenderTarget {
+   // |EmbedderRenderTarget|
+   DlISize GetRenderTargetSize() const override;
+ 
++  // |EmbedderRenderTarget|
++  void DidRenderImpeller() const override;
++
++  /// mcsm8: called after the layer was rendered into this target, before the
++  /// compositor presents it (a Vulkan backing store's layout and host sync).
++  void SetDidRenderCallback(fml::closure callback) {
++    did_render_ = std::move(callback);
++  }
++
+  private:
+   std::shared_ptr<impeller::AiksContext> aiks_context_;
+   std::unique_ptr<impeller::RenderTarget> impeller_target_;
+   fml::closure framebuffer_destruction_callback_;
++  fml::closure did_render_;
+ 
+   FML_DISALLOW_COPY_AND_ASSIGN(EmbedderRenderTargetImpeller);
+ };
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc b/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
+index d8e8018ab38..5318d8f20c9 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
++++ b/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
+@@ -118,7 +118,10 @@ bool EmbedderSurfaceVulkanImpeller::IsValid() const {
+ 
+ // |EmbedderSurface|
+ std::unique_ptr<Surface> EmbedderSurfaceVulkanImpeller::CreateGPUSurface() {
+-  return std::make_unique<GPUSurfaceVulkanImpeller>(this, context_);
++  // mcsm8: with a compositor every layer renders into its backing store.
++  const bool render_to_surface = !external_view_embedder_;
++  return std::make_unique<GPUSurfaceVulkanImpeller>(this, context_,
++                                                    render_to_surface);
+ }
+ 
+ // |EmbedderSurface|
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 5d6715fa337dd9173131d9c20aceca3dbc40807d Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 18:31:26 +0100
+Subject: [PATCH 2/2] embedder (mcsm8): Impeller Vulkan gets a pipeline cache
+ directory on the desktop (%LOCALAPPDATA%\<exe>\flutter_vk_cache,
+ $XDG_CACHE_HOME or ~/.cache/<exe>/flutter_vk_cache; FLUTTER_VK_CACHE_DIR
+ overrides, 0 turns it off), and a frame without a surface of its own (a
+ compositor) persists the cache every 50 frames and recycles per-thread
+ command pools, as SurfaceContextVK does
+
+---
+ .../shell/gpu/gpu_surface_vulkan_impeller.cc  |  9 +++
+ .../embedder_surface_vulkan_impeller.cc       | 56 +++++++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
+index d8795eee4e3..0d47fbbb750 100644
+--- a/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
++++ b/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc
+@@ -14,6 +14,7 @@
+ #include "impeller/display_list/dl_dispatcher.h"
+ #include "impeller/renderer/backend/vulkan/command_buffer_vk.h"
+ #include "impeller/renderer/backend/vulkan/context_vk.h"
++#include "impeller/renderer/backend/vulkan/pipeline_library_vk.h"
+ #include "impeller/renderer/backend/vulkan/surface_context_vk.h"
+ #include "impeller/renderer/backend/vulkan/swapchain/surface_vk.h"
+ #include "impeller/renderer/render_target.h"
+@@ -97,6 +98,14 @@ std::unique_ptr<SurfaceFrame> GPUSurfaceVulkanImpeller::AcquireFrame(
+   // mcsm8: the external view embedder renders into the compositor's backing
+   // stores; this frame only carries the layer tree.
+   if (!render_to_surface_) {
++    // Once a frame, as SurfaceContextVK::MarkFrameEnd does for Impeller's own
++    // swapchain: the pipeline cache persists every 50 frames and per-thread
++    // command pools are recycled.
++    auto& context_vk = impeller::ContextVK::Cast(*impeller_context_);
++    if (auto library = context_vk.GetPipelineLibrary()) {
++      impeller::PipelineLibraryVK::Cast(*library).DidAcquireSurfaceFrame();
++    }
++    context_vk.DisposeThreadLocalCachedResources();
+     return std::make_unique<SurfaceFrame>(
+         nullptr, SurfaceFrame::FramebufferInfo(),
+         [](const SurfaceFrame& surface_frame, DlCanvas* canvas) {
+diff --git a/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc b/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
+index 5318d8f20c9..18207dfa510 100644
+--- a/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
++++ b/engine/src/flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.cc
+@@ -5,6 +5,9 @@
+ #include "flutter/shell/platform/embedder/embedder_surface_vulkan_impeller.h"
+ 
+ #include <utility>
++#include <cstdlib>
++#include "flutter/fml/paths.h"
++#include "flutter/fml/file.h"
+ 
+ #include "flutter/impeller/entity/vk/entity_shaders_vk.h"
+ #include "flutter/impeller/entity/vk/framebuffer_blend_shaders_vk.h"
+@@ -17,6 +20,56 @@
+ 
+ namespace flutter {
+ 
++// mcsm8: %LOCALAPPDATA%\<exe>\flutter_vk_cache (Windows) or
++// $XDG_CACHE_HOME (else ~/.cache)/<exe>/flutter_vk_cache;
++// FLUTTER_VK_CACHE_DIR overrides it, "0" turns it off.
++static fml::UniqueFD McsmPipelineCacheDirectory() {
++  const char* override_dir = std::getenv("FLUTTER_VK_CACHE_DIR");
++  if (override_dir != nullptr && std::string(override_dir) == "0") {
++    return {};
++  }
++  std::string base;
++  if (override_dir != nullptr && override_dir[0] != '\0') {
++    base = override_dir;
++  } else {
++    auto [ok, exe] = fml::paths::GetExecutablePath();
++    if (!ok) {
++      return {};
++    }
++    std::string name = fml::paths::GetDirectoryName(exe);
++    name = exe.substr(name.size() + (name.empty() ? 0 : 1));
++    if (auto dot = name.rfind('.'); dot != std::string::npos) {
++      name = name.substr(0, dot);
++    }
++#if FML_OS_WIN
++    const char* root = std::getenv("LOCALAPPDATA");
++#else
++    const char* root = std::getenv("XDG_CACHE_HOME");
++    std::string home_cache;
++    if (root == nullptr || root[0] == '\0') {
++      const char* home = std::getenv("HOME");
++      if (home == nullptr) {
++        return {};
++      }
++      home_cache = std::string(home) + "/.cache";
++      root = home_cache.c_str();
++    }
++#endif
++    if (root == nullptr || name.empty()) {
++      return {};
++    }
++    fml::UniqueFD root_fd = fml::OpenDirectory(
++        root, /*create_if_necessary=*/false, fml::FilePermission::kReadWrite);
++    if (!root_fd.is_valid()) {
++      return {};
++    }
++    return fml::CreateDirectory(root_fd, {name, "flutter_vk_cache"},
++                                fml::FilePermission::kReadWrite);
++  }
++  return fml::OpenDirectory(base.c_str(), /*create_if_necessary=*/true,
++                            fml::FilePermission::kReadWrite);
++}
++
+ EmbedderSurfaceVulkanImpeller::EmbedderSurfaceVulkanImpeller(
+     uint32_t version,
+     VkInstance instance,
+@@ -53,6 +106,9 @@ EmbedderSurfaceVulkanImpeller::EmbedderSurfaceVulkanImpeller(
+   };
+   impeller::ContextVK::Settings settings;
+   settings.shader_libraries_data = shader_mappings;
++  // mcsm8: a pipeline cache on disk (Impeller's VkPipelineCache), which the
++  // desktop has no directory for otherwise.
++  settings.cache_directory = McsmPipelineCacheDirectory();
+   settings.proc_address_callback =
+       vulkan_dispatch_table.get_instance_proc_address;
+   settings.flags = impeller_flags;
+-- 
+2.54.0 (Apple Git-157)
+

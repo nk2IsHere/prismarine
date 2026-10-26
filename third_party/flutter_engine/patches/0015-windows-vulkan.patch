@@ -1,0 +1,483 @@
+From 58d6da9974d1bafc846c3b355dc5dce1661521e8 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 17:50:34 +0100
+Subject: [PATCH] =?UTF-8?q?windows=20(mcsm8):=20Impeller=20on=20Vulkan=20?=
+ =?UTF-8?q?=E2=80=94=20the=20engine=20makes=20an=20McsmVulkanDevice=20(VK?=
+ =?UTF-8?q?=5FKHR=5Fwin32=5Fsurface)=20unless=20MCSM=5FRENDERER=3Dgles=20o?=
+ =?UTF-8?q?r=20Impeller=20is=20off,=20else=20ANGLE=20as=20before;=20Compos?=
+ =?UTF-8?q?itorVulkan=20presents=20through=20McsmVulkanSwapchain=20(shell/?=
+ =?UTF-8?q?platform/common:=20a=20swapchain=20per=20view=20on=20its=20HWND?=
+ =?UTF-8?q?,=20BGRA8,=20FIFO=20only=20when=20DWM=20doesn't=20compose,=20th?=
+ =?UTF-8?q?e=20layer=20copied=20in,=20one=20frame=20in=20flight,=20rebuilt?=
+ =?UTF-8?q?=20when=20out=20of=20date);=20views=20create,=20resize=20(the?=
+ =?UTF-8?q?=20OnFrameGenerated=20handshake)=20and=20destroy=20the=20swapch?=
+ =?UTF-8?q?ain=20where=20they=20did=20the=20EGL=20surface;=20the=20rendere?=
+ =?UTF-8?q?r=20logged?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../flutter/shell/platform/windows/BUILD.gn   |  3 +
+ .../platform/windows/compositor_vulkan.cc     | 73 +++++++++++++++
+ .../platform/windows/compositor_vulkan.h      | 43 +++++++++
+ .../windows/flutter_windows_engine.cc         | 38 +++++++-
+ .../platform/windows/flutter_windows_engine.h |  8 ++
+ .../platform/windows/flutter_windows_view.cc  | 91 +++++++++++++++++--
+ .../platform/windows/flutter_windows_view.h   | 14 +++
+ 7 files changed, 258 insertions(+), 12 deletions(-)
+ create mode 100644 engine/src/flutter/shell/platform/windows/compositor_vulkan.cc
+ create mode 100644 engine/src/flutter/shell/platform/windows/compositor_vulkan.h
+
+diff --git a/engine/src/flutter/shell/platform/windows/BUILD.gn b/engine/src/flutter/shell/platform/windows/BUILD.gn
+index a6af78f4f44..9a9715871c2 100644
+--- a/engine/src/flutter/shell/platform/windows/BUILD.gn
++++ b/engine/src/flutter/shell/platform/windows/BUILD.gn
+@@ -47,6 +47,8 @@ source_set("flutter_windows_source") {
+     "compositor_opengl.cc",
+     "compositor_opengl.h",
+     "compositor_software.cc",
++    "compositor_vulkan.cc",
++    "compositor_vulkan.h",
+     "compositor_software.h",
+     "cursor_handler.cc",
+     "cursor_handler.h",
+@@ -183,6 +185,7 @@ source_set("flutter_windows_source") {
+     "//flutter/shell/platform/common:common_cpp_input",
+     "//flutter/shell/platform/common:common_cpp_isolate_scope",
+     "//flutter/shell/platform/common:common_cpp_switches",
++    "//flutter/shell/platform/common:mcsm_vulkan",
+     "//flutter/shell/platform/common/client_wrapper",
+     "//flutter/shell/platform/embedder:embedder_as_internal_library",
+     "//flutter/shell/platform/windows/client_wrapper:client_wrapper_windows",
+diff --git a/engine/src/flutter/shell/platform/windows/compositor_vulkan.cc b/engine/src/flutter/shell/platform/windows/compositor_vulkan.cc
+new file mode 100644
+index 00000000000..8ec6aa06312
+--- /dev/null
++++ b/engine/src/flutter/shell/platform/windows/compositor_vulkan.cc
+@@ -0,0 +1,73 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "flutter/shell/platform/windows/compositor_vulkan.h"
++
++#include "flutter/fml/logging.h"
++#include "flutter/shell/platform/common/mcsm_vulkan_device.h"
++#include "flutter/shell/platform/common/mcsm_vulkan_swapchain.h"
++#include "flutter/shell/platform/windows/flutter_windows_view.h"
++
++namespace flutter {
++
++CompositorVulkan::CompositorVulkan(FlutterWindowsEngine* engine)
++    : engine_(engine) {}
++
++bool CompositorVulkan::CreateBackingStore(
++    const FlutterBackingStoreConfig& config,
++    FlutterBackingStore* result) {
++  McsmVulkanDevice* device = engine_->vulkan_device();
++  return device != nullptr && device->CreateBackingStore(config, result);
++}
++
++bool CompositorVulkan::CollectBackingStore(const FlutterBackingStore* store) {
++  McsmVulkanDevice::CollectBackingStore(store);
++  return true;
++}
++
++bool CompositorVulkan::Present(FlutterWindowsView* view,
++                               const FlutterLayer** layers,
++                               size_t layers_count) {
++  FML_DCHECK(view != nullptr);
++
++  if (layers_count == 0) {
++    if (!view->OnEmptyFrameGenerated()) {
++      return false;
++    }
++    McsmVulkanSwapchain* swapchain = view->vulkan_swapchain();
++    if (swapchain == nullptr || !swapchain->Clear()) {
++      return false;
++    }
++    view->OnFramePresented();
++    return true;
++  }
++
++  // TODO: Support compositing layers and platform views (as the GL
++  // compositor).
++  FML_DCHECK(layers_count == 1);
++  FML_DCHECK(layers[0]->type == kFlutterLayerContentTypeBackingStore);
++  FML_DCHECK(layers[0]->backing_store->type == kFlutterBackingStoreTypeVulkan);
++
++  const auto width = static_cast<size_t>(layers[0]->size.width);
++  const auto height = static_cast<size_t>(layers[0]->size.height);
++
++  // Resizes the swapchain if a resize is pending and the frame has the
++  // target size (as the EGL surface is resized).
++  if (!view->OnFrameGenerated(width, height)) {
++    return false;
++  }
++  McsmVulkanSwapchain* swapchain = view->vulkan_swapchain();
++  if (swapchain == nullptr) {
++    return false;
++  }
++  auto* image = static_cast<const McsmVulkanDevice::Image*>(
++      layers[0]->backing_store->vulkan.user_data);
++  if (!swapchain->Present(image)) {
++    return false;
++  }
++  view->OnFramePresented();
++  return true;
++}
++
++}  // namespace flutter
+diff --git a/engine/src/flutter/shell/platform/windows/compositor_vulkan.h b/engine/src/flutter/shell/platform/windows/compositor_vulkan.h
+new file mode 100644
+index 00000000000..cc7ed384f00
+--- /dev/null
++++ b/engine/src/flutter/shell/platform/windows/compositor_vulkan.h
+@@ -0,0 +1,43 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef FLUTTER_SHELL_PLATFORM_WINDOWS_COMPOSITOR_VULKAN_H_
++#define FLUTTER_SHELL_PLATFORM_WINDOWS_COMPOSITOR_VULKAN_H_
++
++#include "flutter/fml/macros.h"
++#include "flutter/shell/platform/embedder/embedder.h"
++#include "flutter/shell/platform/windows/compositor.h"
++#include "flutter/shell/platform/windows/flutter_windows_engine.h"
++
++namespace flutter {
++
++// mcsm8: presents Impeller's Vulkan layers. Backing stores are the engine's
++// McsmVulkanDevice images; each view owns a Vulkan swapchain on its HWND
++// (FlutterWindowsView::vulkan_swapchain), which takes the layer by a copy.
++// One layer, as CompositorOpenGL.
++class CompositorVulkan : public Compositor {
++ public:
++  explicit CompositorVulkan(FlutterWindowsEngine* engine);
++
++  /// |Compositor|
++  bool CreateBackingStore(const FlutterBackingStoreConfig& config,
++                          FlutterBackingStore* result) override;
++
++  /// |Compositor|
++  bool CollectBackingStore(const FlutterBackingStore* store) override;
++
++  /// |Compositor|
++  bool Present(FlutterWindowsView* view,
++               const FlutterLayer** layers,
++               size_t layers_count) override;
++
++ private:
++  FlutterWindowsEngine* engine_;
++
++  FML_DISALLOW_COPY_AND_ASSIGN(CompositorVulkan);
++};
++
++}  // namespace flutter
++
++#endif  // FLUTTER_SHELL_PLATFORM_WINDOWS_COMPOSITOR_VULKAN_H_
+diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
+index d9f797ca257..c401443f482 100644
+--- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
++++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
+@@ -21,6 +21,7 @@
+ #include "flutter/shell/platform/windows/accessibility_bridge_windows.h"
+ #include "flutter/shell/platform/windows/compositor_opengl.h"
+ #include "flutter/shell/platform/windows/compositor_software.h"
++#include "flutter/shell/platform/windows/compositor_vulkan.h"
+ #include "flutter/shell/platform/windows/display_manager.h"
+ #include "flutter/shell/platform/windows/flutter_windows_view.h"
+ #include "flutter/shell/platform/windows/keyboard_key_channel_handler.h"
+@@ -210,8 +211,33 @@ FlutterWindowsEngine::FlutterWindowsEngine(
+   }
+   enable_impeller_ = enable_impeller;
+ 
+-  egl_manager_ = egl::Manager::Create(
+-      static_cast<egl::GpuPreference>(project_->gpu_preference()));
++  // mcsm8: Impeller on Vulkan where a device meets its needs, else ANGLE.
++  // MCSM_RENDERER=vulkan|gles forces one (read from the live environment, as
++  // patch 0007 reads FLUTTER_ENGINE_SWITCHES: the static CRT's getenv sees a
++  // copy taken at load).
++  {
++    char renderer[32] = {};
++    GetEnvironmentVariableA("MCSM_RENDERER", renderer, sizeof(renderer));
++    const std::string choice(renderer);
++    std::string vulkan_error = "forced GLES";
++    if (enable_impeller_ && (choice.empty() || choice == "vulkan")) {
++      McsmVulkanDevice::Options options;
++      options.wsi_instance_extensions = {"VK_KHR_win32_surface"};
++      vulkan_device_ = McsmVulkanDevice::Create(options, &vulkan_error);
++    } else if (!enable_impeller_) {
++      vulkan_error = "Impeller is off";
++    }
++    if (vulkan_device_) {
++      FML_LOG(IMPORTANT) << "renderer: " << vulkan_device_->Describe();
++    } else {
++      FML_LOG(IMPORTANT) << "renderer: ANGLE/GLES (no Vulkan: "
++                         << vulkan_error << ")";
++    }
++  }
++  if (!vulkan_device_) {
++    egl_manager_ = egl::Manager::Create(
++        static_cast<egl::GpuPreference>(project_->gpu_preference()));
++  }
+   window_proc_delegate_manager_ = std::make_unique<WindowProcDelegateManager>();
+ 
+   display_manager_ = std::make_shared<DisplayManagerWin32>(this);
+@@ -473,7 +499,9 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
+     platform_view_plugin_ = std::make_unique<PlatformViewPlugin>(
+         messenger_wrapper_.get(), task_runner_.get());
+   }
+-  if (egl_manager_) {
++  if (vulkan_device_) {
++    compositor_ = std::make_unique<CompositorVulkan>(this);  // mcsm8
++  } else if (egl_manager_) {
+     auto resolver = [](const char* name) -> void* {
+       return reinterpret_cast<void*>(::eglGetProcAddress(name));
+     };
+@@ -522,7 +550,9 @@ bool FlutterWindowsEngine::Run(std::string_view entrypoint) {
+ 
+   FlutterRendererConfig renderer_config;
+ 
+-  if (enable_impeller_) {
++  if (vulkan_device_) {
++    vulkan_device_->FillRendererConfig(&renderer_config);  // mcsm8
++  } else if (enable_impeller_) {
+     // Impeller does not support a Software backend. Avoid falling back and
+     // confusing the engine on which renderer is selected.
+     if (!egl_manager_) {
+diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.h b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.h
+index 720a65a7dd8..2b207ddd2cc 100644
+--- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.h
++++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.h
+@@ -25,6 +25,7 @@
+ #include "flutter/shell/platform/embedder/embedder.h"
+ #include "flutter/shell/platform/windows/accessibility_bridge_windows.h"
+ #include "flutter/shell/platform/windows/accessibility_plugin.h"
++#include "flutter/shell/platform/common/mcsm_vulkan_device.h"
+ #include "flutter/shell/platform/windows/compositor.h"
+ #include "flutter/shell/platform/windows/cursor_handler.h"
+ #include "flutter/shell/platform/windows/egl/manager.h"
+@@ -182,6 +183,10 @@ class FlutterWindowsEngine {
+   // rendering using software instead of OpenGL.
+   egl::Manager* egl_manager() const { return egl_manager_.get(); }
+ 
++  // mcsm8: the Vulkan device when the engine renders with Impeller's Vulkan
++  // backend (then egl_manager() is nullptr).
++  McsmVulkanDevice* vulkan_device() const { return vulkan_device_.get(); }
++
+   WindowProcDelegateManager* window_proc_delegate_manager() {
+     return window_proc_delegate_manager_.get();
+   }
+@@ -460,6 +465,9 @@ class FlutterWindowsEngine {
+   // should be used instead.
+   std::unique_ptr<egl::Manager> egl_manager_;
+ 
++  // mcsm8: see vulkan_device().
++  std::unique_ptr<McsmVulkanDevice> vulkan_device_;
++
+   // The compositor that creates backing stores for the engine to render into
+   // and then presents them onto views.
+   std::unique_ptr<Compositor> compositor_;
+diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_view.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_view.cc
+index cc0505d6232..4881c9a3df0 100644
+--- a/engine/src/flutter/shell/platform/windows/flutter_windows_view.cc
++++ b/engine/src/flutter/shell/platform/windows/flutter_windows_view.cc
+@@ -14,6 +14,11 @@
+ #include "flutter/shell/platform/common/accessibility_bridge.h"
+ #include "flutter/shell/platform/windows/keyboard_key_channel_handler.h"
+ #include "flutter/shell/platform/windows/text_input_plugin.h"
++
++#ifndef VK_USE_PLATFORM_WIN32_KHR
++#define VK_USE_PLATFORM_WIN32_KHR
++#endif
++#include <vulkan/vulkan_win32.h>
+ #include "flutter/third_party/accessibility/ax/platform/ax_platform_node_win.h"
+ 
+ namespace flutter {
+@@ -138,13 +143,41 @@ FlutterWindowsView::~FlutterWindowsView() {
+   if (surface_) {
+     DestroyWindowSurface(*engine_, std::move(surface_));
+   }
++  // mcsm8: the swapchain may be in use on the raster thread.
++  if (vulkan_swapchain_) {
++    if (engine_->running()) {
++      engine_->PostRasterThreadTask(fml::MakeCopyable(
++          [swapchain = std::move(vulkan_swapchain_)]() mutable {
++            swapchain.reset();
++          }));
++    } else {
++      vulkan_swapchain_.reset();
++    }
++  }
++}
++
++bool FlutterWindowsView::HasRenderSurface() const {
++  return (surface_ && surface_->IsValid()) ||
++         (vulkan_swapchain_ != nullptr);
++}
++
++size_t FlutterWindowsView::RenderSurfaceWidth() const {
++  return vulkan_swapchain_ ? vulkan_swapchain_->width() : surface_->width();
++}
++
++size_t FlutterWindowsView::RenderSurfaceHeight() const {
++  return vulkan_swapchain_ ? vulkan_swapchain_->height() : surface_->height();
++}
++
++McsmVulkanSwapchain* FlutterWindowsView::vulkan_swapchain() const {
++  return vulkan_swapchain_.get();
+ }
+ 
+ bool FlutterWindowsView::OnEmptyFrameGenerated() {
+   // Called on the raster thread.
+   std::unique_lock<std::mutex> lock(resize_mutex_);
+ 
+-  if (surface_ == nullptr || !surface_->IsValid()) {
++  if (!HasRenderSurface()) {
+     return false;
+   }
+ 
+@@ -175,7 +208,7 @@ bool FlutterWindowsView::OnFrameGenerated(size_t width, size_t height) {
+     return true;
+   }
+ 
+-  if (surface_ == nullptr || !surface_->IsValid()) {
++  if (!HasRenderSurface()) {
+     return false;
+   }
+ 
+@@ -214,20 +247,20 @@ bool FlutterWindowsView::OnWindowSizeChanged(size_t width, size_t height) {
+     return true;
+   }
+ 
+-  if (!engine_->egl_manager()) {
++  if (!engine_->egl_manager() && !engine_->vulkan_device()) {
+     SendWindowMetrics(width, height, binding_handler_->GetDpiScale());
+     return true;
+   }
+ 
+-  if (!surface_ || !surface_->IsValid()) {
++  if (!HasRenderSurface()) {
+     SendWindowMetrics(width, height, binding_handler_->GetDpiScale());
+     return true;
+   }
+ 
+-  // We're using OpenGL rendering. Resizing the surface must happen on the
+-  // raster thread.
+-  bool surface_will_update =
+-      SurfaceWillUpdate(surface_->width(), surface_->height(), width, height);
++  // We're using OpenGL or Vulkan rendering. Resizing the surface must happen
++  // on the raster thread.
++  bool surface_will_update = SurfaceWillUpdate(
++      RenderSurfaceWidth(), RenderSurfaceHeight(), width, height);
+   if (!surface_will_update) {
+     SendWindowMetrics(width, height, binding_handler_->GetDpiScale());
+     return true;
+@@ -807,6 +840,33 @@ bool FlutterWindowsView::IsImplicitView() const {
+ void FlutterWindowsView::CreateRenderSurface() {
+   FML_DCHECK(surface_ == nullptr);
+ 
++  // mcsm8: a Vulkan swapchain on the HWND when the engine renders with Vulkan.
++  if (McsmVulkanDevice* device = engine_->vulkan_device()) {
++    PhysicalWindowBounds bounds = binding_handler_->GetPhysicalWindowBounds();
++    auto create_surface = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(
++        device->InstanceProc("vkCreateWin32SurfaceKHR"));
++    VkWin32SurfaceCreateInfoKHR info = {
++        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
++    info.hinstance = GetModuleHandle(nullptr);
++    info.hwnd = GetWindowHandle();
++    VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
++    if (create_surface == nullptr ||
++        create_surface(device->instance(), &info, nullptr, &vk_surface) !=
++            VK_SUCCESS) {
++      FML_LOG(ERROR) << "Could not create a Vulkan surface for the view.";
++      return;
++    }
++    vulkan_swapchain_ = McsmVulkanSwapchain::Create(
++        device, vk_surface, static_cast<uint32_t>(bounds.width),
++        static_cast<uint32_t>(bounds.height), NeedsVsync());
++    if (!vulkan_swapchain_) {
++      FML_LOG(ERROR) << "Could not create a Vulkan swapchain for the view.";
++    }
++    resize_target_width_ = bounds.width;
++    resize_target_height_ = bounds.height;
++    return;
++  }
++
+   if (engine_->egl_manager()) {
+     PhysicalWindowBounds bounds = binding_handler_->GetPhysicalWindowBounds();
+     surface_ = engine_->egl_manager()->CreateWindowSurface(
+@@ -820,6 +880,11 @@ void FlutterWindowsView::CreateRenderSurface() {
+ }
+ 
+ bool FlutterWindowsView::ResizeRenderSurface(size_t width, size_t height) {
++  // mcsm8
++  if (vulkan_swapchain_) {
++    return vulkan_swapchain_->Resize(static_cast<uint32_t>(width),
++                                     static_cast<uint32_t>(height));
++  }
+   FML_DCHECK(surface_ != nullptr);
+ 
+   // No-op if the surface is already the desired size.
+@@ -917,6 +982,16 @@ void FlutterWindowsView::UpdateSemanticsEnabled(bool enabled) {
+ 
+ void FlutterWindowsView::OnDwmCompositionChanged() {
+   UpdateVsync(*engine_, surface_.get(), NeedsVsync());
++  // mcsm8: the swapchain's present mode follows (on the raster thread).
++  if (vulkan_swapchain_) {
++    auto update = [swapchain = vulkan_swapchain_.get(),
++                   vsync = NeedsVsync()]() { swapchain->SetVsync(vsync); };
++    if (engine_->running()) {
++      engine_->PostRasterThreadTask(update);
++    } else {
++      update();
++    }
++  }
+ }
+ 
+ void FlutterWindowsView::OnWindowStateEvent(HWND hwnd, WindowStateEvent event) {
+diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_view.h b/engine/src/flutter/shell/platform/windows/flutter_windows_view.h
+index 4e5c47fb5c6..e4cddcb243b 100644
+--- a/engine/src/flutter/shell/platform/windows/flutter_windows_view.h
++++ b/engine/src/flutter/shell/platform/windows/flutter_windows_view.h
+@@ -19,6 +19,7 @@
+ #include "flutter/shell/platform/common/client_wrapper/include/flutter/plugin_registrar.h"
+ #include "flutter/shell/platform/embedder/embedder.h"
+ #include "flutter/shell/platform/windows/accessibility_bridge_windows.h"
++#include "flutter/shell/platform/common/mcsm_vulkan_swapchain.h"
+ #include "flutter/shell/platform/windows/flutter_windows_engine.h"
+ #include "flutter/shell/platform/windows/public/flutter_windows.h"
+ #include "flutter/shell/platform/windows/window_binding_handler.h"
+@@ -89,6 +90,10 @@ class FlutterWindowsView : public WindowBindingHandlerDelegate {
+   // This might be nullptr or an invalid surface.
+   egl::WindowSurface* surface() const;
+ 
++  // mcsm8: the Vulkan swapchain that backs the view when the engine renders
++  // with Vulkan (else nullptr). Used on the raster thread.
++  McsmVulkanSwapchain* vulkan_swapchain() const;
++
+   // Return the currently configured HWND.
+   virtual HWND GetWindowHandle() const;
+ 
+@@ -483,6 +488,15 @@ class FlutterWindowsView : public WindowBindingHandlerDelegate {
+   // or if surface creation failed.
+   std::unique_ptr<egl::WindowSurface> surface_ = nullptr;
+ 
++  // mcsm8: the Vulkan swapchain (instead of surface_).
++  std::unique_ptr<McsmVulkanSwapchain> vulkan_swapchain_;
++
++  // mcsm8: whether a render surface (EGL or Vulkan) exists and is usable, and
++  // its size.
++  bool HasRenderSurface() const;
++  size_t RenderSurfaceWidth() const;
++  size_t RenderSurfaceHeight() const;
++
+   // Keeps track of pointer states in relation to the window.
+   std::unordered_map<int32_t, std::unique_ptr<PointerState>> pointer_states_;
+ 
+-- 
+2.54.0 (Apple Git-157)
+

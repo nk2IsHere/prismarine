@@ -1,0 +1,423 @@
+From a193cfcf3f65848c8b80ea4b3f0c4f1eb5977e09 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 17:46:25 +0100
+Subject: [PATCH 1/2] flutter_gpu (mcsm8): feature bits per backend once the
+ default context exists (bit 1024; InternalFlutterGpu_McsmBackend), and Vulkan
+ ends a command buffer's previous pass when the next begins (it encodes as it
+ goes, like Metal)
+
+---
+ engine/src/flutter/lib/gpu/command_buffer.cc |  8 ++--
+ engine/src/flutter/lib/gpu/context.cc        | 43 +++++++++++++++++++-
+ engine/src/flutter/lib/gpu/context.h         |  6 +++
+ engine/src/flutter/lib/gpu/render_pass.cc    |  6 ++-
+ 4 files changed, 57 insertions(+), 6 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
+index 9946bd585f9..a1ee6dae4d9 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.cc
++++ b/engine/src/flutter/lib/gpu/command_buffer.cc
+@@ -43,10 +43,12 @@ bool CommandBuffer::Encodable::EncodeCommands() const {
+ }
+ 
+ void CommandBuffer::McsmEndOpenEncoder() {
+-  // Only Metal encodes as it goes; the other backends record commands and
+-  // encode them all at submit.
++  // Metal and Vulkan encode as they go (mcsm8: Vulkan begins a render pass
++  // when it is created); GLES records commands and encodes them at submit.
++  const auto backend = context_->GetBackendType();
+   if (encodables_.empty() ||
+-      context_->GetBackendType() != impeller::Context::BackendType::kMetal) {
++      (backend != impeller::Context::BackendType::kMetal &&
++       backend != impeller::Context::BackendType::kVulkan)) {
+     return;
+   }
+   auto& last = encodables_.back();
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 28ba701e134..f97a186c4a1 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "flutter/lib/gpu/context.h"
+ 
++#include <atomic>
++
+ #include <future>
+ 
+ #include "flutter/lib/gpu/formats.h"
+@@ -99,12 +101,31 @@ std::shared_ptr<impeller::Context>& Context::GetContextShared() {
+ /// Exports
+ ///
+ 
++// mcsm8: the default context's backend once Flutter GPU made it (-1 before):
++// 0 Metal, 1 GLES, 2 Vulkan.
++static std::atomic<int> g_mcsm_backend{-1};
++
++static int McsmBackendIndex(impeller::Context::BackendType type) {
++  switch (type) {
++    case impeller::Context::BackendType::kMetal:
++      return 0;
++    case impeller::Context::BackendType::kOpenGLES:
++      return 1;
++    case impeller::Context::BackendType::kVulkan:
++      return 2;
++  }
++  return -1;
++}
++
+ Dart_Handle InternalFlutterGpu_Context_InitializeDefault(Dart_Handle wrapper) {
+   std::optional<std::string> out_error;
+   auto impeller_context = flutter::gpu::Context::GetDefaultContext(out_error);
+   if (out_error.has_value()) {
+     return tonic::ToDart(out_error.value());
+   }
++  if (impeller_context) {
++    g_mcsm_backend = McsmBackendIndex(impeller_context->GetBackendType());
++  }
+ 
+   auto res = fml::MakeRefCounted<flutter::gpu::Context>(impeller_context);
+   res->AssociateWithDartWrapper(wrapper);
+@@ -200,5 +221,25 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // (RenderPass_McsmSetViewports; false on other backends), 512 = draws from
+   // a first instance (RenderPass_McsmDrawInstanced). (32 is unused: a
+   // batched encoding was tried and measured no cheaper than the leaf calls.)
+-  return 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256 | 512;
++  //
++  // mcsm8: once the default context exists the bits are its backend's, with
++  // 1024 set: Metal 16, 64, 256; GLES 64, 128; Vulkan 64 (several passes on
++  // one command buffer: Vulkan ends the previous pass, GLES records them).
++  // Before that, every bit without 1024 (callers ask again later).
++  const int backend = g_mcsm_backend;
++  const int64_t common = 1 | 2 | 4 | 8 | 512;
++  switch (backend) {
++    case 0:
++      return common | 16 | 64 | 256 | 1024;
++    case 1:
++      return common | 64 | 128 | 1024;
++    case 2:
++      return common | 64 | 1024;
++    default:
++      return common | 16 | 64 | 128 | 256;
++  }
++}
++
++extern int InternalFlutterGpu_McsmBackend() {
++  return g_mcsm_backend;
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index 70269e2f27d..cb8a15674eb 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -120,9 +120,15 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   128: several colour attachments in one pass on GLES (mcsm7)
+ ///   256: viewport arrays, RenderPass_McsmSetViewports (Metal only) (mcsm7)
+ ///   512: RenderPass_McsmDrawInstanced, draws from a first instance (mcsm7)
++///   1024: the bits are the default context's backend's (mcsm8)
+ FLUTTER_GPU_EXPORT
+ extern int64_t InternalFlutterGpu_McsmFeatures();
+ 
++/// mcsm8: the default context's backend once Flutter GPU created it: -1
++/// before, 0 Metal, 1 GLES, 2 Vulkan. Leaf.
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_McsmBackend();
++
+ }  // extern "C"
+ 
+ #endif  // FLUTTER_LIB_GPU_CONTEXT_H_
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 3aa9f177a87..b2fcc790ab1 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -91,9 +91,11 @@ bool RenderPass::Begin(flutter::gpu::CommandBuffer& command_buffer) {
+   if (!render_pass_) {
+     return false;
+   }
+-  // (Metal only: the other backends encode every pass at submit.)
++  // (Metal and Vulkan: GLES encodes every pass at submit.)
+   if (GetContext()->GetBackendType() ==
+-      impeller::Context::BackendType::kMetal) {
++          impeller::Context::BackendType::kMetal ||
++      GetContext()->GetBackendType() ==
++          impeller::Context::BackendType::kVulkan) {
+     ended_ = std::make_shared<bool>(false);
+   }
+   command_buffer.AddRenderPass(render_pass_, ended_);
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 3ebe235abb95f226ca4f41b9dfa4050c2fb16be4 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 17:59:44 +0100
+Subject: [PATCH 2/2] =?UTF-8?q?impeller,=20flutter=5Fgpu=20(mcsm8):=20view?=
+ =?UTF-8?q?port=20arrays=20on=20Vulkan=20=E2=80=94=20RenderPassVK::McsmSet?=
+ =?UTF-8?q?Viewports=20sets=2016=20viewports=20and=20scissors=20(Y-flipped?=
+ =?UTF-8?q?=20as=20ToVkViewport;=20slots=20past=20the=20count=20repeat=20t?=
+ =?UTF-8?q?he=20first),=20pipelines=20take=20a=20viewport=20count=20(Pipel?=
+ =?UTF-8?q?ineDescriptor::SetMcsmViewportCount,=2016=20while=20a=20viewpor?=
+ =?UTF-8?q?t=20array=20is=20set;=20part=20of=20lib/gpu's=20pipeline=20key)?=
+ =?UTF-8?q?,=20McsmFeatures=20bit=20256=20on=20Vulkan=20where=20the=20devi?=
+ =?UTF-8?q?ce=20has=20multiViewport=20and=20the=20vertex=20viewport=20inde?=
+ =?UTF-8?q?x?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../renderer/backend/vulkan/pipeline_vk.cc    |  5 +--
+ .../renderer/backend/vulkan/render_pass_vk.cc | 25 +++++++++++++++
+ .../renderer/backend/vulkan/render_pass_vk.h  |  5 +++
+ .../impeller/renderer/pipeline_descriptor.cc  |  2 ++
+ .../impeller/renderer/pipeline_descriptor.h   |  6 ++++
+ engine/src/flutter/lib/gpu/BUILD.gn           |  5 +++
+ engine/src/flutter/lib/gpu/context.cc         | 32 ++++++++++++++++++-
+ engine/src/flutter/lib/gpu/render_pass.cc     | 15 +++++++--
+ engine/src/flutter/lib/gpu/render_pass.h      |  4 +--
+ 9 files changed, 92 insertions(+), 7 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+index 4232014895b..1ae31273d1f 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+@@ -282,8 +282,9 @@ fml::StatusOr<vk::UniquePipeline> MakePipeline(
+   /// Viewport State
+   ///
+   vk::PipelineViewportStateCreateInfo viewport_state;
+-  viewport_state.setViewportCount(1u);
+-  viewport_state.setScissorCount(1u);
++  // mcsm8: a viewport array uses more than one.
++  viewport_state.setViewportCount(desc.GetMcsmViewportCount());
++  viewport_state.setScissorCount(desc.GetMcsmViewportCount());
+   // The actual viewport and scissor rects are not set here since they are
+   // dynamic as mentioned above in the dynamic state info.
+   pipeline_info.setPViewportState(&viewport_state);
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index d5c9ab71fcb..f66edc2d1bc 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -422,6 +422,31 @@ void RenderPassVK::SetScissor(IRect32 scissor) {
+   command_buffer_vk_.setScissor(0, 1, &scissor_vk);
+ }
+ 
++// |RenderPass|
++bool RenderPassVK::McsmSetViewports(const Viewport* viewports,
++                                    const IRect32* scissors,
++                                    size_t count) {
++  // mcsm8: all 16 slots (the pipelines built for viewport arrays use 16);
++  // slots past [count] repeat the first.
++  constexpr size_t kMax = 16;
++  if (count == 0 || count > kMax) {
++    return false;
++  }
++  std::array<vk::Viewport, kMax> vp;
++  std::array<vk::Rect2D, kMax> sc;
++  for (size_t i = 0; i < kMax; i++) {
++    const size_t k = i < count ? i : 0;
++    vp[i] = ToVkViewport(viewports[k]);
++    const IRect32& s = scissors[k];
++    sc[i] = vk::Rect2D()
++                .setOffset(vk::Offset2D(s.GetX(), s.GetY()))
++                .setExtent(vk::Extent2D(s.GetWidth(), s.GetHeight()));
++  }
++  command_buffer_vk_.setViewport(0, kMax, vp.data());
++  command_buffer_vk_.setScissor(0, kMax, sc.data());
++  return true;
++}
++
+ // |RenderPass|
+ void RenderPassVK::SetElementCount(size_t count) {
+   element_count_ = count;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+index 53352951daf..b22141a865a 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+@@ -75,6 +75,11 @@ class RenderPassVK final : public RenderPass {
+   // |RenderPass|
+   void SetScissor(IRect32 scissor) override;
+ 
++  // |RenderPass|
++  bool McsmSetViewports(const Viewport* viewports,
++                        const IRect32* scissors,
++                        size_t count) override;
++
+   // |RenderPass|
+   void SetElementCount(size_t count) override;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/pipeline_descriptor.cc b/engine/src/flutter/impeller/renderer/pipeline_descriptor.cc
+index ad50ebef030..d6bd93e2885 100644
+--- a/engine/src/flutter/impeller/renderer/pipeline_descriptor.cc
++++ b/engine/src/flutter/impeller/renderer/pipeline_descriptor.cc
+@@ -46,6 +46,7 @@ std::size_t PipelineDescriptor::GetHash() const {
+   fml::HashCombineSeed(seed, cull_mode_);
+   fml::HashCombineSeed(seed, primitive_type_);
+   fml::HashCombineSeed(seed, polygon_mode_);
++  fml::HashCombineSeed(seed, mcsm_viewport_count_);
+   return seed;
+ }
+ 
+@@ -66,6 +67,7 @@ bool PipelineDescriptor::IsEqual(const PipelineDescriptor& other) const {
+          cull_mode_ == other.cull_mode_ &&
+          primitive_type_ == other.primitive_type_ &&
+          polygon_mode_ == other.polygon_mode_ &&
++         mcsm_viewport_count_ == other.mcsm_viewport_count_ &&
+          specialization_constants_ == other.specialization_constants_;
+ }
+ 
+diff --git a/engine/src/flutter/impeller/renderer/pipeline_descriptor.h b/engine/src/flutter/impeller/renderer/pipeline_descriptor.h
+index df14741679a..d07c4672bff 100644
+--- a/engine/src/flutter/impeller/renderer/pipeline_descriptor.h
++++ b/engine/src/flutter/impeller/renderer/pipeline_descriptor.h
+@@ -127,6 +127,11 @@ class PipelineDescriptor final : public Comparable<PipelineDescriptor> {
+ 
+   void SetSpecializationConstants(std::vector<Scalar> values);
+ 
++  /// mcsm8: the number of viewports and scissor rects the pipeline uses (a
++  /// viewport array: Vulkan builds its viewport state with this count).
++  void SetMcsmViewportCount(uint32_t count) { mcsm_viewport_count_ = count; }
++  uint32_t GetMcsmViewportCount() const { return mcsm_viewport_count_; }
++
+   const std::vector<Scalar>& GetSpecializationConstants() const;
+ 
+  private:
+@@ -148,6 +153,7 @@ class PipelineDescriptor final : public Comparable<PipelineDescriptor> {
+   PrimitiveType primitive_type_ = PrimitiveType::kTriangle;
+   PolygonMode polygon_mode_ = PolygonMode::kFill;
+   std::vector<Scalar> specialization_constants_;
++  uint32_t mcsm_viewport_count_ = 1u;
+ };
+ 
+ }  // namespace impeller
+diff --git a/engine/src/flutter/lib/gpu/BUILD.gn b/engine/src/flutter/lib/gpu/BUILD.gn
+index 50e6f07b24c..5c41c24d6ab 100644
+--- a/engine/src/flutter/lib/gpu/BUILD.gn
++++ b/engine/src/flutter/lib/gpu/BUILD.gn
+@@ -72,6 +72,11 @@ source_set("gpu") {
+     deps += [ "//flutter/impeller/display_list" ]
+   }
+ 
++  # mcsm8: McsmFeatures reads the Vulkan device's features.
++  if (impeller_enable_vulkan) {
++    deps += [ "//flutter/impeller/renderer/backend/vulkan" ]
++  }
++
+   if (is_win) {
+     # Required for M_PI and others.
+     defines += [ "_USE_MATH_DEFINES" ]
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index f97a186c4a1..eb7bc1dce4e 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -15,6 +15,9 @@
+ #include "impeller/core/formats.h"
+ #include "impeller/core/texture_descriptor.h"
+ #include "impeller/renderer/context.h"
++#if IMPELLER_ENABLE_VULKAN
++#include "impeller/renderer/backend/vulkan/context_vk.h"  // nogncheck
++#endif
+ #include "tonic/converter/dart_converter.h"
+ 
+ namespace flutter {
+@@ -104,6 +107,7 @@ std::shared_ptr<impeller::Context>& Context::GetContextShared() {
+ // mcsm8: the default context's backend once Flutter GPU made it (-1 before):
+ // 0 Metal, 1 GLES, 2 Vulkan.
+ static std::atomic<int> g_mcsm_backend{-1};
++static std::atomic<bool> g_mcsm_vk_viewports{false};
+ 
+ static int McsmBackendIndex(impeller::Context::BackendType type) {
+   switch (type) {
+@@ -125,6 +129,32 @@ Dart_Handle InternalFlutterGpu_Context_InitializeDefault(Dart_Handle wrapper) {
+   }
+   if (impeller_context) {
+     g_mcsm_backend = McsmBackendIndex(impeller_context->GetBackendType());
++    // mcsm8: viewport arrays on Vulkan need multiViewport and the vertex
++    // stage's viewport index (1.2's shaderOutputViewportIndex or
++    // VK_EXT_shader_viewport_index_layer), which the desktop embedders enable
++    // where the device has them.
++#if IMPELLER_ENABLE_VULKAN
++    if (impeller_context->GetBackendType() ==
++        impeller::Context::BackendType::kVulkan) {
++      const auto& vk_context = impeller::ContextVK::Cast(*impeller_context);
++      const auto device = vk_context.GetPhysicalDevice();
++      const auto features = device.getFeatures();
++      const auto props = device.getProperties();
++      bool index = props.apiVersion >= VK_API_VERSION_1_2;
++      if (!index) {
++        auto exts = device.enumerateDeviceExtensionProperties();
++        if (exts.result == impeller::vk::Result::eSuccess) {
++          for (const auto& e : exts.value) {
++            if (std::string(e.extensionName.data()) ==
++                VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME) {
++              index = true;
++            }
++          }
++        }
++      }
++      g_mcsm_vk_viewports = features.multiViewport && index;
++    }
++#endif  // IMPELLER_ENABLE_VULKAN
+   }
+ 
+   auto res = fml::MakeRefCounted<flutter::gpu::Context>(impeller_context);
+@@ -234,7 +264,7 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+     case 1:
+       return common | 64 | 128 | 1024;
+     case 2:
+-      return common | 64 | 1024;
++      return common | 64 | (g_mcsm_vk_viewports ? 256 : 0) | 1024;
+     default:
+       return common | 16 | 64 | 128 | 256;
+   }
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index b2fcc790ab1..9ad82b055d7 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -234,6 +234,7 @@ const McsmPipelineKey& RenderPass::CurrentPipelineKey() {
+   k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetPrimitiveType()));
+   k.Push(static_cast<uint32_t>(pipeline_descriptor_.GetPolygonMode()));
+   k.Push(static_cast<uint32_t>(render_target_.GetSampleCount()));
++  k.Push(pipeline_descriptor_.GetMcsmViewportCount());  // mcsm8
+   // Each colour descriptor as GetOrCreatePipeline builds it: the format is
+   // its target's (the render target's when the attachment has no texture),
+   // or its own for an index with no attachment.
+@@ -401,10 +402,20 @@ void RenderPass::McsmEndViewports() {
+ bool RenderPass::McsmSetViewports(const float* viewports,
+                                   const int32_t* scissors,
+                                   size_t count) {
+-  if (count > 16 || GetContext()->GetBackendType() !=
+-                        impeller::Context::BackendType::kMetal) {
++  const auto backend = GetContext()->GetBackendType();
++  if (count > 16 || (backend != impeller::Context::BackendType::kMetal &&
++                     backend != impeller::Context::BackendType::kVulkan)) {
+     return false;
+   }
++  // mcsm8: Vulkan builds pipelines with the viewport count (16 while a
++  // viewport array is set, else 1).
++  if (backend == impeller::Context::BackendType::kVulkan) {
++    const uint32_t vk_count = count > 0 ? 16u : 1u;
++    if (pipeline_descriptor_.GetMcsmViewportCount() != vk_count) {
++      pipeline_descriptor_.SetMcsmViewportCount(vk_count);
++      MarkPipelineStateChanged();
++    }
++  }
+   mcsm_viewports_.clear();
+   mcsm_scissors_.clear();
+   for (size_t i = 0; i < count; i++) {
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index e26f9b9429f..aebe9e48894 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -226,8 +226,8 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+ 
+   /// mcsm7: several viewports (x, y, width, height, z near, z far each) and
+   /// scissor rects (x, y, width, height each) for the draws that follow;
+-  /// [count] 0 goes back to one. Metal only (false elsewhere: draw per
+-  /// viewport there), at most 16.
++  /// [count] 0 goes back to one. Metal and Vulkan (mcsm8; false on GLES:
++  /// draw per viewport there), at most 16.
+   bool McsmSetViewports(const float* viewports,
+                         const int32_t* scissors,
+                         size_t count);
+-- 
+2.54.0 (Apple Git-157)
+

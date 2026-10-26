@@ -1,6 +1,6 @@
 # The Flutter engine, patched for mcsm
 
-mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs about 0.9 µs of CPU before our own code runs. The patches here cut that to ~0.12 µs on Macs (TownFair's paint −1.7 ms a frame). They also load our Metal shaders precompiled (a fresh build's first scene no longer stalls ~3 s) and cache ANGLE's compiled programs on Windows. Since mcsm6 a render pass may mix target formats (the shadow occlusion buffer is RGBA8 as the exe's) and release builds take the Dart new generation's size (fewer stop-the-world scavenges).
+mcsm draws through Flutter GPU, and on the stock Flutter engine every draw costs about 0.9 µs of CPU before our own code runs. The patches here cut that to ~0.12 µs on Macs (TownFair's paint −1.7 ms a frame). They also load our Metal shaders precompiled (a fresh build's first scene no longer stalls ~3 s) and cache ANGLE's compiled programs on Windows. Since mcsm6 a render pass may mix target formats (the shadow occlusion buffer is RGBA8 as the exe's) and release builds take the Dart new generation's size (fewer stop-the-world scavenges). Since mcsm8 Windows and Linux run Impeller on **Vulkan** (GLES stays as the fallback and behind a switch): see [Vulkan on Windows and Linux](#vulkan-on-windows-and-linux-mcsm8).
 
 **The patched engine is optional.** Everything builds and runs on Flutter's stock engine too, only slower, and the frames are byte-identical either way. The patches apply to the engine of the project's Flutter (3.47.7 stable, engine revision `deb287481e3ce9468f3434937ced4240a70539ca`). They live here as reviewable files; the downloaded or built engine is data (`$MCSM_DATA/engine`, gitignored).
 
@@ -11,6 +11,7 @@ Contents:
 - [Or build it yourself](#or-build-it-yourself): [macOS](#macos-arm64-and-x86_64), [Linux](#linux-x64-native-and-arm64-cross-built), [Windows](#windows-x64-native-and-arm64-cross-built)
 - [Use it](#use-it)
 - [Publish a new build](#publish-a-new-build-maintainers)
+- [Vulkan on Windows and Linux](#vulkan-on-windows-and-linux-mcsm8)
 - [Patches](#patches)
 - [Reference](#reference-targets-backends-test-results-2026-10-17)
 
@@ -146,6 +147,17 @@ What else to know on macOS:
 - **A self-built out dir** needs the `flutter_patched_sdk_product` link; the build scripts make it.
 - **Try it with `tools/gpu_smoke`:** `flutter build <os>` it with those flags and run it. It prints `SMOKE` lines with the per-draw times. On Windows, `tools\gpu_smoke\windows_smoke.ps1 -EngineSrc <…>\engine\src` builds and runs it on the stock engine and then the patched one.
 
+## Vulkan on Windows and Linux (mcsm8)
+
+Flutter's Windows and Linux embedders draw with ANGLE/GLES and GL only; patches 0013–0018 give both an Impeller Vulkan path, used by default where the machine has a working Vulkan device:
+- **Windows:** our own instance and device (`vulkan-1.dll`), a swapchain per view on its window, ANGLE when there's no usable device. `MCSM_RENDERER=gles` forces ANGLE.
+- **Linux (GTK):** our own instance and device (`libvulkan.so.1`); each frame's layer reaches GTK's GL context without a copy through the CPU (`VK_KHR_external_memory_fd` / `GL_EXT_memory_object_fd`, with semaphores), else through a read-back. `MCSM_RENDERER=gles` (or `FLUTTER_LINUX_RENDERER=opengl`) forces GL; `software` is Flutter's software renderer.
+- The engine logs the choice once (`renderer: Vulkan <device> (api …, driver …, multiViewport, vertex viewport index)` or `renderer: ANGLE/GLES (…why…)`), and the player logs `renderer: vulkan|gles|metal, engine features …`.
+- Impeller keeps its Vulkan pipeline cache in `%LOCALAPPDATA%\<exe>\flutter_vk_cache` or `~/.cache/<exe>/flutter_vk_cache` (`FLUTTER_VK_CACHE_DIR=<dir>`, `0` turns it off).
+- Feature bits (`InternalFlutterGpu_McsmFeatures`, bit 1024 = the bits are the running backend's): Vulkan has 1, 2, 4, 8, 64, 512 and 256 (viewport arrays) where the device has `multiViewport` and a vertex-stage viewport index; GLES 1, 2, 4, 8, 64, 128, 512; Metal 1, 2, 4, 8, 16, 64, 256, 512.
+- **Results** (2026-10-26): the treehouse D1 capture's events and audio are bit-identical between Vulkan, GLES (Linux, Windows) and Metal; Vulkan vs GLES frames differ by GPU rounding only (UHD 620: 531 px over 16 levels in a 1280×720 frame, none of it a missing pass; Linux: under 25 px over 4 levels). gpu_smoke passes on Vulkan on the RTX 4060 Ti, lavapipe and the UHD 620, and the Khronos validation layer reports nothing for gpu_smoke and the player. TownFairHall on the RTX: 17.6 ms a frame on Vulkan vs 28.8 on GLES (p50); the treehouse holds 60 fps on both.
+- **Known limit of the GLES fallback:** on ANGLE (WARP and the UHD 620) a Flutter GPU texture read back from the UI thread right after its command buffer completes can come back empty; it happens on the stock engine too and doesn't reach the screen (the tablet's GLES frames match its Vulkan ones). gpu_smoke re-reads once before it counts a read as wrong.
+
 ## Publish a new build (maintainers)
 
 1. Bump `RELEASE` (e.g. `engine-<engine revision, 12 chars>-mcsm<patch count>`).
@@ -200,6 +212,13 @@ What else to know on macOS:
 - `0011-gpu-metal-viewport-arrays.patch` (mcsm7, `lib/gpu`, `impeller/renderer/backend/metal`): **viewport arrays** (bit 256). `RenderPass_McsmSetViewports` takes up to 16 viewports (x, y, w, h, z near, z far) and a scissor rect for each; the draws that follow set them on the encoder (`setViewports:count:` / `setScissorRects:count:`) and each primitive goes to the viewport its vertex stage names (flutter_scene P34 turns a `flat out uint mcsm_viewport_index` output into Metal's `[[viewport_array_index]]`). A draw without them, a replay or count 0 goes back to one viewport. Metal only: other backends return false and the caller draws per tile (GLES 3.0 has no viewport index in the vertex stage; Vulkan's multiViewport comes with mcsm8). One instanced draw into 4 tiles gives the same bytes as 4 per-tile draws (gpu_smoke).
 - `0012-gpu-first-instance-draws.patch` (mcsm7, `lib/gpu`): **draws from a first instance** (bit 512). `RenderPass_McsmDrawInstanced(count, instances, first, indexed)` (leaf; 2 = no cached pipeline yet) offsets every bound instance-rate vertex buffer by `first · stride` for that draw and records the offset views (0008), on every backend, so the shader's instance index counts from 0 everywhere (Metal's `baseInstance` would start `[[instance_id]]` at `first`; GLES 3.0 has no base instance). One instance buffer serves many draws without a bind per draw. flutter_gpu G7 exposes it as `draw(…, firstInstance:)` / `drawIndexed(…, firstInstance:)`.
 
+- `0013-embedder-vulkan-backing-stores.patch` (mcsm8, `shell/platform/embedder`, `shell/gpu`): the embedder API's Vulkan backing stores for Impeller (the embedder's `VkImage` wrapped as the resolve target of a 4× MSAA layer, with its own depth/stencil per backing store, left in `COLOR_ATTACHMENT_OPTIMAL`); with a compositor the Impeller Vulkan surface renders nothing itself (`render_to_surface`), and it gets a pipeline cache directory on the desktop (persisted every 50 frames; per-thread command pools recycled as `SurfaceContextVK` does).
+- `0014-linux-vulkan.patch` (mcsm8, `shell/platform/{common,linux}`): `McsmVulkanDevice` (loader, instance, a device with Impeller's needs plus `multiViewport` and the vertex viewport index where present, the queue's functions behind one mutex for every caller through hooked `vkGet*ProcAddr`, backing-store images, readback), `FlCompositorVulkan`, the renderer choice and its log line; then the zero-copy path (`McsmVulkanExportRing`: three exportable RGBA8 images and semaphores, imported into GDK's GL context by fd, no CPU wait per frame), with the read-back path for several layers or without the GL extensions.
+- `0015-windows-vulkan.patch` (mcsm8, `shell/platform/{common,windows}`): Impeller on Vulkan in `FlutterWindowsEngine` unless `MCSM_RENDERER=gles` or Impeller is off; `CompositorVulkan` presents through `McsmVulkanSwapchain` (a swapchain per view on its HWND, BGRA8, FIFO only when DWM doesn't compose, one frame in flight, rebuilt when out of date); views create, resize and destroy the swapchain where they did the EGL surface; ANGLE as before otherwise.
+- `0016-gpu-vulkan-features-viewport-arrays.patch` (mcsm8, `lib/gpu`, `impeller/renderer/backend/vulkan`): feature bits per backend (bit 1024; `InternalFlutterGpu_McsmBackend`), Vulkan ending a command buffer's previous pass when the next begins (it encodes as it goes, as Metal), and **viewport arrays on Vulkan** (bit 256): 16 viewports and scissors, pipelines with a viewport count (part of the pipeline key); a vertex shader writes `gl_ViewportIndex` under `#ifdef IMPELLER_TARGET_VULKAN` (`GL_ARB_shader_viewport_layer_array`). gpu_smoke: one instanced draw into 4 tiles = 4 per-tile draws, 0 px.
+- `0017-impeller-vulkan-memory-render-pass-cache.patch` (mcsm8, `impeller/renderer/backend/vulkan`): correctness. A host-visible buffer that doesn't fit the staging pool's memory type (the 256 MB BAR heap of a discrete GPU) is allocated outside the pool (TownFair ran out of device memory on the RTX). A pass's cached render pass and framebuffer are keyed on its whole attachment set (each texture by a never-reused id, load/store actions, subresource, a loaded attachment's layout) instead of colour 0 alone: a Flutter GPU pass that loaded a target first cleared by another pass cleared it again, and one with a second depth target drew into the first; loaded depth/stencil and colour attachments past the first start in their tracked layout (they started undefined), and an attachment loaded before it was ever written is moved to an attachment layout first. gpu_smoke "pass reuse" checks it.
+- `0018-vulkan-cheaper-draws-submits.patch` (mcsm8, `lib/gpu`, `impeller/renderer/backend/vulkan`): what made Vulkan's CPU side slower than GLES's. Bindings (recorded and replayed) go to the pass without a `ShaderMetadata` copy each; a submit disposes the thread's pools at most every 16 ms (each dispose made the next command buffer create new pools); signalled fences are reset and reused (`vkCreateFence` cost ~300 µs on NVIDIA); a pass skips unchanged pipeline, descriptor set, vertex and index buffer binds and tracking it already holds; graphics pipelines take uniform buffers as dynamic descriptors (≤ 8) so draws that differ only in their uniform slice share a set, and a pass keeps every set it wrote by its writes. Per draw (gpu_smoke, RTX): bare 0.74 → 0.16 µs; submit 435 → 9 µs.
+
 The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exports and falls back to the stock calls on Flutter's prebuilt engine. mcsm6's capabilities are found by flutter_scene P23 (it builds against Flutter's own flutter_gpu).
 
 ## mcsm6 results (2026-10-22, M2 Pro, interleaved A/B under measure.sh; the machine was loaded, so pairs, not absolutes)
@@ -226,10 +245,10 @@ The same patches on each platform. E1 and E3 are backend-neutral. E2's retained 
 | Platform | Backend | Embedder |
 |---|---|---|
 | macOS | Metal | |
-| Windows | GLES through ANGLE on Direct3D 11 | `windows/egl` |
-| Linux | GLES/GL | the GTK embedder; it supports only OpenGL and software (`fl_engine.cc`) |
+| Windows | GLES through ANGLE on Direct3D 11 (since mcsm8: Vulkan where it works, ANGLE as the fallback) | `windows/egl` (mcsm8: `windows/compositor_vulkan`) |
+| Linux | GLES/GL (since mcsm8: Vulkan where it works) | the GTK embedder; upstream it supports only OpenGL and software (`fl_engine.cc`; mcsm8 adds `fl_compositor_vulkan`) |
 
-So no desktop embedder runs Impeller's Vulkan backend, and a `VkPipelineCache` on disk wouldn't help any of them. The cross-launch shader cache per platform:
+So before mcsm8 no desktop embedder ran Impeller's Vulkan backend (mcsm8 gives Vulkan its pipeline cache directory, above). The cross-launch shader cache per platform:
 - **macOS:** the precompiled `.metallib` bundles (0004 + flutter_scene P8).
 - **Windows:** patch 0005 persists ANGLE's compiled programs (D3D bytecode) through `EGL_ANDROID_blob_cache`, in `%LOCALAPPDATA%\<exe>\flutter_angle_cache` (`FLUTTER_ANGLE_BLOB_CACHE=0` turns it off).
 - **Linux:** Mesa and NVIDIA keep their own on-disk shader caches.
