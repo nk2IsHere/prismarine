@@ -57,7 +57,7 @@ Future<bool> _done(gpu.CommandBuffer cb) {
 Future<bool> mcsm7Checks(void Function(String) log) async {
   final ctx = gpu.gpuContext;
   final features = fs.mcsmEngineFeatures;
-  log('SMOKE mcsm features $features');
+  log('SMOKE mcsm features $features backend ${fs.mcsmBackend ?? 'unknown'}');
   final lib = await fs.loadShaderLibraryAsync(
     await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
   );
