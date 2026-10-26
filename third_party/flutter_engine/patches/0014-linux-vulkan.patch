@@ -2041,7 +2041,7 @@ index dba92d94dc3..5a00e06eaf0 100644
 2.54.0 (Apple Git-157)
 
 
-From a79cfc65f7251889065d62ca072c998ef6f6b1c9 Mon Sep 17 00:00:00 2001
+From 899f33947bb43d2a3c2e17461191305316871d89 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 19:15:43 +0100
 Subject: [PATCH 2/2] =?UTF-8?q?linux=20(mcsm8):=20zero-copy=20Vulkan=20fra?=
@@ -2068,9 +2068,10 @@ Content-Transfer-Encoding: 8bit
  .../platform/common/mcsm_vulkan_device.h      |   5 +
  .../common/mcsm_vulkan_export_ring.cc         | 327 ++++++++++++++++
  .../platform/common/mcsm_vulkan_export_ring.h |  74 ++++
- .../platform/linux/fl_compositor_vulkan.cc    | 354 ++++++++++++++++--
+ .../platform/linux/fl_compositor_vulkan.cc    | 356 ++++++++++++++++--
+ .../flutter/shell/platform/linux/fl_engine.cc |   8 +-
  .../shell/platform/linux/fl_view_renderer.cc  |  11 +-
- 7 files changed, 774 insertions(+), 24 deletions(-)
+ 8 files changed, 781 insertions(+), 27 deletions(-)
  create mode 100644 engine/src/flutter/shell/platform/common/mcsm_vulkan_export_ring.cc
  create mode 100644 engine/src/flutter/shell/platform/common/mcsm_vulkan_export_ring.h
 
@@ -2571,10 +2572,10 @@ index 00000000000..0e56d42197e
 +
 +#endif  // FLUTTER_SHELL_PLATFORM_COMMON_MCSM_VULKAN_EXPORT_RING_H_
 diff --git a/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc b/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
-index 5dd91e5b07b..e03b59f630f 100644
+index 5dd91e5b07b..cd75971b253 100644
 --- a/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
 +++ b/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
-@@ -4,41 +4,96 @@
+@@ -4,41 +4,97 @@
  
  #include "flutter/shell/platform/linux/fl_compositor_vulkan.h"
  
@@ -2592,6 +2593,7 @@ index 5dd91e5b07b..e03b59f630f 100644
 -// which is cairo's ARGB32 in memory) is read back after the engine's host
 -// sync and composited in order into one cairo surface that GTK's draw
 -// callback paints.
++#include "flutter/fml/logging.h"
 +#include "flutter/shell/platform/common/mcsm_vulkan_export_ring.h"
 +
 +// mcsm8: presents the layers Impeller rendered with Vulkan in GTK.
@@ -2687,7 +2689,7 @@ index 5dd91e5b07b..e03b59f630f 100644
    const size_t width = layers[0]->size.width;
    const size_t height = layers[0]->size.height;
    cairo_surface_t* surface =
-@@ -70,14 +125,75 @@ static gboolean fl_compositor_vulkan_present_layers(FlCompositor* compositor,
+@@ -70,14 +126,75 @@ static gboolean fl_compositor_vulkan_present_layers(FlCompositor* compositor,
    cairo_destroy(cr);
    cairo_surface_flush(surface);
  
@@ -2769,7 +2771,7 @@ index 5dd91e5b07b..e03b59f630f 100644
    fl_task_runner_stop_wait(self->task_runner);
    return TRUE;
  }
-@@ -95,15 +211,182 @@ static void fl_compositor_vulkan_get_frame_size(FlCompositor* compositor,
+@@ -95,15 +212,183 @@ static void fl_compositor_vulkan_get_frame_size(FlCompositor* compositor,
    }
  }
  
@@ -2937,10 +2939,11 @@ index 5dd91e5b07b..e03b59f630f 100644
 +  if (self->zero_copy == ZeroCopy::kUnknown) {
 +    self->zero_copy =
 +        have_gl && gl_can_import(self) ? ZeroCopy::kOn : ZeroCopy::kOff;
-+    g_message("vulkan compositor: %s",
-+              self->zero_copy == ZeroCopy::kOn
-+                  ? "zero-copy (GL imports the frames)"
-+                  : "copy (frames read back and painted with cairo)");
++    FML_LOG(IMPORTANT) << "vulkan compositor: "
++                       << (self->zero_copy == ZeroCopy::kOn
++                               ? "zero-copy (GL imports the frames)"
++                               : "copy (frames read back and painted with "
++                                 "cairo)");
 +  }
 +  if (have_gl) {
 +    for (auto& old : *self->retired) {
@@ -2953,7 +2956,7 @@ index 5dd91e5b07b..e03b59f630f 100644
      return FALSE;
    }
  
-@@ -131,6 +414,23 @@ static gboolean fl_compositor_vulkan_render(FlCompositor* compositor,
+@@ -131,6 +416,23 @@ static gboolean fl_compositor_vulkan_render(FlCompositor* compositor,
      }
    }
  
@@ -2977,7 +2980,7 @@ index 5dd91e5b07b..e03b59f630f 100644
    cairo_surface_set_device_scale(self->surface, scale_factor, scale_factor);
    cairo_set_source_surface(cr, self->surface, 0.0, 0.0);
    cairo_paint(cr);
-@@ -144,6 +444,11 @@ static void fl_compositor_vulkan_dispose(GObject* object) {
+@@ -144,6 +446,11 @@ static void fl_compositor_vulkan_dispose(GObject* object) {
    g_clear_pointer(&self->surface, cairo_surface_destroy);
    delete self->scratch;
    self->scratch = nullptr;
@@ -2989,7 +2992,7 @@ index 5dd91e5b07b..e03b59f630f 100644
    g_mutex_clear(&self->frame_mutex);
  
    G_OBJECT_CLASS(fl_compositor_vulkan_parent_class)->dispose(object);
-@@ -161,6 +466,9 @@ static void fl_compositor_vulkan_class_init(FlCompositorVulkanClass* klass) {
+@@ -161,6 +468,9 @@ static void fl_compositor_vulkan_class_init(FlCompositorVulkanClass* klass) {
  static void fl_compositor_vulkan_init(FlCompositorVulkan* self) {
    g_mutex_init(&self->frame_mutex);
    self->scratch = new std::vector<uint8_t>();
@@ -2999,6 +3002,39 @@ index 5dd91e5b07b..e03b59f630f 100644
  }
  
  FlCompositorVulkan* fl_compositor_vulkan_new(
+diff --git a/engine/src/flutter/shell/platform/linux/fl_engine.cc b/engine/src/flutter/shell/platform/linux/fl_engine.cc
+index b55fa18d104..cdcc6e2cbea 100644
+--- a/engine/src/flutter/shell/platform/linux/fl_engine.cc
++++ b/engine/src/flutter/shell/platform/linux/fl_engine.cc
+@@ -10,6 +10,7 @@
+ #include <cstring>
+ 
+ #include "flutter/common/constants.h"
++#include "flutter/fml/logging.h"
+ #include "flutter/shell/platform/common/engine_switches.h"
+ #include "flutter/shell/platform/embedder/embedder.h"
+ #include "flutter/shell/platform/linux/fl_accessibility_handler.h"
+@@ -726,7 +727,7 @@ static FlEngine* fl_engine_new_full(FlDartProject* project,
+   }
+   if (self->vulkan_device != nullptr) {
+     self->renderer_type = kVulkan;
+-    g_message("renderer: %s", self->vulkan_device->Describe().c_str());
++    FML_LOG(IMPORTANT) << "renderer: " << self->vulkan_device->Describe();
+   } else if (g_strcmp0(renderer, "software") == 0) {
+     self->renderer_type = kSoftware;
+     g_warning(
+@@ -741,8 +742,9 @@ static FlEngine* fl_engine_new_full(FlDartProject* project,
+       g_warning("Unknown renderer type '%s', defaulting to opengl", renderer);
+     }
+     self->renderer_type = kOpenGL;
+-    g_message("renderer: OpenGL%s%s", try_vulkan ? " (no Vulkan: " : "",
+-              try_vulkan ? (vulkan_error + ")").c_str() : "");
++    FML_LOG(IMPORTANT) << "renderer: OpenGL"
++                       << (try_vulkan ? " (no Vulkan: " + vulkan_error + ")"
++                                      : std::string());
+   }
+ 
+   if (binary_messenger != nullptr) {
 diff --git a/engine/src/flutter/shell/platform/linux/fl_view_renderer.cc b/engine/src/flutter/shell/platform/linux/fl_view_renderer.cc
 index 5a00e06eaf0..873de5e364e 100644
 --- a/engine/src/flutter/shell/platform/linux/fl_view_renderer.cc
