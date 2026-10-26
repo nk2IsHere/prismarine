@@ -367,6 +367,13 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   int _primitiveType = -1;
   int _polygonMode = -1;
 
+  // mcsm G7: the view bound at each vertex buffer slot (for draws from a
+  // first instance on engines without RenderPass_McsmDrawInstanced).
+  final List<BufferView?> _vertexViews = List<BufferView?>.filled(
+    _kMaxVertexBufferSlots,
+    null,
+  );
+
   /// Creates a new RenderPass.
   RenderPass._(
     GpuContext gpuContext,
@@ -465,6 +472,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (slot > _maxBoundVertexSlot) {
       _maxBoundVertexSlot = slot;
     }
+    _vertexViews[slot] = bufferView;
     bufferView.buffer._bindAsVertexBuffer(
       this,
       bufferView.offsetInBytes,
@@ -716,13 +724,24 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// instance receives the same vertex buffer data. This is valid, but every
   /// instance will produce the same geometry unless the shader varies its output
   /// another way.
-  void draw(int vertexCount, {int instanceCount = 1}) {
+  ///
+  /// mcsm G7: [firstInstance] starts every instance-rate vertex buffer at that
+  /// instance, as if its view were bound [firstInstance] elements further on
+  /// (one instance buffer, many draws). The shader's instance index still
+  /// counts from 0 on every backend. The views must hold
+  /// `firstInstance + instanceCount` elements.
+  void draw(int vertexCount, {int instanceCount = 1, int firstInstance = 0}) {
     RangeError.checkNotNegative(vertexCount, 'vertexCount');
     RangeError.checkNotNegative(instanceCount, 'instanceCount');
+    RangeError.checkNotNegative(firstInstance, 'firstInstance');
     if (vertexCount == 0 || instanceCount == 0) {
       return;
     }
     _validateVertexBindings();
+    if (firstInstance > 0) {
+      _drawFromInstance(vertexCount, instanceCount, firstInstance, false);
+      return;
+    }
     if (_mcsmEngineE3) {
       // mcsm G3: a leaf draw when the pipeline is cached on this pass.
       final drawn = _drawCached(vertexCount, instanceCount, false);
@@ -752,13 +771,24 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// instance receives the same vertex and index buffer data. This is valid, but
   /// every instance will produce the same geometry unless the shader varies its
   /// output another way.
-  void drawIndexed(int indexCount, {int instanceCount = 1}) {
+  ///
+  /// mcsm G7: [firstInstance] as for [draw].
+  void drawIndexed(
+    int indexCount, {
+    int instanceCount = 1,
+    int firstInstance = 0,
+  }) {
     RangeError.checkNotNegative(indexCount, 'indexCount');
     RangeError.checkNotNegative(instanceCount, 'instanceCount');
+    RangeError.checkNotNegative(firstInstance, 'firstInstance');
     if (indexCount == 0 || instanceCount == 0) {
       return;
     }
     _validateVertexBindings();
+    if (firstInstance > 0) {
+      _drawFromInstance(indexCount, instanceCount, firstInstance, true);
+      return;
+    }
     if (_mcsmEngineE3) {
       // mcsm G3: a leaf draw when the pipeline is cached on this pass.
       final drawn = _drawCached(indexCount, instanceCount, true);
@@ -769,6 +799,64 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       throw Exception("Failed to append drawIndexed");
     }
   }
+
+  // mcsm G7: a draw from a first instance. The mcsm7 engine offsets the
+  // instance-rate buffers itself (leaf); elsewhere, or before the pass has
+  // made the pipeline, they are bound again at the offset for this draw.
+  void _drawFromInstance(int count, int instanceCount, int first, bool indexed) {
+    if (_mcsmDrawInstanced) {
+      final drawn = _mcsmDrawInstancedNative(count, instanceCount, first, indexed);
+      if (drawn == 1) return;
+      if (drawn == 0) {
+        throw Exception('Failed to append a draw from instance $first');
+      }
+    }
+    final buffers = _pipeline?._vertexLayout?.buffers ?? const <VertexBuffer>[];
+    final moved = <int, BufferView>{};
+    for (var slot = 0; slot < buffers.length; slot++) {
+      final layout = buffers[slot];
+      final view = _vertexViews[slot];
+      if (layout.stepMode != VertexStepMode.instance || view == null) continue;
+      final skip = first * layout.strideInBytes;
+      if (skip + instanceCount * layout.strideInBytes > view.lengthInBytes) {
+        throw RangeError(
+          'instances $first..${first + instanceCount} run past the view at '
+          'vertex buffer slot $slot',
+        );
+      }
+      moved[slot] = view;
+      bindVertexBuffer(
+        BufferView(
+          view.buffer,
+          offsetInBytes: view.offsetInBytes + skip,
+          lengthInBytes: view.lengthInBytes - skip,
+        ),
+        slot: slot,
+      );
+    }
+    try {
+      if (indexed) {
+        drawIndexed(count, instanceCount: instanceCount);
+      } else {
+        draw(count, instanceCount: instanceCount);
+      }
+    } finally {
+      for (final MapEntry(key: slot, value: view) in moved.entries) {
+        bindVertexBuffer(view, slot: slot);
+      }
+    }
+  }
+
+  @Native<Int Function(Pointer<Void>, Int, Int, Int, Bool)>(
+    symbol: 'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
+    isLeaf: true,
+  )
+  external int _mcsmDrawInstancedNative(
+    int elementCount,
+    int instanceCount,
+    int firstInstance,
+    bool indexed,
+  );
 
   /// Throws a [StateError] when the bound vertex buffer slots are sparse,
   /// naming the slots in `[0, highestBound]` that were left unbound.

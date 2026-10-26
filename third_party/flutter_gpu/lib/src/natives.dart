@@ -42,3 +42,9 @@ Future<developer.ServiceExtensionResponse> _reinitializeShaderLibrary(
 final bool _mcsmEngineE3 = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_RenderPass_BindUniformIndexed',
 );
+
+// mcsm G7: whether the engine draws from a first instance itself
+// (third_party/flutter_engine patch 0012, mcsm7).
+final bool _mcsmDrawInstanced = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
+);

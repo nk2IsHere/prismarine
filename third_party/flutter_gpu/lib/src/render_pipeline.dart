@@ -19,7 +19,8 @@ base class RenderPipeline extends NativeFieldWrapperClass1 {
     Shader fragmentShader, {
     VertexLayout? vertexLayout,
   }) : vertexShader = vertexShader,
-       fragmentShader = fragmentShader {
+       fragmentShader = fragmentShader,
+       _vertexLayout = vertexLayout {
     final (ByteData?, ByteData?, ByteData?) packed = vertexLayout == null
         ? (null, null, null)
         : _packVertexLayout(vertexLayout);
@@ -38,6 +39,11 @@ base class RenderPipeline extends NativeFieldWrapperClass1 {
 
   final Shader vertexShader;
   final Shader fragmentShader;
+
+  // mcsm G7: the layout it was made with (null: the shader's default, all
+  // per-vertex), for draws from a first instance on engines without
+  // RenderPass_McsmDrawInstanced.
+  final VertexLayout? _vertexLayout;
 
   /// Packs a [VertexLayout] into the three ByteData buffers expected by the
   /// C++ side:

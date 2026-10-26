@@ -22,5 +22,9 @@
   "SmokeTilesFragment": {
     "type": "fragment",
     "file": "shaders/smoke_tiles.frag"
+  },
+  "SmokeGbufferVertex": {
+    "type": "vertex",
+    "file": "shaders/smoke_gbuffer.vert"
   }
 }
