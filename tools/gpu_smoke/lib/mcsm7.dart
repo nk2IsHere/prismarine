@@ -544,10 +544,7 @@ Future<bool> _viewportArrays(
   gpu.GpuContext ctx,
   gpu.Texture Function(gpu.PixelFormat) rt,
 ) async {
-  if (!fs.mcsmViewportArrays) {
-    log('SMOKE viewport arrays: not on this engine or backend (casters draw per tile)');
-    return true;
-  }
+  final supported = fs.mcsmViewportArrays;
   final lib = await fs.loadShaderLibraryAsync(
     await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
   );
@@ -598,6 +595,15 @@ Future<bool> _viewportArrays(
     inst.setAll(7 * i, [0.03 * i, -0.02 * i, ...colors[i], i.toDouble()]);
   }
   final instances = ctx.createDeviceBufferWithCopy(ByteData.sublistView(inst));
+  // The per-tile draws' instances name viewport 0 (each draw has one
+  // viewport): an index past a pipeline's viewport count is undefined on
+  // Vulkan, where the shader writes gl_ViewportIndex itself.
+  final instOne = Float32List.fromList(inst);
+  for (var i = 0; i < 4; i++) {
+    instOne[7 * i + 6] = 0;
+  }
+  final instancesOne =
+      ctx.createDeviceBufferWithCopy(ByteData.sublistView(instOne));
   final scale = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(Float32List.fromList([0.9, 0, 0, 0])),
   );
@@ -628,12 +634,29 @@ Future<bool> _viewportArrays(
       ..setViewport(tiles[i])
       ..setScissor(scissors[i])
       ..bindVertexBuffer(
-        gpu.BufferView(instances, offsetInBytes: 28 * i, lengthInBytes: 28),
+        gpu.BufferView(instancesOne, offsetInBytes: 28 * i, lengthInBytes: 28),
         slot: 1,
       )
       ..draw(3);
   }
   await _done(cb);
+  if (!supported) {
+    // The per-tile path casters take on this backend still has to work.
+    final ra = await _readRgba8(a);
+    var n = [0, 0, 0, 0];
+    for (var y = 0; y < 64; y++) {
+      for (var x = 0; x < 64; x++) {
+        final i = (y * 64 + x) * 4;
+        if (ra[i] != 0 || ra[i + 1] != 0 || ra[i + 2] != 0) {
+          n[(y ~/ 32) * 2 + x ~/ 32]++;
+        }
+      }
+    }
+    final ok = n.every((c) => c > 100);
+    log('SMOKE viewport arrays: not on this engine or backend (casters draw '
+        'per tile; per-tile draws ${ok ? 'ok' : 'WRONG'}: ${n.join('/')})');
+    return ok;
+  }
   // B: one instanced draw, four instances, each into its tile.
   final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
   cb = ctx.createCommandBuffer();
@@ -661,8 +684,21 @@ Future<bool> _viewportArrays(
     }
   }
   final ok = set && differ == 0 && covered > 400;
+  // Coverage per tile (quadrant) of each, to see which draws landed where.
+  String perTile(Uint8List px) {
+    final n = [0, 0, 0, 0];
+    for (var y = 0; y < 64; y++) {
+      for (var x = 0; x < 64; x++) {
+        final i = (y * 64 + x) * 4;
+        if (px[i] != 0 || px[i + 1] != 0 || px[i + 2] != 0) {
+          n[(y ~/ 32) * 2 + x ~/ 32]++;
+        }
+      }
+    }
+    return n.join('/');
+  }
   log('SMOKE viewport arrays ${ok ? 'ok' : 'WRONG'} (set: $set; 4 tiles: '
       'one instanced draw vs one draw per tile: $differ of ${ra.length ~/ 4} '
-      'pixels differ, $covered covered)');
+      'pixels differ, $covered covered; per tile ${perTile(ra)} vs ${perTile(rb)})');
   return ok;
 }
