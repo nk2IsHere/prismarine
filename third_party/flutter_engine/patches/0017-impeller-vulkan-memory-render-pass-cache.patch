@@ -1,7 +1,7 @@
-From 17048637f8756440b0212ba32c746f468cd9fff6 Mon Sep 17 00:00:00 2001
+From a9b9d65ab02fc009c9e07a7f4a113749ee78e3cf Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 18:17:43 +0100
-Subject: [PATCH 1/2] impeller (mcsm8): a host-visible buffer that doesn't fit
+Subject: [PATCH 1/3] impeller (mcsm8): a host-visible buffer that doesn't fit
  the Vulkan staging pool's memory type (the 256 MB device-local + host-visible
  heap on a discrete GPU without resizable BAR) is allocated outside the pool,
  where VMA falls back to other host-visible memory (TownFair ran out of device
@@ -40,10 +40,10 @@ index 20313ea2aad..024d45feca9 100644
 2.54.0 (Apple Git-157)
 
 
-From 12c8a9419f73c1fad2dddbb908ff69f9e78d3957 Mon Sep 17 00:00:00 2001
+From dad25c45ab245bd05e04f0e1d73203fb1b42c48b Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 21:18:21 +0100
-Subject: [PATCH 2/2] impeller (mcsm8): a Vulkan render pass's cached render
+Subject: [PATCH 2/3] impeller (mcsm8): a Vulkan render pass's cached render
  pass and framebuffer are keyed on the whole attachment set (every
  attachment's texture by a never-reused id, load and store actions,
  subresource, a loaded attachment's layout), not only colour 0's subresource:
@@ -517,6 +517,145 @@ index 1ce7053a830..eb0427a24e0 100644
  
   private:
    std::weak_ptr<Context> context_;
+-- 
+2.54.0 (Apple Git-157)
+
+
+From d0f15ecf1e36e0ee78bfa62c8323a1c179a6246f Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 22:41:44 +0100
+Subject: [PATCH 3/3] =?UTF-8?q?impeller,=20flutter=5Fgpu=20(mcsm8):=20a=20?=
+ =?UTF-8?q?new=20Flutter=20GPU=20colour=20texture=20leaves=20UNDEFINED=20a?=
+ =?UTF-8?q?t=20once=20on=20Vulkan=20=E2=80=94=20ContextVK::McsmInitializeL?=
+ =?UTF-8?q?ayout=20moves=20it=20to=20SHADER=5FREAD=5FONLY=5FOPTIMAL=20on?=
+ =?UTF-8?q?=20a=20command=20buffer=20submitted=20right=20away,=20so=20the?=
+ =?UTF-8?q?=20image's=20layout=20on=20the=20GPU=20matches=20Impeller's=20t?=
+ =?UTF-8?q?racked=20one=20before=20anything=20else=20is=20recorded=20with?=
+ =?UTF-8?q?=20it.=20Flutter=20GPU=20may=20sample=20a=20texture=20nothing?=
+ =?UTF-8?q?=20wrote=20yet,=20or=20record=20its=20first=20write=20in=20a=20?=
+ =?UTF-8?q?command=20buffer=20submitted=20after=20(or=20never=20submitted?=
+ =?UTF-8?q?=20before)=20one=20that=20samples=20it;=20the=20tracked=20layou?=
+ =?UTF-8?q?t=20then=20said=20SHADER=5FREAD=5FONLY=20while=20the=20image=20?=
+ =?UTF-8?q?was=20still=20UNDEFINED=20(validation=20VUID-vkCmdDraw-None-096?=
+ =?UTF-8?q?00=20in=20TempleHub,=20TempleHubInterior,=20TownFair=20and=20To?=
+ =?UTF-8?q?wnFairDestroyed).=20The=20other=20backends=20read=20undefined?=
+ =?UTF-8?q?=20contents=20there;=20so=20does=20Vulkan=20now.?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../renderer/backend/vulkan/context_vk.cc     | 28 +++++++++++++++++++
+ .../renderer/backend/vulkan/context_vk.h      |  8 ++++++
+ engine/src/flutter/lib/gpu/texture.cc         | 16 +++++++++++
+ 3 files changed, 52 insertions(+)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
+index e6f20de1b68..c5c4ff9149c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
+@@ -32,6 +32,7 @@
+ #include "impeller/base/validation.h"
+ #include "impeller/renderer/backend/vulkan/allocator_vk.h"
+ #include "impeller/renderer/backend/vulkan/capabilities_vk.h"
++#include "impeller/renderer/backend/vulkan/barrier_vk.h"
+ #include "impeller/renderer/backend/vulkan/command_buffer_vk.h"
+ #include "impeller/renderer/backend/vulkan/command_pool_vk.h"
+ #include "impeller/renderer/backend/vulkan/command_queue_vk.h"
+@@ -41,6 +42,7 @@
+ #include "impeller/renderer/backend/vulkan/gpu_tracer_vk.h"
+ #include "impeller/renderer/backend/vulkan/resource_manager_vk.h"
+ #include "impeller/renderer/backend/vulkan/surface_context_vk.h"
++#include "impeller/renderer/backend/vulkan/texture_vk.h"
+ #include "impeller/renderer/backend/vulkan/yuv_conversion_library_vk.h"
+ #include "impeller/renderer/capabilities.h"
+ 
+@@ -584,6 +586,32 @@ std::shared_ptr<CommandBuffer> ContextVK::CreateCommandBuffer() const {
+       ));
+ }
+ 
++bool ContextVK::McsmInitializeLayout(
++    const std::shared_ptr<Texture>& texture) const {
++  if (!texture) {
++    return false;
++  }
++  const auto& texture_vk = TextureVK::Cast(*texture);
++  if (texture_vk.GetLayout() != vk::ImageLayout::eUndefined) {
++    return true;
++  }
++  auto command_buffer = CreateCommandBuffer();
++  if (!command_buffer) {
++    return false;
++  }
++  auto& command_buffer_vk = CommandBufferVK::Cast(*command_buffer);
++  BarrierVK barrier;
++  barrier.cmd_buffer = command_buffer_vk.GetCommandBuffer();
++  barrier.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
++  barrier.src_stage = vk::PipelineStageFlagBits::eTopOfPipe;
++  barrier.dst_stage = vk::PipelineStageFlagBits::eAllCommands;
++  barrier.dst_access = vk::AccessFlagBits::eShaderRead;
++  if (!texture_vk.SetLayout(barrier) || !command_buffer_vk.Track(texture)) {
++    return false;
++  }
++  return GetCommandQueue()->Submit({std::move(command_buffer)}).ok();
++}
++
+ vk::Instance ContextVK::GetInstance() const {
+   return *device_holder_->instance;
+ }
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
+index b300d8657e9..326352f5e98 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
+@@ -247,6 +247,14 @@ class ContextVK final : public Context,
+     return idle_waiter_vk_;
+   }
+ 
++  /// mcsm8: moves a new colour texture out of UNDEFINED to
++  /// SHADER_READ_ONLY_OPTIMAL on a command buffer submitted at once, so the
++  /// image's layout on the GPU matches the tracked one before anything else
++  /// is recorded with it (Flutter GPU may sample a texture nothing wrote, or
++  /// record its first write in a command buffer submitted after one that
++  /// samples it).
++  bool McsmInitializeLayout(const std::shared_ptr<Texture>& texture) const;
++
+  private:
+   struct DeviceHolderImpl : public DeviceHolderVK {
+     // |DeviceHolder|
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 1ea066b49bf..5ed03cd3c6b 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -21,6 +21,9 @@
+ #include "impeller/renderer/command_buffer.h"
+ #include "impeller/renderer/command_queue.h"
+ #include "impeller/renderer/context.h"
++#if IMPELLER_ENABLE_VULKAN
++#include "impeller/renderer/backend/vulkan/context_vk.h"  // nogncheck
++#endif
+ 
+ #if IMPELLER_SUPPORTS_RENDERING
+ #include "flutter/display_list/image/dl_image.h"      // nogncheck
+@@ -271,6 +274,19 @@ bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+     FML_LOG(ERROR) << "Failed to create texture.";
+     return false;
+   }
++#if IMPELLER_ENABLE_VULKAN
++  // mcsm8: a sampled colour texture leaves UNDEFINED at once
++  // (ContextVK::McsmInitializeLayout).
++  if (gpu_context->GetContext().GetBackendType() ==
++          impeller::Context::BackendType::kVulkan &&
++      desc.storage_mode != impeller::StorageMode::kDeviceTransient &&
++      (desc.usage & impeller::TextureUsage::kShaderRead) &&
++      !impeller::IsDepthWritable(desc.format) &&
++      !impeller::IsStencilWritable(desc.format)) {
++    impeller::ContextVK::Cast(gpu_context->GetContext())
++        .McsmInitializeLayout(texture);
++  }
++#endif  // IMPELLER_ENABLE_VULKAN
+ 
+   auto res = fml::MakeRefCounted<flutter::gpu::Texture>(std::move(texture));
+   res->AssociateWithDartWrapper(wrapper);
 -- 
 2.54.0 (Apple Git-157)
 

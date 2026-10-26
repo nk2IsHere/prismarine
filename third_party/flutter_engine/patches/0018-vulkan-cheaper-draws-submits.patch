@@ -1,4 +1,4 @@
-From 08599339dc4842df5b8d7d840a5a83781d691807 Mon Sep 17 00:00:00 2001
+From efae50987899b25adb2110c5bac956282901087e Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 18:54:33 +0100
 Subject: [PATCH 1/7] flutter_gpu (mcsm8): on Vulkan a draw's bindings go to
@@ -55,60 +55,104 @@ index 9ad82b055d7..d55dcc562e1 100644
 2.54.0 (Apple Git-157)
 
 
-From 42083b13f06cdbb9d8ba6259358ef71af11e608f Mon Sep 17 00:00:00 2001
+From b388e470da29cd502fa40b9886c56fc42aa01257 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 18:58:33 +0100
-Subject: [PATCH 2/7] flutter_gpu (mcsm8): on Vulkan a submit disposes the
- thread's command and descriptor pools at most every 16 ms instead of every
- time: each dispose made the next command buffer create new pools (~1-2 ms a
- pass on the RTX; SMAA 2.3 ms vs 0.03 on GLES)
+Subject: [PATCH 2/7] flutter_gpu (mcsm8): on Vulkan a submit or a texture
+ overwrite disposes the thread's command and descriptor pools at most every 16
+ ms instead of every time (McsmDisposeThreadLocal): each dispose made the next
+ command buffer create new pools (~1-2 ms a pass on the RTX; SMAA 2.3 ms vs
+ 0.03 on GLES)
 
 ---
- engine/src/flutter/lib/gpu/command_buffer.cc | 19 ++++++++++++++++++-
- 1 file changed, 18 insertions(+), 1 deletion(-)
+ engine/src/flutter/lib/gpu/command_buffer.cc |  3 ++-
+ engine/src/flutter/lib/gpu/context.cc        | 14 +++++++++++++-
+ engine/src/flutter/lib/gpu/context.h         |  7 +++++++
+ engine/src/flutter/lib/gpu/texture.cc        |  2 +-
+ 4 files changed, 23 insertions(+), 3 deletions(-)
 
 diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
-index a1ee6dae4d9..f4bcd41fd92 100644
+index a1ee6dae4d9..576fd6fa3e8 100644
 --- a/engine/src/flutter/lib/gpu/command_buffer.cc
 +++ b/engine/src/flutter/lib/gpu/command_buffer.cc
-@@ -4,6 +4,8 @@
- 
- #include "flutter/lib/gpu/command_buffer.h"
- 
-+#include <chrono>
-+
- #include "dart_api.h"
- #include "fml/make_copyable.h"
- #include "impeller/core/buffer_view.h"
-@@ -210,7 +212,22 @@ bool CommandBuffer::Submit(
+@@ -210,7 +210,8 @@ bool CommandBuffer::Submit(
  
    auto status = context_->GetCommandQueue()->Submit(
        {command_buffer_}, combined_completion_callback);
 -  context_->DisposeThreadLocalCachedResources();
-+  // mcsm8: on Vulkan, disposing drops this thread's command and descriptor
-+  // pools, so the next command buffer makes new ones (~1-2 ms each on the
-+  // RTX: a frame of the look submits dozens). Dispose at most every 16 ms
-+  // (about once a frame) there; the pools are recycled as before.
-+  bool dispose = true;
-+  if (context_->GetBackendType() == impeller::Context::BackendType::kVulkan) {
-+    thread_local auto last_dispose = std::chrono::steady_clock::now();
-+    const auto now = std::chrono::steady_clock::now();
-+    dispose = now - last_dispose >= std::chrono::milliseconds(16);
-+    if (dispose) {
-+      last_dispose = now;
-+    }
-+  }
-+  if (dispose) {
-+    context_->DisposeThreadLocalCachedResources();
-+  }
++  // mcsm8: at most every 16 ms on Vulkan (McsmDisposeThreadLocal).
++  McsmDisposeThreadLocal(*context_);
    if (!status.ok() && combined_completion_callback) {
      combined_completion_callback(impeller::CommandBuffer::Status::kError);
    }
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index eb7bc1dce4e..a354274af19 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -5,7 +5,7 @@
+ #include "flutter/lib/gpu/context.h"
+ 
+ #include <atomic>
+-
++#include <chrono>
+ #include <future>
+ 
+ #include "flutter/lib/gpu/formats.h"
+@@ -23,6 +23,18 @@
+ namespace flutter {
+ namespace gpu {
+ 
++void McsmDisposeThreadLocal(impeller::Context& context) {
++  if (context.GetBackendType() == impeller::Context::BackendType::kVulkan) {
++    thread_local auto last_dispose = std::chrono::steady_clock::now();
++    const auto now = std::chrono::steady_clock::now();
++    if (now - last_dispose < std::chrono::milliseconds(16)) {
++      return;
++    }
++    last_dispose = now;
++  }
++  context.DisposeThreadLocalCachedResources();
++}
++
+ bool SupportsNormalOffscreenMSAA(const impeller::Context& context) {
+   auto& capabilities = context.GetCapabilities();
+   return capabilities->SupportsOffscreenMSAA() &&
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index cb8a15674eb..a8dbc439a18 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -15,6 +15,13 @@ namespace gpu {
+ 
+ bool SupportsNormalOffscreenMSAA(const impeller::Context& context);
+ 
++/// mcsm8: DisposeThreadLocalCachedResources after a UI-thread submit. On
++/// Vulkan disposing drops this thread's command and descriptor pools, so the
++/// next command buffer makes new ones (~1-2 ms each on the RTX: a frame of
++/// the look submits dozens); there it runs at most every 16 ms (about once a
++/// frame) and the pools are recycled as before. Other backends: every time.
++void McsmDisposeThreadLocal(impeller::Context& context);
++
+ class Context : public RefCountedDartWrappable<Context> {
+   DEFINE_WRAPPERTYPEINFO();
+   FML_FRIEND_MAKE_REF_COUNTED(Context);
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 5ed03cd3c6b..55fd1cb8cc6 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -144,7 +144,7 @@ bool Texture::Overwrite(Context& gpu_context,
+                                 length, destination_region, mip_level, slice)) {
+     return false;
+   }
+-  impeller_context.DisposeThreadLocalCachedResources();
++  McsmDisposeThreadLocal(impeller_context);  // mcsm8: throttled on Vulkan
+   return true;
+ }
+ 
 -- 
 2.54.0 (Apple Git-157)
 
 
-From c97e1e660c20e222b3f34a9a11fa791afaa55db1 Mon Sep 17 00:00:00 2001
+From cea7552d38713eb1bd4d79a0bdb6f55c0301b7a3 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 19:02:42 +0100
 Subject: [PATCH 3/7] impeller (mcsm8): Vulkan submits reuse signalled fences
@@ -246,7 +290,7 @@ index 8701aa96ef1..cafc03fba4b 100644
 2.54.0 (Apple Git-157)
 
 
-From 1f57b1ed148dab0942278c241d9ae70624be0051 Mon Sep 17 00:00:00 2001
+From 76694f81cefe947f1c7b9795f1df2fcbae1399e1 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 19:40:32 +0100
 Subject: [PATCH 4/7] =?UTF-8?q?impeller=20(mcsm8):=20RenderPassVK=20skips?=
@@ -497,7 +541,7 @@ index b22141a865a..136c6a18fca 100644
 2.54.0 (Apple Git-157)
 
 
-From 848b5442cb7878e85199ff9b5b1b926eb2b80396 Mon Sep 17 00:00:00 2001
+From d4c671259d84d882f19f685667b212f3c8f98f13 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 19:47:55 +0100
 Subject: [PATCH 5/7] impeller (mcsm8): Vulkan graphics pipelines take their
@@ -695,7 +739,7 @@ index 136c6a18fca..3f7987320c5 100644
 2.54.0 (Apple Git-157)
 
 
-From 7af7d573d9715549ded45b3d3a9cb51645b03e35 Mon Sep 17 00:00:00 2001
+From 666f6e09e5367e5218f1dfb78a80d314c934f640 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 19:52:04 +0100
 Subject: [PATCH 6/7] impeller (mcsm8): a Vulkan render pass keeps every
@@ -777,7 +821,7 @@ index 3f7987320c5..b45cf920ad4 100644
 2.54.0 (Apple Git-157)
 
 
-From 9e577dc6fceabebda3343df17ec6fc3e47a386a5 Mon Sep 17 00:00:00 2001
+From f55ae7932d7b099c6df8597626e13d48124944da Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Mon, 26 Oct 2026 21:18:21 +0100
 Subject: [PATCH 7/7] flutter_gpu (mcsm8): on Vulkan a replayed draw's bindings
