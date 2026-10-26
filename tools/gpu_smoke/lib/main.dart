@@ -144,7 +144,20 @@ Future<int> _smoke() async {
   final mcsm7 = await mcsm7Checks(_log);
   if (firstEmpty) {
     // ANGLE (Windows) gave an empty first readback on the stock engine too,
-    // while later readbacks work: render and read the same target again.
+    // while later readbacks work. First read the same target again without
+    // drawing (tells a read that came too early from a draw that was lost),
+    // then render and read again.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final r0 = ui.PictureRecorder();
+    ui.Canvas(r0).drawImage(target.asImage(), ui.Offset.zero, ui.Paint());
+    final pic0 = r0.endRecording();
+    final img0 = await pic0.toImage(64, 64);
+    pic0.dispose();
+    final b0 = (await img0.toByteData())!;
+    img0.dispose();
+    final c0 = b0.buffer.asUint8List(b0.offsetInBytes + (32 * 64 + 32) * 4, 4);
+    _log('SMOKE pixel re-read without drawing, 200 ms later: ${c0.toList()} '
+        '${c0[1] == 200 ? '(the draw was there: the first read came too early)' : '(still empty: the draw was lost)'}');
     cb = ctx.createCommandBuffer();
     pass(cb)
       ..bindPipeline(pipeline)

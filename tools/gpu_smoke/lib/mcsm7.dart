@@ -172,7 +172,15 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
         ..draw(6, instanceCount: 2);
       await _done(cb2);
     }
-    final ra = await _readRgba8(a), rb = await _readRgba8(b);
+    final ra = await _readRgba8(a);
+    var rb = await _readRgba8(b);
+    if (_px(rb, 64, 16, 48).every((v) => v == 0)) {
+      // An empty read (ANGLE): read the same target again later, no draw.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      rb = await _readRgba8(b);
+      log('SMOKE instancing: target b read empty, re-read 200 ms later '
+          'without drawing: ${_px(rb, 64, 16, 48)}');
+    }
     // Quadrant centres (y down in the image): top-left red, top-right
     // green, bottom-left blue, bottom-right yellow; b has only the bottom.
     final ok =
@@ -469,6 +477,42 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   // 4. Viewport arrays (feature 256): one instanced draw into four tiles
   // must give the same bytes as four draws with one tile's viewport each.
   allOk &= await _viewportArrays(log, ctx, rt);
+
+  // 4b. Per-pass CPU cost: a command buffer, one pass with one draw, a
+  // submit (the look's post passes are like this), median of 200.
+  {
+    final target = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
+    final times = <int, List<double>>{0: [], 1: [], 2: []};
+    for (var i = 0; i < 200; i++) {
+      final sw = Stopwatch()..start();
+      final cb = ctx.createCommandBuffer();
+      final t0 = sw.elapsedMicroseconds;
+      cb.createRenderPass(gpu.RenderTarget.singleColor(
+        gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
+      ))
+        ..bindPipeline(colorPipeline)
+        ..bindVertexBuffer(quad)
+        ..bindVertexBuffer(
+          gpu.BufferView(instances, offsetInBytes: 0, lengthInBytes: 24),
+          slot: 1,
+        )
+        ..bindUniform(
+          vInst.getUniformSlot('FrameInfo'),
+          gpu.BufferView(scale, offsetInBytes: 0, lengthInBytes: 16),
+        )
+        ..draw(6);
+      final t1 = sw.elapsedMicroseconds;
+      cb.submit();
+      final t2 = sw.elapsedMicroseconds;
+      times[0]!.add(t0.toDouble());
+      times[1]!.add((t1 - t0).toDouble());
+      times[2]!.add((t2 - t1).toDouble());
+    }
+    double med(List<double> v) => (v..sort())[v.length ~/ 2];
+    log('SMOKE pass cost: command buffer ${med(times[0]!).toStringAsFixed(1)} us, '
+        'pass + draw ${med(times[1]!).toStringAsFixed(1)} us, '
+        'submit ${med(times[2]!).toStringAsFixed(1)} us (median of 200)');
+  }
 
   // 5. Scene-like draws: µs per draw (CPU), best of 7 rounds of 2,000.
   {
