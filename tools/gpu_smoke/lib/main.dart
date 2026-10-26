@@ -17,12 +17,18 @@ import 'package:vector_math/vector_math.dart';
 import 'mcsm7.dart';
 
 // Each SMOKE line goes to stdout and, when GPU_SMOKE_OUT names a file, to it
-// too (a Windows GUI app has no console).
+// too (a Windows GUI app has no console). Lines are ASCII, so the file reads
+// the same in any code page. On Windows with a log file nothing goes to
+// stdout: a GUI process's stdout has no reader, and flushing it before the
+// exit held the process for minutes.
 final _out = Platform.environment['GPU_SMOKE_OUT'];
+final _useStdout = !(Platform.isWindows && _out != null);
 
 void _log(String line) {
-  stdout.writeln(line);
-  if (_out != null) File(_out!).writeAsStringSync('$line\n', mode: FileMode.append);
+  if (_useStdout) stdout.writeln(line);
+  if (_out != null) {
+    File(_out!).writeAsStringSync('$line\n', mode: FileMode.append);
+  }
 }
 
 Future<void> main() async {
@@ -34,7 +40,11 @@ Future<void> main() async {
   } catch (e, st) {
     _log('SMOKE error $e\n$st');
   }
-  await stdout.flush();
+  // The last line says the run is over (the app exits right after).
+  _log('SMOKE done, exit code $code');
+  if (_useStdout) {
+    await stdout.flush().timeout(const Duration(seconds: 2), onTimeout: () {});
+  }
   exit(code);
 }
 
@@ -93,8 +103,11 @@ Future<int> _smoke() async {
   final bytes = (await image.toByteData())!;
   image.dispose();
   final c = bytes.buffer.asUint8List(bytes.offsetInBytes + (32 * 64 + 32) * 4, 4);
-  final ok = c[0] == 10 && c[1] == 200 && c[2] == 30 && c[3] == 255;
-  _log('SMOKE pixel ${c.toList()} ${ok ? 'ok' : 'WRONG (want [10, 200, 30, 255])'}');
+  var ok = c[0] == 10 && c[1] == 200 && c[2] == 30 && c[3] == 255;
+  final firstEmpty = !ok && c.every((v) => v == 0);
+  if (ok || !firstEmpty) {
+    _log('SMOKE pixel ${c.toList()} ${ok ? 'ok' : 'WRONG (want [10, 200, 30, 255])'}');
+  }
 
   // Timings (µs per draw, CPU, best of 7 rounds of 2,000).
   double time(void Function(gpu.RenderPass) setup, void Function(gpu.RenderPass) draw) {
@@ -129,5 +142,29 @@ Future<int> _smoke() async {
   _log('SMOKE draw ${bare.toStringAsFixed(3)} us, '
       'draw+texture bind ${bind.toStringAsFixed(3)} us');
   final mcsm7 = await mcsm7Checks(_log);
+  if (firstEmpty) {
+    // ANGLE (Windows) gave an empty first readback on the stock engine too,
+    // while later readbacks work: render and read the same target again.
+    cb = ctx.createCommandBuffer();
+    pass(cb)
+      ..bindPipeline(pipeline)
+      ..bindVertexBuffer(vb)
+      ..bindTexture(slot, source, sampler: sampler)
+      ..draw(6);
+    final again = Completer<bool>();
+    cb.submit(completionCallback: (ok) => again.complete(ok));
+    await again.future;
+    final r = ui.PictureRecorder();
+    ui.Canvas(r).drawImage(target.asImage(), ui.Offset.zero, ui.Paint());
+    final pic = r.endRecording();
+    final img = await pic.toImage(64, 64);
+    pic.dispose();
+    final b2 = (await img.toByteData())!;
+    img.dispose();
+    final c2 = b2.buffer.asUint8List(b2.offsetInBytes + (32 * 64 + 32) * 4, 4);
+    ok = c2[0] == 10 && c2[1] == 200 && c2[2] == 30 && c2[3] == 255;
+    _log('SMOKE pixel ${c2.toList()} ${ok ? 'ok' : 'WRONG (want [10, 200, 30, 255])'} '
+        '(the first readback came back empty; this is a second render and readback)');
+  }
   return ok && mcsm7 ? 0 : 2;
 }

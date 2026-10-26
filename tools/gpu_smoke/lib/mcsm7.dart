@@ -320,7 +320,7 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     final claimed = mixed;  // Metal with the mixed-format pipelines (mcsm6+)
     log('SMOKE mrt ${ok0 && ok1 ? 'ok' : 'WRONG'} (RGBA8 + '
         '${mixed ? 'R32F' : 'RGBA32F'} in one pass) '
-        'target0 ${_px(r0, 64, 32, 32)} target1→rgba8 ${_px(r1, 64, 32, 32)}'
+        'target0 ${_px(r0, 64, 32, 32)} target1->rgba8 ${_px(r1, 64, 32, 32)}'
         '${claimed ? '' : ' (not claimed by this engine)'}');
     if (claimed) allOk &= ok0 && ok1;
   }
@@ -430,7 +430,7 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     log('SMOKE gbuffer ${ok ? 'ok' : 'WRONG'} (RGBA8 + '
         '${mixed ? 'R32F' : 'RGBA32F'} + depth, depth test, instanced) '
         'target0 ${[_px(r0, 64, 20, 32), _px(r0, 64, 32, 32), _px(r0, 64, 44, 32)]} '
-        'target1→rgba8 ${[_px(r1, 64, 32, 32)[0], _px(r1, 64, 44, 32)[0]]}'
+        'target1->rgba8 ${[_px(r1, 64, 32, 32)[0], _px(r1, 64, 44, 32)[0]]}'
         '${mixed ? '' : ' (not claimed by this engine)'}');
     if (mixed) allOk &= ok;
   }
