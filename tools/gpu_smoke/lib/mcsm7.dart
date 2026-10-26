@@ -443,6 +443,113 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     if (mixed) allOk &= ok;
   }
 
+  // 2c. Pass reuse (mcsm8): the same colour targets in passes that differ in
+  // load actions and depth targets must each get their own load, clear and
+  // depth (Vulkan caches a render pass and framebuffer per target).
+  {
+    final mixed = fs.mcsmMixedColorAttachmentFormats;
+    final vG = lib['SmokeGbufferVertex']!;
+    final gLayout = gpu.VertexLayout(buffers: [
+      gpu.VertexBuffer(
+        strideInBytes: 8,
+        attributes: [
+          gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
+        ],
+      ),
+      gpu.VertexBuffer(
+        strideInBytes: 28,
+        stepMode: gpu.VertexStepMode.instance,
+        attributes: [
+          gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
+          gpu.VertexAttribute(name: 'color', format: gpu.VertexFormat.float32x4, offsetInBytes: 8),
+          gpu.VertexAttribute(name: 'depth', format: gpu.VertexFormat.float32, offsetInBytes: 24),
+        ],
+      ),
+    ]);
+    final pipeline = ctx.createRenderPipeline(vG, fMrt, vertexLayout: gLayout);
+    final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
+    final c1 = rt(mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float);
+    gpu.Texture depthTexture() => ctx.createTexture(
+      gpu.StorageMode.devicePrivate,
+      64,
+      64,
+      format: ctx.defaultDepthStencilFormat,
+      enableRenderTargetUsage: true,
+    )!;
+    final depthA = depthTexture(), depthB = depthTexture();
+    final quads = ctx.createDeviceBufferWithCopy(ByteData.sublistView(
+      Float32List.fromList([
+        -0.25, 0, 0, 0.125, 1, 1, 0.2, //
+        0.25, 0, 1, 0.25, 0, 1, 0.6, //
+      ]),
+    ));
+    final half = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(Float32List.fromList([0.5, 0, 0, 0])),
+    );
+    Future<void> pass({
+      required bool loadColor,
+      required Vector4 clear,
+      required gpu.Texture depth,
+      required bool loadDepth,
+      required double depthClear,
+      required bool draw,
+    }) async {
+      final cb = ctx.createCommandBuffer();
+      final load = loadColor ? gpu.LoadAction.load : gpu.LoadAction.clear;
+      final p = cb.createRenderPass(gpu.RenderTarget(
+        colorAttachments: [
+          gpu.ColorAttachment(texture: c0, loadAction: load, clearValue: clear),
+          gpu.ColorAttachment(texture: c1, loadAction: load, clearValue: Vector4.zero()),
+        ],
+        depthStencilAttachment: gpu.DepthStencilAttachment(
+          texture: depth,
+          depthLoadAction: loadDepth ? gpu.LoadAction.load : gpu.LoadAction.clear,
+          depthStoreAction: gpu.StoreAction.store,
+          depthClearValue: depthClear,
+        ),
+      ));
+      p.setColorBlendEnable(false, colorAttachmentIndex: 1);
+      if (draw) {
+        p
+          ..bindPipeline(pipeline)
+          ..setDepthWriteEnable(true)
+          ..setDepthCompareOperation(gpu.CompareFunction.less)
+          ..bindVertexBuffer(quad)
+          ..bindVertexBuffer(
+            gpu.BufferView(quads, offsetInBytes: 0, lengthInBytes: 56),
+            slot: 1,
+          )
+          ..bindUniform(
+            vG.getUniformSlot('FrameInfo'),
+            gpu.BufferView(half, offsetInBytes: 0, lengthInBytes: 16),
+          )
+          ..draw(6, instanceCount: 2);
+      }
+      await _done(cb);
+    }
+
+    // Red over depth 0.1; then loaded, both quads (z 0.2, 0.6) fail the
+    // loaded depth: still red (a stale clear would give black and quads).
+    await pass(loadColor: false, clear: Vector4(1, 0, 0, 1), depth: depthA, loadDepth: false, depthClear: 0.1, draw: false);
+    await pass(loadColor: true, clear: Vector4(0, 0, 0, 1), depth: depthA, loadDepth: true, depthClear: 1.0, draw: true);
+    final r1 = await _readRgba8(c0);
+    // Cleared to black over a second depth target cleared to 1.0: both
+    // quads; then loaded with nothing drawn: kept.
+    await pass(loadColor: false, clear: Vector4(0, 0, 0, 1), depth: depthB, loadDepth: false, depthClear: 1.0, draw: true);
+    await pass(loadColor: true, clear: Vector4(0, 1, 0, 1), depth: depthB, loadDepth: true, depthClear: 1.0, draw: false);
+    final r2 = await _readRgba8(c0);
+    final ok = _near(_px(r1, 64, 20, 32), [255, 0, 0, 255]) &&
+        _near(_px(r1, 64, 44, 32), [255, 0, 0, 255]) &&
+        _near(_px(r2, 64, 20, 32), [0, 32, 255, 255]) &&
+        _near(_px(r2, 64, 44, 32), [255, 64, 0, 255]) &&
+        _near(_px(r2, 64, 4, 4), [0, 0, 0, 255]);
+    log('SMOKE pass reuse ${ok ? 'ok' : 'WRONG'} (one target: clear, load '
+        'over a loaded depth, clear over another depth, load) '
+        '${[_px(r1, 64, 20, 32), _px(r1, 64, 44, 32), _px(r2, 64, 20, 32), _px(r2, 64, 44, 32), _px(r2, 64, 4, 4)]}'
+        '${mixed ? '' : ' (not claimed by this engine)'}');
+    if (mixed) allOk &= ok;
+  }
+
   // 3. A direct texture write (feature 16), drawn and read back.
   if (fs.mcsmDirectTextureWrites) {
     final t = ctx.createTexture(gpu.StorageMode.hostVisible, 4, 4,
