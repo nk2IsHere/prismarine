@@ -38,6 +38,10 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - `render_pipeline.dart`: a `RenderPipeline` keeps the `VertexLayout` it was made with.
 - gpu_smoke checks it against offset bindings (plain and indexed: 0 px differ) on the stock, mcsm6 and mcsm7 engines.
 
+## G8: GpuMemory.totalBytes (perf4)
+
+- `memory.dart`: the sum of G4's bytes, kept as objects are made and finalized (no map per read): the player's GC pacing reads it once a frame.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
