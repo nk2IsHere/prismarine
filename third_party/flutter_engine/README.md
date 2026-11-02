@@ -167,7 +167,7 @@ Flutter's Windows and Linux embedders draw with ANGLE/GLES and GL only; patches 
    
    Each makes `mcsm-engine-<target>.tar.xz` and `.sha256`. `package.sh` records `MCSM_ENGINE_REV` (default `deb287481e3c…`).
 3. Check each archive the way users get it: `fetch.sh` with `MCSM_ENGINE_ARCHIVE=<file>`, or `fetch.ps1 -Archive <file>`, into a scratch `MCSM_DATA`, then build the player or gpu_smoke from it.
-4. Run `gh release create <tag> -R <owner>/<repo> --title … --notes-file … mcsm-engine-* SHA256SUMS`. An asset must be under 2 GiB; ours are ~20 MB.
+4. Run `gh release create <tag> -R "$MCSM_ENGINE_REPO" --title … --notes-file … mcsm-engine-* SHA256SUMS`. An asset must be under 2 GiB; ours are ~20 MB.
 
 ## Patches
 
@@ -264,7 +264,7 @@ So before mcsm8 no desktop embedder ran Impeller's Vulkan backend (mcsm8 gives V
 | Windows x64 | Windows VM, `windows.ps1` | (host) | `host_release` | 2.5 GB | 23 min at 10 jobs |
 | Windows arm64 | Windows VM (cross) | `--windows-cpu arm64` | `host_release_arm64` | 3.6 GB | 35 min |
 
-The workstation keeps its checkout in `/mnt/storage/mcsm/engine` (11 GB of sources; 19 GB with the outs, the test build, a Flutter SDK and the smoke Docker context). The VM keeps its own in `C:\mcsm\engine` (15.8 GB with both outs). The VM's toolchain comes from `windows-toolchain.ps1`. `docs/memory/reference-linux-workstation.md` has the access details.
+The workstation keeps its checkout in `$MCSM_WS_ROOT/engine` (11 GB of sources; 19 GB with the outs, the test build, a Flutter SDK and the smoke Docker context). The VM keeps its own in `C:\mcsm\engine` (15.8 GB with both outs). The VM's toolchain comes from `windows-toolchain.ps1`. `docs/memory/reference-linux-workstation.md` has the access details.
 
 **macOS universal:** the Flutter tool builds a local-engine macOS app for one architecture only. It sets `ARCHS` from the engine's name: `_arm64` → arm64, otherwise x86_64 (`xcode_build_settings.dart`). For a universal app:
 1. Build once with `MCSM_LOCAL_ENGINE_NAME=host_release_arm64` and once with `host_release`, copying each `.app` aside.
