@@ -70,31 +70,45 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   final fColor = lib['SmokeColorFragment']!;
   final fMrt = lib['SmokeMrtFragment']!;
   final fTex = lib['SmokeTexturedFragment']!;
-  final layout = gpu.VertexLayout(buffers: [
-    gpu.VertexBuffer(
-      strideInBytes: 8,
-      attributes: [
-        gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
-      ],
-    ),
-    gpu.VertexBuffer(
-      strideInBytes: 24,
-      stepMode: gpu.VertexStepMode.instance,
-      attributes: [
-        gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
-        gpu.VertexAttribute(
-          name: 'color',
-          format: gpu.VertexFormat.float32x4,
-          offsetInBytes: 8,
-        ),
-      ],
-    ),
-  ]);
-  final colorPipeline = ctx.createRenderPipeline(vInst, fColor, vertexLayout: layout);
+  final layout = gpu.VertexLayout(
+    buffers: [
+      gpu.VertexBuffer(
+        strideInBytes: 8,
+        attributes: [
+          gpu.VertexAttribute(
+            name: 'position',
+            format: gpu.VertexFormat.float32x2,
+          ),
+        ],
+      ),
+      gpu.VertexBuffer(
+        strideInBytes: 24,
+        stepMode: gpu.VertexStepMode.instance,
+        attributes: [
+          gpu.VertexAttribute(
+            name: 'offset',
+            format: gpu.VertexFormat.float32x2,
+          ),
+          gpu.VertexAttribute(
+            name: 'color',
+            format: gpu.VertexFormat.float32x4,
+            offsetInBytes: 8,
+          ),
+        ],
+      ),
+    ],
+  );
+  final colorPipeline = ctx.createRenderPipeline(
+    vInst,
+    fColor,
+    vertexLayout: layout,
+  );
   final quad = gpu.BufferView(
-    ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-    )),
+    ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(
+        Float32List.fromList([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      ),
+    ),
     offsetInBytes: 0,
     lengthInBytes: 48,
   );
@@ -105,7 +119,9 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     -0.5, -0.5, 0, 0, 1, 1, //
     0.5, -0.5, 1, 1, 0, 1, //
   ]);
-  final instances = ctx.createDeviceBufferWithCopy(ByteData.sublistView(instData));
+  final instances = ctx.createDeviceBufferWithCopy(
+    ByteData.sublistView(instData),
+  );
   final scale = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(Float32List.fromList([0.25, 0, 0, 0])),
   );
@@ -125,9 +141,11 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     final cb = ctx.createCommandBuffer();
     void draw(gpu.Texture target, int first, int count) {
-      final p = cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
-      ));
+      final p = cb.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
+        ),
+      );
       p
         ..bindPipeline(colorPipeline)
         ..bindVertexBuffer(quad)
@@ -155,9 +173,11 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     } else {
       await _done(cb);
       final cb2 = ctx.createCommandBuffer();
-      final p = cb2.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: b, clearValue: Vector4(0, 0, 0, 1)),
-      ));
+      final p = cb2.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(texture: b, clearValue: Vector4(0, 0, 0, 1)),
+        ),
+      );
       p
         ..bindPipeline(colorPipeline)
         ..bindVertexBuffer(quad)
@@ -178,8 +198,10 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       // An empty read (ANGLE): read the same target again later, no draw.
       await Future<void>.delayed(const Duration(milliseconds: 200));
       rb = await _readRgba8(b);
-      log('SMOKE instancing: target b read empty, re-read 200 ms later '
-          'without drawing: ${_px(rb, 64, 16, 48)}');
+      log(
+        'SMOKE instancing: target b read empty, re-read 200 ms later '
+        'without drawing: ${_px(rb, 64, 16, 48)}',
+      );
     }
     // Quadrant centres (y down in the image): top-left red, top-right
     // green, bottom-left blue, bottom-right yellow; b has only the bottom.
@@ -192,10 +214,12 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
         _near(_px(rb, 64, 16, 16), [0, 0, 0, 255]) &&
         _near(_px(rb, 64, 16, 48), [0, 0, 255, 255]) &&
         _near(_px(rb, 64, 48, 48), [255, 255, 0, 255]);
-    log('SMOKE instancing ${ok ? 'ok' : 'WRONG'} '
-        '(4 instances; 2 from an offset binding; '
-        '${shared ? 'both passes on one command buffer' : 'one command buffer per pass'}) '
-        '${[_px(ra, 64, 16, 16), _px(ra, 64, 48, 16), _px(ra, 64, 16, 48), _px(ra, 64, 48, 48), _px(rb, 64, 16, 48)]}');
+    log(
+      'SMOKE instancing ${ok ? 'ok' : 'WRONG'} '
+      '(4 instances; 2 from an offset binding; '
+      '${shared ? 'both passes on one command buffer' : 'one command buffer per pass'}) '
+      '${[_px(ra, 64, 16, 16), _px(ra, 64, 48, 16), _px(ra, 64, 16, 48), _px(ra, 64, 48, 48), _px(rb, 64, 16, 48)]}',
+    );
     allOk &= ok;
   }
 
@@ -207,9 +231,11 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     Future<Uint8List> one(void Function(gpu.RenderPass p) body) async {
       final t = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
       final cb = ctx.createCommandBuffer();
-      final p = cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: t, clearValue: Vector4(0, 0, 0, 1)),
-      ));
+      final p = cb.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(texture: t, clearValue: Vector4(0, 0, 0, 1)),
+        ),
+      );
       p
         ..bindPipeline(colorPipeline)
         ..bindVertexBuffer(quad)
@@ -235,20 +261,28 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       offsetInBytes: 0,
       lengthInBytes: 12,
     );
-    final viaFirst = await one((p) => p
-      ..bindVertexBuffer(all, slot: 1)
-      ..draw(6, instanceCount: 2, firstInstance: 2));
-    final viaOffset = await one((p) => p
-      ..bindVertexBuffer(from(2), slot: 1)
-      ..draw(6, instanceCount: 2));
-    final idxFirst = await one((p) => p
-      ..bindVertexBuffer(all, slot: 1)
-      ..bindIndexBuffer(indices, gpu.IndexType.int16)
-      ..drawIndexed(6, instanceCount: 3, firstInstance: 1));
-    final idxOffset = await one((p) => p
-      ..bindVertexBuffer(from(1), slot: 1)
-      ..bindIndexBuffer(indices, gpu.IndexType.int16)
-      ..drawIndexed(6, instanceCount: 3));
+    final viaFirst = await one(
+      (p) => p
+        ..bindVertexBuffer(all, slot: 1)
+        ..draw(6, instanceCount: 2, firstInstance: 2),
+    );
+    final viaOffset = await one(
+      (p) => p
+        ..bindVertexBuffer(from(2), slot: 1)
+        ..draw(6, instanceCount: 2),
+    );
+    final idxFirst = await one(
+      (p) => p
+        ..bindVertexBuffer(all, slot: 1)
+        ..bindIndexBuffer(indices, gpu.IndexType.int16)
+        ..drawIndexed(6, instanceCount: 3, firstInstance: 1),
+    );
+    final idxOffset = await one(
+      (p) => p
+        ..bindVertexBuffer(from(1), slot: 1)
+        ..bindIndexBuffer(indices, gpu.IndexType.int16)
+        ..drawIndexed(6, instanceCount: 3),
+    );
     int differ(Uint8List a, Uint8List b) {
       var n = 0;
       for (var i = 0; i < a.length; i += 4) {
@@ -259,16 +293,19 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
 
     final d1 = differ(viaFirst, viaOffset), d2 = differ(idxFirst, idxOffset);
     // Instance 1 (top right, green) only in the indexed pair.
-    final ok = d1 == 0 &&
+    final ok =
+        d1 == 0 &&
         d2 == 0 &&
         _near(_px(viaFirst, 64, 16, 48), [0, 0, 255, 255]) &&
         _near(_px(viaFirst, 64, 48, 16), [0, 0, 0, 255]) &&
         _near(_px(idxFirst, 64, 48, 16), [0, 255, 0, 255]) &&
         _near(_px(idxFirst, 64, 16, 16), [0, 0, 0, 255]);
-    log('SMOKE first instance ${ok ? 'ok' : 'WRONG'} '
-        '(${fs.mcsmFirstInstanceDraws ? 'engine draw' : 'bound again at the offset'}; '
-        'draw 2..3: $d1 px differ from an offset binding, '
-        'indexed 1..3: $d2 px differ)');
+    log(
+      'SMOKE first instance ${ok ? 'ok' : 'WRONG'} '
+      '(${fs.mcsmFirstInstanceDraws ? 'engine draw' : 'bound again at the offset'}; '
+      'draw 2..3: $d1 px differ from an offset binding, '
+      'indexed 1..3: $d2 px differ)',
+    );
     allOk &= ok;
   }
 
@@ -277,22 +314,30 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final c1 = rt(mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float);
+    final c1 = rt(
+      mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float,
+    );
     final copyOut = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final mrtPipeline = ctx.createRenderPipeline(vInst, fMrt, vertexLayout: layout);
-    final one = ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([0, 0, 0.25, 0.5, 0.75, 1]),
-    ));
+    final mrtPipeline = ctx.createRenderPipeline(
+      vInst,
+      fMrt,
+      vertexLayout: layout,
+    );
+    final one = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(Float32List.fromList([0, 0, 0.25, 0.5, 0.75, 1])),
+    );
     final big = ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(Float32List.fromList([1, 0, 0, 0])),
     );
     var cb = ctx.createCommandBuffer();
-    final p = cb.createRenderPass(gpu.RenderTarget(
-      colorAttachments: [
-        gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
-        gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
-      ],
-    ));
+    final p = cb.createRenderPass(
+      gpu.RenderTarget(
+        colorAttachments: [
+          gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
+          gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
+        ],
+      ),
+    );
     p.setColorBlendEnable(false, colorAttachmentIndex: 1);
     p
       ..bindPipeline(mrtPipeline)
@@ -308,28 +353,40 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       ..draw(6);
     await _done(cb);
     cb = ctx.createCommandBuffer();
-    final copy = cb.createRenderPass(gpu.RenderTarget.singleColor(
-      gpu.ColorAttachment(texture: copyOut, clearValue: Vector4(0, 0, 0, 1)),
-    ));
+    final copy = cb.createRenderPass(
+      gpu.RenderTarget.singleColor(
+        gpu.ColorAttachment(texture: copyOut, clearValue: Vector4(0, 0, 0, 1)),
+      ),
+    );
     final fsv = baseShaderLibrary['FullscreenVertex']!;
     final fcopy = baseShaderLibrary['CopyFragment']!;
     copy
       ..bindPipeline(ctx.createRenderPipeline(fsv, fcopy))
       ..bindVertexBuffer(quad)
-      ..bindTexture(fcopy.getUniformSlot('source_texture'), c1,
-          sampler: gpu.SamplerOptions())
+      ..bindTexture(
+        fcopy.getUniformSlot('source_texture'),
+        c1,
+        sampler: gpu.SamplerOptions(),
+      )
       ..draw(6);
     await _done(cb);
     final r0 = await _readRgba8(c0), r1 = await _readRgba8(copyOut);
     // Target 0: the colour; target 1: g · 4 = 2.0, saturated by the copy
     // into RGBA8 (r = 255): a second target that was never written stays 0.
     final ok0 = _near(_px(r0, 64, 32, 32), [64, 128, 191, 255]);
-    final ok1 = _near(_px(r1, 64, 32, 32).sublist(0, 1) + [0, 0, 0], [255, 0, 0, 0]);
-    final claimed = mixed;  // Metal with the mixed-format pipelines (mcsm6+)
-    log('SMOKE mrt ${ok0 && ok1 ? 'ok' : 'WRONG'} (RGBA8 + '
-        '${mixed ? 'R32F' : 'RGBA32F'} in one pass) '
-        'target0 ${_px(r0, 64, 32, 32)} target1->rgba8 ${_px(r1, 64, 32, 32)}'
-        '${claimed ? '' : ' (not claimed by this engine)'}');
+    final ok1 = _near(_px(r1, 64, 32, 32).sublist(0, 1) + [0, 0, 0], [
+      255,
+      0,
+      0,
+      0,
+    ]);
+    final claimed = mixed; // Metal with the mixed-format pipelines (mcsm6+)
+    log(
+      'SMOKE mrt ${ok0 && ok1 ? 'ok' : 'WRONG'} (RGBA8 + '
+      '${mixed ? 'R32F' : 'RGBA32F'} in one pass) '
+      'target0 ${_px(r0, 64, 32, 32)} target1->rgba8 ${_px(r1, 64, 32, 32)}'
+      '${claimed ? '' : ' (not claimed by this engine)'}',
+    );
     if (claimed) allOk &= ok0 && ok1;
   }
 
@@ -341,34 +398,44 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
-    final gLayout = gpu.VertexLayout(buffers: [
-      gpu.VertexBuffer(
-        strideInBytes: 8,
-        attributes: [
-          gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
-        ],
-      ),
-      gpu.VertexBuffer(
-        strideInBytes: 28,
-        stepMode: gpu.VertexStepMode.instance,
-        attributes: [
-          gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
-          gpu.VertexAttribute(
-            name: 'color',
-            format: gpu.VertexFormat.float32x4,
-            offsetInBytes: 8,
-          ),
-          gpu.VertexAttribute(
-            name: 'depth',
-            format: gpu.VertexFormat.float32,
-            offsetInBytes: 24,
-          ),
-        ],
-      ),
-    ]);
+    final gLayout = gpu.VertexLayout(
+      buffers: [
+        gpu.VertexBuffer(
+          strideInBytes: 8,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'position',
+              format: gpu.VertexFormat.float32x2,
+            ),
+          ],
+        ),
+        gpu.VertexBuffer(
+          strideInBytes: 28,
+          stepMode: gpu.VertexStepMode.instance,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'offset',
+              format: gpu.VertexFormat.float32x2,
+            ),
+            gpu.VertexAttribute(
+              name: 'color',
+              format: gpu.VertexFormat.float32x4,
+              offsetInBytes: 8,
+            ),
+            gpu.VertexAttribute(
+              name: 'depth',
+              format: gpu.VertexFormat.float32,
+              offsetInBytes: 24,
+            ),
+          ],
+        ),
+      ],
+    );
     final pipeline = ctx.createRenderPipeline(vG, fMrt, vertexLayout: gLayout);
     final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final c1 = rt(mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float);
+    final c1 = rt(
+      mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float,
+    );
     final depth = ctx.createTexture(
       gpu.StorageMode.deviceTransient,
       64,
@@ -379,26 +446,30 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     final copyOut = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     // Near (z 0.2): blue with g 0.125 (→ 0.5 in target 1), left; far (z 0.6):
     // g 0.25 (→ 1.0), right; they overlap in the middle.
-    final quads = ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([
-        -0.25, 0, 0, 0.125, 1, 1, 0.2, //
-        0.25, 0, 1, 0.25, 0, 1, 0.6, //
-      ]),
-    ));
+    final quads = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(
+        Float32List.fromList([
+          -0.25, 0, 0, 0.125, 1, 1, 0.2, //
+          0.25, 0, 1, 0.25, 0, 1, 0.6, //
+        ]),
+      ),
+    );
     final half = ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(Float32List.fromList([0.5, 0, 0, 0])),
     );
     var cb = ctx.createCommandBuffer();
-    final p = cb.createRenderPass(gpu.RenderTarget(
-      colorAttachments: [
-        gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
-        gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
-      ],
-      depthStencilAttachment: gpu.DepthStencilAttachment(
-        texture: depth,
-        depthClearValue: 1.0,
+    final p = cb.createRenderPass(
+      gpu.RenderTarget(
+        colorAttachments: [
+          gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
+          gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
+        ],
+        depthStencilAttachment: gpu.DepthStencilAttachment(
+          texture: depth,
+          depthClearValue: 1.0,
+        ),
       ),
-    ));
+    );
     p.setColorBlendEnable(false, colorAttachmentIndex: 1);
     p
       ..bindPipeline(pipeline)
@@ -418,28 +489,39 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     cb = ctx.createCommandBuffer();
     final fsv = baseShaderLibrary['FullscreenVertex']!;
     final fcopy = baseShaderLibrary['CopyFragment']!;
-    cb.createRenderPass(gpu.RenderTarget.singleColor(
-      gpu.ColorAttachment(texture: copyOut, clearValue: Vector4(0, 0, 0, 1)),
-    ))
+    cb.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(
+            texture: copyOut,
+            clearValue: Vector4(0, 0, 0, 1),
+          ),
+        ),
+      )
       ..bindPipeline(ctx.createRenderPipeline(fsv, fcopy))
       ..bindVertexBuffer(quad)
-      ..bindTexture(fcopy.getUniformSlot('source_texture'), c1,
-          sampler: gpu.SamplerOptions())
+      ..bindTexture(
+        fcopy.getUniformSlot('source_texture'),
+        c1,
+        sampler: gpu.SamplerOptions(),
+      )
       ..draw(6);
     await _done(cb);
     final r0 = await _readRgba8(c0), r1 = await _readRgba8(copyOut);
     // Columns: 20 near only, 32 both (near wins), 44 far only.
-    final ok = _near(_px(r0, 64, 20, 32), [0, 32, 255, 255]) &&
+    final ok =
+        _near(_px(r0, 64, 20, 32), [0, 32, 255, 255]) &&
         _near(_px(r0, 64, 32, 32), [0, 32, 255, 255]) &&
         _near(_px(r0, 64, 44, 32), [255, 64, 0, 255]) &&
         (_px(r1, 64, 32, 32)[0] - 128).abs() <= 2 &&
         _px(r1, 64, 44, 32)[0] >= 253 &&
         _px(r1, 64, 4, 4)[0] == 0;
-    log('SMOKE gbuffer ${ok ? 'ok' : 'WRONG'} (RGBA8 + '
-        '${mixed ? 'R32F' : 'RGBA32F'} + depth, depth test, instanced) '
-        'target0 ${[_px(r0, 64, 20, 32), _px(r0, 64, 32, 32), _px(r0, 64, 44, 32)]} '
-        'target1->rgba8 ${[_px(r1, 64, 32, 32)[0], _px(r1, 64, 44, 32)[0]]}'
-        '${mixed ? '' : ' (not claimed by this engine)'}');
+    log(
+      'SMOKE gbuffer ${ok ? 'ok' : 'WRONG'} (RGBA8 + '
+      '${mixed ? 'R32F' : 'RGBA32F'} + depth, depth test, instanced) '
+      'target0 ${[_px(r0, 64, 20, 32), _px(r0, 64, 32, 32), _px(r0, 64, 44, 32)]} '
+      'target1->rgba8 ${[_px(r1, 64, 32, 32)[0], _px(r1, 64, 44, 32)[0]]}'
+      '${mixed ? '' : ' (not claimed by this engine)'}',
+    );
     if (mixed) allOk &= ok;
   }
 
@@ -449,26 +531,44 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
-    final gLayout = gpu.VertexLayout(buffers: [
-      gpu.VertexBuffer(
-        strideInBytes: 8,
-        attributes: [
-          gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
-        ],
-      ),
-      gpu.VertexBuffer(
-        strideInBytes: 28,
-        stepMode: gpu.VertexStepMode.instance,
-        attributes: [
-          gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
-          gpu.VertexAttribute(name: 'color', format: gpu.VertexFormat.float32x4, offsetInBytes: 8),
-          gpu.VertexAttribute(name: 'depth', format: gpu.VertexFormat.float32, offsetInBytes: 24),
-        ],
-      ),
-    ]);
+    final gLayout = gpu.VertexLayout(
+      buffers: [
+        gpu.VertexBuffer(
+          strideInBytes: 8,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'position',
+              format: gpu.VertexFormat.float32x2,
+            ),
+          ],
+        ),
+        gpu.VertexBuffer(
+          strideInBytes: 28,
+          stepMode: gpu.VertexStepMode.instance,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'offset',
+              format: gpu.VertexFormat.float32x2,
+            ),
+            gpu.VertexAttribute(
+              name: 'color',
+              format: gpu.VertexFormat.float32x4,
+              offsetInBytes: 8,
+            ),
+            gpu.VertexAttribute(
+              name: 'depth',
+              format: gpu.VertexFormat.float32,
+              offsetInBytes: 24,
+            ),
+          ],
+        ),
+      ],
+    );
     final pipeline = ctx.createRenderPipeline(vG, fMrt, vertexLayout: gLayout);
     final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final c1 = rt(mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float);
+    final c1 = rt(
+      mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float,
+    );
     gpu.Texture depthTexture() => ctx.createTexture(
       gpu.StorageMode.devicePrivate,
       64,
@@ -477,12 +577,14 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       enableRenderTargetUsage: true,
     )!;
     final depthA = depthTexture(), depthB = depthTexture();
-    final quads = ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([
-        -0.25, 0, 0, 0.125, 1, 1, 0.2, //
-        0.25, 0, 1, 0.25, 0, 1, 0.6, //
-      ]),
-    ));
+    final quads = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(
+        Float32List.fromList([
+          -0.25, 0, 0, 0.125, 1, 1, 0.2, //
+          0.25, 0, 1, 0.25, 0, 1, 0.6, //
+        ]),
+      ),
+    );
     final half = ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(Float32List.fromList([0.5, 0, 0, 0])),
     );
@@ -496,18 +598,30 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     }) async {
       final cb = ctx.createCommandBuffer();
       final load = loadColor ? gpu.LoadAction.load : gpu.LoadAction.clear;
-      final p = cb.createRenderPass(gpu.RenderTarget(
-        colorAttachments: [
-          gpu.ColorAttachment(texture: c0, loadAction: load, clearValue: clear),
-          gpu.ColorAttachment(texture: c1, loadAction: load, clearValue: Vector4.zero()),
-        ],
-        depthStencilAttachment: gpu.DepthStencilAttachment(
-          texture: depth,
-          depthLoadAction: loadDepth ? gpu.LoadAction.load : gpu.LoadAction.clear,
-          depthStoreAction: gpu.StoreAction.store,
-          depthClearValue: depthClear,
+      final p = cb.createRenderPass(
+        gpu.RenderTarget(
+          colorAttachments: [
+            gpu.ColorAttachment(
+              texture: c0,
+              loadAction: load,
+              clearValue: clear,
+            ),
+            gpu.ColorAttachment(
+              texture: c1,
+              loadAction: load,
+              clearValue: Vector4.zero(),
+            ),
+          ],
+          depthStencilAttachment: gpu.DepthStencilAttachment(
+            texture: depth,
+            depthLoadAction: loadDepth
+                ? gpu.LoadAction.load
+                : gpu.LoadAction.clear,
+            depthStoreAction: gpu.StoreAction.store,
+            depthClearValue: depthClear,
+          ),
         ),
-      ));
+      );
       p.setColorBlendEnable(false, colorAttachmentIndex: 1);
       if (draw) {
         p
@@ -530,23 +644,54 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
 
     // Red over depth 0.1; then loaded, both quads (z 0.2, 0.6) fail the
     // loaded depth: still red (a stale clear would give black and quads).
-    await pass(loadColor: false, clear: Vector4(1, 0, 0, 1), depth: depthA, loadDepth: false, depthClear: 0.1, draw: false);
-    await pass(loadColor: true, clear: Vector4(0, 0, 0, 1), depth: depthA, loadDepth: true, depthClear: 1.0, draw: true);
+    await pass(
+      loadColor: false,
+      clear: Vector4(1, 0, 0, 1),
+      depth: depthA,
+      loadDepth: false,
+      depthClear: 0.1,
+      draw: false,
+    );
+    await pass(
+      loadColor: true,
+      clear: Vector4(0, 0, 0, 1),
+      depth: depthA,
+      loadDepth: true,
+      depthClear: 1.0,
+      draw: true,
+    );
     final r1 = await _readRgba8(c0);
     // Cleared to black over a second depth target cleared to 1.0: both
     // quads; then loaded with nothing drawn: kept.
-    await pass(loadColor: false, clear: Vector4(0, 0, 0, 1), depth: depthB, loadDepth: false, depthClear: 1.0, draw: true);
-    await pass(loadColor: true, clear: Vector4(0, 1, 0, 1), depth: depthB, loadDepth: true, depthClear: 1.0, draw: false);
+    await pass(
+      loadColor: false,
+      clear: Vector4(0, 0, 0, 1),
+      depth: depthB,
+      loadDepth: false,
+      depthClear: 1.0,
+      draw: true,
+    );
+    await pass(
+      loadColor: true,
+      clear: Vector4(0, 1, 0, 1),
+      depth: depthB,
+      loadDepth: true,
+      depthClear: 1.0,
+      draw: false,
+    );
     final r2 = await _readRgba8(c0);
-    final ok = _near(_px(r1, 64, 20, 32), [255, 0, 0, 255]) &&
+    final ok =
+        _near(_px(r1, 64, 20, 32), [255, 0, 0, 255]) &&
         _near(_px(r1, 64, 44, 32), [255, 0, 0, 255]) &&
         _near(_px(r2, 64, 20, 32), [0, 32, 255, 255]) &&
         _near(_px(r2, 64, 44, 32), [255, 64, 0, 255]) &&
         _near(_px(r2, 64, 4, 4), [0, 0, 0, 255]);
-    log('SMOKE pass reuse ${ok ? 'ok' : 'WRONG'} (one target: clear, load '
-        'over a loaded depth, clear over another depth, load) '
-        '${[_px(r1, 64, 20, 32), _px(r1, 64, 44, 32), _px(r2, 64, 20, 32), _px(r2, 64, 44, 32), _px(r2, 64, 4, 4)]}'
-        '${mixed ? '' : ' (not claimed by this engine)'}');
+    log(
+      'SMOKE pass reuse ${ok ? 'ok' : 'WRONG'} (one target: clear, load '
+      'over a loaded depth, clear over another depth, load) '
+      '${[_px(r1, 64, 20, 32), _px(r1, 64, 44, 32), _px(r2, 64, 20, 32), _px(r2, 64, 44, 32), _px(r2, 64, 4, 4)]}'
+      '${mixed ? '' : ' (not claimed by this engine)'}',
+    );
     if (mixed) allOk &= ok;
   }
 
@@ -557,26 +702,44 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
   if (fs.mcsmRetainedDraws) {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
-    final gLayout = gpu.VertexLayout(buffers: [
-      gpu.VertexBuffer(
-        strideInBytes: 8,
-        attributes: [
-          gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
-        ],
-      ),
-      gpu.VertexBuffer(
-        strideInBytes: 28,
-        stepMode: gpu.VertexStepMode.instance,
-        attributes: [
-          gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
-          gpu.VertexAttribute(name: 'color', format: gpu.VertexFormat.float32x4, offsetInBytes: 8),
-          gpu.VertexAttribute(name: 'depth', format: gpu.VertexFormat.float32, offsetInBytes: 24),
-        ],
-      ),
-    ]);
+    final gLayout = gpu.VertexLayout(
+      buffers: [
+        gpu.VertexBuffer(
+          strideInBytes: 8,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'position',
+              format: gpu.VertexFormat.float32x2,
+            ),
+          ],
+        ),
+        gpu.VertexBuffer(
+          strideInBytes: 28,
+          stepMode: gpu.VertexStepMode.instance,
+          attributes: [
+            gpu.VertexAttribute(
+              name: 'offset',
+              format: gpu.VertexFormat.float32x2,
+            ),
+            gpu.VertexAttribute(
+              name: 'color',
+              format: gpu.VertexFormat.float32x4,
+              offsetInBytes: 8,
+            ),
+            gpu.VertexAttribute(
+              name: 'depth',
+              format: gpu.VertexFormat.float32,
+              offsetInBytes: 24,
+            ),
+          ],
+        ),
+      ],
+    );
     final pipeline = ctx.createRenderPipeline(vG, fMrt, vertexLayout: gLayout);
     final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final c1 = rt(mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float);
+    final c1 = rt(
+      mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float,
+    );
     final depth = ctx.createTexture(
       gpu.StorageMode.devicePrivate,
       64,
@@ -585,31 +748,37 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       enableRenderTargetUsage: true,
     )!;
     final copyOut = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    final quads = ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([
-        -0.25, 0, 0, 0.125, 1, 1, 0.2, //
-        0.25, 0, 1, 0.25, 0, 1, 0.6, //
-        0, 0.5, 0.5, 0.5, 0.5, 1, 0.4, //
-      ]),
-    ));
+    final quads = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(
+        Float32List.fromList([
+          -0.25, 0, 0, 0.125, 1, 1, 0.2, //
+          0.25, 0, 1, 0.25, 0, 1, 0.6, //
+          0, 0.5, 0.5, 0.5, 0.5, 1, 0.4, //
+        ]),
+      ),
+    );
     // Two FrameInfo blocks in one buffer, 256 bytes apart.
     final blocks = Float32List(128)
       ..[0] = 0.5
       ..[64] = 0.3;
-    final uniforms = ctx.createDeviceBufferWithCopy(ByteData.sublistView(blocks));
+    final uniforms = ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(blocks),
+    );
     final list = fs.McsmDrawList();
     Future<(Uint8List, Uint8List)> frame(bool record) async {
       var cb = ctx.createCommandBuffer();
-      final p = cb.createRenderPass(gpu.RenderTarget(
-        colorAttachments: [
-          gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
-          gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
-        ],
-        depthStencilAttachment: gpu.DepthStencilAttachment(
-          texture: depth,
-          depthClearValue: 1.0,
+      final p = cb.createRenderPass(
+        gpu.RenderTarget(
+          colorAttachments: [
+            gpu.ColorAttachment(texture: c0, clearValue: Vector4(0, 0, 0, 1)),
+            gpu.ColorAttachment(texture: c1, clearValue: Vector4.zero()),
+          ],
+          depthStencilAttachment: gpu.DepthStencilAttachment(
+            texture: depth,
+            depthClearValue: 1.0,
+          ),
         ),
-      ));
+      );
       p.setColorBlendEnable(false, colorAttachmentIndex: 1);
       if (record) {
         fs.mcsmBeginRecording(p, list);
@@ -644,13 +813,21 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       cb = ctx.createCommandBuffer();
       final fsv = baseShaderLibrary['FullscreenVertex']!;
       final fcopy = baseShaderLibrary['CopyFragment']!;
-      cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: copyOut, clearValue: Vector4(0, 0, 0, 1)),
-      ))
+      cb.createRenderPass(
+          gpu.RenderTarget.singleColor(
+            gpu.ColorAttachment(
+              texture: copyOut,
+              clearValue: Vector4(0, 0, 0, 1),
+            ),
+          ),
+        )
         ..bindPipeline(ctx.createRenderPipeline(fsv, fcopy))
         ..bindVertexBuffer(quad)
-        ..bindTexture(fcopy.getUniformSlot('source_texture'), c1,
-            sampler: gpu.SamplerOptions())
+        ..bindTexture(
+          fcopy.getUniformSlot('source_texture'),
+          c1,
+          sampler: gpu.SamplerOptions(),
+        )
         ..draw(6);
       await _done(cb);
       return (await _readRgba8(c0), await _readRgba8(copyOut));
@@ -660,16 +837,19 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     final (r0, r1) = await frame(false);
     var differ0 = 0, differ1 = 0, covered = 0;
     for (var i = 0; i < d0.length; i += 4) {
-      if (d0[i] != r0[i] || d0[i + 1] != r0[i + 1] || d0[i + 2] != r0[i + 2]) differ0++;
+      if (d0[i] != r0[i] || d0[i + 1] != r0[i + 1] || d0[i + 2] != r0[i + 2])
+        differ0++;
       if (d1[i] != r1[i]) differ1++;
       if (d0[i] != 0 || d0[i + 1] != 0 || d0[i + 2] != 0) covered++;
     }
     final ok = differ0 == 0 && differ1 == 0 && covered > 500;
-    log('SMOKE mrt replay ${ok ? 'ok' : 'WRONG'} (RGBA8 + '
-        '${mixed ? 'R32F' : 'RGBA32F'} + depth, 2 draws with uniforms 256 '
-        'bytes apart, recorded then replayed into a fresh pass: '
-        '$differ0/$differ1 of 4096 px differ in target 0/1, $covered covered)'
-        '${mixed ? '' : ' (not claimed by this engine)'}');
+    log(
+      'SMOKE mrt replay ${ok ? 'ok' : 'WRONG'} (RGBA8 + '
+      '${mixed ? 'R32F' : 'RGBA32F'} + depth, 2 draws with uniforms 256 '
+      'bytes apart, recorded then replayed into a fresh pass: '
+      '$differ0/$differ1 of 4096 px differ in target 0/1, $covered covered)'
+      '${mixed ? '' : ' (not claimed by this engine)'}',
+    );
     if (mixed) allOk &= ok;
   } else {
     log('SMOKE mrt replay: not on this engine (no retained draws)');
@@ -677,8 +857,12 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
 
   // 3. A direct texture write (feature 16), drawn and read back.
   if (fs.mcsmDirectTextureWrites) {
-    final t = ctx.createTexture(gpu.StorageMode.hostVisible, 4, 4,
-        format: gpu.PixelFormat.r8g8b8a8UNormInt)!;
+    final t = ctx.createTexture(
+      gpu.StorageMode.hostVisible,
+      4,
+      4,
+      format: gpu.PixelFormat.r8g8b8a8UNormInt,
+    )!;
     final texel = Uint8List(64);
     for (var i = 0; i < 64; i += 4) {
       texel.setAll(i, [77, 33, 200, 255]);
@@ -688,22 +872,31 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
     final cb = ctx.createCommandBuffer();
     final fsv = baseShaderLibrary['FullscreenVertex']!;
     final fcopy = baseShaderLibrary['CopyFragment']!;
-    cb.createRenderPass(gpu.RenderTarget.singleColor(
-      gpu.ColorAttachment(texture: out, clearValue: Vector4(0, 0, 0, 1)),
-    ))
+    cb.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(texture: out, clearValue: Vector4(0, 0, 0, 1)),
+        ),
+      )
       ..bindPipeline(ctx.createRenderPipeline(fsv, fcopy))
       ..bindVertexBuffer(quad)
-      ..bindTexture(fcopy.getUniformSlot('source_texture'), t,
-          sampler: gpu.SamplerOptions())
+      ..bindTexture(
+        fcopy.getUniformSlot('source_texture'),
+        t,
+        sampler: gpu.SamplerOptions(),
+      )
       ..draw(6);
     await _done(cb);
     final r = await _readRgba8(out);
     final ok = wrote && _near(_px(r, 64, 32, 32), [77, 33, 200, 255]);
-    log('SMOKE direct texture write ${ok ? 'ok' : 'WRONG'} '
-        '(written: $wrote) ${_px(r, 64, 32, 32)}');
+    log(
+      'SMOKE direct texture write ${ok ? 'ok' : 'WRONG'} '
+      '(written: $wrote) ${_px(r, 64, 32, 32)}',
+    );
     allOk &= ok;
   } else {
-    log('SMOKE direct texture write: not on this engine or backend (uploads the usual way)');
+    log(
+      'SMOKE direct texture write: not on this engine or backend (uploads the usual way)',
+    );
   }
 
   // 4. Viewport arrays (feature 256): one instanced draw into four tiles
@@ -719,9 +912,14 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       final sw = Stopwatch()..start();
       final cb = ctx.createCommandBuffer();
       final t0 = sw.elapsedMicroseconds;
-      cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
-      ))
+      cb.createRenderPass(
+          gpu.RenderTarget.singleColor(
+            gpu.ColorAttachment(
+              texture: target,
+              clearValue: Vector4(0, 0, 0, 1),
+            ),
+          ),
+        )
         ..bindPipeline(colorPipeline)
         ..bindVertexBuffer(quad)
         ..bindVertexBuffer(
@@ -741,26 +939,38 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
       times[2]!.add((t2 - t1).toDouble());
     }
     double med(List<double> v) => (v..sort())[v.length ~/ 2];
-    log('SMOKE pass cost: command buffer ${med(times[0]!).toStringAsFixed(1)} us, '
-        'pass + draw ${med(times[1]!).toStringAsFixed(1)} us, '
-        'submit ${med(times[2]!).toStringAsFixed(1)} us (median of 200)');
+    log(
+      'SMOKE pass cost: command buffer ${med(times[0]!).toStringAsFixed(1)} us, '
+      'pass + draw ${med(times[1]!).toStringAsFixed(1)} us, '
+      'submit ${med(times[2]!).toStringAsFixed(1)} us (median of 200)',
+    );
   }
 
   // 5. Scene-like draws: µs per draw (CPU), best of 7 rounds of 2,000.
   {
-    final pipeline = ctx.createRenderPipeline(vInst, fTex, vertexLayout: layout);
+    final pipeline = ctx.createRenderPipeline(
+      vInst,
+      fTex,
+      vertexLayout: layout,
+    );
     final geometry = [
       for (var i = 0; i < 8; i++)
-        ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-          Float32List.fromList([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-        )),
+        ctx.createDeviceBufferWithCopy(
+          ByteData.sublistView(
+            Float32List.fromList([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+          ),
+        ),
     ];
     final blocks = ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(Float32List(2000 * 64)),
     );
     gpu.Texture tex(int v) {
-      final t = ctx.createTexture(gpu.StorageMode.hostVisible, 4, 4,
-          format: gpu.PixelFormat.r8g8b8a8UNormInt)!;
+      final t = ctx.createTexture(
+        gpu.StorageMode.hostVisible,
+        4,
+        4,
+        format: gpu.PixelFormat.r8g8b8a8UNormInt,
+      )!;
       t.overwrite(ByteData.sublistView(Uint8List(64)..fillRange(0, 64, v)));
       return t;
     }
@@ -780,37 +990,63 @@ Future<bool> mcsm7Checks(void Function(String) log) async {
         int.tryParse(io.Platform.environment['GPU_SMOKE_REPEAT'] ?? '') ?? 7;
     for (var r = 0; r < rounds; r++) {
       final cb = ctx.createCommandBuffer();
-      final p = cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
-      ));
+      final p = cb.createRenderPass(
+        gpu.RenderTarget.singleColor(
+          gpu.ColorAttachment(texture: target, clearValue: Vector4(0, 0, 0, 1)),
+        ),
+      );
       final sw = Stopwatch()..start();
       p.bindPipeline(pipeline);
       for (var i = 0; i < 2000; i++) {
         p
-          ..bindVertexBuffer(gpu.BufferView(
-            geometry[i & 7],
-            offsetInBytes: 0,
-            lengthInBytes: 48,
-          ))
           ..bindVertexBuffer(
-            gpu.BufferView(instances, offsetInBytes: (i & 3) * 24, lengthInBytes: 24),
+            gpu.BufferView(
+              geometry[i & 7],
+              offsetInBytes: 0,
+              lengthInBytes: 48,
+            ),
+          )
+          ..bindVertexBuffer(
+            gpu.BufferView(
+              instances,
+              offsetInBytes: (i & 3) * 24,
+              lengthInBytes: 24,
+            ),
             slot: 1,
           )
-          ..bindUniform(frame, gpu.BufferView(blocks, offsetInBytes: i * 256, lengthInBytes: 16))
-          ..bindUniform(material, gpu.BufferView(blocks, offsetInBytes: i * 256 + 64, lengthInBytes: 16))
+          ..bindUniform(
+            frame,
+            gpu.BufferView(blocks, offsetInBytes: i * 256, lengthInBytes: 16),
+          )
+          ..bindUniform(
+            material,
+            gpu.BufferView(
+              blocks,
+              offsetInBytes: i * 256 + 64,
+              lengthInBytes: 16,
+            ),
+          )
           ..bindTexture(a, maps[i & 7], sampler: sampler)
           ..bindTexture(b, shared, sampler: sampler)
           ..bindTexture(c, maps[(i >> 3) & 7], sampler: sampler)
-          ..setCullMode((i & 1) == 0 ? gpu.CullMode.backFace : gpu.CullMode.none)
-          ..setWindingOrder((i & 2) == 0 ? gpu.WindingOrder.clockwise : gpu.WindingOrder.counterClockwise)
+          ..setCullMode(
+            (i & 1) == 0 ? gpu.CullMode.backFace : gpu.CullMode.none,
+          )
+          ..setWindingOrder(
+            (i & 2) == 0
+                ? gpu.WindingOrder.clockwise
+                : gpu.WindingOrder.counterClockwise,
+          )
           ..draw(6);
       }
       final us = sw.elapsedMicroseconds / 2000;
       cb.submit();
       if (r > 0 && us < best) best = us;
     }
-    log('SMOKE scene-like draw ${best.toStringAsFixed(3)} us '
-        '(2 vertex buffers, 2 uniform blocks, 3 textures, cull + winding per draw)');
+    log(
+      'SMOKE scene-like draw ${best.toStringAsFixed(3)} us '
+      '(2 vertex buffers, 2 uniform blocks, 3 textures, cull + winding per draw)',
+    );
   }
   return allOk;
 }
@@ -826,37 +1062,47 @@ Future<bool> _viewportArrays(
   );
   if (lib == null) return false;
   final v = lib['SmokeTilesVertex']!, f = lib['SmokeTilesFragment']!;
-  final layout = gpu.VertexLayout(buffers: [
-    gpu.VertexBuffer(
-      strideInBytes: 8,
-      attributes: [
-        gpu.VertexAttribute(name: 'position', format: gpu.VertexFormat.float32x2),
-      ],
-    ),
-    gpu.VertexBuffer(
-      strideInBytes: 28,
-      stepMode: gpu.VertexStepMode.instance,
-      attributes: [
-        gpu.VertexAttribute(name: 'offset', format: gpu.VertexFormat.float32x2),
-        gpu.VertexAttribute(
-          name: 'color',
-          format: gpu.VertexFormat.float32x4,
-          offsetInBytes: 8,
-        ),
-        gpu.VertexAttribute(
-          name: 'tile',
-          format: gpu.VertexFormat.float32,
-          offsetInBytes: 24,
-        ),
-      ],
-    ),
-  ]);
+  final layout = gpu.VertexLayout(
+    buffers: [
+      gpu.VertexBuffer(
+        strideInBytes: 8,
+        attributes: [
+          gpu.VertexAttribute(
+            name: 'position',
+            format: gpu.VertexFormat.float32x2,
+          ),
+        ],
+      ),
+      gpu.VertexBuffer(
+        strideInBytes: 28,
+        stepMode: gpu.VertexStepMode.instance,
+        attributes: [
+          gpu.VertexAttribute(
+            name: 'offset',
+            format: gpu.VertexFormat.float32x2,
+          ),
+          gpu.VertexAttribute(
+            name: 'color',
+            format: gpu.VertexFormat.float32x4,
+            offsetInBytes: 8,
+          ),
+          gpu.VertexAttribute(
+            name: 'tile',
+            format: gpu.VertexFormat.float32,
+            offsetInBytes: 24,
+          ),
+        ],
+      ),
+    ],
+  );
   final pipeline = ctx.createRenderPipeline(v, f, vertexLayout: layout);
   // A thin slanted triangle: edges that cross pixel centres at odd places.
   final tri = gpu.BufferView(
-    ctx.createDeviceBufferWithCopy(ByteData.sublistView(
-      Float32List.fromList([-0.93, -0.71, 0.87, -0.97, 0.13, 0.94]),
-    )),
+    ctx.createDeviceBufferWithCopy(
+      ByteData.sublistView(
+        Float32List.fromList([-0.93, -0.71, 0.87, -0.97, 0.13, 0.94]),
+      ),
+    ),
     offsetInBytes: 0,
     lengthInBytes: 24,
   );
@@ -878,23 +1124,31 @@ Future<bool> _viewportArrays(
   for (var i = 0; i < 4; i++) {
     instOne[7 * i + 6] = 0;
   }
-  final instancesOne =
-      ctx.createDeviceBufferWithCopy(ByteData.sublistView(instOne));
+  final instancesOne = ctx.createDeviceBufferWithCopy(
+    ByteData.sublistView(instOne),
+  );
   final scale = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(Float32List.fromList([0.9, 0, 0, 0])),
   );
   final tiles = [
     for (var i = 0; i < 4; i++)
-      gpu.Viewport(x: (i % 2) * 32 + 1, y: (i ~/ 2) * 32 + 1, width: 30, height: 30),
+      gpu.Viewport(
+        x: (i % 2) * 32 + 1,
+        y: (i ~/ 2) * 32 + 1,
+        width: 30,
+        height: 30,
+      ),
   ];
   final scissors = [
     for (final t in tiles)
       gpu.Scissor(x: t.x, y: t.y, width: t.width, height: t.height),
   ];
   gpu.RenderPass begin(gpu.CommandBuffer cb, gpu.Texture t) =>
-      cb.createRenderPass(gpu.RenderTarget.singleColor(
-        gpu.ColorAttachment(texture: t, clearValue: Vector4(0, 0, 0, 1)),
-      ))
+      cb.createRenderPass(
+          gpu.RenderTarget.singleColor(
+            gpu.ColorAttachment(texture: t, clearValue: Vector4(0, 0, 0, 1)),
+          ),
+        )
         ..bindPipeline(pipeline)
         ..bindVertexBuffer(tri)
         ..bindUniform(
@@ -929,8 +1183,10 @@ Future<bool> _viewportArrays(
       }
     }
     final ok = n.every((c) => c > 100);
-    log('SMOKE viewport arrays: not on this engine or backend (casters draw '
-        'per tile; per-tile draws ${ok ? 'ok' : 'WRONG'}: ${n.join('/')})');
+    log(
+      'SMOKE viewport arrays: not on this engine or backend (casters draw '
+      'per tile; per-tile draws ${ok ? 'ok' : 'WRONG'}: ${n.join('/')})',
+    );
     return ok;
   }
   // B: one instanced draw, four instances, each into its tile.
@@ -973,8 +1229,11 @@ Future<bool> _viewportArrays(
     }
     return n.join('/');
   }
-  log('SMOKE viewport arrays ${ok ? 'ok' : 'WRONG'} (set: $set; 4 tiles: '
-      'one instanced draw vs one draw per tile: $differ of ${ra.length ~/ 4} '
-      'pixels differ, $covered covered; per tile ${perTile(ra)} vs ${perTile(rb)})');
+
+  log(
+    'SMOKE viewport arrays ${ok ? 'ok' : 'WRONG'} (set: $set; 4 tiles: '
+    'one instanced draw vs one draw per tile: $differ of ${ra.length ~/ 4} '
+    'pixels differ, $covered covered; per tile ${perTile(ra)} vs ${perTile(rb)})',
+  );
   return ok;
 }
