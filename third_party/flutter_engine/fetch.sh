@@ -8,7 +8,9 @@
 # On macOS, tools/toolchain/env.sh then finds it by itself (play.sh builds on
 # it; MCSM_LOCAL_ENGINE=off in .env goes back to the stock engine). Elsewhere
 # it prints the `flutter build` flags. Needs `gh` logged in to an account that
-# can read the repo (or MCSM_ENGINE_ARCHIVE=<a downloaded .tar.xz>, its .sha256
+# can read the release repo, MCSM_ENGINE_REPO (owner/name: the environment, else
+# the private config, tools/toolchain/private_env.sh), or
+# MCSM_ENGINE_ARCHIVE=<a downloaded .tar.xz>, its .sha256
 # beside it), plus tar and xz. MCSM_DATA: the environment, else .env,
 # else the repo's data/. The Flutter SDK: $MCSM_FLUTTER, else data/flutter,
 # else the `flutter` on PATH. Windows: fetch.ps1.
@@ -27,7 +29,9 @@ if [[ -z ${MCSM_FLUTTER:-} ]]; then
     MCSM_FLUTTER=$(cd "$(dirname "$(command -v flutter)")/.." && pwd)
   fi
 fi
-repo=${MCSM_ENGINE_REPO:-<owner>/<repo>}
+. "$repo_root/tools/toolchain/private_env.sh"
+[[ -n ${MCSM_ENGINE_ARCHIVE:-} ]] || mcsm_need MCSM_ENGINE_REPO
+repo=${MCSM_ENGINE_REPO:-}
 tag=$(cat "$here/RELEASE")
 target=${1:-}
 if [[ -z $target ]]; then

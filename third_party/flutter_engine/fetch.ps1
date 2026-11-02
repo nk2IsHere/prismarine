@@ -6,6 +6,8 @@
 # links its out dir's dart-sdk to the Flutter SDK's own (the `flutter` on
 # PATH, or $env:MCSM_FLUTTER). -Archive: unpack that local .tar.xz instead
 # (its .sha256 beside it). Prints the flags for `flutter build windows`.
+# The release repo (owner/name): $env:MCSM_ENGINE_REPO, else MCSM_ENGINE_REPO in
+# a private/config/*.env found walking up from here (tools/toolchain/private_env.sh).
 param(
   [string] $Target,
   [string] $Data,
@@ -13,7 +15,27 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repo = if ($env:MCSM_ENGINE_REPO) { $env:MCSM_ENGINE_REPO } else { '<owner>/<repo>' }
+function Get-PrivateSetting([string] $Key) {
+  $v = [Environment]::GetEnvironmentVariable($Key)
+  if ($v) { return $v }
+  $d = $here
+  while ($d) {
+    $cfg = Join-Path $d 'private\config'
+    if (Test-Path $cfg) {
+      foreach ($f in Get-ChildItem $cfg -Filter *.env | Sort-Object Name) {
+        foreach ($l in Get-Content $f.FullName) {
+          if ($l -match "^$Key=(.*)$") { return $Matches[1].Trim('"', "'") }
+        }
+      }
+    }
+    $d = Split-Path -Parent $d
+  }
+  return $null
+}
+$repo = Get-PrivateSetting 'MCSM_ENGINE_REPO'
+if (!$repo -and !$Archive) {
+  throw "mcsm: missing machine setting MCSM_ENGINE_REPO (the engine release repo, owner/name): set it in the environment or in <repo>\private\config\*.env, or pass -Archive"
+}
 $tag = (Get-Content "$here\RELEASE").Trim()
 if (!$Target) {
   $Target = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'windows-arm64' } else { 'windows-x64' }
