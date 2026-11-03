@@ -25,6 +25,7 @@ import 'package:vector_math/vector_math.dart';
 part 'mcsm9_compute.dart';
 part 'mcsm9_more.dart';
 part 'mcsm9_targets.dart';
+part 'mcsm9_texel.dart';
 part 'mcsm9_views.dart';
 
 /// What every check uses: the context, the S2 bundle, a quad.
@@ -172,6 +173,31 @@ Future<bool> mcsm9Checks(void Function(String) log) async {
     () => _vertexFormats(s2),
   );
   await check('layered pass (gl_Layer) and cube arrays', () => _layered(s2));
+  await check(
+    'texel buffers, storage texel buffers, atomics',
+    () => _texelBuffers(s2),
+  );
+  await check(
+    'storage image formats (RGBA16 unorm, RGBA32UI 3D, RGBA16F)',
+    () => _storageFormats(s2),
+  );
+  await check(
+    'IEEE arithmetic (NaN, Inf, -0 + 0) without SPIR-V or Metal fast math',
+    () => _metalOptions(s2),
+  );
+  await check(
+    'compute-written vertex and indexed indirect buffers',
+    () => _computeBuffers(s2),
+  );
+  await check(
+    'base instance, clip distance, invariant position',
+    () => _drawParameters(s2),
+  );
+  await check(
+    'textures and samplers declared apart (and compare)',
+    () => _separateSamplers(s2),
+  );
+  await check('BC3 array 1392x1288, three layers', () => _bc3Array(s2));
   return ok;
 }
 
