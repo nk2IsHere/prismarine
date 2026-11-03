@@ -74,7 +74,8 @@ if [[ $step == build || $step == all ]]; then
     flutter/sky/packages \
     flutter/flutter_frontend_server:frontend_server \
     flutter/tools/font_subset \
-    flutter/tools/const_finder
+    flutter/tools/const_finder \
+    flutter/impeller/compiler:impellerc
   # A release out dir's patched SDK is the product one; the Flutter tool looks
   # for it under the cache's name.
   [[ $mode == release ]] && ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product

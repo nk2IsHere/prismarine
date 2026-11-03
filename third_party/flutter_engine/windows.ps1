@@ -57,7 +57,7 @@ target_os = ["win"]
 gclient sync --no-history -j8
 Set-Location engine\src
 $common = @('flutter/lib/snapshot:kernel_platform_files')
-$hostTools = @('flutter/sky/packages', 'flutter/tools/font_subset', 'flutter/tools/const_finder')
+$hostTools = @('flutter/sky/packages', 'flutter/tools/font_subset', 'flutter/tools/const_finder', 'flutter/impeller/compiler:impellerc')
 foreach ($c in @('x64', 'arm64')) {
   if ($Cpu -ne 'both' -and $Cpu -ne $c) { continue }
   $out = if ($c -eq 'arm64') { 'host_release_arm64' } else { 'host_release' }
