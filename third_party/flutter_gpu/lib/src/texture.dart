@@ -120,7 +120,9 @@ base class Texture extends NativeFieldWrapperClass1 {
           format.bytesPerBlock *
           d;
     }
-    return total * sampleCount * layers;
+    return total *
+        sampleCount *
+        (textureType == TextureType.textureCubeArray ? 6 * layers : layers);
   }
 
   Texture._surface(
@@ -200,8 +202,11 @@ base class Texture extends NativeFieldWrapperClass1 {
     int baseMipLevel,
     this.mipLevelCount,
     int baseLayer,
-    this.layers,
+    int layerCount,
   ) : _gpuContext = gpuContext,
+      layers = textureType == TextureType.textureCubeArray
+          ? layerCount ~/ 6
+          : (textureType == TextureType.textureCube ? 1 : layerCount),
       storageMode = parent.storageMode,
       format = parent.format,
       width = (parent.width >> baseMipLevel) < 1
@@ -223,7 +228,7 @@ base class Texture extends NativeFieldWrapperClass1 {
       baseMipLevel,
       mipLevelCount,
       baseLayer,
-      layers,
+      layerCount,
     );
     if (!_valid) {
       throw Exception('Texture view creation failed');
@@ -310,6 +315,7 @@ base class Texture extends NativeFieldWrapperClass1 {
   int get sliceCount => switch (textureType) {
     TextureType.textureCube => 6,
     TextureType.texture2DArray => layers,
+    TextureType.textureCubeArray => 6 * layers,
     TextureType.texture3D => depth,
     _ => 1,
   };

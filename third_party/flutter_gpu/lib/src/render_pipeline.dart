@@ -72,7 +72,9 @@ base class RenderPipeline extends NativeFieldWrapperClass1 {
       final VertexBuffer buf = layout.buffers[i];
       buffersData[i * 3 + 0] = buf.strideInBytes;
       buffersData[i * 3 + 1] = buf.attributes.length;
-      buffersData[i * 3 + 2] = buf.stepMode.index;
+      // mcsm G9: the step rate in bits 8 and up.
+      buffersData[i * 3 + 2] =
+          buf.stepMode.index | (buf.stepRate > 1 ? buf.stepRate << 8 : 0);
     }
 
     // First pass: encode each name to bytes and compute the total length,

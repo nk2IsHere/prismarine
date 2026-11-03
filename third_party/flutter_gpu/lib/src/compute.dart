@@ -15,6 +15,77 @@ bool get mcsmEngineSupportsS2 =>
 @Native<Int64 Function()>(symbol: 'InternalFlutterGpu_McsmFeatures')
 external int _mcsmFeaturesNative();
 
+/// The border colours Metal and Vulkan both offer.
+enum McsmBorderColor { transparentBlack, opaqueBlack, opaqueWhite }
+
+/// A whole sampler state, as Direct3D 11's (Metal and Vulkan): the depth
+/// address mode, a comparison function (for `sampler2DShadow` and kin), the
+/// border colour [SamplerAddressMode.clampToBorder] reads, LOD clamps and a
+/// LOD bias (Vulkan only: Metal has no sampler bias).
+base class McsmSampler extends SamplerOptions {
+  McsmSampler({
+    super.minFilter,
+    super.magFilter,
+    super.mipFilter,
+    super.widthAddressMode,
+    super.heightAddressMode,
+    super.maxAnisotropy,
+    this.depthAddressMode = SamplerAddressMode.clampToEdge,
+    this.compare,
+    this.borderColor = McsmBorderColor.transparentBlack,
+    this.minLod = 0,
+    this.maxLod = 1000,
+    this.lodBias = 0,
+  });
+
+  SamplerAddressMode depthAddressMode;
+  CompareFunction? compare;
+  McsmBorderColor borderColor;
+  double minLod;
+  double maxLod;
+  double lodBias;
+
+  /// The packed fields `McsmSamplerFromPacked` (engine) reads.
+  int get _packed =>
+      minFilter.index |
+      magFilter.index << 4 |
+      mipFilter.index << 8 |
+      widthAddressMode.index << 12 |
+      heightAddressMode.index << 16 |
+      depthAddressMode.index << 20 |
+      (maxAnisotropy.clamp(1, 255)) << 24 |
+      (compare == null ? 0 : compare!.index + 1) << 32 |
+      borderColor.index << 36;
+}
+
+void _mcsmBindTextureSampler(
+  RenderPass pass,
+  UniformSlot slot,
+  Texture texture,
+  McsmSampler sampler,
+) {
+  final index = slot._resolvedTextureIndex;
+  if (index < 0 ||
+      !_renderPassBindTextureSampler(
+        pass,
+        slot.shader,
+        index,
+        texture,
+        sampler._packed,
+        sampler.minLod,
+        sampler.maxLod,
+        sampler.lodBias,
+      )) {
+    throw Exception('Failed to bind texture ${slot.uniformName}');
+  }
+  // The G5 memo no longer holds what this slot has.
+  final bound = slot.shader._mcsmBound;
+  if (2 * index + 1 < bound.length) {
+    bound[2 * index] = null;
+    bound[2 * index + 1] = null;
+  }
+}
+
 /// A shader's storage buffer or storage image, by name: a storage buffer by
 /// its block's type name (`buffer Lights { … } lights;` is `Lights`), a
 /// storage image by its variable name. Resolved once, until the shader is
@@ -76,6 +147,78 @@ extension McsmRenderPassIndirect on RenderPass {
     )) {
       throw Exception('Indirect draw failed');
     }
+  }
+}
+
+extension McsmCommandBufferCopies on CommandBuffer {
+  /// Copies a region of [source]'s mip level and slice (a 3D texture's depth
+  /// slice) to [destination]'s, which may be another level or slice of the
+  /// same texture; same format. Not on views.
+  void copyTextureRegion(
+    Texture source,
+    Texture destination, {
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    int destinationX = 0,
+    int destinationY = 0,
+    int sourceMipLevel = 0,
+    int sourceSlice = 0,
+    int destinationMipLevel = 0,
+    int destinationSlice = 0,
+  }) {
+    final error = _copyTextureToTexture(
+      this,
+      source,
+      destination,
+      x,
+      y,
+      width,
+      height,
+      destinationX,
+      destinationY,
+      sourceMipLevel,
+      sourceSlice,
+      destinationMipLevel,
+      destinationSlice,
+    );
+    if (error != null) throw Exception(error);
+  }
+
+  /// Copies a region of [source]'s mip level and slice into [destination]
+  /// at [destinationOffset], rows tightly packed.
+  void copyTextureRegionToBuffer(
+    Texture source,
+    DeviceBuffer destination, {
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    int mipLevel = 0,
+    int slice = 0,
+    int destinationOffset = 0,
+  }) {
+    final error = _copyTextureToBuffer(
+      this,
+      source,
+      x,
+      y,
+      width,
+      height,
+      mipLevel,
+      slice,
+      destination,
+      destinationOffset,
+    );
+    if (error != null) throw Exception(error);
+  }
+
+  /// Fills [texture]'s mip levels from its base level (every layer of an
+  /// array or cube), as the backend's blit does.
+  void generateMipmaps(Texture texture) {
+    final error = _generateMipmap(this, texture);
+    if (error != null) throw Exception(error);
   }
 }
 
@@ -158,6 +301,20 @@ base class ComputePass extends NativeFieldWrapperClass1 {
   }) {
     final s = sampler ?? SamplerOptions();
     final index = slot._resolvedTextureIndex;
+    if (s is McsmSampler) {
+      if (index < 0 ||
+          !_bindTextureSampler(
+            index,
+            texture,
+            s._packed,
+            s.minLod,
+            s.maxLod,
+            s.lodBias,
+          )) {
+        throw Exception('Failed to bind texture ${slot.uniformName}');
+      }
+      return;
+    }
     if (index < 0 ||
         !_bindTexture(
           index,
@@ -245,6 +402,26 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int heightAddressMode,
   );
 
+  @Native<
+    Bool Function(
+      Pointer<Void>,
+      Int,
+      Pointer<Void>,
+      Int64,
+      Double,
+      Double,
+      Double,
+    )
+  >(symbol: 'InternalFlutterGpu_ComputePass_McsmBindTextureSampler')
+  external bool _bindTextureSampler(
+    int index,
+    Texture texture,
+    int packed,
+    double minLod,
+    double maxLod,
+    double lodBias,
+  );
+
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageImage',
   )
@@ -297,3 +474,91 @@ external bool _renderPassDrawIndirect(
   int offsetInBytes,
   bool indexed,
 );
+
+@Native<
+  Bool Function(
+    Pointer<Void>,
+    Pointer<Void>,
+    Int,
+    Pointer<Void>,
+    Int64,
+    Double,
+    Double,
+    Double,
+  )
+>(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTextureSampler')
+external bool _renderPassBindTextureSampler(
+  RenderPass pass,
+  Shader shader,
+  int index,
+  Texture texture,
+  int packed,
+  double minLod,
+  double maxLod,
+  double lodBias,
+);
+
+@Native<
+  Handle Function(
+    Pointer<Void>,
+    Pointer<Void>,
+    Pointer<Void>,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+  )
+>(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture')
+external String? _copyTextureToTexture(
+  CommandBuffer commandBuffer,
+  Texture source,
+  Texture destination,
+  int x,
+  int y,
+  int width,
+  int height,
+  int destinationX,
+  int destinationY,
+  int sourceMip,
+  int sourceSlice,
+  int destinationMip,
+  int destinationSlice,
+);
+
+@Native<
+  Handle Function(
+    Pointer<Void>,
+    Pointer<Void>,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Int,
+    Pointer<Void>,
+    Int,
+  )
+>(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer')
+external String? _copyTextureToBuffer(
+  CommandBuffer commandBuffer,
+  Texture source,
+  int x,
+  int y,
+  int width,
+  int height,
+  int mip,
+  int slice,
+  DeviceBuffer destination,
+  int destinationOffset,
+);
+
+@Native<Handle Function(Pointer<Void>, Pointer<Void>)>(
+  symbol: 'InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap',
+)
+external String? _generateMipmap(CommandBuffer commandBuffer, Texture texture);

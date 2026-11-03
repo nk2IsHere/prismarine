@@ -49,7 +49,82 @@ enum VertexFormat {
   sint32x3(bytesPerElement: 12, componentCount: 3),
 
   /// Four 32-bit signed integers (16 bytes).
-  sint32x4(bytesPerElement: 16, componentCount: 4);
+  sint32x4(bytesPerElement: 16, componentCount: 4),
+
+  // mcsm G9: half, normalized, packed and 8/16-bit integer formats (the
+  // mcsm9 engine on Metal and Vulkan), read by the shader as floats (or, for
+  // the integer ones, as uint or int).
+  /// Two 16-bit floats.
+  float16x2(bytesPerElement: 4, componentCount: 2),
+
+  /// Four 16-bit floats.
+  float16x4(bytesPerElement: 8, componentCount: 4),
+
+  /// One unsigned normalized byte.
+  unorm8(bytesPerElement: 1, componentCount: 1),
+
+  /// Two unsigned normalized bytes.
+  unorm8x2(bytesPerElement: 2, componentCount: 2),
+
+  /// Four unsigned normalized bytes.
+  unorm8x4(bytesPerElement: 4, componentCount: 4),
+
+  /// One signed normalized byte.
+  snorm8(bytesPerElement: 1, componentCount: 1),
+
+  /// Two signed normalized bytes.
+  snorm8x2(bytesPerElement: 2, componentCount: 2),
+
+  /// Four signed normalized bytes.
+  snorm8x4(bytesPerElement: 4, componentCount: 4),
+
+  /// One unsigned normalized 16-bit value.
+  unorm16(bytesPerElement: 2, componentCount: 1),
+
+  /// Two unsigned normalized 16-bit values.
+  unorm16x2(bytesPerElement: 4, componentCount: 2),
+
+  /// Four unsigned normalized 16-bit values.
+  unorm16x4(bytesPerElement: 8, componentCount: 4),
+
+  /// One signed normalized 16-bit value.
+  snorm16(bytesPerElement: 2, componentCount: 1),
+
+  /// Two signed normalized 16-bit values.
+  snorm16x2(bytesPerElement: 4, componentCount: 2),
+
+  /// Four signed normalized 16-bit values.
+  snorm16x4(bytesPerElement: 8, componentCount: 4),
+
+  /// Red, green, blue in 10 bits and alpha in 2, normalized.
+  unorm10_10_10_2(bytesPerElement: 4, componentCount: 4),
+
+  /// Four unsigned normalized bytes in blue, green, red, alpha order.
+  bgra8unorm(bytesPerElement: 4, componentCount: 4),
+
+  /// Two unsigned bytes (a uint input).
+  uint8x2(bytesPerElement: 2, componentCount: 2),
+
+  /// Four unsigned bytes (a uint input).
+  uint8x4(bytesPerElement: 4, componentCount: 4),
+
+  /// Two signed bytes (an int input).
+  sint8x2(bytesPerElement: 2, componentCount: 2),
+
+  /// Four signed bytes (an int input).
+  sint8x4(bytesPerElement: 4, componentCount: 4),
+
+  /// Two unsigned 16-bit values (a uint input).
+  uint16x2(bytesPerElement: 4, componentCount: 2),
+
+  /// Four unsigned 16-bit values (a uint input).
+  uint16x4(bytesPerElement: 8, componentCount: 4),
+
+  /// Two signed 16-bit values (an int input).
+  sint16x2(bytesPerElement: 4, componentCount: 2),
+
+  /// Four signed 16-bit values (an int input).
+  sint16x4(bytesPerElement: 8, componentCount: 4);
 
   const VertexFormat({
     required this.bytesPerElement,
@@ -148,7 +223,13 @@ final class VertexBuffer {
     required this.strideInBytes,
     required this.attributes,
     this.stepMode = VertexStepMode.vertex,
+    this.stepRate = 1,
   });
+
+  /// mcsm G9: an instance buffer advances every [stepRate] instances
+  /// (Direct3D 11's InstanceDataStepRate; the mcsm9 engine on Metal and
+  /// Vulkan).
+  final int stepRate;
 
   /// Byte distance from the start of one element to the start of the next
   /// element in this vertex buffer (not the gap between an element's end and

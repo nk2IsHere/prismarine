@@ -631,6 +631,13 @@ enum SamplerAddressMode {
   /// The texture is tiled by mirroring it at every integer coordinate
   /// boundary.
   mirror,
+
+  /// mcsm G9: coordinates outside the texture read the sampler's border
+  /// colour ([McsmSampler.borderColor]; Metal and Vulkan).
+  clampToBorder,
+
+  /// mcsm G9: mirrored once, then clamped to the edge (Metal and Vulkan).
+  mirrorClampToEdge,
 }
 
 /// The width of each element in an index buffer.
@@ -788,4 +795,8 @@ enum TextureType {
   /// mcsm G9: a 3D texture ([Texture.depth]; Metal and Vulkan). Not a render
   /// target: compute writes it as a storage image.
   texture3D,
+
+  /// mcsm G9: an array of [Texture.layers] cubes, six slices each (Metal and
+  /// Vulkan).
+  textureCubeArray,
 }

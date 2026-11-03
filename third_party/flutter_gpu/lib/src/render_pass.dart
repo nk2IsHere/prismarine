@@ -329,6 +329,12 @@ void _validateAttachmentSubresource(
       "$label mipLevel ($mipLevel) must be in the range [0, ${texture.mipLevelCount - 1}] for this texture",
     );
   }
+  // mcsm G9: -1 attaches every layer of an array or cube texture (the vertex
+  // stage picks each primitive's layer; the mcsm9 engine on Metal and
+  // Vulkan).
+  if (slice == -1 && texture.sliceCount > 1 && _mcsmEngineS2) {
+    return;
+  }
   if (slice < 0 || slice >= texture.sliceCount) {
     throw Exception(
       "$label slice ($slice) must be in the range [0, ${texture.sliceCount - 1}] for textures of type ${texture.textureType}",
@@ -513,6 +519,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   }) {
     if (sampler == null) {
       sampler = SamplerOptions();
+    }
+    // mcsm G9: a whole sampler state.
+    if (sampler is McsmSampler) {
+      _mcsmBindTextureSampler(this, slot, texture, sampler);
+      return;
     }
 
     assert(() {
