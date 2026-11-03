@@ -1,12 +1,13 @@
-From 445565e3c7c46ec14229534201bc5fc3c42e8b19 Mon Sep 17 00:00:00 2001
+From adff1761475de40e34db27456bb156672b76b101 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Tue, 3 Nov 2026 11:58:53 +0100
-Subject: [PATCH 4/4] flutter_gpu (mcsm9): 2D array and 3D textures, the added
- formats and 2x MSAA (Texture_McsmInitializeLayered), storage buffers bound in
- render passes (RenderPass_McsmBindStorageBuffer), compute pipelines and
- compute passes (ComputePipeline_McsmInitialize, ComputePass_Mcsm*: uniform
- and storage buffers, sampled textures, storage images, dispatch, barrier), a
- depth-only format attached as depth only, feature bit 2048
+Subject: [PATCH 4/4] flutter_gpu (mcsm9): layered textures and texture views,
+ the added formats and 2x MSAA, storage buffers in render passes, compute
+ pipelines and passes (uniform and storage buffers, textures, storage images,
+ texel buffers, separate textures and samplers, dispatch, indirect dispatch,
+ barrier), indirect draws, whole sampler states, texture copies and mip
+ generation, shaders registered with their bundle's Metal options, the added
+ vertex formats and step rates, depth-only attachments, feature bit 2048
 
 ---
  engine/src/flutter/lib/gpu/BUILD.gn           |   2 +

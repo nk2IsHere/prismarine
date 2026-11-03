@@ -1,15 +1,19 @@
-From f906f3175b8ed4cf14940396ca04bed5c8f1f19d Mon Sep 17 00:00:00 2001
+From 2f2d6824952897be9c2a32606fe55f454be3f344 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Tue, 3 Nov 2026 11:58:53 +0100
 Subject: [PATCH 2/4] impellerc (mcsm9): Metal and Vulkan shaders limit each
- uniform block to 16 KB (Vulkan's minimum maxUniformBufferRange) instead of
- all blocks together to 6,208 bytes, a GLES budget (S2's light data block is
- 12,288); shader bundles record storage buffers, storage images (with
- read-only flags) and a compute shader's workgroup size; a bundle entry may
- name its backends ("targets"), so Metal- and Vulkan-only shaders leave out GL
+ uniform block to 64 KB (Direct3D 11's constant buffer size) instead of all
+ blocks together to 6,208 bytes, a GLES budget that GLES keeps; shader bundles
+ record storage buffers, storage images, texel buffers, separate textures and
+ samplers and a compute shader's workgroup size; a bundle entry may name its
+ backends ("targets") and its Metal options (preserved invariance, safe math)
+ and turn spirv-opt off; Metal gives separate images, samplers and an image's
+ atomic buffer explicit indices that don't collide; a single-file compile
+ defines its target's IMPELLER_TARGET_* macro as a bundle does
 
 ---
- .../src/flutter/impeller/compiler/compiler.cc |  96 ++++++++++++++-
+ .../src/flutter/impeller/compiler/compiler.cc | 107 ++++++++++++++++-
+ .../impeller/compiler/impellerc_main.cc       |   9 ++
  .../flutter/impeller/compiler/reflector.cc    | 112 ++++++++++++++++++
  .../src/flutter/impeller/compiler/reflector.h |   3 +
  .../impeller/compiler/shader_bundle.cc        | 111 +++++++++++++----
@@ -18,10 +22,10 @@ Subject: [PATCH 2/4] impellerc (mcsm9): Metal and Vulkan shaders limit each
  .../impeller/compiler/source_options.h        |   5 +
  engine/src/flutter/impeller/compiler/types.h  |  12 ++
  .../impeller/shader_bundle/shader_bundle.fbs  |  44 +++++++
- 9 files changed, 457 insertions(+), 30 deletions(-)
+ 10 files changed, 477 insertions(+), 30 deletions(-)
 
 diff --git a/engine/src/flutter/impeller/compiler/compiler.cc b/engine/src/flutter/impeller/compiler/compiler.cc
-index 939ce618ff7..cb454269d1a 100644
+index 939ce618ff7..4731e3d6f44 100644
 --- a/engine/src/flutter/impeller/compiler/compiler.cc
 +++ b/engine/src/flutter/impeller/compiler/compiler.cc
 @@ -4,6 +4,7 @@
@@ -68,7 +72,7 @@ index 939ce618ff7..cb454269d1a 100644
  
    uint32_t buffer_offset = 0;
    uint32_t sampler_offset = 0;
-@@ -192,6 +208,39 @@ static CompilerBackend CreateMSLCompiler(
+@@ -192,6 +208,50 @@ static CompilerBackend CreateMSLCompiler(
      });
      sampler_offset++;
    }
@@ -77,6 +81,15 @@ index 939ce618ff7..cb454269d1a 100644
 +  // indices after theirs; SPIRV-Cross's automatic indices would start at 0
 +  // again and collide.
 +  uint32_t texture_offset = sampler_offset;
++  // A storage image's atomic companion buffer (where Metal emulates image
++  // atomics) takes a buffer index after every uniform and storage buffer,
++  // which SPIRV-Cross numbers from 0; an explicit binding's default buffer
++  // index, 0, collided with the first of them.
++  const auto mcsm_resources = sl_compiler->get_shader_resources();
++  uint32_t atomic_buffer_offset = static_cast<uint32_t>(
++      mcsm_resources.uniform_buffers.size() +
++      mcsm_resources.storage_buffers.size() +
++      mcsm_resources.push_constant_buffers.size());
 +  for (auto& image_id :
 +       SortUniforms(&ir, sl_compiler.get(), spirv_cross::SPIRType::Image)) {
 +    sl_compiler->add_msl_resource_binding({
@@ -87,9 +100,11 @@ index 939ce618ff7..cb454269d1a 100644
 +        .binding =
 +            sl_compiler->get_decoration(image_id, spv::DecorationBinding),
 +        .count = 1u,
++        .msl_buffer = atomic_buffer_offset,
 +        .msl_texture = texture_offset,
 +    });
 +    texture_offset++;
++    atomic_buffer_offset++;
 +  }
 +  for (auto& sampler_id :
 +       SortUniforms(&ir, sl_compiler.get(), spirv_cross::SPIRType::Sampler)) {
@@ -108,7 +123,7 @@ index 939ce618ff7..cb454269d1a 100644
  
    return CompilerBackend(sl_compiler);
  }
-@@ -341,6 +390,19 @@ static CompilerBackend CreateCompiler(const spirv_cross::ParsedIR& ir,
+@@ -341,6 +401,19 @@ static CompilerBackend CreateCompiler(const spirv_cross::ParsedIR& ir,
  }
  
  namespace {
@@ -128,7 +143,7 @@ index 939ce618ff7..cb454269d1a 100644
  uint32_t CalculateUBOSize(const spirv_cross::Compiler* compiler) {
    spirv_cross::ShaderResources resources = compiler->get_shader_resources();
    uint32_t result = 0;
-@@ -515,6 +577,11 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
+@@ -515,6 +588,11 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
        COMPILER_ERROR(error_stream_) << "Target platform invalid.";
        return;
    }
@@ -140,7 +155,7 @@ index 939ce618ff7..cb454269d1a 100644
  
    // Implicit definition that indicates that this compilation is for the device
    // (instead of the host).
-@@ -564,11 +631,30 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
+@@ -564,11 +642,30 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
    CanonicalizeUniformBlockInstanceNamesForGL(source_options.target_platform,
                                               sl_compiler.GetCompiler());
  
@@ -176,6 +191,33 @@ index 939ce618ff7..cb454269d1a 100644
    }
  
    // We need to invoke the compiler even if we don't use the SL mapping later
+diff --git a/engine/src/flutter/impeller/compiler/impellerc_main.cc b/engine/src/flutter/impeller/compiler/impellerc_main.cc
+index a4aeb3dcacc..2250dabf5b4 100644
+--- a/engine/src/flutter/impeller/compiler/impellerc_main.cc
++++ b/engine/src/flutter/impeller/compiler/impellerc_main.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include <algorithm>
+ #include <filesystem>
+ #include <system_error>
+ 
+@@ -40,6 +41,14 @@ std::shared_ptr<Compiler> CreateCompiler(
+     const Switches& switches) {
+   SourceOptions options = switches.CreateSourceOptions();
+   options.target_platform = platform;
++  // mcsm: the platform's defines (IMPELLER_TARGET_VULKAN and kin), as bundle
++  // mode gives them, unless --define already did (the engine's own build).
++  for (const auto& define : GetShaderBundleTargetPlatformDefines(platform)) {
++    if (std::find(options.defines.begin(), options.defines.end(),
++                  std::string(define)) == options.defines.end()) {
++      options.defines.emplace_back(define);
++    }
++  }
+   Reflector::Options reflector_options =
+       CreateReflectorOptions(options, switches);
+   return std::make_shared<Compiler>(source_file_mapping, options,
 diff --git a/engine/src/flutter/impeller/compiler/reflector.cc b/engine/src/flutter/impeller/compiler/reflector.cc
 index ed9c3ab2dfe..5f5ca41f72e 100644
 --- a/engine/src/flutter/impeller/compiler/reflector.cc

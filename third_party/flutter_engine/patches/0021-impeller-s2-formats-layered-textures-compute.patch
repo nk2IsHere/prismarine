@@ -1,16 +1,15 @@
-From 018800eaa9af2eef5b084f8bb93bc04f9017f087 Mon Sep 17 00:00:00 2001
+From ad1134d5c12bb5915ab4cde9a83a5bdae3d14729 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Tue, 3 Nov 2026 11:58:53 +0100
 Subject: [PATCH 3/4] impeller (mcsm9): what S2's frame needs on Metal and
- Vulkan: R11G11B10 float, RGBA16 unorm, D16, D32 float, R32/RG32/RGBA32 uint,
- R16/RG16 float and RG32 float formats; 2x MSAA; 2D array and 3D textures
- (TextureDescriptor array_layer_count and depth; uploads per layer or depth
- slice; rendering into an array layer); depth-only render targets; storage
- images in compute passes; on Vulkan, compute passes move sampled and storage
- images to the layouts they read them in (and storage images back to
- shader-read after), compute writes are ordered before every later stage,
- depth targets that shaders sample end their pass shader-readable and read
- through a depth-only view, and pass boundaries order depth writes
+ Vulkan: every shared uncompressed format, D16 and D32 float, BC2/BC4/BC5
+ signed/BC6H, 2x MSAA; 2D array, 3D and cube-array textures and texture views;
+ depth-only targets and sampled depth; layered passes; indirect draws and
+ dispatches; storage images; sampler compare, border, mirror clamp and LOD
+ state; separate textures and samplers; texel buffers; half, normalized and
+ packed vertex formats and step rates; texture copies and layered mip
+ generation; Metal compile options per shader; on Vulkan the layouts, barriers
+ and device features these need
 
 ---
  engine/src/flutter/impeller/core/formats.cc   |   6 +-
