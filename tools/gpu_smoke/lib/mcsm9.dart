@@ -7,7 +7,10 @@
 // - the added formats as targets (R11G11B10 float, RGBA16 unorm, RGBA16
 //   float, D16, D32 float) and a 2x MSAA D16 target read per sample later;
 // - a compute pass: storage buffers in and out, a uniform, an RGBA8 storage
-//   image and a uint 3D storage image, read afterwards by render passes.
+//   image and a uint 3D storage image, read afterwards by render passes;
+// - indirect draws and dispatches, texture views, per-frame array uploads,
+//   sampler state, copies and mip generation, vertex formats and step
+//   rates, layered passes and cube arrays.
 //
 // Each check prints a SMOKE line; the result is false when a check fails on
 // an engine that claims S2's features (bit 2048).
@@ -20,6 +23,7 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:vector_math/vector_math.dart';
 
 part 'mcsm9_compute.dart';
+part 'mcsm9_more.dart';
 part 'mcsm9_targets.dart';
 part 'mcsm9_views.dart';
 
@@ -155,6 +159,19 @@ Future<bool> mcsm9Checks(void Function(String) log) async {
     'per-frame array upload (two layers, one command buffer)',
     () => _arrayUpload(s2),
   );
+  await check(
+    'sampler state (compare, border, LOD clamps, mirror clamp)',
+    () => _samplers(s2),
+  );
+  await check(
+    'copies between mips and slices, to buffers; mip generation',
+    () => _copies(s2),
+  );
+  await check(
+    'vertex formats (half, unorm8) and step rates',
+    () => _vertexFormats(s2),
+  );
+  await check('layered pass (gl_Layer) and cube arrays', () => _layered(s2));
   return ok;
 }
 

@@ -86,5 +86,77 @@
       "metal_desktop",
       "vulkan"
     ]
+  },
+  "S2ShadowFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_shadow.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2SampleAtFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_sample_at.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2LayerLodFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_layer_lod.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2AttribVertex": {
+    "type": "vertex",
+    "file": "shaders/s2/s2_attrib.vert",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2VColorFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_vcolor.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2SteppedVertex": {
+    "type": "vertex",
+    "file": "shaders/s2/s2_stepped.vert",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2LayeredVertex": {
+    "type": "vertex",
+    "file": "shaders/s2/s2_layered.vert",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2LayerColorFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_layer_color.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2CubeFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_cube.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
   }
 }
