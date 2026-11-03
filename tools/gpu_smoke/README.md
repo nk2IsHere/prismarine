@@ -15,4 +15,13 @@ Impeller, Windows `set_enable_flutter_gpu`).
     flutter build <macos|linux|windows> --release \
       [--local-engine-src-path=<engine/src> --local-engine=<out> --local-engine-host=<out>]
 
+On the mcsm9 engine it also checks S2's additions (`lib/mcsm9.dart`: a 64 KB
+uniform block, storage buffers in fragment shaders, array and 3D textures,
+rendering into an array layer, texture views, the added formats as targets, a
+2x MSAA D16 target read per sample, a compute pass with storage buffers and
+images, indirect dispatches and draws, per-frame array uploads). Their
+shaders need the engine's impellerc, so build them first:
+
+    tool/s2_bundle.sh [<engine out dir>/impellerc]   # default $MCSM_IMPELLERC
+
 Results per platform: third_party/flutter_engine/README.md.

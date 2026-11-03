@@ -1,0 +1,27 @@
+#version 460
+// Storage buffers in and out, a uniform, an RGBA8 storage image and a uint 3D
+// storage image (S2's light grid), over 2 x 2 workgroups of 8 x 8.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430) readonly buffer Inputs {
+  vec4 values[];
+} inputs;
+
+layout(std430) writeonly buffer Outputs {
+  vec4 values[];
+} outputs;
+
+uniform Scale {
+  vec4 scale;
+} scale;
+
+layout(rgba8) uniform writeonly image2D color_out;
+layout(r32ui) uniform writeonly uimage3D grid_out;
+
+void main() {
+  uvec2 id = gl_GlobalInvocationID.xy;
+  uint i = id.y * 16u + id.x;
+  outputs.values[i] = inputs.values[i % 4u] * scale.scale;
+  imageStore(color_out, ivec2(id), vec4(0.25, 0.5, 0.75, 1.0));
+  imageStore(grid_out, ivec3(id, 2), uvec4(i + 0x1100u));
+}
