@@ -91,26 +91,100 @@ void _mcsmBindTextureSampler(
 /// storage image by its variable name. Resolved once, until the shader is
 /// reloaded.
 base class StorageSlot {
-  StorageSlot._(this.shader, this.name, this._image);
+  StorageSlot._(this.shader, this.name, this._kind);
 
   final Shader shader;
   final String name;
-  final bool _image;
+
+  /// 0 a storage buffer, 1 a storage image, 2 a texel buffer, 3 a texture
+  /// and 4 a sampler declared apart (the engine's kinds).
+  final int _kind;
+  bool get _image => _kind == 1;
   int _index = -2;
 
   int get _resolved => _index != -2
       ? _index
-      : (_index = _image
-            ? _resolveStorageImage(shader, name)
-            : _resolveStorageBuffer(shader, name));
+      : (_index = switch (_kind) {
+          0 => _resolveStorageBuffer(shader, name),
+          1 => _resolveStorageImage(shader, name),
+          _ => _resolveBinding(shader, _kind, name),
+        });
 }
 
 extension McsmShaderStorage on Shader {
-  StorageSlot getStorageBufferSlot(String name) =>
-      StorageSlot._(this, name, false);
+  StorageSlot getStorageBufferSlot(String name) => StorageSlot._(this, name, 0);
 
-  StorageSlot getStorageImageSlot(String name) =>
-      StorageSlot._(this, name, true);
+  StorageSlot getStorageImageSlot(String name) => StorageSlot._(this, name, 1);
+
+  /// A texel buffer (`samplerBuffer`, `imageBuffer`) by its variable name.
+  StorageSlot getTexelBufferSlot(String name) => StorageSlot._(this, name, 2);
+
+  /// A texture declared apart from its sampler (`texture2D` and kin).
+  StorageSlot getSeparateTextureSlot(String name) =>
+      StorageSlot._(this, name, 3);
+
+  /// A sampler declared apart (`sampler`, `samplerShadow`).
+  StorageSlot getSeparateSamplerSlot(String name) =>
+      StorageSlot._(this, name, 4);
+}
+
+McsmSampler _asMcsmSampler(SamplerOptions s) => s is McsmSampler
+    ? s
+    : McsmSampler(
+        minFilter: s.minFilter,
+        magFilter: s.magFilter,
+        mipFilter: s.mipFilter,
+        widthAddressMode: s.widthAddressMode,
+        heightAddressMode: s.heightAddressMode,
+        maxAnisotropy: s.maxAnisotropy,
+      );
+
+extension McsmRenderPassBindings on RenderPass {
+  /// Binds a buffer range read (or written, for an `imageBuffer`) as texels
+  /// of [format] (Metal texture buffers, Vulkan texel buffers).
+  void bindTexelBuffer(StorageSlot slot, BufferView view, PixelFormat format) {
+    final index = slot._resolved;
+    if (slot._kind != 2 ||
+        index < 0 ||
+        !_renderPassBindTexelBuffer(
+          this,
+          slot.shader,
+          index,
+          view.buffer,
+          view.offsetInBytes,
+          view.lengthInBytes,
+          format.index,
+        )) {
+      throw Exception('Failed to bind texel buffer ${slot.name}');
+    }
+  }
+
+  void bindSeparateTexture(StorageSlot slot, Texture texture) {
+    final index = slot._resolved;
+    if (slot._kind != 3 ||
+        index < 0 ||
+        !_renderPassBindSeparateTexture(this, slot.shader, index, texture)) {
+      throw Exception('Failed to bind texture ${slot.name}');
+    }
+  }
+
+  void bindSeparateSampler(StorageSlot slot, SamplerOptions sampler) {
+    final s = _asMcsmSampler(sampler);
+    final index = slot._resolved;
+    if (slot._kind != 4 ||
+        index < 0 ||
+        !_renderPassBindSeparateSampler(
+          this,
+          slot.shader,
+          index,
+          s._packed,
+          s.minLod,
+          s.maxLod,
+          s.lodBias,
+        )) {
+      throw Exception('Failed to bind sampler ${slot.name}');
+    }
+  }
 }
 
 extension McsmRenderPassStorage on RenderPass {
@@ -337,6 +411,44 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     }
   }
 
+  void bindTexelBuffer(StorageSlot slot, BufferView view, PixelFormat format) {
+    final index = slot._resolved;
+    if (slot._kind != 2 ||
+        index < 0 ||
+        !_bindTexelBuffer(
+          index,
+          view.buffer,
+          view.offsetInBytes,
+          view.lengthInBytes,
+          format.index,
+        )) {
+      throw Exception('Failed to bind texel buffer ${slot.name}');
+    }
+  }
+
+  void bindSeparateTexture(StorageSlot slot, Texture texture) {
+    final index = slot._resolved;
+    if (slot._kind != 3 || index < 0 || !_bindSeparateTexture(index, texture)) {
+      throw Exception('Failed to bind texture ${slot.name}');
+    }
+  }
+
+  void bindSeparateSampler(StorageSlot slot, SamplerOptions sampler) {
+    final s = _asMcsmSampler(sampler);
+    final index = slot._resolved;
+    if (slot._kind != 4 ||
+        index < 0 ||
+        !_bindSeparateSampler(
+          index,
+          s._packed,
+          s.minLod,
+          s.maxLod,
+          s.lodBias,
+        )) {
+      throw Exception('Failed to bind sampler ${slot.name}');
+    }
+  }
+
   /// Runs `x · y · z` workgroups of the pipeline's shader.
   void dispatch(int x, [int y = 1, int z = 1]) {
     if (!_dispatch(x, y, z)) {
@@ -426,6 +538,33 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageImage',
   )
   external bool _bindStorageImage(int index, Texture texture);
+
+  @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)>(
+    symbol: 'InternalFlutterGpu_ComputePass_McsmBindTexelBuffer',
+  )
+  external bool _bindTexelBuffer(
+    int index,
+    DeviceBuffer buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+    int format,
+  );
+
+  @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
+    symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateTexture',
+  )
+  external bool _bindSeparateTexture(int index, Texture texture);
+
+  @Native<Bool Function(Pointer<Void>, Int, Int64, Double, Double, Double)>(
+    symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateSampler',
+  )
+  external bool _bindSeparateSampler(
+    int index,
+    int packed,
+    double minLod,
+    double maxLod,
+    double lodBias,
+  );
 
   @Native<Bool Function(Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmDispatch',
@@ -562,3 +701,52 @@ external String? _copyTextureToBuffer(
   symbol: 'InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap',
 )
 external String? _generateMipmap(CommandBuffer commandBuffer, Texture texture);
+
+@Native<Int Function(Pointer<Void>, Int, Handle)>(
+  symbol: 'InternalFlutterGpu_Shader_McsmResolveBinding',
+)
+external int _resolveBinding(Shader shader, int kind, String name);
+
+@Native<
+  Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)
+>(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTexelBuffer')
+external bool _renderPassBindTexelBuffer(
+  RenderPass pass,
+  Shader shader,
+  int index,
+  DeviceBuffer buffer,
+  int offsetInBytes,
+  int lengthInBytes,
+  int format,
+);
+
+@Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>)>(
+  symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateTexture',
+)
+external bool _renderPassBindSeparateTexture(
+  RenderPass pass,
+  Shader shader,
+  int index,
+  Texture texture,
+);
+
+@Native<
+  Bool Function(
+    Pointer<Void>,
+    Pointer<Void>,
+    Int,
+    Int64,
+    Double,
+    Double,
+    Double,
+  )
+>(symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateSampler')
+external bool _renderPassBindSeparateSampler(
+  RenderPass pass,
+  Shader shader,
+  int index,
+  int packed,
+  double minLod,
+  double maxLod,
+  double lodBias,
+);
