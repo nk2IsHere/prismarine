@@ -1,4 +1,4 @@
-From 3391e04d669bf22ff6f6c032064a7916e1ee3b0c Mon Sep 17 00:00:00 2001
+From f906f3175b8ed4cf14940396ca04bed5c8f1f19d Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Tue, 3 Nov 2026 11:58:53 +0100
 Subject: [PATCH 2/4] impellerc (mcsm9): Metal and Vulkan shaders limit each
@@ -9,17 +9,19 @@ Subject: [PATCH 2/4] impellerc (mcsm9): Metal and Vulkan shaders limit each
  name its backends ("targets"), so Metal- and Vulkan-only shaders leave out GL
 
 ---
- .../src/flutter/impeller/compiler/compiler.cc | 49 +++++++++-
- .../flutter/impeller/compiler/reflector.cc    | 44 +++++++++
- .../impeller/compiler/shader_bundle.cc        | 91 ++++++++++++++-----
- .../impeller/compiler/shader_bundle_data.cc   | 33 +++++++
- .../impeller/compiler/shader_bundle_data.h    | 17 ++++
- engine/src/flutter/impeller/compiler/types.h  |  6 ++
- .../impeller/shader_bundle/shader_bundle.fbs  | 24 +++++
- 7 files changed, 234 insertions(+), 30 deletions(-)
+ .../src/flutter/impeller/compiler/compiler.cc |  96 ++++++++++++++-
+ .../flutter/impeller/compiler/reflector.cc    | 112 ++++++++++++++++++
+ .../src/flutter/impeller/compiler/reflector.h |   3 +
+ .../impeller/compiler/shader_bundle.cc        | 111 +++++++++++++----
+ .../impeller/compiler/shader_bundle_data.cc   |  69 +++++++++++
+ .../impeller/compiler/shader_bundle_data.h    |  35 ++++++
+ .../impeller/compiler/source_options.h        |   5 +
+ engine/src/flutter/impeller/compiler/types.h  |  12 ++
+ .../impeller/shader_bundle/shader_bundle.fbs  |  44 +++++++
+ 9 files changed, 457 insertions(+), 30 deletions(-)
 
 diff --git a/engine/src/flutter/impeller/compiler/compiler.cc b/engine/src/flutter/impeller/compiler/compiler.cc
-index 939ce618ff7..8ed1e459ee3 100644
+index 939ce618ff7..cb454269d1a 100644
 --- a/engine/src/flutter/impeller/compiler/compiler.cc
 +++ b/engine/src/flutter/impeller/compiler/compiler.cc
 @@ -4,6 +4,7 @@
@@ -43,7 +45,70 @@ index 939ce618ff7..8ed1e459ee3 100644
  static uint32_t ParseMSLVersion(const std::string& msl_version) {
    std::stringstream sstream(msl_version);
    std::string version_part;
-@@ -341,6 +348,19 @@ static CompilerBackend CreateCompiler(const spirv_cross::ParsedIR& ir,
+@@ -140,6 +147,11 @@ static CompilerBackend CreateMSLCompiler(
+       sl_options.msl_version >=
+           spirv_cross::CompilerMSL::Options::make_msl_version(2, 4, 0);
+   sl_options.use_framebuffer_fetch_subpasses = true;
++  // mcsm: texel buffers as texture_buffer (MSL 2.1), not emulated 2D
++  // textures.
++  sl_options.texture_buffer_native =
++      sl_options.msl_version >=
++      spirv_cross::CompilerMSL::Options::make_msl_version(2, 1, 0);
+   sl_compiler->set_msl_options(sl_options);
+ 
+   // Sort the float and sampler uniforms according to their declared/decorated
+@@ -160,6 +172,10 @@ static CompilerBackend CreateMSLCompiler(
+   if (source_options.type == SourceType::kVertexShader) {
+     execution_model = spv::ExecutionModel::ExecutionModelVertex;
+   }
++  // mcsm: a compute shader's bindings are the compute stage's.
++  if (source_options.type == SourceType::kComputeShader) {
++    execution_model = spv::ExecutionModel::ExecutionModelGLCompute;
++  }
+ 
+   uint32_t buffer_offset = 0;
+   uint32_t sampler_offset = 0;
+@@ -192,6 +208,39 @@ static CompilerBackend CreateMSLCompiler(
+     });
+     sampler_offset++;
+   }
++  // mcsm: separate images (texture2D, storage images, imageBuffer) take the
++  // texture indices after the sampled images, separate samplers the sampler
++  // indices after theirs; SPIRV-Cross's automatic indices would start at 0
++  // again and collide.
++  uint32_t texture_offset = sampler_offset;
++  for (auto& image_id :
++       SortUniforms(&ir, sl_compiler.get(), spirv_cross::SPIRType::Image)) {
++    sl_compiler->add_msl_resource_binding({
++        .stage = execution_model,
++        .basetype = spirv_cross::SPIRType::BaseType::Image,
++        .desc_set =
++            sl_compiler->get_decoration(image_id, spv::DecorationDescriptorSet),
++        .binding =
++            sl_compiler->get_decoration(image_id, spv::DecorationBinding),
++        .count = 1u,
++        .msl_texture = texture_offset,
++    });
++    texture_offset++;
++  }
++  for (auto& sampler_id :
++       SortUniforms(&ir, sl_compiler.get(), spirv_cross::SPIRType::Sampler)) {
++    sl_compiler->add_msl_resource_binding({
++        .stage = execution_model,
++        .basetype = spirv_cross::SPIRType::BaseType::Sampler,
++        .desc_set = sl_compiler->get_decoration(sampler_id,
++                                                spv::DecorationDescriptorSet),
++        .binding =
++            sl_compiler->get_decoration(sampler_id, spv::DecorationBinding),
++        .count = 1u,
++        .msl_sampler = sampler_offset,
++    });
++    sampler_offset++;
++  }
+ 
+   return CompilerBackend(sl_compiler);
+ }
+@@ -341,6 +390,19 @@ static CompilerBackend CreateCompiler(const spirv_cross::ParsedIR& ir,
  }
  
  namespace {
@@ -63,7 +128,19 @@ index 939ce618ff7..8ed1e459ee3 100644
  uint32_t CalculateUBOSize(const spirv_cross::Compiler* compiler) {
    spirv_cross::ShaderResources resources = compiler->get_shader_resources();
    uint32_t result = 0;
-@@ -564,11 +584,30 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
+@@ -515,6 +577,11 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
+       COMPILER_ERROR(error_stream_) << "Target platform invalid.";
+       return;
+   }
++  // mcsm: no SPIR-V optimization when the shader asks for none.
++  if (!source_options.mcsm_spirv_optimize) {
++    spirv_options.optimization_level =
++        shaderc_optimization_level::shaderc_optimization_level_zero;
++  }
+ 
+   // Implicit definition that indicates that this compilation is for the device
+   // (instead of the host).
+@@ -564,11 +631,30 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
    CanonicalizeUniformBlockInstanceNamesForGL(source_options.target_platform,
                                               sl_compiler.GetCompiler());
  
@@ -100,10 +177,30 @@ index 939ce618ff7..8ed1e459ee3 100644
  
    // We need to invoke the compiler even if we don't use the SL mapping later
 diff --git a/engine/src/flutter/impeller/compiler/reflector.cc b/engine/src/flutter/impeller/compiler/reflector.cc
-index ed9c3ab2dfe..0e2f80759db 100644
+index ed9c3ab2dfe..5f5ca41f72e 100644
 --- a/engine/src/flutter/impeller/compiler/reflector.cc
 +++ b/engine/src/flutter/impeller/compiler/reflector.cc
-@@ -608,6 +608,50 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+@@ -597,6 +597,19 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+ 
+   const auto sampled_images = compiler_->get_shader_resources().sampled_images;
+   for (const auto& image : sampled_images) {
++    // mcsm: a samplerBuffer is a texel buffer, not a texture.
++    if (compiler_->get_type(image.type_id).image.dim == spv::DimBuffer) {
++      ShaderBundleData::ShaderTexelBuffer buffer;
++      buffer.name = image.name;
++      buffer.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++          CompilerBackend::ExtendedResourceIndex::kPrimary, image.id);
++      buffer.set = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationDescriptorSet);
++      buffer.binding = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationBinding);
++      data->AddTexelBuffer(std::move(buffer));
++      continue;
++    }
+     ShaderBundleData::ShaderUniformTexture uniform_texture;
+     uniform_texture.name = image.name;
+     uniform_texture.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
+@@ -608,6 +621,105 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
      data->AddUniformTexture(uniform_texture);
    }
  
@@ -123,6 +220,23 @@ index ed9c3ab2dfe..0e2f80759db 100644
 +    data->AddStorageBuffer(std::move(storage));
 +  }
 +  for (const auto& image : resources.storage_images) {
++    // mcsm: an imageBuffer is a storage texel buffer (its atomic view, where
++    // Metal emulates image atomics, at the secondary index).
++    if (compiler_->get_type(image.type_id).image.dim == spv::DimBuffer) {
++      ShaderBundleData::ShaderTexelBuffer buffer;
++      buffer.name = image.name;
++      buffer.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++          CompilerBackend::ExtendedResourceIndex::kPrimary, image.id);
++      buffer.ext_res_1 = compiler_.GetExtendedMSLResourceBinding(
++          CompilerBackend::ExtendedResourceIndex::kSecondary, image.id);
++      buffer.set = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationDescriptorSet);
++      buffer.binding = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationBinding);
++      buffer.storage = true;
++      data->AddTexelBuffer(std::move(buffer));
++      continue;
++    }
 +    ShaderBundleData::ShaderStorageResource storage;
 +    storage.name = image.name;
 +    storage.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
@@ -135,6 +249,44 @@ index ed9c3ab2dfe..0e2f80759db 100644
 +        image.id, spv::Decoration::DecorationNonWritable);
 +    data->AddStorageImage(std::move(storage));
 +  }
++  // mcsm: textures and samplers declared apart (texture2D + sampler; a
++  // textureBuffer is a texel buffer).
++  const auto add_separate = [&](const spirv_cross::Resource& resource,
++                                bool sampler) {
++    ShaderBundleData::ShaderUniformTexture texture;
++    texture.name = resource.name;
++    texture.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++        CompilerBackend::ExtendedResourceIndex::kPrimary, resource.id);
++    texture.set = compiler_->get_decoration(
++        resource.id, spv::Decoration::DecorationDescriptorSet);
++    texture.binding = compiler_->get_decoration(
++        resource.id, spv::Decoration::DecorationBinding);
++    if (sampler) {
++      data->AddSeparateSampler(std::move(texture));
++    } else {
++      data->AddSeparateTexture(std::move(texture));
++    }
++  };
++  for (const auto& image : resources.separate_images) {
++    if (compiler_->get_type(image.type_id).image.dim == spv::DimBuffer) {
++      ShaderBundleData::ShaderTexelBuffer buffer;
++      buffer.name = image.name;
++      buffer.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++          CompilerBackend::ExtendedResourceIndex::kPrimary, image.id);
++      buffer.set = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationDescriptorSet);
++      buffer.binding = compiler_->get_decoration(
++          image.id, spv::Decoration::DecorationBinding);
++      data->AddTexelBuffer(std::move(buffer));
++    } else {
++      add_separate(image, false);
++    }
++  }
++  for (const auto& sampler : resources.separate_samplers) {
++    add_separate(sampler, true);
++  }
++  data->SetMetalOptions(options_.mcsm_metal_options);
++
 +  if (entrypoints.front().execution_model ==
 +      spv::ExecutionModel::ExecutionModelGLCompute) {
 +    spirv_cross::SpecializationConstant spec_x, spec_y, spec_z;
@@ -154,8 +306,22 @@ index ed9c3ab2dfe..0e2f80759db 100644
    // We only need to worry about storing vertex attributes.
    if (entrypoints.front().execution_model == spv::ExecutionModelVertex) {
      const auto inputs = compiler_->get_shader_resources().stage_inputs;
+diff --git a/engine/src/flutter/impeller/compiler/reflector.h b/engine/src/flutter/impeller/compiler/reflector.h
+index 064d9d5ab0d..6e5b1c464a1 100644
+--- a/engine/src/flutter/impeller/compiler/reflector.h
++++ b/engine/src/flutter/impeller/compiler/reflector.h
+@@ -184,6 +184,9 @@ class Reflector {
+     std::string entry_point_name;
+     std::string shader_name;
+     std::string header_file_name;
++    // mcsm: how Metal compiles this shader (bit 1 preserves invariance, bit
++    // 2 turns fast math off), recorded in its bundle.
++    uint32_t mcsm_metal_options = 0u;
+   };
+ 
+   Reflector(Options options,
 diff --git a/engine/src/flutter/impeller/compiler/shader_bundle.cc b/engine/src/flutter/impeller/compiler/shader_bundle.cc
-index 2c5b3adbeff..6b11c5275a7 100644
+index 2c5b3adbeff..b001858a84b 100644
 --- a/engine/src/flutter/impeller/compiler/shader_bundle.cc
 +++ b/engine/src/flutter/impeller/compiler/shader_bundle.cc
 @@ -4,6 +4,8 @@
@@ -167,10 +333,28 @@ index 2c5b3adbeff..6b11c5275a7 100644
  #include <filesystem>
  #include <sstream>
  
-@@ -81,6 +83,28 @@ std::optional<ShaderBundleConfig> ParseShaderBundleConfig(
+@@ -81,6 +83,46 @@ std::optional<ShaderBundleConfig> ParseShaderBundleConfig(
                               ? shader_value["entry_point"]
                               : "main";
  
++    // mcsm: Metal compile options (a translated Direct3D shader keeps
++    // invariant positions and IEEE arithmetic).
++    if (shader_value.contains("metal_preserve_invariance") &&
++        shader_value["metal_preserve_invariance"].is_boolean() &&
++        shader_value["metal_preserve_invariance"].get<bool>()) {
++      shader.metal_options |= 1u;
++    }
++    if (shader_value.contains("metal_safe_math") &&
++        shader_value["metal_safe_math"].is_boolean() &&
++        shader_value["metal_safe_math"].get<bool>()) {
++      shader.metal_options |= 2u;
++    }
++
++    if (shader_value.contains("spirv_optimize") &&
++        shader_value["spirv_optimize"].is_boolean()) {
++      shader.spirv_optimize = shader_value["spirv_optimize"].get<bool>();
++    }
++
 +    // mcsm: an optional list of backends.
 +    if (shader_value.contains("targets")) {
 +      if (!shader_value["targets"].is_array()) {
@@ -196,7 +380,23 @@ index 2c5b3adbeff..6b11c5275a7 100644
      bundle[shader_name] = shader;
    }
  
-@@ -203,35 +227,52 @@ static std::unique_ptr<fb::shaderbundle::ShaderT> GenerateShaderFB(
+@@ -143,6 +185,7 @@ GenerateShaderBackendFB(TargetPlatform target_platform,
+   // backends.
+   SourceOptions backend_options = options;
+   backend_options.target_platform = target_platform;
++  backend_options.mcsm_spirv_optimize = shader_config.spirv_optimize;  // mcsm
+   for (const auto& define :
+        GetShaderBundleTargetPlatformDefines(target_platform)) {
+     backend_options.defines.emplace_back(define);
+@@ -152,6 +195,7 @@ GenerateShaderBackendFB(TargetPlatform target_platform,
+   reflector_options.target_platform = target_platform;
+   reflector_options.entry_point_name = options.entry_point_name;
+   reflector_options.shader_name = shader_name;
++  reflector_options.mcsm_metal_options = shader_config.metal_options;  // mcsm
+ 
+   Compiler compiler(source_file_mapping, backend_options, reflector_options);
+   if (!compiler.IsValid()) {
+@@ -203,35 +247,52 @@ static std::unique_ptr<fb::shaderbundle::ShaderT> GenerateShaderFB(
      std::set<std::string>* out_dependencies) {
    auto result = std::make_unique<fb::shaderbundle::ShaderT>();
    result->name = shader_name;
@@ -275,10 +475,10 @@ index 2c5b3adbeff..6b11c5275a7 100644
    return result;
  }
 diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
-index 4a40103e2e6..8c4b99b0c74 100644
+index 4a40103e2e6..7b0890f7f5c 100644
 --- a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
 +++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
-@@ -34,6 +34,18 @@ void ShaderBundleData::AddInputDescription(InputDescription input) {
+@@ -34,6 +34,30 @@ void ShaderBundleData::AddInputDescription(InputDescription input) {
    inputs_.emplace_back(std::move(input));
  }
  
@@ -290,6 +490,18 @@ index 4a40103e2e6..8c4b99b0c74 100644
 +  storage_images_.emplace_back(std::move(image));
 +}
 +
++void ShaderBundleData::AddTexelBuffer(ShaderTexelBuffer buffer) {
++  texel_buffers_.emplace_back(std::move(buffer));
++}
++
++void ShaderBundleData::AddSeparateTexture(ShaderUniformTexture texture) {
++  separate_textures_.emplace_back(std::move(texture));
++}
++
++void ShaderBundleData::AddSeparateSampler(ShaderUniformTexture sampler) {
++  separate_samplers_.emplace_back(std::move(sampler));
++}
++
 +void ShaderBundleData::SetWorkgroupSize(uint32_t x, uint32_t y, uint32_t z) {
 +  workgroup_size_ = {x, y, z};
 +}
@@ -297,7 +509,7 @@ index 4a40103e2e6..8c4b99b0c74 100644
  void ShaderBundleData::SetShaderData(std::shared_ptr<fml::Mapping> shader) {
    shader_ = std::move(shader);
  }
-@@ -210,6 +222,27 @@ ShaderBundleData::CreateFlatbuffer() const {
+@@ -210,6 +234,51 @@ ShaderBundleData::CreateFlatbuffer() const {
      shader_bundle->uniform_textures.emplace_back(std::move(desc));
    }
  
@@ -321,12 +533,36 @@ index 4a40103e2e6..8c4b99b0c74 100644
 +    shader_bundle->storage_images.emplace_back(std::move(desc));
 +  }
 +  shader_bundle->workgroup_size = workgroup_size_;
++  for (const auto& buffer : texel_buffers_) {
++    auto desc = std::make_unique<fb::shaderbundle::ShaderTexelBufferT>();
++    desc->name = buffer.name;
++    desc->ext_res_0 = buffer.ext_res_0;
++    desc->ext_res_1 = buffer.ext_res_1;
++    desc->set = buffer.set;
++    desc->binding = buffer.binding;
++    desc->storage = buffer.storage;
++    shader_bundle->texel_buffers.emplace_back(std::move(desc));
++  }
++  const auto add_textures = [](const std::vector<ShaderUniformTexture>& from,
++                               auto& to) {
++    for (const auto& texture : from) {
++      auto desc = std::make_unique<fb::shaderbundle::ShaderUniformTextureT>();
++      desc->name = texture.name;
++      desc->ext_res_0 = texture.ext_res_0;
++      desc->set = texture.set;
++      desc->binding = texture.binding;
++      to.emplace_back(std::move(desc));
++    }
++  };
++  add_textures(separate_textures_, shader_bundle->separate_textures);
++  add_textures(separate_samplers_, shader_bundle->separate_samplers);
++  shader_bundle->metal_options = metal_options_;
 +
    for (const auto& input : inputs_) {
      auto desc = std::make_unique<fb::shaderbundle::ShaderInputT>();
  
 diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.h b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
-index 1894c06bc6a..44fa1b9bac4 100644
+index 1894c06bc6a..974fc774c19 100644
 --- a/engine/src/flutter/impeller/compiler/shader_bundle_data.h
 +++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
 @@ -48,6 +48,15 @@ class ShaderBundleData {
@@ -345,7 +581,7 @@ index 1894c06bc6a..44fa1b9bac4 100644
    ShaderBundleData(std::string entrypoint,
                     spv::ExecutionModel stage,
                     TargetPlatform target_platform);
-@@ -60,6 +69,11 @@ class ShaderBundleData {
+@@ -60,6 +69,25 @@ class ShaderBundleData {
  
    void AddInputDescription(InputDescription input);
  
@@ -354,21 +590,55 @@ index 1894c06bc6a..44fa1b9bac4 100644
 +  void AddStorageImage(ShaderStorageResource image);
 +  void SetWorkgroupSize(uint32_t x, uint32_t y, uint32_t z);
 +
++  // mcsm
++  struct ShaderTexelBuffer {
++    std::string name;
++    size_t ext_res_0 = 0u;
++    size_t ext_res_1 = 0xffffffffu;
++    size_t set = 0u;
++    size_t binding = 0u;
++    bool storage = false;
++  };
++  void AddTexelBuffer(ShaderTexelBuffer buffer);
++  void AddSeparateTexture(ShaderUniformTexture texture);
++  void AddSeparateSampler(ShaderUniformTexture sampler);
++  void SetMetalOptions(uint32_t options) { metal_options_ = options; }
++
    void SetShaderData(std::shared_ptr<fml::Mapping> shader);
  
    void SetSkSLData(std::shared_ptr<fml::Mapping> sksl);
-@@ -73,6 +87,9 @@ class ShaderBundleData {
+@@ -73,6 +101,13 @@ class ShaderBundleData {
    std::vector<ShaderUniformStruct> uniform_structs_;
    std::vector<ShaderUniformTexture> uniform_textures_;
    std::vector<InputDescription> inputs_;
 +  std::vector<ShaderStorageResource> storage_buffers_;  // mcsm
 +  std::vector<ShaderStorageResource> storage_images_;   // mcsm
 +  std::vector<uint32_t> workgroup_size_;                // mcsm
++  std::vector<ShaderTexelBuffer> texel_buffers_;         // mcsm
++  std::vector<ShaderUniformTexture> separate_textures_;  // mcsm
++  std::vector<ShaderUniformTexture> separate_samplers_;  // mcsm
++  uint32_t metal_options_ = 0u;                          // mcsm
    std::shared_ptr<fml::Mapping> shader_;
    std::shared_ptr<fml::Mapping> sksl_;
  
+diff --git a/engine/src/flutter/impeller/compiler/source_options.h b/engine/src/flutter/impeller/compiler/source_options.h
+index 57ac252715e..9263fc865f8 100644
+--- a/engine/src/flutter/impeller/compiler/source_options.h
++++ b/engine/src/flutter/impeller/compiler/source_options.h
+@@ -39,6 +39,11 @@ struct SourceOptions {
+   /// Only used on OpenGLES targets.
+   bool require_framebuffer_fetch = false;
+ 
++  /// mcsm: whether spirv-opt may optimize the SPIR-V. Its folds aren't
++  /// IEEE-exact (x * -1 + 0 became -x), so a translated shader whose
++  /// arithmetic must follow its source turns it off.
++  bool mcsm_spirv_optimize = true;
++
+   SourceOptions();
+ 
+   ~SourceOptions();
 diff --git a/engine/src/flutter/impeller/compiler/types.h b/engine/src/flutter/impeller/compiler/types.h
-index 7adddff9e26..5324b15c74c 100644
+index 7adddff9e26..cb5ed329a06 100644
 --- a/engine/src/flutter/impeller/compiler/types.h
 +++ b/engine/src/flutter/impeller/compiler/types.h
 @@ -11,6 +11,7 @@
@@ -379,7 +649,7 @@ index 7adddff9e26..5324b15c74c 100644
  
  #include "runtime_stage_types_flatbuffers.h"
  #include "shaderc/shaderc.hpp"
-@@ -92,6 +93,11 @@ struct ShaderConfig {
+@@ -92,6 +93,17 @@ struct ShaderConfig {
    SourceType type;
    SourceLanguage language;
    std::string entry_point;
@@ -388,14 +658,20 @@ index 7adddff9e26..5324b15c74c 100644
 +  // Shaders that need Metal or Vulkan (storage resources, large uniform
 +  // blocks) leave the GL backends out.
 +  std::vector<std::string> targets;
++  // mcsm: Metal compile options for the shader (bit 1 preserve invariance,
++  // bit 2 fast math off).
++  uint32_t metal_options = 0u;
++  // mcsm: false keeps spirv-opt from optimizing (its folds aren't
++  // IEEE-exact).
++  bool spirv_optimize = true;
  };
  
  using ShaderBundleConfig = std::unordered_map<std::string, ShaderConfig>;
 diff --git a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
-index aaf69a2bc1d..d2d9366cfa8 100644
+index aaf69a2bc1d..11f104892f6 100644
 --- a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
 +++ b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
-@@ -96,6 +96,25 @@ table ShaderUniformTexture {
+@@ -96,6 +96,38 @@ table ShaderUniformTexture {
    binding: uint64;
  }
  
@@ -418,10 +694,23 @@ index aaf69a2bc1d..d2d9366cfa8 100644
 +  read_only: bool;
 +}
 +
++// mcsm: a texel buffer (a buffer read or written as typed texels:
++// samplerBuffer, imageBuffer). On Metal, ext_res_0 is its texture index and
++// ext_res_1 the buffer index of its atomic view (image atomics), or
++// 0xffffffff.
++table ShaderTexelBuffer {
++  name: string;
++  ext_res_0: uint64;
++  ext_res_1: uint64;
++  set: uint64;
++  binding: uint64;
++  storage: bool;
++}
++
  table BackendShader {
    stage: ShaderStage;
    entrypoint: string;
-@@ -108,6 +127,11 @@ table BackendShader {
+@@ -108,6 +140,18 @@ table BackendShader {
    // compile `shader` at run time. Optional; engines that don't know this field
    // keep compiling `shader`, which stays the source.
    compiled: [ubyte];
@@ -430,6 +719,13 @@ index aaf69a2bc1d..d2d9366cfa8 100644
 +  storage_buffers: [ShaderStorageBuffer];
 +  storage_images: [ShaderStorageImage];
 +  workgroup_size: [uint32];
++  // mcsm: texel buffers, textures and samplers declared apart (texture2D +
++  // sampler), and how Metal compiles the source: bit 1 preserves
++  // invariance, bit 2 turns fast math off.
++  texel_buffers: [ShaderTexelBuffer];
++  separate_textures: [ShaderUniformTexture];
++  separate_samplers: [ShaderUniformTexture];
++  metal_options: uint32;
  }
  
  table Shader {

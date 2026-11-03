@@ -1,4 +1,4 @@
-From 7b9ae8f3344a1f9a7b15130e98e7f60a84c81aeb Mon Sep 17 00:00:00 2001
+From 445565e3c7c46ec14229534201bc5fc3c42e8b19 Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Tue, 3 Nov 2026 11:58:53 +0100
 Subject: [PATCH 4/4] flutter_gpu (mcsm9): 2D array and 3D textures, the added
@@ -10,21 +10,21 @@ Subject: [PATCH 4/4] flutter_gpu (mcsm9): 2D array and 3D textures, the added
 
 ---
  engine/src/flutter/lib/gpu/BUILD.gn           |   2 +
- engine/src/flutter/lib/gpu/command_buffer.cc  | 162 +++++++++
- engine/src/flutter/lib/gpu/command_buffer.h   |  67 ++++
- engine/src/flutter/lib/gpu/compute_pass.cc    | 341 ++++++++++++++++++
- engine/src/flutter/lib/gpu/compute_pass.h     | 202 +++++++++++
+ engine/src/flutter/lib/gpu/command_buffer.cc  | 162 +++++++
+ engine/src/flutter/lib/gpu/command_buffer.h   |  67 +++
+ engine/src/flutter/lib/gpu/compute_pass.cc    | 425 ++++++++++++++++++
+ engine/src/flutter/lib/gpu/compute_pass.h     | 238 ++++++++++
  engine/src/flutter/lib/gpu/context.cc         |  13 +-
- engine/src/flutter/lib/gpu/formats.h          | 246 +++++++++++++
- engine/src/flutter/lib/gpu/render_pass.cc     | 167 ++++++++-
- engine/src/flutter/lib/gpu/render_pass.h      |  56 +++
- engine/src/flutter/lib/gpu/render_pipeline.cc |  45 ++-
- engine/src/flutter/lib/gpu/shader.cc          |  35 ++
- engine/src/flutter/lib/gpu/shader.h           |  52 +++
- engine/src/flutter/lib/gpu/shader_library.cc  |  36 ++
- engine/src/flutter/lib/gpu/texture.cc         | 144 +++++++-
+ engine/src/flutter/lib/gpu/formats.h          | 246 ++++++++++
+ engine/src/flutter/lib/gpu/render_pass.cc     | 279 +++++++++++-
+ engine/src/flutter/lib/gpu/render_pass.h      | 102 +++++
+ engine/src/flutter/lib/gpu/render_pipeline.cc |  45 +-
+ engine/src/flutter/lib/gpu/shader.cc          |  94 +++-
+ engine/src/flutter/lib/gpu/shader.h           |  88 ++++
+ engine/src/flutter/lib/gpu/shader_library.cc  |  84 ++++
+ engine/src/flutter/lib/gpu/texture.cc         | 144 +++++-
  engine/src/flutter/lib/gpu/texture.h          |  38 ++
- 15 files changed, 1580 insertions(+), 26 deletions(-)
+ 15 files changed, 2000 insertions(+), 27 deletions(-)
  create mode 100644 engine/src/flutter/lib/gpu/compute_pass.cc
  create mode 100644 engine/src/flutter/lib/gpu/compute_pass.h
 
@@ -347,10 +347,10 @@ index 20c21e13658..efb34fa1a24 100644
  #endif  // FLUTTER_LIB_GPU_COMMAND_BUFFER_H_
 diff --git a/engine/src/flutter/lib/gpu/compute_pass.cc b/engine/src/flutter/lib/gpu/compute_pass.cc
 new file mode 100644
-index 00000000000..7d056fe00ab
+index 00000000000..5a80f5df0da
 --- /dev/null
 +++ b/engine/src/flutter/lib/gpu/compute_pass.cc
-@@ -0,0 +1,341 @@
+@@ -0,0 +1,425 @@
 +// Copyright 2013 The Flutter Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -497,6 +497,55 @@ index 00000000000..7d056fe00ab
 +                             impeller::DescriptorType::kStorageImage, slot,
 +                             &kNoMetadata, std::move(texture),
 +                             impeller::raw_ptr<const impeller::Sampler>());
++}
++
++bool ComputePass::BindTexelBuffer(
++    int index,
++    std::shared_ptr<const impeller::DeviceBuffer> buffer,
++    size_t offset,
++    size_t length,
++    impeller::PixelFormat format) {
++  if (!pass_ || *ended_ || !pipeline_ || !buffer ||
++      offset + length > buffer->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(2, index);
++  if (!slot) {
++    return false;
++  }
++  return pass_->McsmBindTexelBuffer(
++      impeller::ShaderStage::kCompute,
++      {.metal_texture = slot->ext_res_0,
++       .metal_atomic_buffer = slot->ext_res_1,
++       .binding = slot->binding,
++       .storage = slot->storage},
++      impeller::BufferView(std::move(buffer), impeller::Range(offset, length)),
++      format);
++}
++
++bool ComputePass::BindSeparateTexture(
++    int index,
++    std::shared_ptr<const impeller::Texture> texture) {
++  if (!pass_ || *ended_ || !pipeline_ || !texture) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(3, index);
++  return slot && pass_->McsmBindSeparateTexture(impeller::ShaderStage::kCompute,
++                                                slot->ext_res_0, slot->binding,
++                                                std::move(texture));
++}
++
++bool ComputePass::BindSeparateSampler(
++    int index,
++    const impeller::SamplerDescriptor& sampler) {
++  if (!pass_ || *ended_ || !pipeline_) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(4, index);
++  return slot && pass_->McsmBindSeparateSampler(
++                     impeller::ShaderStage::kCompute, slot->ext_res_0,
++                     slot->binding,
++                     context_->GetSamplerLibrary()->GetSampler(sampler));
 +}
 +
 +bool ComputePass::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
@@ -692,12 +741,47 @@ index 00000000000..7d056fe00ab
 +      index, texture->GetTexture(),
 +      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
 +}
++
++bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format) {
++  if (!buffer || offset_in_bytes < 0 || length_in_bytes <= 0) {
++    return false;
++  }
++  return wrapper->BindTexelBuffer(index, buffer->GetBuffer(),
++                                  static_cast<size_t>(offset_in_bytes),
++                                  static_cast<size_t>(length_in_bytes),
++                                  flutter::gpu::ToImpellerPixelFormat(format));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture) {
++  return texture && wrapper->BindSeparateTexture(index, texture->GetTexture());
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  return wrapper->BindSeparateSampler(
++      index,
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++}
 diff --git a/engine/src/flutter/lib/gpu/compute_pass.h b/engine/src/flutter/lib/gpu/compute_pass.h
 new file mode 100644
-index 00000000000..3f25d775aee
+index 00000000000..939c9397c74
 --- /dev/null
 +++ b/engine/src/flutter/lib/gpu/compute_pass.h
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,238 @@
 +// Copyright 2013 The Flutter Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -781,6 +865,18 @@ index 00000000000..3f25d775aee
 +
 +  bool BindStorageImage(int index,
 +                        std::shared_ptr<const impeller::Texture> texture);
++
++  /// Texel buffers, textures and samplers bound apart (kinds as
++  /// Shader::McsmResolve).
++  bool BindTexelBuffer(int index,
++                       std::shared_ptr<const impeller::DeviceBuffer> buffer,
++                       size_t offset,
++                       size_t length,
++                       impeller::PixelFormat format);
++  bool BindSeparateTexture(int index,
++                           std::shared_ptr<const impeller::Texture> texture);
++  bool BindSeparateSampler(int index,
++                           const impeller::SamplerDescriptor& sampler);
 +
 +  bool Dispatch(uint32_t x, uint32_t y, uint32_t z);
 +
@@ -886,6 +982,30 @@ index 00000000000..3f25d775aee
 +    int x,
 +    int y,
 +    int z);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
 +
 +FLUTTER_GPU_EXPORT
 +extern bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
@@ -1233,14 +1353,15 @@ index 43a66e7aaa2..84c130f43bd 100644
  }  // namespace flutter
  
 diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
-index f4aba1fe300..2b452e50f2b 100644
+index f4aba1fe300..65cc244545b 100644
 --- a/engine/src/flutter/lib/gpu/render_pass.cc
 +++ b/engine/src/flutter/lib/gpu/render_pass.cc
-@@ -134,6 +134,70 @@ void RenderPass::ClearBindings() {
+@@ -134,6 +134,115 @@ void RenderPass::ClearBindings() {
    vertex_buffer_count = 0;
    index_buffer = {};
    index_buffer_type = impeller::IndexType::kNone;
 +  mcsm_storage_bindings_.clear();  // mcsm9
++  mcsm_bindings_.clear();          // mcsm9
 +}
 +
 +bool RenderPass::McsmDrawIndirect(impeller::BufferView args, bool indexed) {
@@ -1304,10 +1425,54 @@ index f4aba1fe300..2b452e50f2b 100644
 +                               impeller::DescriptorType::kStorageBuffer,
 +                               entry.slot, &kNoMetadata, entry.view);
 +  }
++  // mcsm9: texel buffers, textures and samplers bound apart. Their Metal
++  // indices are marked written, so a binding that held one is sent again.
++  for (const auto& entry : mcsm_bindings_) {
++    if (retained_bindings_) {
++      SendTexture(entry.stage, entry.slot.ext_res_0, &mcsm_bindings_, true);
++      if (entry.slot.ext_res_1 != ~size_t{0}) {
++        SendBuffer(entry.stage, entry.slot.ext_res_1, &mcsm_bindings_, true);
++      }
++    }
++    switch (entry.kind) {
++      case 2:
++        render_pass_->McsmBindTexelBuffer(
++            entry.stage,
++            {.metal_texture = entry.slot.ext_res_0,
++             .metal_atomic_buffer = entry.slot.ext_res_1,
++             .binding = entry.slot.binding,
++             .storage = entry.slot.storage},
++            entry.view, entry.format);
++        break;
++      case 3:
++        render_pass_->McsmBindSeparateTexture(entry.stage, entry.slot.ext_res_0,
++                                              entry.slot.binding,
++                                              entry.texture);
++        break;
++      case 4:
++        render_pass_->McsmBindSeparateSampler(entry.stage, entry.slot.ext_res_0,
++                                              entry.slot.binding,
++                                              entry.sampler);
++        break;
++    }
++  }
++}
++
++bool RenderPass::McsmBind(McsmBinding binding) {
++  for (auto& entry : mcsm_bindings_) {
++    if (entry.stage == binding.stage && entry.kind == binding.kind &&
++        entry.slot.binding == binding.slot.binding &&
++        entry.slot.ext_res_0 == binding.slot.ext_res_0) {
++      entry = std::move(binding);
++      return true;
++    }
++  }
++  mcsm_bindings_.push_back(std::move(binding));
++  return true;
  }
  
  std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
-@@ -596,6 +660,7 @@ bool RenderPass::Draw(size_t element_count,
+@@ -596,6 +705,7 @@ bool RenderPass::Draw(size_t element_count,
    } else {
      SendAllBindings();
    }
@@ -1315,7 +1480,7 @@ index f4aba1fe300..2b452e50f2b 100644
    if (indexed) {
      render_pass_->SetIndexBuffer(index_buffer, index_buffer_type);
    } else {
-@@ -628,9 +693,16 @@ bool RenderPass::Draw(size_t element_count,
+@@ -628,9 +738,16 @@ bool RenderPass::Draw(size_t element_count,
      }
    }
  
@@ -1333,7 +1498,7 @@ index f4aba1fe300..2b452e50f2b 100644
      Record(GetCachedPipeline(), element_count, instance_count, indexed);
    }
  
-@@ -922,7 +994,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetColorAttachment(
+@@ -922,7 +1039,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetColorAttachment(
                                       clear_color_b, clear_color_a);
    desc.texture = texture->GetTexture();
    desc.mip_level = mip_level;
@@ -1344,7 +1509,7 @@ index f4aba1fe300..2b452e50f2b 100644
    if (!Dart_IsNull(resolve_texture_wrapper)) {
      flutter::gpu::Texture* resolve_texture =
          tonic::DartConverter<flutter::gpu::Texture*>::FromDart(
-@@ -959,10 +1033,15 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
+@@ -959,10 +1078,15 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
      desc.clear_depth = depth_clear_value;
      desc.texture = texture->GetTexture();
      desc.mip_level = mip_level;
@@ -1362,7 +1527,7 @@ index f4aba1fe300..2b452e50f2b 100644
      impeller::StencilAttachment desc;
      desc.load_action = flutter::gpu::ToImpellerLoadAction(stencil_load_action);
      desc.store_action =
-@@ -970,7 +1049,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
+@@ -970,7 +1094,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
      desc.clear_stencil = stencil_clear_value;
      desc.texture = texture->GetTexture();
      desc.mip_level = mip_level;
@@ -1373,7 +1538,7 @@ index f4aba1fe300..2b452e50f2b 100644
      wrapper->GetRenderTarget().SetStencilAttachment(desc);
    }
  
-@@ -1521,3 +1602,79 @@ bool InternalFlutterGpu_RenderPass_McsmSetViewports(
+@@ -1521,3 +1647,146 @@ bool InternalFlutterGpu_RenderPass_McsmSetViewports(
    return wrapper->McsmSetViewports(viewports.data(), scissors.data(),
                                     static_cast<size_t>(count));
  }
@@ -1393,6 +1558,73 @@ index f4aba1fe300..2b452e50f2b 100644
 +      *shader, index, device_buffer->GetBuffer(),
 +      static_cast<size_t>(offset_in_bytes),
 +      static_cast<size_t>(length_in_bytes));
++}
++
++// mcsm9: texel buffers, textures and samplers bound apart.
++bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(2, index) : nullptr;
++  if (!slot || !buffer || offset_in_bytes < 0 || length_in_bytes <= 0 ||
++      static_cast<size_t>(offset_in_bytes + length_in_bytes) >
++          buffer->GetBuffer()->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 2,
++      .slot = *slot,
++      .view = impeller::BufferView(
++          buffer->GetBuffer(), impeller::Range(offset_in_bytes, length_in_bytes)),
++      .format = flutter::gpu::ToImpellerPixelFormat(format),
++  });
++}
++
++bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(3, index) : nullptr;
++  if (!slot || !texture) {
++    return false;
++  }
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 3,
++      .slot = *slot,
++      .texture = texture->GetTexture(),
++  });
++}
++
++bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(4, index) : nullptr;
++  if (!slot) {
++    return false;
++  }
++  auto sampler = wrapper->GetContext()->GetSamplerLibrary()->GetSampler(
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 4,
++      .slot = *slot,
++      .sampler = sampler,
++  });
 +}
 +
 +bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
@@ -1454,7 +1686,7 @@ index f4aba1fe300..2b452e50f2b 100644
 +  return true;
 +}
 diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
-index aebe9e48894..84f0b1f95b5 100644
+index aebe9e48894..6624104edd2 100644
 --- a/engine/src/flutter/lib/gpu/render_pass.h
 +++ b/engine/src/flutter/lib/gpu/render_pass.h
 @@ -142,6 +142,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
@@ -1484,7 +1716,7 @@ index aebe9e48894..84f0b1f95b5 100644
    struct BufferAndUniformSlot {
      impeller::ShaderUniformSlot slot;
      impeller::BufferResource view;
-@@ -248,6 +261,16 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+@@ -248,6 +261,33 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
    /// Every binding, vertex and index buffer, each time (non-Metal backends).
    void SendAllBindings();
  
@@ -1498,10 +1730,27 @@ index aebe9e48894..84f0b1f95b5 100644
 +  impeller::BufferView mcsm_pending_indirect_;  // mcsm9
 +  void McsmSendStorageBuffers();
 +
++ public:
++  // mcsm9: texel buffers, textures and samplers bound apart (kinds as
++  // Shader::McsmResolve), sent at each draw with the storage buffers.
++  struct McsmBinding {
++    impeller::ShaderStage stage;
++    int kind;
++    Shader::McsmBinding slot;
++    impeller::BufferView view;
++    impeller::PixelFormat format = impeller::PixelFormat::kUnknown;
++    std::shared_ptr<const impeller::Texture> texture;
++    impeller::raw_ptr<const impeller::Sampler> sampler;
++  };
++  bool McsmBind(McsmBinding binding);
++
++ private:
++  std::vector<McsmBinding> mcsm_bindings_;
++
    /// mcsm E1: the pipeline for the bound RenderPipeline and the current
    /// state, from this pass's cache; GetOrCreatePipeline on a miss.
    std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
-@@ -354,6 +377,39 @@ extern "C" {
+@@ -354,6 +394,68 @@ extern "C" {
  FLUTTER_GPU_EXPORT
  extern void InternalFlutterGpu_RenderPass_Initialize(Dart_Handle wrapper);
  
@@ -1514,6 +1763,35 @@ index aebe9e48894..84f0b1f95b5 100644
 +    flutter::gpu::Shader* shader,
 +    int index,
 +    flutter::gpu::Texture* texture,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
++
++/// mcsm9: texel buffers (`format` a Flutter GPU PixelFormat), textures and
++/// samplers bound apart; indices from Shader_McsmResolveBinding.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
 +    int64_t packed,
 +    double min_lod,
 +    double max_lod,
@@ -1636,20 +1914,48 @@ index 7822b719a6b..1ad701e8f27 100644
        built.offset = static_cast<size_t>(offset);
        stage_inputs.push_back(built);
 diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
-index 89356622b02..31ccfeb42c6 100644
+index 89356622b02..5b27a4a8aa0 100644
 --- a/engine/src/flutter/lib/gpu/shader.cc
 +++ b/engine/src/flutter/lib/gpu/shader.cc
-@@ -111,6 +111,9 @@ void Shader::ResetFrom(Shader& other) {
+@@ -111,6 +111,13 @@ void Shader::ResetFrom(Shader& other) {
    uniform_structs_ = std::move(other.uniform_structs_);
    uniform_textures_ = std::move(other.uniform_textures_);
    descriptor_set_layouts_ = std::move(other.descriptor_set_layouts_);
 +  storage_buffers_ = std::move(other.storage_buffers_);  // mcsm9
 +  storage_images_ = std::move(other.storage_images_);    // mcsm9
 +  workgroup_size_ = other.workgroup_size_;               // mcsm9
++  texel_buffers_ = std::move(other.texel_buffers_);      // mcsm9
++  separate_textures_ = std::move(other.separate_textures_);
++  separate_samplers_ = std::move(other.separate_samplers_);
++  metal_options_ = other.metal_options_;
    ReresolveUniforms();
    if (code_changed) {
      is_dirty_ = true;
-@@ -200,6 +203,24 @@ const Shader::TextureBinding* Shader::GetUniformTexture(
+@@ -149,8 +156,22 @@ bool Shader::RegisterSync(Context& context) {
+   };
+   // mcsm: the build's compiled library first; the source when there is none
+   // or it doesn't load (e.g. built for a newer OS than this one).
++  // mcsm9: source with Metal compile options when the bundle asks.
++  auto register_source = [&]() {
++    if (metal_options_ == 0u) {
++      return register_code(code_mapping_);
++    }
++    std::promise<bool> promise;
++    auto future = promise.get_future();
++    lib.McsmRegisterFunction(
++        scoped_name, stage_, code_mapping_, metal_options_,
++        fml::MakeCopyable([promise = std::move(promise)](bool result) mutable {
++          promise.set_value(result);
++        }));
++    return future.get();
++  };
+   if (!(compiled_mapping_ && register_code(compiled_mapping_)) &&
+-      !register_code(code_mapping_)) {
++      !register_source()) {
+     return false;  // Registration failed.
+   }
+   is_dirty_ = false;
+@@ -200,6 +221,57 @@ const Shader::TextureBinding* Shader::GetUniformTexture(
    return &uniform->second;
  }
  
@@ -1671,10 +1977,43 @@ index 89356622b02..31ccfeb42c6 100644
 +  return -1;
 +}
 +
++int Shader::McsmResolve(int kind, const std::string& name) const {
++  const std::vector<McsmBinding>* list = nullptr;
++  switch (kind) {
++    case 2:
++      list = &texel_buffers_;
++      break;
++    case 3:
++      list = &separate_textures_;
++      break;
++    case 4:
++      list = &separate_samplers_;
++      break;
++    default:
++      return -1;
++  }
++  for (size_t i = 0; i < list->size(); i++) {
++    if ((*list)[i].name == name) {
++      return static_cast<int>(i);
++    }
++  }
++  return -1;
++}
++
++const Shader::McsmBinding* Shader::McsmGet(int kind, int index) const {
++  const std::vector<McsmBinding>* list = kind == 2   ? &texel_buffers_
++                                         : kind == 3 ? &separate_textures_
++                                         : kind == 4 ? &separate_samplers_
++                                                     : nullptr;
++  return list && index >= 0 && static_cast<size_t>(index) < list->size()
++             ? &(*list)[index]
++             : nullptr;
++}
++
  int Shader::ResolveUniformStruct(const std::string& name) {
    for (size_t i = 0; i < resolved_struct_names_.size(); i++) {
      if (resolved_struct_names_[i] == name) {
-@@ -294,3 +315,17 @@ int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+@@ -294,3 +366,23 @@ int InternalFlutterGpu_Shader_GetUniformMemberOffset(
  bool InternalFlutterGpu_Shader_DebugIsDirty(flutter::gpu::Shader* wrapper) {
    return wrapper->IsDirty();
  }
@@ -1692,8 +2031,14 @@ index 89356622b02..31ccfeb42c6 100644
 +  return wrapper->McsmResolveStorageImage(
 +      tonic::StdStringFromDart(name_handle));
 +}
++
++int InternalFlutterGpu_Shader_McsmResolveBinding(flutter::gpu::Shader* wrapper,
++                                                 int kind,
++                                                 Dart_Handle name_handle) {
++  return wrapper->McsmResolve(kind, tonic::StdStringFromDart(name_handle));
++}
 diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
-index 4319f5e135f..fb947d83c0a 100644
+index 4319f5e135f..42435385831 100644
 --- a/engine/src/flutter/lib/gpu/shader.h
 +++ b/engine/src/flutter/lib/gpu/shader.h
 @@ -6,6 +6,7 @@
@@ -1720,7 +2065,7 @@ index 4319f5e135f..fb947d83c0a 100644
    ~Shader() override;
  
    static fml::RefPtr<Shader> Make(
-@@ -65,6 +75,34 @@ class Shader : public RefCountedDartWrappable<Shader> {
+@@ -65,6 +75,58 @@ class Shader : public RefCountedDartWrappable<Shader> {
      compiled_mapping_ = std::move(compiled);
    }
  
@@ -1733,6 +2078,30 @@ index 4319f5e135f..fb947d83c0a 100644
 +    storage_images_ = std::move(images);
 +    workgroup_size_ = workgroup_size;
 +  }
++
++  /// mcsm9: the other kinds of bindings a translated shader declares, by
++  /// kind: 0 storage buffers, 1 storage images, 2 texel buffers (`set`
++  /// carries no meaning beyond Vulkan; `read_only` false = storage; `ext_res_1`
++  /// the atomic view's Metal buffer), 3 textures and 4 samplers declared
++  /// apart.
++  struct McsmBinding {
++    std::string name;
++    size_t ext_res_0 = 0u;
++    size_t ext_res_1 = ~size_t{0};
++    size_t binding = 0u;
++    bool storage = false;
++  };
++  void McsmSetBindings(std::vector<McsmBinding> texel_buffers,
++                       std::vector<McsmBinding> textures,
++                       std::vector<McsmBinding> samplers,
++                       uint32_t metal_options) {
++    texel_buffers_ = std::move(texel_buffers);
++    separate_textures_ = std::move(textures);
++    separate_samplers_ = std::move(samplers);
++    metal_options_ = metal_options;
++  }
++  int McsmResolve(int kind, const std::string& name) const;
++  const McsmBinding* McsmGet(int kind, int index) const;
 +
 +  /// mcsm9: the index of a storage buffer (or image) by name, or -1. Valid
 +  /// until the shader is reloaded.
@@ -1755,17 +2124,21 @@ index 4319f5e135f..fb947d83c0a 100644
    /// Whether this shader needs to be re-registered with the impeller shader
    /// library on next use. Fresh shaders start dirty. Set back to false by
    /// `RegisterSync` after registration completes, and back to true by
-@@ -145,6 +183,9 @@ class Shader : public RefCountedDartWrappable<Shader> {
+@@ -145,6 +207,13 @@ class Shader : public RefCountedDartWrappable<Shader> {
    std::unordered_map<std::string, UniformBinding> uniform_structs_;
    std::unordered_map<std::string, TextureBinding> uniform_textures_;
    std::vector<impeller::DescriptorSetLayout> descriptor_set_layouts_;
 +  std::vector<StorageBinding> storage_buffers_;  // mcsm9
 +  std::vector<StorageBinding> storage_images_;   // mcsm9
 +  std::array<uint32_t, 3> workgroup_size_{};     // mcsm9
++  std::vector<McsmBinding> texel_buffers_;       // mcsm9
++  std::vector<McsmBinding> separate_textures_;   // mcsm9
++  std::vector<McsmBinding> separate_samplers_;   // mcsm9
++  uint32_t metal_options_ = 0u;                  // mcsm9
    bool is_dirty_ = true;
    uint64_t generation_ = 0;  // mcsm7
  
-@@ -187,6 +228,17 @@ extern int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+@@ -187,6 +256,25 @@ extern int InternalFlutterGpu_Shader_GetUniformMemberOffset(
  
  // Test-only: exposes the per-shader dirty bit so tests can assert that
  // reload deduplication keeps unchanged shaders clean.
@@ -1780,14 +2153,22 @@ index 4319f5e135f..fb947d83c0a 100644
 +    flutter::gpu::Shader* wrapper,
 +    Dart_Handle name_handle);
 +
++/// mcsm9: Shader::McsmResolve (kinds 2 texel buffers, 3 textures and 4
++/// samplers declared apart).
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_McsmResolveBinding(
++    flutter::gpu::Shader* wrapper,
++    int kind,
++    Dart_Handle name_handle);
++
  FLUTTER_GPU_EXPORT
  extern bool InternalFlutterGpu_Shader_DebugIsDirty(
      flutter::gpu::Shader* wrapper);
 diff --git a/engine/src/flutter/lib/gpu/shader_library.cc b/engine/src/flutter/lib/gpu/shader_library.cc
-index d9313475b6b..328cc93e0aa 100644
+index d9313475b6b..e20c53c4b45 100644
 --- a/engine/src/flutter/lib/gpu/shader_library.cc
 +++ b/engine/src/flutter/lib/gpu/shader_library.cc
-@@ -328,6 +328,40 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+@@ -328,6 +328,84 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
        }
      }
  
@@ -1817,6 +2198,50 @@ index d9313475b6b..328cc93e0aa 100644
 +                 impeller::DescriptorType::kStorageBuffer);
 +    read_storage(backend_shader->storage_images(), storage_images,
 +                 impeller::DescriptorType::kStorageImage);
++    // mcsm9: texel buffers, textures and samplers declared apart.
++    std::vector<Shader::McsmBinding> texel_buffers;
++    std::vector<Shader::McsmBinding> separate_textures;
++    std::vector<Shader::McsmBinding> separate_samplers;
++    if (backend_shader->texel_buffers() != nullptr) {
++      for (const auto* entry : *backend_shader->texel_buffers()) {
++        texel_buffers.push_back(Shader::McsmBinding{
++            .name = entry->name() ? entry->name()->str() : std::string(),
++            .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
++            .ext_res_1 = entry->ext_res_1() == 0xffffffffu
++                             ? ~size_t{0}
++                             : static_cast<size_t>(entry->ext_res_1()),
++            .binding = static_cast<size_t>(entry->binding()),
++            .storage = entry->storage(),
++        });
++        descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
++            static_cast<uint32_t>(entry->binding()),
++            entry->storage()
++                ? impeller::DescriptorType::kMcsmStorageTexelBuffer
++                : impeller::DescriptorType::kMcsmUniformTexelBuffer,
++            ToShaderStage(backend_shader->stage())});
++      }
++    }
++    auto read_separate = [&](const auto* list,
++                             std::vector<Shader::McsmBinding>& out,
++                             impeller::DescriptorType type) {
++      if (list == nullptr) {
++        return;
++      }
++      for (const auto* entry : *list) {
++        out.push_back(Shader::McsmBinding{
++            .name = entry->name() ? entry->name()->str() : std::string(),
++            .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
++            .binding = static_cast<size_t>(entry->binding()),
++        });
++        descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
++            static_cast<uint32_t>(entry->binding()), type,
++            ToShaderStage(backend_shader->stage())});
++      }
++    };
++    read_separate(backend_shader->separate_textures(), separate_textures,
++                  impeller::DescriptorType::kImage);
++    read_separate(backend_shader->separate_samplers(), separate_samplers,
++                  impeller::DescriptorType::kSampler);
 +    std::array<uint32_t, 3> workgroup_size{};
 +    if (backend_shader->workgroup_size() != nullptr) {
 +      for (size_t i = 0; i < 3 && i < backend_shader->workgroup_size()->size();
@@ -1828,12 +2253,16 @@ index d9313475b6b..328cc93e0aa 100644
      std::vector<impeller::ShaderStageIOSlot> inputs;
      std::vector<impeller::ShaderStageBufferLayout> layouts;
      if (backend_shader->stage() ==
-@@ -364,6 +398,8 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+@@ -364,6 +442,12 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
          std::move(inputs), std::move(layouts), std::move(uniform_structs),
          std::move(uniform_textures), std::move(descriptor_set_layouts));
      shader->SetCompiledMapping(std::move(compiled_mapping));  // mcsm
 +    shader->McsmSetStorage(std::move(storage_buffers),
 +                           std::move(storage_images), workgroup_size);
++    shader->McsmSetBindings(std::move(texel_buffers),
++                            std::move(separate_textures),
++                            std::move(separate_samplers),
++                            backend_shader->metal_options());
      shader_map[bundled_shader->name()->str()] = std::move(shader);
    }
  
