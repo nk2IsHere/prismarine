@@ -1,0 +1,435 @@
+From 3391e04d669bf22ff6f6c032064a7916e1ee3b0c Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Tue, 3 Nov 2026 11:58:53 +0100
+Subject: [PATCH 2/4] impellerc (mcsm9): Metal and Vulkan shaders limit each
+ uniform block to 16 KB (Vulkan's minimum maxUniformBufferRange) instead of
+ all blocks together to 6,208 bytes, a GLES budget (S2's light data block is
+ 12,288); shader bundles record storage buffers, storage images (with
+ read-only flags) and a compute shader's workgroup size; a bundle entry may
+ name its backends ("targets"), so Metal- and Vulkan-only shaders leave out GL
+
+---
+ .../src/flutter/impeller/compiler/compiler.cc | 49 +++++++++-
+ .../flutter/impeller/compiler/reflector.cc    | 44 +++++++++
+ .../impeller/compiler/shader_bundle.cc        | 91 ++++++++++++++-----
+ .../impeller/compiler/shader_bundle_data.cc   | 33 +++++++
+ .../impeller/compiler/shader_bundle_data.h    | 17 ++++
+ engine/src/flutter/impeller/compiler/types.h  |  6 ++
+ .../impeller/shader_bundle/shader_bundle.fbs  | 24 +++++
+ 7 files changed, 234 insertions(+), 30 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/compiler/compiler.cc b/engine/src/flutter/impeller/compiler/compiler.cc
+index 939ce618ff7..8ed1e459ee3 100644
+--- a/engine/src/flutter/impeller/compiler/compiler.cc
++++ b/engine/src/flutter/impeller/compiler/compiler.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "impeller/compiler/compiler.h"
+ 
++#include <algorithm>
+ #include <cstdint>
+ #include <filesystem>
+ #include <memory>
+@@ -102,6 +103,12 @@ std::string InjectYFlipForGLESVertexShader(std::string source) {
+ // https://docs.qualcomm.com/bundle/publicresource/topics/80-78185-2/best_practices.html?product=1601111740035277#buffer-best-practices
+ static const uint32_t kMaxUniformBufferSize = 6208;
+ 
++// mcsm: one uniform block on Metal and Vulkan: 64 KB, Direct3D 11's
++// constant buffer size (4,096 vec4s), so a translated shader's blocks always
++// fit. Desktop Vulkan drivers take 64 KB or more (maxUniformBufferRange; the
++// spec's minimum is 16 KB).
++static const uint32_t kMaxUniformBlockSizeMetalVulkan = 65536;
++
+ static uint32_t ParseMSLVersion(const std::string& msl_version) {
+   std::stringstream sstream(msl_version);
+   std::string version_part;
+@@ -341,6 +348,19 @@ static CompilerBackend CreateCompiler(const spirv_cross::ParsedIR& ir,
+ }
+ 
+ namespace {
++// mcsm: the largest single uniform block of a shader.
++uint32_t CalculateLargestUBOSize(const spirv_cross::Compiler* compiler) {
++  spirv_cross::ShaderResources resources = compiler->get_shader_resources();
++  uint32_t result = 0;
++  for (const spirv_cross::Resource& ubo : resources.uniform_buffers) {
++    const spirv_cross::SPIRType& ubo_type =
++        compiler->get_type(ubo.base_type_id);
++    result = std::max<uint32_t>(result,
++                                compiler->get_declared_struct_size(ubo_type));
++  }
++  return result;
++}
++
+ uint32_t CalculateUBOSize(const spirv_cross::Compiler* compiler) {
+   spirv_cross::ShaderResources resources = compiler->get_shader_resources();
+   uint32_t result = 0;
+@@ -564,11 +584,30 @@ Compiler::Compiler(const std::shared_ptr<const fml::Mapping>& source_mapping,
+   CanonicalizeUniformBlockInstanceNamesForGL(source_options.target_platform,
+                                              sl_compiler.GetCompiler());
+ 
+-  uint32_t ubo_size = CalculateUBOSize(sl_compiler.GetCompiler());
+-  if (ubo_size > kMaxUniformBufferSize) {
+-    COMPILER_ERROR(error_stream_) << "Uniform buffer size exceeds max ("
+-                                  << kMaxUniformBufferSize << "): " << ubo_size;
+-    return;
++  // mcsm: Metal and Vulkan shaders (not runtime stages) bind each uniform
++  // block as its own buffer, so only a single block's size is limited; the
++  // total budget is a GLES one.
++  // Minecraft: Story Mode S2's light data block alone is 12,288 bytes.
++  const bool per_block_limit =
++      source_options.target_platform == TargetPlatform::kMetalDesktop ||
++      source_options.target_platform == TargetPlatform::kMetalIOS ||
++      source_options.target_platform == TargetPlatform::kVulkan;
++  if (per_block_limit) {
++    uint32_t block_size = CalculateLargestUBOSize(sl_compiler.GetCompiler());
++    if (block_size > kMaxUniformBlockSizeMetalVulkan) {
++      COMPILER_ERROR(error_stream_)
++          << "Uniform block size exceeds max ("
++          << kMaxUniformBlockSizeMetalVulkan << "): " << block_size;
++      return;
++    }
++  } else {
++    uint32_t ubo_size = CalculateUBOSize(sl_compiler.GetCompiler());
++    if (ubo_size > kMaxUniformBufferSize) {
++      COMPILER_ERROR(error_stream_)
++          << "Uniform buffer size exceeds max (" << kMaxUniformBufferSize
++          << "): " << ubo_size;
++      return;
++    }
+   }
+ 
+   // We need to invoke the compiler even if we don't use the SL mapping later
+diff --git a/engine/src/flutter/impeller/compiler/reflector.cc b/engine/src/flutter/impeller/compiler/reflector.cc
+index ed9c3ab2dfe..0e2f80759db 100644
+--- a/engine/src/flutter/impeller/compiler/reflector.cc
++++ b/engine/src/flutter/impeller/compiler/reflector.cc
+@@ -608,6 +608,50 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+     data->AddUniformTexture(uniform_texture);
+   }
+ 
++  // mcsm: storage buffers and images, and a compute shader's workgroup size.
++  const auto resources = compiler_->get_shader_resources();
++  for (const auto& buffer : resources.storage_buffers) {
++    ShaderBundleData::ShaderStorageResource storage;
++    storage.name = buffer.name;
++    storage.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++        CompilerBackend::ExtendedResourceIndex::kPrimary, buffer.id);
++    storage.set = compiler_->get_decoration(
++        buffer.id, spv::Decoration::DecorationDescriptorSet);
++    storage.binding = compiler_->get_decoration(
++        buffer.id, spv::Decoration::DecorationBinding);
++    storage.read_only = compiler_->get_buffer_block_flags(buffer.id).get(
++        spv::Decoration::DecorationNonWritable);
++    data->AddStorageBuffer(std::move(storage));
++  }
++  for (const auto& image : resources.storage_images) {
++    ShaderBundleData::ShaderStorageResource storage;
++    storage.name = image.name;
++    storage.ext_res_0 = compiler_.GetExtendedMSLResourceBinding(
++        CompilerBackend::ExtendedResourceIndex::kPrimary, image.id);
++    storage.set = compiler_->get_decoration(
++        image.id, spv::Decoration::DecorationDescriptorSet);
++    storage.binding =
++        compiler_->get_decoration(image.id, spv::Decoration::DecorationBinding);
++    storage.read_only = compiler_->has_decoration(
++        image.id, spv::Decoration::DecorationNonWritable);
++    data->AddStorageImage(std::move(storage));
++  }
++  if (entrypoints.front().execution_model ==
++      spv::ExecutionModel::ExecutionModelGLCompute) {
++    spirv_cross::SpecializationConstant spec_x, spec_y, spec_z;
++    compiler_->get_work_group_size_specialization_constants(spec_x, spec_y,
++                                                            spec_z);
++    const auto local_size = [&](spirv_cross::SpecializationConstant& spec,
++                                uint32_t index) -> uint32_t {
++      return spec.id != 0 ? 0u
++                          : compiler_->get_execution_mode_argument(
++                                spv::ExecutionMode::ExecutionModeLocalSize,
++                                index);
++    };
++    data->SetWorkgroupSize(local_size(spec_x, 0u), local_size(spec_y, 1u),
++                           local_size(spec_z, 2u));
++  }
++
+   // We only need to worry about storing vertex attributes.
+   if (entrypoints.front().execution_model == spv::ExecutionModelVertex) {
+     const auto inputs = compiler_->get_shader_resources().stage_inputs;
+diff --git a/engine/src/flutter/impeller/compiler/shader_bundle.cc b/engine/src/flutter/impeller/compiler/shader_bundle.cc
+index 2c5b3adbeff..6b11c5275a7 100644
+--- a/engine/src/flutter/impeller/compiler/shader_bundle.cc
++++ b/engine/src/flutter/impeller/compiler/shader_bundle.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "impeller/compiler/shader_bundle.h"
+ 
++#include <algorithm>
++
+ #include <filesystem>
+ #include <sstream>
+ 
+@@ -81,6 +83,28 @@ std::optional<ShaderBundleConfig> ParseShaderBundleConfig(
+                              ? shader_value["entry_point"]
+                              : "main";
+ 
++    // mcsm: an optional list of backends.
++    if (shader_value.contains("targets")) {
++      if (!shader_value["targets"].is_array()) {
++        std::cerr << "Invalid shader entry \"" << shader_name
++                  << "\": \"targets\" must be a list of backend names."
++                  << std::endl;
++        return std::nullopt;
++      }
++      for (const auto& target : shader_value["targets"]) {
++        const std::string name = target.is_string() ? target.get<std::string>()
++                                                    : std::string();
++        if (name != "metal_ios" && name != "metal_desktop" &&
++            name != "opengl_es" && name != "opengl_desktop" &&
++            name != "vulkan") {
++          std::cerr << "Invalid shader entry \"" << shader_name
++                    << "\": unknown target \"" << name << "\"." << std::endl;
++          return std::nullopt;
++        }
++        shader.targets.push_back(name);
++      }
++    }
++
+     bundle[shader_name] = shader;
+   }
+ 
+@@ -203,35 +227,52 @@ static std::unique_ptr<fb::shaderbundle::ShaderT> GenerateShaderFB(
+     std::set<std::string>* out_dependencies) {
+   auto result = std::make_unique<fb::shaderbundle::ShaderT>();
+   result->name = shader_name;
+-  result->metal_ios =
+-      GenerateShaderBackendFB(TargetPlatform::kMetalIOS, options, shader_name,
+-                              shader_config, out_dependencies);
+-  if (!result->metal_ios) {
+-    return nullptr;
++  // mcsm: only the backends the entry asks for (all when it names none).
++  const auto wants = [&](std::string_view target) {
++    return shader_config.targets.empty() ||
++           std::find(shader_config.targets.begin(),
++                     shader_config.targets.end(),
++                     target) != shader_config.targets.end();
++  };
++  if (wants("metal_ios")) {
++    result->metal_ios =
++        GenerateShaderBackendFB(TargetPlatform::kMetalIOS, options, shader_name,
++                                shader_config, out_dependencies);
++    if (!result->metal_ios) {
++      return nullptr;
++    }
+   }
+-  result->metal_desktop =
+-      GenerateShaderBackendFB(TargetPlatform::kMetalDesktop, options,
+-                              shader_name, shader_config, out_dependencies);
+-  if (!result->metal_desktop) {
+-    return nullptr;
++  if (wants("metal_desktop")) {
++    result->metal_desktop =
++        GenerateShaderBackendFB(TargetPlatform::kMetalDesktop, options,
++                                shader_name, shader_config, out_dependencies);
++    if (!result->metal_desktop) {
++      return nullptr;
++    }
+   }
+-  result->opengl_es =
+-      GenerateShaderBackendFB(TargetPlatform::kOpenGLES, options, shader_name,
+-                              shader_config, out_dependencies);
+-  if (!result->opengl_es) {
+-    return nullptr;
++  if (wants("opengl_es")) {
++    result->opengl_es =
++        GenerateShaderBackendFB(TargetPlatform::kOpenGLES, options, shader_name,
++                                shader_config, out_dependencies);
++    if (!result->opengl_es) {
++      return nullptr;
++    }
+   }
+-  result->opengl_desktop =
+-      GenerateShaderBackendFB(TargetPlatform::kOpenGLDesktop, options,
+-                              shader_name, shader_config, out_dependencies);
+-  if (!result->opengl_desktop) {
+-    return nullptr;
++  if (wants("opengl_desktop")) {
++    result->opengl_desktop =
++        GenerateShaderBackendFB(TargetPlatform::kOpenGLDesktop, options,
++                                shader_name, shader_config, out_dependencies);
++    if (!result->opengl_desktop) {
++      return nullptr;
++    }
+   }
+-  result->vulkan =
+-      GenerateShaderBackendFB(TargetPlatform::kVulkan, options, shader_name,
+-                              shader_config, out_dependencies);
+-  if (!result->vulkan) {
+-    return nullptr;
++  if (wants("vulkan")) {
++    result->vulkan =
++        GenerateShaderBackendFB(TargetPlatform::kVulkan, options, shader_name,
++                                shader_config, out_dependencies);
++    if (!result->vulkan) {
++      return nullptr;
++    }
+   }
+   return result;
+ }
+diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
+index 4a40103e2e6..8c4b99b0c74 100644
+--- a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
++++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
+@@ -34,6 +34,18 @@ void ShaderBundleData::AddInputDescription(InputDescription input) {
+   inputs_.emplace_back(std::move(input));
+ }
+ 
++void ShaderBundleData::AddStorageBuffer(ShaderStorageResource buffer) {
++  storage_buffers_.emplace_back(std::move(buffer));
++}
++
++void ShaderBundleData::AddStorageImage(ShaderStorageResource image) {
++  storage_images_.emplace_back(std::move(image));
++}
++
++void ShaderBundleData::SetWorkgroupSize(uint32_t x, uint32_t y, uint32_t z) {
++  workgroup_size_ = {x, y, z};
++}
++
+ void ShaderBundleData::SetShaderData(std::shared_ptr<fml::Mapping> shader) {
+   shader_ = std::move(shader);
+ }
+@@ -210,6 +222,27 @@ ShaderBundleData::CreateFlatbuffer() const {
+     shader_bundle->uniform_textures.emplace_back(std::move(desc));
+   }
+ 
++  // mcsm: storage buffers and images, the workgroup size.
++  for (const auto& buffer : storage_buffers_) {
++    auto desc = std::make_unique<fb::shaderbundle::ShaderStorageBufferT>();
++    desc->name = buffer.name;
++    desc->ext_res_0 = buffer.ext_res_0;
++    desc->set = buffer.set;
++    desc->binding = buffer.binding;
++    desc->read_only = buffer.read_only;
++    shader_bundle->storage_buffers.emplace_back(std::move(desc));
++  }
++  for (const auto& image : storage_images_) {
++    auto desc = std::make_unique<fb::shaderbundle::ShaderStorageImageT>();
++    desc->name = image.name;
++    desc->ext_res_0 = image.ext_res_0;
++    desc->set = image.set;
++    desc->binding = image.binding;
++    desc->read_only = image.read_only;
++    shader_bundle->storage_images.emplace_back(std::move(desc));
++  }
++  shader_bundle->workgroup_size = workgroup_size_;
++
+   for (const auto& input : inputs_) {
+     auto desc = std::make_unique<fb::shaderbundle::ShaderInputT>();
+ 
+diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.h b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
+index 1894c06bc6a..44fa1b9bac4 100644
+--- a/engine/src/flutter/impeller/compiler/shader_bundle_data.h
++++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
+@@ -48,6 +48,15 @@ class ShaderBundleData {
+     size_t binding = 0u;
+   };
+ 
++  // mcsm
++  struct ShaderStorageResource {
++    std::string name;
++    size_t ext_res_0 = 0u;
++    size_t set = 0u;
++    size_t binding = 0u;
++    bool read_only = false;
++  };
++
+   ShaderBundleData(std::string entrypoint,
+                    spv::ExecutionModel stage,
+                    TargetPlatform target_platform);
+@@ -60,6 +69,11 @@ class ShaderBundleData {
+ 
+   void AddInputDescription(InputDescription input);
+ 
++  // mcsm
++  void AddStorageBuffer(ShaderStorageResource buffer);
++  void AddStorageImage(ShaderStorageResource image);
++  void SetWorkgroupSize(uint32_t x, uint32_t y, uint32_t z);
++
+   void SetShaderData(std::shared_ptr<fml::Mapping> shader);
+ 
+   void SetSkSLData(std::shared_ptr<fml::Mapping> sksl);
+@@ -73,6 +87,9 @@ class ShaderBundleData {
+   std::vector<ShaderUniformStruct> uniform_structs_;
+   std::vector<ShaderUniformTexture> uniform_textures_;
+   std::vector<InputDescription> inputs_;
++  std::vector<ShaderStorageResource> storage_buffers_;  // mcsm
++  std::vector<ShaderStorageResource> storage_images_;   // mcsm
++  std::vector<uint32_t> workgroup_size_;                // mcsm
+   std::shared_ptr<fml::Mapping> shader_;
+   std::shared_ptr<fml::Mapping> sksl_;
+ 
+diff --git a/engine/src/flutter/impeller/compiler/types.h b/engine/src/flutter/impeller/compiler/types.h
+index 7adddff9e26..5324b15c74c 100644
+--- a/engine/src/flutter/impeller/compiler/types.h
++++ b/engine/src/flutter/impeller/compiler/types.h
+@@ -11,6 +11,7 @@
+ #include <map>
+ #include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "runtime_stage_types_flatbuffers.h"
+ #include "shaderc/shaderc.hpp"
+@@ -92,6 +93,11 @@ struct ShaderConfig {
+   SourceType type;
+   SourceLanguage language;
+   std::string entry_point;
++  // mcsm: the backends to compile for ("metal_ios", "metal_desktop",
++  // "opengl_es", "opengl_desktop", "vulkan"); empty means all of them.
++  // Shaders that need Metal or Vulkan (storage resources, large uniform
++  // blocks) leave the GL backends out.
++  std::vector<std::string> targets;
+ };
+ 
+ using ShaderBundleConfig = std::unordered_map<std::string, ShaderConfig>;
+diff --git a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+index aaf69a2bc1d..d2d9366cfa8 100644
+--- a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
++++ b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+@@ -96,6 +96,25 @@ table ShaderUniformTexture {
+   binding: uint64;
+ }
+ 
++// mcsm: a storage (shader storage) buffer a shader reads or writes.
++table ShaderStorageBuffer {
++  name: string;
++  ext_res_0: uint64;
++  set: uint64;
++  binding: uint64;
++  read_only: bool;
++}
++
++// mcsm: a storage image (an image the shader loads from or stores to without
++// a sampler).
++table ShaderStorageImage {
++  name: string;
++  ext_res_0: uint64;
++  set: uint64;
++  binding: uint64;
++  read_only: bool;
++}
++
+ table BackendShader {
+   stage: ShaderStage;
+   entrypoint: string;
+@@ -108,6 +127,11 @@ table BackendShader {
+   // compile `shader` at run time. Optional; engines that don't know this field
+   // keep compiling `shader`, which stays the source.
+   compiled: [ubyte];
++  // mcsm: storage buffers and images (any stage), and a compute shader's
++  // workgroup size (x, y, z; 0 where a specialization constant sizes it).
++  storage_buffers: [ShaderStorageBuffer];
++  storage_images: [ShaderStorageImage];
++  workgroup_size: [uint32];
+ }
+ 
+ table Shader {
