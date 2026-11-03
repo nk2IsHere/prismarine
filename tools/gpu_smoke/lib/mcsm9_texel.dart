@@ -41,6 +41,11 @@ Future<String?> _texelBuffers(_S2 s2) async {
   final cb = s2.ctx.createCommandBuffer();
   cb.createComputePass()
     ..bindPipeline(s2.ctx.createComputePipeline(shader))
+    ..bindUniform(shader.getUniformSlot('Params'), _u32(s2, [1, 77, 0, 0]))
+    ..bindStorageBuffer(
+      shader.getStorageBufferSlot('Scratch'),
+      _u32(s2, List<int>.filled(64, 0)),
+    )
     ..bindTexelBuffer(
       shader.getTexelBufferSlot('counters'),
       counters,

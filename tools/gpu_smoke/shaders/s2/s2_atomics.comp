@@ -1,14 +1,25 @@
 #version 460
 // Storage texel buffers: every invocation adds one to a counter and
-// exchanges another; an RGBA32F buffer is written.
+// exchanges another; an RGBA32F buffer is written. A uniform block and a
+// storage buffer take Metal buffer indices too (the counters' atomic buffer
+// must not land on one of them).
 layout(local_size_x = 64) in;
+
+uniform Params {
+  uvec4 params;
+} params;
+
+layout(std430) buffer Scratch {
+  uint values[];
+} scratch;
 
 layout(r32ui) uniform uimageBuffer counters;
 layout(rgba32f) uniform writeonly imageBuffer values;
 
 void main() {
   uint i = gl_GlobalInvocationID.x;
-  imageAtomicAdd(counters, 0, 1u);
-  imageAtomicExchange(counters, 1, 77u);
+  imageAtomicAdd(counters, 0, params.params.x);
+  imageAtomicExchange(counters, 1, params.params.y);
+  scratch.values[i] = i;
   imageStore(values, int(i), vec4(0.25, 0.5, 0.75, 1.0));
 }
