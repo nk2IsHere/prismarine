@@ -256,6 +256,13 @@ The Dart side of E3 is `third_party/flutter_gpu` (G1–G3). It detects these exp
 - **Captures:** the branch's 11 capture sets (frames, events, audio) are byte-identical to main's on mcsm6, on the stock, mcsm6 and mcsm7 engines and on the player built from the macos-arm64 archive. Linux x64: stock vs mcsm7 treehouse D1, TownFair and TownFairHall captures identical.
 - **Scenes** (scene_bench vs main on mcsm6, interleaved): the UI thread's scene render −0.4..−0.5 ms a frame (TownFair 3.97 → 3.52, TownFairHall 3.14 → 2.75, EllieWitherstorm 4.18 → 3.68 ms p50), shadows −0.1..−0.3 ms; frames over 16.7 ms TownFair 7.8 → 5.4 %, EllieWitherstorm 13.7 → 7.6 %. docs/memory/status-perf.md "mcsm7" has the table.
 
+## mcsm9 results (2026-11-03, M2 Pro unless noted)
+
+- **gpu_smoke mcsm9 checks** (22: uniform blocks of 64 KB, storage buffers, array, 3D and cube-array textures, layered passes, formats, 2x MSAA depth, compute, indirect draws and dispatches, views, sampler state, copies and mips, vertex formats, texel buffers and atomics, storage image formats, IEEE arithmetic, compute-written vertex and indirect buffers, clip distances, separate samplers, a 1392x1288 BC3 array): all pass on Metal (macOS arm64 and x64 built from their archives, x64 under Rosetta) and on Vulkan (Linux x64 built from its archive, RTX 4060 Ti under a headless GNOME Shell, validation layer clean); on GLES they report "not on this backend" and the older checks pass.
+- **S2's compute shaders with image atomics** (11, in CS_LineGeneration and CS_BokehSprites) compile with impellerc and pass Apple's Metal compiler; before, the atomic buffer sat at `buffer(0)` with a uniform block.
+- **Captures:** the treehouse D1 capture is byte-identical to the reference without the text-shadow workaround, over 32 captures on the engine before the last impellerc fixes and 8 on the final one. S1's shader bundles are byte-identical from the stock and the patched impellerc.
+- **Scenes** (scene_bench, players built from one source on mcsm8 and mcsm9, interleaved mcsm8, mcsm9, mcsm8, mcsm9 under measure.sh; p50 ms, the second pair at a lower machine load): TownFair 12.8 → 12.7, 12.6 → 12.6; TownFairHall 15.6 → 16.3, 15.8 → 15.7; EllieWitherstorm 10.7 → 10.6, 10.1 → 9.9. S1 is unchanged within noise.
+
 ## Reference: targets, backends, test results (2026-10-17)
 
 The same patches on each platform. E1 and E3 are backend-neutral. E2's retained bindings and 0004 are Metal-only: other backends take the stock paths.
