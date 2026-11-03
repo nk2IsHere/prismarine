@@ -167,6 +167,75 @@ enum PixelFormat {
   /// ASTC HDR, 8x8 blocks, 16 bytes per block. Modern mobile ASTC HDR family.
   /// HDR samples are linear floating point, so there is no sRGB variant.
   astc8x8HDR,
+
+  // mcsm G9: Minecraft: Story Mode S2's formats (Metal and Vulkan, engine
+  // feature 2048).
+
+  /// Packed unsigned float red 11, green 11, blue 10 bits (the HDR scene
+  /// colour).
+  r11g11b10UFloat,
+
+  /// 16-bit unsigned normalized RGBA (the shadow moments).
+  r16g16b16a16UNormInt,
+
+  /// 16-bit unsigned normalized depth.
+  d16UNormInt,
+
+  /// 32-bit float depth without stencil.
+  d32Float,
+
+  /// 32-bit unsigned integer red.
+  r32UInt,
+
+  /// 32-bit unsigned integer red and green.
+  r32g32UInt,
+
+  /// 32-bit unsigned integer RGBA.
+  r32g32b32a32UInt,
+
+  /// 16-bit float red.
+  r16Float,
+
+  /// 16-bit float red and green.
+  r16g16Float,
+
+  /// 32-bit float red and green.
+  r32g32Float,
+
+  // mcsm G9: the other formats Metal and Vulkan share (DXGI's, as a D3D11
+  // game binds them): integer, signed-normalized, 10-bit and shared-exponent
+  // formats, and the remaining BC formats (BC2, BC4, BC5 signed, BC6H).
+  r8UInt,
+  r8SNormInt,
+  r8g8UInt,
+  r8g8SNormInt,
+  r8g8b8a8UInt,
+  r8g8b8a8SInt,
+  r8g8b8a8SNormInt,
+  r10g10b10a2UNormInt,
+  r10g10b10a2UInt,
+  r9g9b9e5UFloat,
+  r16UNormInt,
+  r16SNormInt,
+  r16UInt,
+  r16SInt,
+  r16g16UNormInt,
+  r16g16SNormInt,
+  r16g16UInt,
+  r16g16SInt,
+  r16g16b16a16SNormInt,
+  r16g16b16a16UInt,
+  r16g16b16a16SInt,
+  r32SInt,
+  r32g32SInt,
+  r32g32b32a32SInt,
+  bc2RGBAUNormInt,
+  bc2RGBAUNormIntSRGB,
+  bc4RUNormInt,
+  bc4RSNormInt,
+  bc5RGSNormInt,
+  bc6HRGBUFloat,
+  bc6HRGBSFloat,
 }
 
 /// The family of a block-compressed pixel format. Hardware support for
@@ -200,6 +269,13 @@ extension PixelFormatProperties on PixelFormat {
       case PixelFormat.astc8x8LDRSRGB:
       case PixelFormat.astc8x8HDR:
         return 8;
+      case PixelFormat.bc2RGBAUNormInt:
+      case PixelFormat.bc2RGBAUNormIntSRGB:
+      case PixelFormat.bc4RUNormInt:
+      case PixelFormat.bc4RSNormInt:
+      case PixelFormat.bc5RGSNormInt:
+      case PixelFormat.bc6HRGBUFloat:
+      case PixelFormat.bc6HRGBSFloat:
       case PixelFormat.bc1RGBAUNormInt:
       case PixelFormat.bc1RGBAUNormIntSRGB:
       case PixelFormat.bc3RGBAUNormInt:
@@ -228,6 +304,13 @@ extension PixelFormatProperties on PixelFormat {
       case PixelFormat.astc8x8LDRSRGB:
       case PixelFormat.astc8x8HDR:
         return 8;
+      case PixelFormat.bc2RGBAUNormInt:
+      case PixelFormat.bc2RGBAUNormIntSRGB:
+      case PixelFormat.bc4RUNormInt:
+      case PixelFormat.bc4RSNormInt:
+      case PixelFormat.bc5RGSNormInt:
+      case PixelFormat.bc6HRGBUFloat:
+      case PixelFormat.bc6HRGBSFloat:
       case PixelFormat.bc1RGBAUNormInt:
       case PixelFormat.bc1RGBAUNormIntSRGB:
       case PixelFormat.bc3RGBAUNormInt:
@@ -260,7 +343,56 @@ extension PixelFormatProperties on PixelFormat {
       case PixelFormat.s8UInt:
         return 1;
       case PixelFormat.r8g8UNormInt:
+      case PixelFormat.d16UNormInt:
+      case PixelFormat.r16Float:
         return 2;
+      case PixelFormat.r11g11b10UFloat:
+      case PixelFormat.d32Float:
+      case PixelFormat.r32UInt:
+      case PixelFormat.r16g16Float:
+        return 4;
+      case PixelFormat.r16g16b16a16UNormInt:
+      case PixelFormat.r32g32UInt:
+      case PixelFormat.r32g32Float:
+        return 8;
+      case PixelFormat.r32g32b32a32UInt:
+        return 16;
+      case PixelFormat.r8UInt:
+      case PixelFormat.r8SNormInt:
+        return 1;
+      case PixelFormat.r8g8UInt:
+      case PixelFormat.r8g8SNormInt:
+      case PixelFormat.r16UNormInt:
+      case PixelFormat.r16SNormInt:
+      case PixelFormat.r16UInt:
+      case PixelFormat.r16SInt:
+        return 2;
+      case PixelFormat.r8g8b8a8UInt:
+      case PixelFormat.r8g8b8a8SInt:
+      case PixelFormat.r8g8b8a8SNormInt:
+      case PixelFormat.r10g10b10a2UNormInt:
+      case PixelFormat.r10g10b10a2UInt:
+      case PixelFormat.r9g9b9e5UFloat:
+      case PixelFormat.r16g16UNormInt:
+      case PixelFormat.r16g16SNormInt:
+      case PixelFormat.r16g16UInt:
+      case PixelFormat.r16g16SInt:
+      case PixelFormat.r32SInt:
+        return 4;
+      case PixelFormat.r16g16b16a16SNormInt:
+      case PixelFormat.r16g16b16a16UInt:
+      case PixelFormat.r16g16b16a16SInt:
+      case PixelFormat.r32g32SInt:
+      case PixelFormat.bc4RUNormInt:
+      case PixelFormat.bc4RSNormInt:
+        return 8;
+      case PixelFormat.r32g32b32a32SInt:
+      case PixelFormat.bc2RGBAUNormInt:
+      case PixelFormat.bc2RGBAUNormIntSRGB:
+      case PixelFormat.bc5RGSNormInt:
+      case PixelFormat.bc6HRGBUFloat:
+      case PixelFormat.bc6HRGBSFloat:
+        return 16;
       case PixelFormat.r8g8b8a8UNormInt:
       case PixelFormat.r8g8b8a8UNormIntSRGB:
       case PixelFormat.b8g8r8a8UNormInt:
@@ -300,6 +432,13 @@ extension PixelFormatProperties on PixelFormat {
   /// uncompressed formats.
   TextureCompressionFamily? get compressionFamily {
     switch (this) {
+      case PixelFormat.bc2RGBAUNormInt:
+      case PixelFormat.bc2RGBAUNormIntSRGB:
+      case PixelFormat.bc4RUNormInt:
+      case PixelFormat.bc4RSNormInt:
+      case PixelFormat.bc5RGSNormInt:
+      case PixelFormat.bc6HRGBUFloat:
+      case PixelFormat.bc6HRGBSFloat:
       case PixelFormat.bc1RGBAUNormInt:
       case PixelFormat.bc1RGBAUNormIntSRGB:
       case PixelFormat.bc3RGBAUNormInt:
@@ -642,4 +781,11 @@ enum TextureType {
 
   /// A texture sourced from an external source.
   textureExternalOES,
+
+  /// mcsm G9: an array of 2D textures ([Texture.layers]; Metal and Vulkan).
+  texture2DArray,
+
+  /// mcsm G9: a 3D texture ([Texture.depth]; Metal and Vulkan). Not a render
+  /// target: compute writes it as a storage image.
+  texture3D,
 }

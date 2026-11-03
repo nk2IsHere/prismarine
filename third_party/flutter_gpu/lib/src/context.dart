@@ -189,6 +189,12 @@ base class GpuContext extends NativeFieldWrapperClass1 {
     bool enableShaderReadUsage = true,
     bool enableShaderWriteUsage = false,
     int mipLevelCount = 1,
+
+    /// mcsm G9: the layers of a [TextureType.texture2DArray].
+    int layers = 1,
+
+    /// mcsm G9: the depth of a [TextureType.texture3D].
+    int depth = 1,
   }) {
     final resolvedTextureType =
         textureType ??
@@ -235,6 +241,8 @@ base class GpuContext extends NativeFieldWrapperClass1 {
       enableShaderReadUsage,
       enableShaderWriteUsage,
       mipLevelCount,
+      layers: layers,
+      depth: depth,
     );
     // `Texture._initialize` throws on failure, so `result` is always valid here.
     return result;

@@ -44,24 +44,57 @@ base class Texture extends NativeFieldWrapperClass1 {
     this.enableRenderTargetUsage,
     this.enableShaderReadUsage,
     this.enableShaderWriteUsage,
-    this.mipLevelCount,
-  ) : _gpuContext = gpuContext {
-    if (sampleCount != 1 && sampleCount != 4) {
-      throw Exception("Only a sample count of 1 or 4 is currently supported");
+    this.mipLevelCount, {
+    this.layers = 1,
+    this.depth = 1,
+  }) : _gpuContext = gpuContext,
+       _viewParent = null {
+    // mcsm G9: layered textures, the added formats and 2x MSAA go through
+    // the mcsm9 engine's export.
+    final bool mcsm9 =
+        layers != 1 ||
+        depth != 1 ||
+        sampleCount == 2 ||
+        textureType.index > TextureType.textureExternalOES.index ||
+        format.index > PixelFormat.astc8x8HDR.index;
+    if (sampleCount != 1 && sampleCount != 4 && !(mcsm9 && sampleCount == 2)) {
+      throw Exception("Only a sample count of 1, 2 or 4 is supported");
     }
-    _valid = _initialize(
-      gpuContext,
-      storageMode.index,
-      format.index,
-      width,
-      height,
-      sampleCount,
-      textureType.index,
-      enableRenderTargetUsage,
-      enableShaderReadUsage,
-      enableShaderWriteUsage,
-      mipLevelCount,
-    );
+    if (mcsm9 && !_mcsmEngineS2) {
+      throw Exception(
+        'Layered textures, the S2 pixel formats and 2x MSAA need the mcsm9 '
+        'engine',
+      );
+    }
+    _valid = mcsm9
+        ? _initializeLayered(
+            gpuContext,
+            storageMode.index,
+            format.index,
+            width,
+            height,
+            layers,
+            depth,
+            sampleCount,
+            textureType.index,
+            enableRenderTargetUsage,
+            enableShaderReadUsage,
+            enableShaderWriteUsage,
+            mipLevelCount,
+          )
+        : _initialize(
+            gpuContext,
+            storageMode.index,
+            format.index,
+            width,
+            height,
+            sampleCount,
+            textureType.index,
+            enableRenderTargetUsage,
+            enableShaderReadUsage,
+            enableShaderWriteUsage,
+            mipLevelCount,
+          );
     if (!_valid) {
       // The engine logs the specific reason (for example, a compressed format
       // used with render target or shader write usage, which is sample-only).
@@ -79,9 +112,15 @@ base class Texture extends NativeFieldWrapperClass1 {
     for (var l = 0; l < mipLevelCount; l++) {
       final w = (width >> l) < 1 ? 1 : width >> l;
       final h = (height >> l) < 1 ? 1 : height >> l;
-      total += ((w + bw - 1) ~/ bw) * ((h + bh - 1) ~/ bh) * format.bytesPerBlock;
+      // mcsm G9: a 3D texture's depth halves per level too.
+      final d = (depth >> l) < 1 ? 1 : depth >> l;
+      total +=
+          ((w + bw - 1) ~/ bw) *
+          ((h + bh - 1) ~/ bh) *
+          format.bytesPerBlock *
+          d;
     }
-    return total * sampleCount;
+    return total * sampleCount * layers;
   }
 
   Texture._surface(
@@ -99,7 +138,10 @@ base class Texture extends NativeFieldWrapperClass1 {
       enableRenderTargetUsage = true,
       enableShaderReadUsage = true,
       enableShaderWriteUsage = false,
-      mipLevelCount = 1;
+      mipLevelCount = 1,
+      layers = 1,
+      depth = 1,
+      _viewParent = null;
 
   /// Wraps the GPU texture that backs [image] as a Flutter GPU [Texture],
   /// without copying any pixel data.
@@ -140,12 +182,94 @@ base class Texture extends NativeFieldWrapperClass1 {
       enableRenderTargetUsage = info[6] != 0,
       enableShaderReadUsage = info[7] != 0,
       enableShaderWriteUsage = info[8] != 0,
-      mipLevelCount = info[9] {
+      mipLevelCount = info[9],
+      layers = 1,
+      depth = 1,
+      _viewParent = null {
     _valid = _initializeFromImage(gpuContext, image);
     if (!_valid) {
       throw Exception("Texture.fromImage failed to wrap the image texture");
     }
   }
+
+  /// mcsm G9: a view of [parent]'s mip levels and layers (see [makeView]).
+  Texture._view(
+    GpuContext gpuContext,
+    Texture parent,
+    this.textureType,
+    int baseMipLevel,
+    this.mipLevelCount,
+    int baseLayer,
+    this.layers,
+  ) : _gpuContext = gpuContext,
+      storageMode = parent.storageMode,
+      format = parent.format,
+      width = (parent.width >> baseMipLevel) < 1
+          ? 1
+          : parent.width >> baseMipLevel,
+      height = (parent.height >> baseMipLevel) < 1
+          ? 1
+          : parent.height >> baseMipLevel,
+      sampleCount = parent.sampleCount,
+      enableRenderTargetUsage = parent.enableRenderTargetUsage,
+      enableShaderReadUsage = parent.enableShaderReadUsage,
+      enableShaderWriteUsage = parent.enableShaderWriteUsage,
+      depth = 1,
+      _viewParent = parent {
+    _valid = _initializeView(
+      gpuContext,
+      parent,
+      textureType.index,
+      baseMipLevel,
+      mipLevelCount,
+      baseLayer,
+      layers,
+    );
+    if (!_valid) {
+      throw Exception('Texture view creation failed');
+    }
+  }
+
+  /// mcsm G9: a texture that is mip levels `[baseMipLevel, baseMipLevel +
+  /// mipLevelCount)` and layers `[baseLayer, baseLayer + layers)` of this one
+  /// (Metal and Vulkan; not of a 3D texture). Sample, render into or write it
+  /// as a storage image on its own: one level while sampling the level
+  /// above, one layer of an array as a 2D target. A view shares this
+  /// texture's memory; upload through this texture, not the view.
+  /// [textureType] defaults to 2D for one layer, else a 2D array.
+  Texture makeView({
+    int baseMipLevel = 0,
+    int mipLevelCount = 1,
+    int baseLayer = 0,
+    int layers = 1,
+    TextureType? textureType,
+  }) {
+    if (!_mcsmEngineS2) {
+      throw Exception('Texture views need the mcsm9 engine');
+    }
+    if (baseMipLevel < 0 ||
+        mipLevelCount < 1 ||
+        baseMipLevel + mipLevelCount > this.mipLevelCount ||
+        baseLayer < 0 ||
+        layers < 1 ||
+        baseLayer + layers > sliceCount) {
+      throw RangeError('The view must lie within the texture');
+    }
+    return Texture._view(
+      _gpuContext,
+      this,
+      textureType ??
+          (layers == 1 ? TextureType.texture2D : TextureType.texture2DArray),
+      baseMipLevel,
+      mipLevelCount,
+      baseLayer,
+      layers,
+    );
+  }
+
+  /// mcsm G9: the texture a view was made of (null for a texture of its
+  /// own); it keeps the parent's Dart wrapper alive too.
+  final Texture? _viewParent;
 
   GpuContext _gpuContext;
 
@@ -174,9 +298,21 @@ base class Texture extends NativeFieldWrapperClass1 {
   /// [Texture.fullMipCount] to compute the maximum for a given size.
   final int mipLevelCount;
 
+  /// mcsm G9: the layers of a [TextureType.texture2DArray] (1 otherwise).
+  final int layers;
+
+  /// mcsm G9: the depth of a [TextureType.texture3D] (1 otherwise).
+  final int depth;
+
   /// The number of slices in this texture. Determined by [textureType]:
-  /// 1 for 2D and external textures, 6 for cubemap textures.
-  int get sliceCount => textureType == TextureType.textureCube ? 6 : 1;
+  /// 1 for 2D and external textures, 6 for cubemap textures, the layers of
+  /// an array and the depth of a 3D texture (mcsm G9).
+  int get sliceCount => switch (textureType) {
+    TextureType.textureCube => 6,
+    TextureType.texture2DArray => layers,
+    TextureType.texture3D => depth,
+    _ => 1,
+  };
 
   /// Returns the width of the texture at [mipLevel], clamped at 1.
   int getMipLevelWidth(int mipLevel) {
@@ -229,6 +365,9 @@ base class Texture extends NativeFieldWrapperClass1 {
   /// Throws an exception if the write fails due to an internal error or if
   /// any of the parameters are out of range.
   void overwrite(ByteData sourceBytes, {int mipLevel = 0, int slice = 0}) {
+    if (_viewParent != null) {
+      throw Exception('Upload through the texture a view was made of');
+    }
     _validateMipLevelAndSlice(mipLevel, slice);
     final int expectedSize = getMipLevelSizeInBytes(mipLevel);
     if (sourceBytes.lengthInBytes != expectedSize) {
@@ -298,6 +437,55 @@ base class Texture extends NativeFieldWrapperClass1 {
     bool enableShaderReadUsage,
     bool enableShaderWriteUsage,
     int mipLevelCount,
+  );
+
+  /// mcsm G9: the mcsm9 engine's texture creation (layers and depth).
+  @Native<
+    Bool Function(
+      Handle,
+      Pointer<Void>,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+      Bool,
+      Bool,
+      Bool,
+      Int,
+    )
+  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeLayered')
+  external bool _initializeLayered(
+    GpuContext gpuContext,
+    int storageMode,
+    int format,
+    int width,
+    int height,
+    int layers,
+    int depth,
+    int sampleCount,
+    int textureType,
+    bool enableRenderTargetUsage,
+    bool enableShaderReadUsage,
+    bool enableShaderWriteUsage,
+    int mipLevelCount,
+  );
+
+  /// mcsm G9: Texture_McsmInitializeView.
+  @Native<
+    Bool Function(Handle, Pointer<Void>, Pointer<Void>, Int, Int, Int, Int, Int)
+  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeView')
+  external bool _initializeView(
+    GpuContext gpuContext,
+    Texture parent,
+    int textureType,
+    int baseMipLevel,
+    int mipLevelCount,
+    int baseLayer,
+    int layers,
   );
 
   @Native<Bool Function(Pointer<Void>, Pointer<Void>, Handle, Int, Int)>(

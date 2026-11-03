@@ -42,6 +42,14 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 
 - `memory.dart`: the sum of G4's bytes, kept as objects are made and finalized (no map per read): the player's GC pacing reads it once a frame.
 
+## G9: S2's additions (mcsm9)
+
+- `formats.dart`: `PixelFormat` gains the formats Metal and Vulkan share (R11G11B10 float, RGB9E5, RGBA16 unorm and snorm, D16, D32 float, 8/16/32-bit integer and signed-normalized formats, RGB10A2, R16/RG16/RG32 float, BC2, BC4, BC5 signed, BC6H), after the stock values as the engine's enum, with their block sizes; `TextureType` gains `texture2DArray` and `texture3D`.
+- `texture.dart`, `context.dart`: `createTexture(…, layers:, depth:)`; a layered texture, an added format or a sample count of 2 goes through `InternalFlutterGpu_Texture_McsmInitializeLayered` (throws on an engine without it); `sliceCount` is an array's layers and a 3D texture's depth, so `overwrite(slice:)` and `CommandBuffer.copyBufferToTexture` upload one layer or depth slice; `Texture.makeView(baseMipLevel:, mipLevelCount:, baseLayer:, layers:)` (`InternalFlutterGpu_Texture_McsmInitializeView`) is a view sharing the texture's memory, to render into one level while sampling another or treat one layer as a 2D target; G4 counts layers and depth, not views.
+- `compute.dart` (new): `mcsmEngineSupportsS2` (engine bit 2048); `Shader.getStorageBufferSlot` / `getStorageImageSlot` (a storage buffer by its block's type name, an image by its variable name); `RenderPass.bindStorageBuffer` (sent at each draw, not recorded into draw lists) and `RenderPass.drawIndirect`; `GpuContext.createComputePipeline`, `CommandBuffer.createComputePass` and `ComputePass` (`bindPipeline`, `bindUniform`, `bindStorageBuffer`, `bindTexture`, `bindStorageImage`, `dispatch(x, y, z)`, `dispatchIndirect`, `barrier`; resources are bound again after each dispatch).
+- `natives.dart`: `_mcsmEngineS2`, whether the engine exports `InternalFlutterGpu_ComputePass_McsmDispatch`.
+- gpu_smoke's mcsm9 checks use all of it on Metal and Vulkan.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
