@@ -50,6 +50,11 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - `natives.dart`: `_mcsmEngineS2`, whether the engine exports `InternalFlutterGpu_ComputePass_McsmDispatch`.
 - gpu_smoke's mcsm9 checks use all of it on Metal and Vulkan.
 
+## G10: S2's binds and dispatches as leaf calls
+
+- `compute.dart`: every `ComputePass` bind, `dispatch`, `dispatchIndirect` and `barrier`, and the render pass's separate texture, separate sampler, texel buffer, storage buffer and texture-with-sampler binds are leaf calls: the engine's halves only store or encode state (no Dart handles, nothing that waits), as G3's and G6's do. S2's heavy shots make thousands of them a frame (BeaconTown's title shot: ~855 dispatches with about six binds each).
+- `drawIndirect` stays a non-leaf call: like the stock draw, it may wait for a pipeline the pass has not built yet.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
