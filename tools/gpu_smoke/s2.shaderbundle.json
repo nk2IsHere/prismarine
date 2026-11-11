@@ -242,5 +242,45 @@
       "metal_desktop",
       "vulkan"
     ]
+  },
+  "S2PullVertex": {
+    "type": "vertex",
+    "file": "shaders/s2/s2_pull.vert",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2PullInputVertex": {
+    "type": "vertex",
+    "file": "shaders/s2/s2_pull_input.vert",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2PullFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_pull.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2Texel4Fragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_texel4.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
+  },
+  "S2PullUnusedFragment": {
+    "type": "fragment",
+    "file": "shaders/s2/s2_pull_unused.frag",
+    "targets": [
+      "metal_desktop",
+      "vulkan"
+    ]
   }
 }
