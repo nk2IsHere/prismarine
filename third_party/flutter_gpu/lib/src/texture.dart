@@ -203,12 +203,13 @@ base class Texture extends NativeFieldWrapperClass1 {
     this.mipLevelCount,
     int baseLayer,
     int layerCount,
+    PixelFormat? viewFormat,
   ) : _gpuContext = gpuContext,
       layers = textureType == TextureType.textureCubeArray
           ? layerCount ~/ 6
           : (textureType == TextureType.textureCube ? 1 : layerCount),
       storageMode = parent.storageMode,
-      format = parent.format,
+      format = viewFormat ?? parent.format,
       width = (parent.width >> baseMipLevel) < 1
           ? 1
           : parent.width >> baseMipLevel,
@@ -221,15 +222,26 @@ base class Texture extends NativeFieldWrapperClass1 {
       enableShaderWriteUsage = parent.enableShaderWriteUsage,
       depth = 1,
       _viewParent = parent {
-    _valid = _initializeView(
-      gpuContext,
-      parent,
-      textureType.index,
-      baseMipLevel,
-      mipLevelCount,
-      baseLayer,
-      layerCount,
-    );
+    _valid = viewFormat == null || viewFormat == parent.format
+        ? _initializeView(
+            gpuContext,
+            parent,
+            textureType.index,
+            baseMipLevel,
+            mipLevelCount,
+            baseLayer,
+            layerCount,
+          )
+        : _initializeViewFormat(
+            gpuContext,
+            parent,
+            textureType.index,
+            baseMipLevel,
+            mipLevelCount,
+            baseLayer,
+            layerCount,
+            viewFormat.index,
+          );
     if (!_valid) {
       throw Exception('Texture view creation failed');
     }
@@ -242,15 +254,24 @@ base class Texture extends NativeFieldWrapperClass1 {
   /// above, one layer of an array as a 2D target. A view shares this
   /// texture's memory; upload through this texture, not the view.
   /// [textureType] defaults to 2D for one layer, else a 2D array.
+  ///
+  /// mcsm10: [format] may be this texture's sRGB twin (an 8-bit RGBA or BGRA
+  /// texture viewed as sRGB, or the reverse): the same bytes, encoded on
+  /// write and decoded on read. On Vulkan only a render target can be viewed
+  /// so ([enableRenderTargetUsage]).
   Texture makeView({
     int baseMipLevel = 0,
     int mipLevelCount = 1,
     int baseLayer = 0,
     int layers = 1,
     TextureType? textureType,
+    PixelFormat? format,
   }) {
     if (!_mcsmEngineS2) {
       throw Exception('Texture views need the mcsm9 engine');
+    }
+    if (format != null && format != this.format && !mcsmEngine10) {
+      throw Exception('sRGB texture views need the mcsm10 engine');
     }
     if (baseMipLevel < 0 ||
         mipLevelCount < 1 ||
@@ -269,6 +290,7 @@ base class Texture extends NativeFieldWrapperClass1 {
       mipLevelCount,
       baseLayer,
       layers,
+      format,
     );
   }
 
@@ -492,6 +514,31 @@ base class Texture extends NativeFieldWrapperClass1 {
     int mipLevelCount,
     int baseLayer,
     int layers,
+  );
+
+  /// mcsm10: Texture_McsmInitializeViewFormat.
+  @Native<
+    Bool Function(
+      Handle,
+      Pointer<Void>,
+      Pointer<Void>,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+      Int,
+    )
+  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeViewFormat')
+  external bool _initializeViewFormat(
+    GpuContext gpuContext,
+    Texture parent,
+    int textureType,
+    int baseMipLevel,
+    int mipLevelCount,
+    int baseLayer,
+    int layers,
+    int format,
   );
 
   @Native<Bool Function(Pointer<Void>, Pointer<Void>, Handle, Int, Int)>(

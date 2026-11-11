@@ -15,6 +15,12 @@ bool get mcsmEngineSupportsS2 =>
 @Native<Int64 Function()>(symbol: 'InternalFlutterGpu_McsmFeatures')
 external int _mcsmFeaturesNative();
 
+/// Whether the running engine has mcsm10's additions for our renderer:
+/// vertex stages without inputs, storage and unsigned texel buffers in pixel
+/// stages on Metal, more bindings per draw, leaf indirect draws and sRGB
+/// texture views ([Texture.makeView]'s `format`).
+bool get mcsmEngine10 => _mcsmEngineS2 && (_mcsmFeaturesNative() & 4096) != 0;
+
 /// The border colours Metal and Vulkan both offer.
 enum McsmBorderColor { transparentBlack, opaqueBlack, opaqueWhite }
 
@@ -213,6 +219,17 @@ extension McsmRenderPassIndirect on RenderPass {
   /// instance), as Direct3D 11, Metal and Vulkan lay them out. Draw lists
   /// don't record it.
   void drawIndirect(BufferView args, {bool indexed = false}) {
+    if (_mcsmIndirectLeaf) {
+      // mcsm10: a leaf call when the pipeline is cached on this pass.
+      final drawn = _renderPassDrawIndirectCached(
+        this,
+        args.buffer,
+        args.offsetInBytes,
+        indexed,
+      );
+      if (drawn == 1) return;
+      if (drawn == 0) throw Exception('Indirect draw failed');
+    }
     if (!_renderPassDrawIndirect(
       this,
       args.buffer,
@@ -615,6 +632,22 @@ external bool _renderPassBindStorageBuffer(
   DeviceBuffer buffer,
   int offsetInBytes,
   int lengthInBytes,
+);
+
+// mcsm10: whether the engine answers an indirect draw as a leaf call.
+final bool _mcsmIndirectLeaf = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
+);
+
+@Native<Int Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
+  symbol: 'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
+  isLeaf: true,
+)
+external int _renderPassDrawIndirectCached(
+  RenderPass pass,
+  DeviceBuffer args,
+  int offsetInBytes,
+  bool indexed,
 );
 
 @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
