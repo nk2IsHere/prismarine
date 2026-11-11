@@ -1,0 +1,244 @@
+From 1a6cc9ceaf9b1d4cd0c8452b1470470acd4f88e4 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Wed, 11 Nov 2026 16:24:11 +0100
+Subject: [PATCH 24/25] impeller (mcsm10): Metal binds of a resource its stage
+ never reads (reflected without an index, 0xFFFFFFFF) are no-ops (they crashed
+ the AGX driver in setFragmentBuffer/setFragmentTexture); views in a texture's
+ sRGB twin format on Metal and Vulkan (8-bit colour render targets are
+ mutable-format on Vulkan); Vulkan pipelines take 128 bindings and descriptor
+ pools 256 storage buffers
+
+---
+ engine/src/flutter/impeller/core/formats.h    | 22 +++++++++++++++++++
+ .../metal/compute_pass_bindings_cache_mtl.mm  | 17 ++++++++++++++
+ .../renderer/backend/metal/context_mtl.mm     |  8 +++++--
+ .../backend/metal/pass_bindings_cache_mtl.mm  | 17 ++++++++++++++
+ .../renderer/backend/vulkan/allocator_vk.cc   |  8 +++++++
+ .../backend/vulkan/descriptor_pool_vk.cc      |  3 ++-
+ .../backend/vulkan/mcsm_texture_view_vk.cc    |  7 ++++--
+ .../renderer/backend/vulkan/pipeline_vk.h     |  4 +++-
+ 8 files changed, 80 insertions(+), 6 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/core/formats.h b/engine/src/flutter/impeller/core/formats.h
+index f0cbfa800ae..9fad0f6bbbc 100644
+--- a/engine/src/flutter/impeller/core/formats.h
++++ b/engine/src/flutter/impeller/core/formats.h
+@@ -341,6 +341,28 @@ constexpr size_t CompressedBlockHeightForPixelFormat(PixelFormat format) {
+   }
+ }
+ 
++/// mcsm10: the format an 8-bit RGBA/BGRA texture's view may take besides its
++/// own (UNORM <-> sRGB; the same bits, encoded or not on read and write).
++constexpr PixelFormat McsmSRGBTwin(PixelFormat format) {
++  switch (format) {
++    case PixelFormat::kR8G8B8A8UNormInt:
++      return PixelFormat::kR8G8B8A8UNormIntSRGB;
++    case PixelFormat::kR8G8B8A8UNormIntSRGB:
++      return PixelFormat::kR8G8B8A8UNormInt;
++    case PixelFormat::kB8G8R8A8UNormInt:
++      return PixelFormat::kB8G8R8A8UNormIntSRGB;
++    case PixelFormat::kB8G8R8A8UNormIntSRGB:
++      return PixelFormat::kB8G8R8A8UNormInt;
++    default:
++      return PixelFormat::kUnknown;
++  }
++}
++
++/// mcsm10: whether a view of a `parent` texture may have `view`'s format.
++constexpr bool McsmViewFormatAllowed(PixelFormat parent, PixelFormat view) {
++  return view == parent || view == McsmSRGBTwin(parent);
++}
++
+ constexpr bool IsDepthWritable(PixelFormat format) {
+   switch (format) {
+     case PixelFormat::kD24UnormS8Uint:
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_bindings_cache_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_bindings_cache_mtl.mm
+index 50e91e7ce95..c54339f5936 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_bindings_cache_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_bindings_cache_mtl.mm
+@@ -6,6 +6,14 @@
+ 
+ namespace impeller {
+ 
++namespace {
++// mcsm10: impellerc reflects every resource a stage declares, and a resource
++// the stage never reads has no MSL slot: its index is 0xFFFFFFFF
++// (CompilerBackend::GetExtendedMSLResourceBinding). Binding it is a no-op;
++// sending it crashed the AGX driver in setFragmentBuffer/setFragmentTexture.
++constexpr uint64_t kMcsmUnusedIndex = 0xFFFFFFFFu;
++}  // namespace
++
+ void ComputePassBindingsCacheMTL::SetComputePipelineState(
+     id<MTLComputePipelineState> pipeline) {
+   if (pipeline == pipeline_) {
+@@ -27,6 +35,9 @@
+ void ComputePassBindingsCacheMTL::SetBuffer(uint64_t index,
+                                             uint64_t offset,
+                                             id<MTLBuffer> buffer) {
++  if (index == kMcsmUnusedIndex) {
++    return;
++  }
+   auto found = buffers_.find(index);
+   if (found != buffers_.end() && found->second.buffer == buffer) {
+     // The right buffer is bound. Check if its offset needs to be updated.
+@@ -48,6 +59,9 @@
+ 
+ void ComputePassBindingsCacheMTL::SetTexture(uint64_t index,
+                                              id<MTLTexture> texture) {
++  if (index == kMcsmUnusedIndex) {
++    return;
++  }
+   auto found = textures_.find(index);
+   if (found != textures_.end() && found->second == texture) {
+     // Already bound.
+@@ -60,6 +74,9 @@
+ 
+ void ComputePassBindingsCacheMTL::SetSampler(uint64_t index,
+                                              id<MTLSamplerState> sampler) {
++  if (index == kMcsmUnusedIndex) {
++    return;
++  }
+   auto found = samplers_.find(index);
+   if (found != samplers_.end() && found->second == sampler) {
+     // Already bound.
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
+index b7a7468e8f1..ee6fbb625e3 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
+@@ -559,10 +559,14 @@ new ContextMTL(flags, device, command_queue,
+       view_desc.type == TextureType::kTexture3D ||
+       base_mip + view_desc.mip_count > desc.mip_count ||
+       base_layer + view_desc.GetArrayLayerCount() > desc.GetArrayLayerCount() ||
+-      view_desc.format != desc.format ||
++      !McsmViewFormatAllowed(desc.format, view_desc.format) ||
+       view_desc.sample_count != desc.sample_count) {
++    // mcsm10: an sRGB view of a UNORM texture or the reverse needs no
++    // MTLTextureUsagePixelFormatView (the only reinterpretation Metal allows
++    // without it).
+     VALIDATION_LOG << "A texture view must lie within its 2D, array or cube "
+-                      "texture, in its format and sample count.";
++                      "texture, in its format (or its sRGB twin) and sample "
++                      "count.";
+     return nullptr;
+   }
+   id<MTLTexture> parent = TextureMTL::Cast(*texture).GetMTLTexture();
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+index e79cb9bd36c..b104818414e 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+@@ -6,6 +6,14 @@
+ 
+ namespace impeller {
+ 
++namespace {
++// mcsm10: impellerc reflects every resource a stage declares, and a resource
++// the stage never reads has no MSL slot: its index is 0xFFFFFFFF
++// (CompilerBackend::GetExtendedMSLResourceBinding). Binding it is a no-op;
++// sending it crashed the AGX driver in setFragmentBuffer/setFragmentTexture.
++constexpr uint64_t kMcsmUnusedIndex = 0xFFFFFFFFu;
++}  // namespace
++
+ void PassBindingsCacheMTL::SetEncoder(id<MTLRenderCommandEncoder> encoder) {
+   encoder_ = encoder;
+ }
+@@ -32,6 +40,9 @@
+                                      uint64_t index,
+                                      uint64_t offset,
+                                      id<MTLBuffer> buffer) {
++  if (index == kMcsmUnusedIndex) {
++    return true;
++  }
+   // mcsm7: flat slots for the common stages and indices.
+   if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
+     auto& slot = flat_buffers_[st][index];
+@@ -99,6 +110,9 @@
+ bool PassBindingsCacheMTL::SetTexture(ShaderStage stage,
+                                       uint64_t index,
+                                       id<MTLTexture> texture) {
++  if (index == kMcsmUnusedIndex) {
++    return true;
++  }
+   if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
+     auto& slot = flat_textures_[st][index];
+     if (slot == texture) {
+@@ -136,6 +150,9 @@
+ bool PassBindingsCacheMTL::SetSampler(ShaderStage stage,
+                                       uint64_t index,
+                                       id<MTLSamplerState> sampler) {
++  if (index == kMcsmUnusedIndex) {
++    return true;
++  }
+   if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
+     auto& slot = flat_samplers_[st][index];
+     if (slot == sampler) {
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+index e33fe591b61..9bdc92ccd8b 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+@@ -302,6 +302,14 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+         image_info_chain;
+     auto& image_info = image_info_chain.get();
+     image_info.flags = ToVKImageCreateFlags(desc.type);
++    // mcsm10: 8-bit colour render targets may be viewed as their sRGB twin
++    // (S2 draws and samples several targets through sRGB views). Only render
++    // targets: sampled textures upload in their final format, and a mutable
++    // format can cost a driver its compression.
++    if (McsmSRGBTwin(desc.format) != PixelFormat::kUnknown &&
++        (desc.usage & TextureUsage::kRenderTarget)) {
++      image_info.flags |= vk::ImageCreateFlagBits::eMutableFormat;
++    }
+     // mcsm: 3D textures and arrays.
+     image_info.imageType = desc.type == TextureType::kTexture3D
+                                ? vk::ImageType::e3D
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+index dc184be65e3..1a82c1a937b 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+@@ -22,7 +22,8 @@ static const constexpr DescriptorPoolSize kDefaultBindingSize =
+     DescriptorPoolSize{
+         .buffer_bindings = 512u,   // Buffer Bindings
+         .texture_bindings = 256u,  // Texture Bindings
+-        .storage_bindings = 32,
++        // mcsm10: pulled passes bind several storage buffers per draw.
++        .storage_bindings = 256u,
+         .subpass_bindings = 4u  // Subpass Bindings
+     };
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
+index 938f768dad0..e812960385d 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
+@@ -37,10 +37,13 @@ std::shared_ptr<McsmTextureViewVK> McsmTextureViewVK::Make(
+       base_mip + view_desc.mip_count > parent_desc.mip_count ||
+       base_layer + view_desc.GetArrayLayerCount() >
+           parent_desc.GetArrayLayerCount() ||
+-      view_desc.format != parent_desc.format ||
++      !McsmViewFormatAllowed(parent_desc.format, view_desc.format) ||
+       view_desc.sample_count != parent_desc.sample_count) {
++    // mcsm10: the sRGB twin needs a mutable-format image (AllocatorVK makes
++    // its 8-bit colour render targets so).
+     VALIDATION_LOG << "A texture view must lie within its 2D, array or cube "
+-                      "texture, in its format and sample count.";
++                      "texture, in its format (or its sRGB twin) and sample "
++                      "count.";
+     return nullptr;
+   }
+   auto view = std::shared_ptr<McsmTextureViewVK>(
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
+index b627f2e52f1..f7d1a9e692d 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
+@@ -20,7 +20,9 @@ namespace impeller {
+ 
+ // Limit on the total number of buffer and image bindings that allow the Vulkan
+ // backend to avoid dynamic heap allocations.
+-static constexpr size_t kMaxBindings = 32;
++// mcsm10: our renderer's pulled passes bind a scene's material arrays,
++// lightmap pages and frame textures at once (~50).
++static constexpr size_t kMaxBindings = 128;
+ 
+ class PipelineVK final
+     : public Pipeline<PipelineDescriptor>,
+-- 
+2.54.0 (Apple Git-157)
+
