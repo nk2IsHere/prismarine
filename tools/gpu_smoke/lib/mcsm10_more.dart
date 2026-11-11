@@ -116,7 +116,6 @@ Future<void> mcsm10MoreChecks(
   });
 
   await check('leaf indirect draws', () async {
-    if (!gpu.mcsmEngine10) return 'the engine reports no mcsm10 features';
     final args = view(Uint32List.fromList([3, 1, 0, 0, 3, 1, 0, 0]));
     final c = await run(fs, [
       (pass) => pass

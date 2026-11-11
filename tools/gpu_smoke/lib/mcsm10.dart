@@ -27,6 +27,10 @@ import 'mcsm10_more.dart';
 
 /// Runs the mcsm10 checks with [log] for SMOKE lines; true when all pass.
 Future<bool> mcsm10Checks(void Function(String) log) async {
+  if (!gpu.mcsmEngine10) {
+    log('SMOKE mcsm10 not on this engine or backend (no feature 4096)');
+    return true;
+  }
   final ctx = gpu.gpuContext;
   final bytes = await rootBundle.load('s2_generated/s2smoke.shaderbundle');
   final lib = await gpu.ShaderLibrary.fromBytes(bytes);
