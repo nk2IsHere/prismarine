@@ -14,8 +14,8 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:flutter_scene/scene.dart' show Scene, baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
-import 'mcsm7.dart';
 import 'mcsm10.dart';
+import 'mcsm7.dart';
 import 'mcsm9.dart';
 
 // Each SMOKE line goes to stdout and, when GPU_SMOKE_OUT names a file, to it
