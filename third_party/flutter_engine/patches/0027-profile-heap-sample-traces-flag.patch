@@ -1,21 +1,21 @@
-From ee1d67ef0d65202517af0fbfad1fb2a817a5b62c Mon Sep 17 00:00:00 2001
+From fa8e6912f68248c194de86c8fe634e76d457c2ad Mon Sep 17 00:00:00 2001
 From: mcsm <mcsm@localhost>
 Date: Sat, 14 Nov 2026 13:26:32 +0100
-Subject: [PATCH] shell (mcsm): profile builds accept --heap_sample_traces
- (allocation by call site, weighted by bytes; the Dart patch
- vm-heap-sample-traces); macOS profile builds compile on the macOS 27 SDK (its
- os_signpost macros' stack_protector_ignore under -fstack-protector-all)
+Subject: [PATCH] shell (mcsm): profile builds accept --heap_sample_traces and
+ --scavenge_census (the Dart patch vm-heap-sample-traces); macOS profile
+ builds compile on the macOS 27 SDK (its os_signpost macros'
+ stack_protector_ignore under -fstack-protector-all)
 
 ---
- engine/src/flutter/shell/common/switches.cc                   | 4 ++++
- .../darwin/macos/framework/Source/FlutterVSyncWaiter.mm       | 4 ++++
- 2 files changed, 8 insertions(+)
+ engine/src/flutter/shell/common/switches.cc                | 7 +++++++
+ .../darwin/macos/framework/Source/FlutterVSyncWaiter.mm    | 4 ++++
+ 2 files changed, 11 insertions(+)
 
 diff --git a/engine/src/flutter/shell/common/switches.cc b/engine/src/flutter/shell/common/switches.cc
-index 91281642d52..b3c50d51280 100644
+index 91281642d52..a48612cdabd 100644
 --- a/engine/src/flutter/shell/common/switches.cc
 +++ b/engine/src/flutter/shell/common/switches.cc
-@@ -83,6 +83,10 @@ static const std::string kAllowedDartFlags[] = {
+@@ -83,6 +83,13 @@ static const std::string kAllowedDartFlags[] = {
      "--new-gen-semi-initial-size",
      "--no-inline-alloc",
      "--no_inline_alloc",
@@ -23,6 +23,9 @@ index 91281642d52..b3c50d51280 100644
 +    // vm-heap-sample-traces), with --no-inline-alloc.
 +    "--heap_sample_traces",
 +    "--heap-sample-traces",
++    // mcsm: what each young collection copies, by class (the Dart patch).
++    "--scavenge_census",
++    "--scavenge-census",
      "--profile_vm",
      "--profile-vm",
      "--verbose_gc",
