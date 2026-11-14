@@ -1,0 +1,75 @@
+From ad4e66f14854be294bd6ac2c20dc34db6418485f Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 14 Nov 2026 13:26:38 +0100
+Subject: [PATCH] vm (mcsm): --heap_sample_traces=<bytes>: about one allocation
+ per that many bytes recorded as a profiler allocation trace, weighted by
+ bytes
+
+---
+ runtime/vm/object.cc | 39 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/runtime/vm/object.cc b/runtime/vm/object.cc
+index ad6572f3..61e27b35 100644
+--- a/runtime/vm/object.cc
++++ b/runtime/vm/object.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "vm/object.h"
+ 
++#include <math.h>
+ #include <memory>
+ 
+ #include "include/dart_api.h"
+@@ -2588,6 +2589,41 @@ void Object::CheckHandle() const {
+ #endif
+ }
+ 
++#if !defined(PRODUCT)
++// mcsm: --heap_sample_traces=<bytes> records about one allocation per that
++// many bytes as a profiler allocation trace (its Dart stack), with the bytes
++// it stands for in the identity hash: allocation by call site, weighted by
++// bytes, through getAllocationTraces. Each thread counts down a random
++// (exponential) interval so periodic allocation patterns don't alias; an
++// object crossing k sampling points stands for k intervals. Only allocations
++// that reach the VM are seen, so it is meant for --no-inline-alloc.
++DEFINE_FLAG(int,
++            heap_sample_traces,
++            0,
++            "Trace about one allocation per this many bytes (0: off).");
++
++static void SampleAllocationBytes(Thread* thread,
++                                  intptr_t cls_id,
++                                  intptr_t size) {
++  static thread_local intptr_t left = 0;
++  static thread_local uint64_t seed = 0;
++  if (seed == 0) seed = reinterpret_cast<uint64_t>(&left) | 1;
++  left -= size;
++  if (left > 0) return;
++  intptr_t weight = 0;
++  while (left <= 0) {
++    seed ^= seed << 13;
++    seed ^= seed >> 7;
++    seed ^= seed << 17;
++    const double u = static_cast<double>(seed >> 11) * 0x1.0p-53;
++    left += 1 + static_cast<intptr_t>(-log(1 - u) * FLAG_heap_sample_traces);
++    weight += FLAG_heap_sample_traces;
++  }
++  if (Profiler::sample_block_buffer() == nullptr) return;
++  Profiler::SampleAllocation(thread, cls_id, static_cast<uint32_t>(weight));
++}
++#endif  // !defined(PRODUCT)
++
+ ObjectPtr Object::Allocate(intptr_t cls_id,
+                            intptr_t size,
+                            Heap::Space space,
+@@ -2652,6 +2688,9 @@ ObjectPtr Object::Allocate(intptr_t cls_id,
+         HeapSnapshotWriter::GetHeapSnapshotIdentityHash(thread, raw_obj);
+     Profiler::SampleAllocation(thread, cls_id, hash);
+   }
++  if (FLAG_heap_sample_traces > 0) {
++    SampleAllocationBytes(thread, cls_id, size);
++  }
+ #endif  // !defined(PRODUCT)
+   return raw_obj;
+ }

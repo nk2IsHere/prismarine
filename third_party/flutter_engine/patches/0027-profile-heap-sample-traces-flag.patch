@@ -1,0 +1,43 @@
+From ee1d67ef0d65202517af0fbfad1fb2a817a5b62c Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 14 Nov 2026 13:26:32 +0100
+Subject: [PATCH] shell (mcsm): profile builds accept --heap_sample_traces
+ (allocation by call site, weighted by bytes; the Dart patch
+ vm-heap-sample-traces); macOS profile builds compile on the macOS 27 SDK (its
+ os_signpost macros' stack_protector_ignore under -fstack-protector-all)
+
+---
+ engine/src/flutter/shell/common/switches.cc                   | 4 ++++
+ .../darwin/macos/framework/Source/FlutterVSyncWaiter.mm       | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/engine/src/flutter/shell/common/switches.cc b/engine/src/flutter/shell/common/switches.cc
+index 91281642d52..b3c50d51280 100644
+--- a/engine/src/flutter/shell/common/switches.cc
++++ b/engine/src/flutter/shell/common/switches.cc
+@@ -83,6 +83,10 @@ static const std::string kAllowedDartFlags[] = {
+     "--new-gen-semi-initial-size",
+     "--no-inline-alloc",
+     "--no_inline_alloc",
++    // mcsm: allocation by call site weighted by bytes (the Dart patch
++    // vm-heap-sample-traces), with --no-inline-alloc.
++    "--heap_sample_traces",
++    "--heap-sample-traces",
+     "--profile_vm",
+     "--profile-vm",
+     "--verbose_gc",
+diff --git a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterVSyncWaiter.mm b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterVSyncWaiter.mm
+index d5133cb5651..16554bfa0de 100644
+--- a/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterVSyncWaiter.mm
++++ b/engine/src/flutter/shell/platform/darwin/macos/framework/Source/FlutterVSyncWaiter.mm
+@@ -18,6 +18,10 @@
+ #if VSYNC_TRACING_ENABLED
+ #include <OSLog/OSLog.h>
+ 
++// mcsm: the macOS 27 SDK's os_signpost macros carry stack_protector_ignore,
++// which -fstack-protector-all turns into a warning (an error here).
++#pragma clang diagnostic ignored "-Wignored-attributes"
++
+ // Trace vsync events using os_signpost so that they can be seen in Instruments "Points of
+ // Interest".
+ #define TRACE_VSYNC(event_type, baton)                                                     \

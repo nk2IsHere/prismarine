@@ -4,7 +4,10 @@
 #          .gclient (no Android, JDK, esbuild, Fuchsia) and `gclient sync`
 #          (~13 GB in $MCSM_DATA/engine; network, 20–40 min).
 #   patch  applies patches/*.patch on a branch `mcsm-engine` (idempotent: a
-#          fresh branch from the revision each time).
+#          fresh branch from the revision each time), and patches/dart/*.patch
+#          to the Dart SDK's files at its DEPS revision, uncommitted: the
+#          engine stamps its Dart SDK hash from that checkout's HEAD, which
+#          must stay the revision the Flutter tool's kernel files carry.
 #   build  gn + ninja for out/host_release_arm64 (MCSM_ENGINE_CPU=x64:
 #          out/host_release, an x86_64 engine): only the targets a release
 #          `flutter build macos --local-engine` reads (~4.5 GB; ~1 h the first
@@ -57,6 +60,10 @@ if [[ $step == patch || $step == all ]]; then
   git -C $E/flutter checkout -q -B mcsm-engine $rev
   git -C $E/flutter -c user.name="$(git -C $here config user.name)" \
     -c user.email="$(git -C $here config user.email)" am -q $here/patches/*.patch
+  dart=$src/flutter/third_party/dart
+  git -C $dart checkout -q -f --detach \
+    $(sed -n "s/^  'dart_revision': '\([0-9a-f]*\)',/\1/p" $E/flutter/DEPS)
+  git -C $dart apply $here/patches/dart/*.patch
 fi
 
 if [[ $step == build || $step == all ]]; then
