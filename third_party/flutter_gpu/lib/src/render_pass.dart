@@ -343,6 +343,10 @@ void _validateAttachmentSubresource(
 }
 
 base class RenderPass extends NativeFieldWrapperClass1 {
+  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// take it as a pointer, where passing the object made a Pointer per call.
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   /// The maximum number of vertex buffer slots that can be bound to a single
   /// draw. Matches `flutter::gpu::RenderPass::kMaxVertexBufferSlots` on the
   /// native side, which in turn matches `impeller::kMaxVertexBuffers`; keep
@@ -814,9 +818,19 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   // mcsm G7: a draw from a first instance. The mcsm7 engine offsets the
   // instance-rate buffers itself (leaf); elsewhere, or before the pass has
   // made the pipeline, they are bound again at the offset for this draw.
-  void _drawFromInstance(int count, int instanceCount, int first, bool indexed) {
+  void _drawFromInstance(
+    int count,
+    int instanceCount,
+    int first,
+    bool indexed,
+  ) {
     if (_mcsmDrawInstanced) {
-      final drawn = _mcsmDrawInstancedNative(count, instanceCount, first, indexed);
+      final drawn = _mcsmDrawInstancedNative(
+        count,
+        instanceCount,
+        first,
+        indexed,
+      );
       if (drawn == 1) return;
       if (drawn == 0) {
         throw Exception('Failed to append a draw from instance $first');
@@ -862,11 +876,24 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
     isLeaf: true,
   )
-  external int _mcsmDrawInstancedNative(
+  external static int _mcsmDrawInstancedNativeP(
+    Pointer<Void> self,
     int elementCount,
     int instanceCount,
     int firstInstance,
     bool indexed,
+  );
+  int _mcsmDrawInstancedNative(
+    int elementCount,
+    int instanceCount,
+    int firstInstance,
+    bool indexed,
+  ) => _mcsmDrawInstancedNativeP(
+    _mcsmSelf,
+    elementCount,
+    instanceCount,
+    firstInstance,
+    indexed,
   );
 
   /// Throws a [StateError] when the bound vertex buffer slots are sparse,
@@ -961,28 +988,59 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_RenderPass_BindPipeline',
     isLeaf: true, // mcsm G6
   )
-  external void _bindPipeline(RenderPipeline pipeline);
+  external static void _bindPipelineP(
+    Pointer<Void> self,
+    Pointer<Void> pipeline,
+  );
+  void _bindPipeline(RenderPipeline pipeline) =>
+      _bindPipelineP(_mcsmSelf, pipeline._mcsmSelf);
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindVertexBufferDevice',
     isLeaf: true, // mcsm G3
   )
-  external void _bindVertexBufferDevice(
+  external static void _bindVertexBufferDeviceP(
+    Pointer<Void> self,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+    int slot,
+  );
+  void _bindVertexBufferDevice(
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
     int slot,
+  ) => _bindVertexBufferDeviceP(
+    _mcsmSelf,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
+    slot,
   );
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindIndexBufferDevice',
     isLeaf: true, // mcsm G3
   )
-  external void _bindIndexBufferDevice(
+  external static void _bindIndexBufferDeviceP(
+    Pointer<Void> self,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+    int indexType,
+  );
+  void _bindIndexBufferDevice(
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
     int indexType,
+  ) => _bindIndexBufferDeviceP(
+    _mcsmSelf,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
+    indexType,
   );
 
   @Native<
@@ -997,16 +1055,30 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   );
 
   // mcsm G2
-  @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int)>(
-    symbol: 'InternalFlutterGpu_RenderPass_BindUniformIndexed',
-    isLeaf: true,
-  )
-  external bool _bindUniformIndexed(
+  @Native<
+    Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int)
+  >(symbol: 'InternalFlutterGpu_RenderPass_BindUniformIndexed', isLeaf: true)
+  external static bool _bindUniformIndexedP(
+    Pointer<Void> self,
+    Pointer<Void> shader,
+    int uniformIndex,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+  );
+  bool _bindUniformIndexed(
     Shader shader,
     int uniformIndex,
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
+  ) => _bindUniformIndexedP(
+    _mcsmSelf,
+    shader._mcsmSelf,
+    uniformIndex,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
   );
 
   // mcsm G2
@@ -1024,7 +1096,19 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       Int,
     )
   >(symbol: 'InternalFlutterGpu_RenderPass_BindTextureIndexed', isLeaf: true)
-  external bool _bindTextureIndexed(
+  external static bool _bindTextureIndexedP(
+    Pointer<Void> self,
+    Pointer<Void> shader,
+    int textureIndex,
+    Pointer<Void> texture,
+    int minFilter,
+    int magFilter,
+    int mipFilter,
+    int widthAddressMode,
+    int heightAddressMode,
+    int maxAnisotropy,
+  );
+  bool _bindTextureIndexed(
     Shader shader,
     int textureIndex,
     Texture texture,
@@ -1034,6 +1118,17 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int widthAddressMode,
     int heightAddressMode,
     int maxAnisotropy,
+  ) => _bindTextureIndexedP(
+    _mcsmSelf,
+    shader._mcsmSelf,
+    textureIndex,
+    texture._mcsmSelf,
+    minFilter,
+    magFilter,
+    mipFilter,
+    widthAddressMode,
+    heightAddressMode,
+    maxAnisotropy,
   );
 
   // mcsm G3: 1 drawn, 0 failed, 2 pipeline not cached (nothing done).
@@ -1041,19 +1136,43 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_RenderPass_DrawCached',
     isLeaf: true,
   )
-  external int _drawCached(int elementCount, int instanceCount, bool indexed);
+  external static int _drawCachedP(
+    Pointer<Void> self,
+    int elementCount,
+    int instanceCount,
+    bool indexed,
+  );
+  int _drawCached(int elementCount, int instanceCount, bool indexed) =>
+      _drawCachedP(_mcsmSelf, elementCount, instanceCount, indexed);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Float, Float)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetViewport',
     isLeaf: true, // mcsm G6
   )
-  external void _setViewport(
+  external static void _setViewportP(
+    Pointer<Void> self,
     int x,
     int y,
     int width,
     int height,
     double depthRangeZNear,
     double depthRangeZFar,
+  );
+  void _setViewport(
+    int x,
+    int y,
+    int width,
+    int height,
+    double depthRangeZNear,
+    double depthRangeZFar,
+  ) => _setViewportP(
+    _mcsmSelf,
+    x,
+    y,
+    width,
+    height,
+    depthRangeZNear,
+    depthRangeZFar,
   );
 
   @Native<
@@ -1086,19 +1205,27 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_RenderPass_ClearBindings',
     isLeaf: true, // mcsm G3
   )
-  external void _clearBindings();
+  external static void _clearBindingsP(Pointer<Void> self);
+  void _clearBindings() => _clearBindingsP(_mcsmSelf);
 
   @Native<Void Function(Pointer<Void>, Int, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEnable',
     isLeaf: true, // mcsm G6
   )
-  external void _setColorBlendEnable(int colorAttachmentIndex, bool enable);
+  external static void _setColorBlendEnableP(
+    Pointer<Void> self,
+    int colorAttachmentIndex,
+    bool enable,
+  );
+  void _setColorBlendEnable(int colorAttachmentIndex, bool enable) =>
+      _setColorBlendEnableP(_mcsmSelf, colorAttachmentIndex, enable);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEquation',
     isLeaf: true, // mcsm G6
   )
-  external void _setColorBlendEquation(
+  external static void _setColorBlendEquationP(
+    Pointer<Void> self,
     int colorAttachmentIndex,
     int colorBlendOperation,
     int sourceColorBlendFactor,
@@ -1107,30 +1234,61 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int sourceAlphaBlendFactor,
     int destinationAlphaBlendFactor,
   );
+  void _setColorBlendEquation(
+    int colorAttachmentIndex,
+    int colorBlendOperation,
+    int sourceColorBlendFactor,
+    int destinationColorBlendFactor,
+    int alphaBlendOperation,
+    int sourceAlphaBlendFactor,
+    int destinationAlphaBlendFactor,
+  ) => _setColorBlendEquationP(
+    _mcsmSelf,
+    colorAttachmentIndex,
+    colorBlendOperation,
+    sourceColorBlendFactor,
+    destinationColorBlendFactor,
+    alphaBlendOperation,
+    sourceAlphaBlendFactor,
+    destinationAlphaBlendFactor,
+  );
 
   @Native<Void Function(Pointer<Void>, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthWriteEnable',
     isLeaf: true, // mcsm G6
   )
-  external void _setDepthWriteEnable(bool enable);
+  external static void _setDepthWriteEnableP(Pointer<Void> self, bool enable);
+  void _setDepthWriteEnable(bool enable) =>
+      _setDepthWriteEnableP(_mcsmSelf, enable);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthCompareOperation',
     isLeaf: true, // mcsm G6
   )
-  external void _setDepthCompareOperation(int compareOperation);
+  external static void _setDepthCompareOperationP(
+    Pointer<Void> self,
+    int compareOperation,
+  );
+  void _setDepthCompareOperation(int compareOperation) =>
+      _setDepthCompareOperationP(_mcsmSelf, compareOperation);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilReference',
     isLeaf: true, // mcsm G6
   )
-  external void _setStencilReference(int referenceValue);
+  external static void _setStencilReferenceP(
+    Pointer<Void> self,
+    int referenceValue,
+  );
+  void _setStencilReference(int referenceValue) =>
+      _setStencilReferenceP(_mcsmSelf, referenceValue);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilConfig',
     isLeaf: true, // mcsm G6
   )
-  external void _setStencilConfig(
+  external static void _setStencilConfigP(
+    Pointer<Void> self,
     int compareFunction,
     int stencilFailureOperation,
     int depthFailureOperation,
@@ -1139,36 +1297,72 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int writeMask,
     int target_face,
   );
+  void _setStencilConfig(
+    int compareFunction,
+    int stencilFailureOperation,
+    int depthFailureOperation,
+    int depthStencilPassOperation,
+    int readMask,
+    int writeMask,
+    int target_face,
+  ) => _setStencilConfigP(
+    _mcsmSelf,
+    compareFunction,
+    stencilFailureOperation,
+    depthFailureOperation,
+    depthStencilPassOperation,
+    readMask,
+    writeMask,
+    target_face,
+  );
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetScissor',
     isLeaf: true, // mcsm G6
   )
-  external void _setScissor(int x, int y, int width, int height);
+  external static void _setScissorP(
+    Pointer<Void> self,
+    int x,
+    int y,
+    int width,
+    int height,
+  );
+  void _setScissor(int x, int y, int width, int height) =>
+      _setScissorP(_mcsmSelf, x, y, width, height);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetCullMode',
     isLeaf: true, // mcsm G6
   )
-  external void _setCullMode(int cullMode);
+  external static void _setCullModeP(Pointer<Void> self, int cullMode);
+  void _setCullMode(int cullMode) => _setCullModeP(_mcsmSelf, cullMode);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPrimitiveType',
     isLeaf: true, // mcsm G6
   )
-  external void _setPrimitiveType(int primitiveType);
+  external static void _setPrimitiveTypeP(
+    Pointer<Void> self,
+    int primitiveType,
+  );
+  void _setPrimitiveType(int primitiveType) =>
+      _setPrimitiveTypeP(_mcsmSelf, primitiveType);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetWindingOrder',
     isLeaf: true, // mcsm G6
   )
-  external void _setWindingOrder(int windingOrder);
+  external static void _setWindingOrderP(Pointer<Void> self, int windingOrder);
+  void _setWindingOrder(int windingOrder) =>
+      _setWindingOrderP(_mcsmSelf, windingOrder);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPolygonMode',
     isLeaf: true, // mcsm G6
   )
-  external void _setPolygonMode(int polygonMode);
+  external static void _setPolygonModeP(Pointer<Void> self, int polygonMode);
+  void _setPolygonMode(int polygonMode) =>
+      _setPolygonModeP(_mcsmSelf, polygonMode);
 
   @Native<Bool Function(Pointer<Void>, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_Draw',

@@ -54,3 +54,21 @@ final bool _mcsmDrawInstanced = DynamicLibrary.process().providesSymbol(
 final bool _mcsmEngineS2 = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_ComputePass_McsmDispatch',
 );
+
+/// mcsm G11: [o]'s native pointer (libc `memmove(p, p, 0)` returns p; the
+/// FFI passes a wrapper as its native field). Read once per object
+/// ([_mcsmSelf]): a wrapper passed to a native call becomes a new Pointer
+/// object each call when the generated call isn't inlined, which the
+/// player's AOT build doesn't: ~27,000 a frame in S2's heavy shots.
+Pointer<Void> _mcsmPointerOf(NativeFieldWrapperClass1 o) =>
+    _mcsmMemmove(o, o, 0);
+
+@Native<Pointer<Void> Function(Pointer<Void>, Pointer<Void>, Size)>(
+  symbol: 'memmove',
+  isLeaf: true,
+)
+external Pointer<Void> _mcsmMemmove(
+  NativeFieldWrapperClass1 a,
+  NativeFieldWrapperClass1 b,
+  int n,
+);

@@ -29,6 +29,10 @@ class BufferView {
 /// [DeviceBuffer] is a region of memory allocated on the device heap
 /// (GPU-resident memory).
 base class DeviceBuffer extends NativeFieldWrapperClass1 {
+  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// take it as a pointer, where passing the object made a Pointer per call.
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   bool _valid = false;
   get isValid {
     return _valid;

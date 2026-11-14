@@ -34,6 +34,7 @@ part 'src/buffer.dart';
 part 'src/memory.dart';
 part 'src/command_buffer.dart';
 part 'src/compute.dart';
+part 'src/compute_natives.dart';
 part 'src/context.dart';
 part 'src/formats.dart';
 part 'src/natives.dart';

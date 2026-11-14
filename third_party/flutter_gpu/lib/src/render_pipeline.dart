@@ -7,6 +7,10 @@
 part of flutter_gpu;
 
 base class RenderPipeline extends NativeFieldWrapperClass1 {
+  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// take it as a pointer, where passing the object made a Pointer per call.
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   /// Creates a new RenderPipeline.
   ///
   /// If [vertexLayout] is null, the default interleaved layout declared by

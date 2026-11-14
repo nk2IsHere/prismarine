@@ -325,6 +325,10 @@ extension McsmCommandBufferCompute on CommandBuffer {
 }
 
 base class ComputePipeline extends NativeFieldWrapperClass1 {
+  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// take it as a pointer, where passing the object made a Pointer per call.
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   ComputePipeline._(GpuContext gpuContext, this.shader) {
     final String? error = _initialize(gpuContext, shader);
     if (error != null) {
@@ -344,6 +348,10 @@ base class ComputePipeline extends NativeFieldWrapperClass1 {
 /// resource again after each [dispatch]. Dispatches may overlap: put a
 /// [barrier] between one that writes and one that reads.
 base class ComputePass extends NativeFieldWrapperClass1 {
+  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// take it as a pointer, where passing the object made a Pointer per call.
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   ComputePass._(CommandBuffer commandBuffer) {
     _initialize();
     final String? error = _begin(commandBuffer);
@@ -497,34 +505,75 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindPipeline',
     isLeaf: true,
   )
-  external bool _bindPipeline(ComputePipeline pipeline);
+  external static bool _bindPipelineP(
+    Pointer<Void> self,
+    Pointer<Void> pipeline,
+  );
+  bool _bindPipeline(ComputePipeline pipeline) =>
+      _bindPipelineP(_mcsmSelf, pipeline._mcsmSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindUniform',
     isLeaf: true,
   )
-  external bool _bindUniform(
+  external static bool _bindUniformP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+  );
+  bool _bindUniform(
     int index,
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
+  ) => _bindUniformP(
+    _mcsmSelf,
+    index,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageBuffer',
     isLeaf: true,
   )
-  external bool _bindStorageBuffer(
+  external static bool _bindStorageBufferP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+  );
+  bool _bindStorageBuffer(
     int index,
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
+  ) => _bindStorageBufferP(
+    _mcsmSelf,
+    index,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
   );
 
   @Native<
     Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int, Int, Int, Int)
   >(symbol: 'InternalFlutterGpu_ComputePass_McsmBindTexture', isLeaf: true)
-  external bool _bindTexture(
+  external static bool _bindTextureP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> texture,
+    int minFilter,
+    int magFilter,
+    int mipFilter,
+    int widthAddressMode,
+    int heightAddressMode,
+  );
+  bool _bindTexture(
     int index,
     Texture texture,
     int minFilter,
@@ -532,6 +581,15 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int mipFilter,
     int widthAddressMode,
     int heightAddressMode,
+  ) => _bindTextureP(
+    _mcsmSelf,
+    index,
+    texture._mcsmSelf,
+    minFilter,
+    magFilter,
+    mipFilter,
+    widthAddressMode,
+    heightAddressMode,
   );
 
   @Native<
@@ -548,252 +606,126 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindTextureSampler',
     isLeaf: true,
   )
-  external bool _bindTextureSampler(
+  external static bool _bindTextureSamplerP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> texture,
+    int packed,
+    double minLod,
+    double maxLod,
+    double lodBias,
+  );
+  bool _bindTextureSampler(
     int index,
     Texture texture,
     int packed,
     double minLod,
     double maxLod,
     double lodBias,
+  ) => _bindTextureSamplerP(
+    _mcsmSelf,
+    index,
+    texture._mcsmSelf,
+    packed,
+    minLod,
+    maxLod,
+    lodBias,
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageImage',
     isLeaf: true,
   )
-  external bool _bindStorageImage(int index, Texture texture);
+  external static bool _bindStorageImageP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> texture,
+  );
+  bool _bindStorageImage(int index, Texture texture) =>
+      _bindStorageImageP(_mcsmSelf, index, texture._mcsmSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindTexelBuffer',
     isLeaf: true,
   )
-  external bool _bindTexelBuffer(
+  external static bool _bindTexelBufferP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> buffer,
+    int offsetInBytes,
+    int lengthInBytes,
+    int format,
+  );
+  bool _bindTexelBuffer(
     int index,
     DeviceBuffer buffer,
     int offsetInBytes,
     int lengthInBytes,
     int format,
+  ) => _bindTexelBufferP(
+    _mcsmSelf,
+    index,
+    buffer._mcsmSelf,
+    offsetInBytes,
+    lengthInBytes,
+    format,
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateTexture',
     isLeaf: true,
   )
-  external bool _bindSeparateTexture(int index, Texture texture);
+  external static bool _bindSeparateTextureP(
+    Pointer<Void> self,
+    int index,
+    Pointer<Void> texture,
+  );
+  bool _bindSeparateTexture(int index, Texture texture) =>
+      _bindSeparateTextureP(_mcsmSelf, index, texture._mcsmSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Int64, Double, Double, Double)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateSampler',
     isLeaf: true,
   )
-  external bool _bindSeparateSampler(
+  external static bool _bindSeparateSamplerP(
+    Pointer<Void> self,
     int index,
     int packed,
     double minLod,
     double maxLod,
     double lodBias,
   );
+  bool _bindSeparateSampler(
+    int index,
+    int packed,
+    double minLod,
+    double maxLod,
+    double lodBias,
+  ) => _bindSeparateSamplerP(_mcsmSelf, index, packed, minLod, maxLod, lodBias);
 
   @Native<Bool Function(Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmDispatch',
     isLeaf: true,
   )
-  external bool _dispatch(int x, int y, int z);
+  external static bool _dispatchP(Pointer<Void> self, int x, int y, int z);
+  bool _dispatch(int x, int y, int z) => _dispatchP(_mcsmSelf, x, y, z);
 
   @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmDispatchIndirect',
     isLeaf: true,
   )
-  external bool _dispatchIndirect(DeviceBuffer args, int offsetInBytes);
+  external static bool _dispatchIndirectP(
+    Pointer<Void> self,
+    Pointer<Void> args,
+    int offsetInBytes,
+  );
+  bool _dispatchIndirect(DeviceBuffer args, int offsetInBytes) =>
+      _dispatchIndirectP(_mcsmSelf, args._mcsmSelf, offsetInBytes);
 
   @Native<Void Function(Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_ComputePass_McsmBarrier',
     isLeaf: true,
   )
-  external void _barrier();
+  external static void _barrierP(Pointer<Void> self);
+  void _barrier() => _barrierP(_mcsmSelf);
 }
-
-@Native<Int Function(Pointer<Void>, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveStorageBuffer',
-)
-external int _resolveStorageBuffer(Shader shader, String name);
-
-@Native<Int Function(Pointer<Void>, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveStorageImage',
-)
-external int _resolveStorageImage(Shader shader, String name);
-
-@Native<
-  Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int)
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindStorageBuffer', isLeaf: true)
-external bool _renderPassBindStorageBuffer(
-  RenderPass pass,
-  Shader shader,
-  int index,
-  DeviceBuffer buffer,
-  int offsetInBytes,
-  int lengthInBytes,
-);
-
-// mcsm10: whether the engine answers an indirect draw as a leaf call.
-final bool _mcsmIndirectLeaf = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
-);
-
-@Native<Int Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
-  isLeaf: true,
-)
-external int _renderPassDrawIndirectCached(
-  RenderPass pass,
-  DeviceBuffer args,
-  int offsetInBytes,
-  bool indexed,
-);
-
-@Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmDrawIndirect',
-)
-external bool _renderPassDrawIndirect(
-  RenderPass pass,
-  DeviceBuffer args,
-  int offsetInBytes,
-  bool indexed,
-);
-
-@Native<
-  Bool Function(
-    Pointer<Void>,
-    Pointer<Void>,
-    Int,
-    Pointer<Void>,
-    Int64,
-    Double,
-    Double,
-    Double,
-  )
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTextureSampler', isLeaf: true)
-external bool _renderPassBindTextureSampler(
-  RenderPass pass,
-  Shader shader,
-  int index,
-  Texture texture,
-  int packed,
-  double minLod,
-  double maxLod,
-  double lodBias,
-);
-
-@Native<
-  Handle Function(
-    Pointer<Void>,
-    Pointer<Void>,
-    Pointer<Void>,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-  )
->(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture')
-external String? _copyTextureToTexture(
-  CommandBuffer commandBuffer,
-  Texture source,
-  Texture destination,
-  int x,
-  int y,
-  int width,
-  int height,
-  int destinationX,
-  int destinationY,
-  int sourceMip,
-  int sourceSlice,
-  int destinationMip,
-  int destinationSlice,
-);
-
-@Native<
-  Handle Function(
-    Pointer<Void>,
-    Pointer<Void>,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Int,
-    Pointer<Void>,
-    Int,
-  )
->(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer')
-external String? _copyTextureToBuffer(
-  CommandBuffer commandBuffer,
-  Texture source,
-  int x,
-  int y,
-  int width,
-  int height,
-  int mip,
-  int slice,
-  DeviceBuffer destination,
-  int destinationOffset,
-);
-
-@Native<Handle Function(Pointer<Void>, Pointer<Void>)>(
-  symbol: 'InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap',
-)
-external String? _generateMipmap(CommandBuffer commandBuffer, Texture texture);
-
-@Native<Int Function(Pointer<Void>, Int, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveBinding',
-)
-external int _resolveBinding(Shader shader, int kind, String name);
-
-@Native<
-  Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTexelBuffer', isLeaf: true)
-external bool _renderPassBindTexelBuffer(
-  RenderPass pass,
-  Shader shader,
-  int index,
-  DeviceBuffer buffer,
-  int offsetInBytes,
-  int lengthInBytes,
-  int format,
-);
-
-@Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateTexture',
-  isLeaf: true,
-)
-external bool _renderPassBindSeparateTexture(
-  RenderPass pass,
-  Shader shader,
-  int index,
-  Texture texture,
-);
-
-@Native<
-  Bool Function(
-    Pointer<Void>,
-    Pointer<Void>,
-    Int,
-    Int64,
-    Double,
-    Double,
-    Double,
-  )
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateSampler', isLeaf: true)
-external bool _renderPassBindSeparateSampler(
-  RenderPass pass,
-  Shader shader,
-  int index,
-  int packed,
-  double minLod,
-  double maxLod,
-  double lodBias,
-);

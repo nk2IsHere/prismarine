@@ -55,6 +55,11 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - `compute.dart`: every `ComputePass` bind, `dispatch`, `dispatchIndirect` and `barrier`, and the render pass's separate texture, separate sampler, texel buffer, storage buffer and texture-with-sampler binds are leaf calls: the engine's halves only store or encode state (no Dart handles, nothing that waits), as G3's and G6's do. S2's heavy shots make thousands of them a frame (BeaconTown's title shot: ~855 dispatches with about six binds each).
 - `drawIndirect` stays a non-leaf call: like the stock draw, it may wait for a pipeline the pass has not built yet.
 
+## G11: wrapper objects' native pointers read once
+
+- `natives.dart`: `_mcsmPointerOf(o)`, an object's native field as a `Pointer<Void>` (libc `memmove(p, p, 0)` returns p). `RenderPass`, `ComputePass`, `DeviceBuffer`, `Shader`, `Texture`, `RenderPipeline` and `ComputePipeline` keep theirs (`_mcsmSelf`, read on first use).
+- `render_pass.dart`, `compute.dart`, `compute_natives.dart` (split from `compute.dart`): every leaf native that took a wrapper object (`this` included) is a static native taking `Pointer<Void>`s, called with the kept pointers by a method of the old name. A wrapper passed to a native call becomes a new `Pointer` object each call unless the generated call is inlined, which the player's AOT build doesn't do (~27,000 a frame in S2's heavy shots, the UI isolate's largest allocation). Non-leaf natives keep the wrappers: their generated calls hold the objects alive through the call (a GC can run in it).
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
