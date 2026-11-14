@@ -3,16 +3,16 @@ Subject: [PATCH] vm (mcsm): allocation by call site weighted by bytes
  (--heap_sample_traces, message copies included), and what young collections
  copy by class (--scavenge_census)
 
- runtime/vm/heap/scavenger.cc    | 61 +++++++++++++++++++++++++++++++++++++++++
- runtime/vm/object.cc            | 37 +++++++++++++++++++++++++
- runtime/vm/object_graph_copy.cc | 12 ++++++++
- 3 files changed, 110 insertions(+)
+ runtime/vm/heap/scavenger.cc    | 69 +++++++++++++++++++++++++++++++++++++++++
+ runtime/vm/object.cc            | 37 ++++++++++++++++++++++
+ runtime/vm/object_graph_copy.cc | 12 +++++++
+ 3 files changed, 118 insertions(+)
 
 diff --git a/runtime/vm/heap/scavenger.cc b/runtime/vm/heap/scavenger.cc
-index 9fba03d6..d683351b 100644
+index 9fba03d6..f0abd09e 100644
 --- a/runtime/vm/heap/scavenger.cc
 +++ b/runtime/vm/heap/scavenger.cc
-@@ -47,6 +47,55 @@ DEFINE_FLAG(int,
+@@ -47,6 +47,63 @@ DEFINE_FLAG(int,
              90,
              "Grow new gen when less than this percentage is garbage.");
  DEFINE_FLAG(int, new_gen_growth_factor, 2, "Grow new gen by this factor.");
@@ -59,16 +59,24 @@ index 9fba03d6..d683351b 100644
 +  }
 +  OS::PrintErr("[census] %d scavenges: copied %.1f MB, promoted %.1f MB\n",
 +               FLAG_scavenge_census, copied / 1e6, promoted / 1e6);
++  Thread* thread = Thread::Current();
++  StackZone zone(thread);
 +  for (intptr_t i = 0; i < 30 && top[i].copied + top[i].promoted > 0; i++) {
++    // The class's own name: a product build's class table keeps no names
++    // of its own.
++    const char* name =
++        table->HasValidClassAt(top[i].cid)
++            ? String::Handle(Class::Handle(table->At(top[i].cid)).Name())
++                  .ToCString()
++            : "?";
 +    OS::PrintErr("[census] %9.3f %9.3f  %s\n", top[i].copied / 1e6,
-+                 top[i].promoted / 1e6,
-+                 table->UserVisibleNameFor(top[i].cid));
++                 top[i].promoted / 1e6, name);
 +  }
 +}
  
  // Scavenger uses the kCardRememberedBit to distinguish forwarded and
  // non-forwarded objects. We must choose a bit that is clear for all new-space
-@@ -496,6 +545,9 @@ class ScavengerVisitor : public ObjectPointerVisitor,
+@@ -496,6 +553,9 @@ class ScavengerVisitor : public ObjectPointerVisitor,
        // Try to install forwarding address.
        uword forwarding_header = ForwardingHeader(new_obj);
        if (InstallForwardingPointer(raw_addr, &header, forwarding_header)) {
@@ -78,7 +86,7 @@ index 9fba03d6..d683351b 100644
          if (new_obj->IsOldObject()) {
            // If promotion succeeded then we need to remember it so that it can
            // be traversed later.
-@@ -1855,6 +1907,10 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
+@@ -1855,6 +1915,10 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
                      thread->is_marking() ? kAllowMarked : kForbidMarked);
    }
  
@@ -89,7 +97,7 @@ index 9fba03d6..d683351b 100644
    // Prepare for a scavenge.
    failed_to_promote_ = false;
    abort_ = false;
-@@ -1933,6 +1989,11 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
+@@ -1933,6 +1997,11 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
    // if the VM cannot create more pages for these objects.
    ASSERT((type != GCType::kEvacuate) || (UsedInWords() == 0) ||
           failed_to_promote_);
