@@ -64,6 +64,10 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 
 - `render_pass.dart`: the non-leaf natives a `RenderPass` is made with (`SetColorAttachment`, `SetDepthStencilAttachment`, `Begin`) are static natives taking `Pointer<Void>`s for the pass, the context, the attachments' textures and the command buffer (about six `Pointer` objects a pass, a hundred passes a frame). `GpuContext` and `CommandBuffer` keep their `_mcsmSelf` too. The constructor holds every wrapper through each call (itself, its render target, the command buffer), so none can be collected inside one.
 
+## G13: vertex views made on first bind
+
+- `render_pass.dart`: G7's per-slot vertex views are a list made on a pass's first `bindVertexBuffer` (a full-screen pass binds none; a list of sixteen per pass was).
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
