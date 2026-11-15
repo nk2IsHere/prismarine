@@ -60,6 +60,10 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 - `natives.dart`: `_mcsmPointerOf(o)`, an object's native field as a `Pointer<Void>` (libc `memmove(p, p, 0)` returns p). `RenderPass`, `ComputePass`, `DeviceBuffer`, `Shader`, `Texture`, `RenderPipeline` and `ComputePipeline` keep theirs (`_mcsmSelf`, read on first use).
 - `render_pass.dart`, `compute.dart`, `compute_natives.dart` (split from `compute.dart`): every leaf native that took a wrapper object (`this` included) is a static native taking `Pointer<Void>`s, called with the kept pointers by a method of the old name. A wrapper passed to a native call becomes a new `Pointer` object each call unless the generated call is inlined, which the player's AOT build doesn't do (~27,000 a frame in S2's heavy shots, the UI isolate's largest allocation). Non-leaf natives keep the wrappers: their generated calls hold the objects alive through the call (a GC can run in it).
 
+## G12: a render pass's set-up by kept pointers
+
+- `render_pass.dart`: the non-leaf natives a `RenderPass` is made with (`SetColorAttachment`, `SetDepthStencilAttachment`, `Begin`) are static natives taking `Pointer<Void>`s for the pass, the context, the attachments' textures and the command buffer (about six `Pointer` objects a pass, a hundred passes a frame). `GpuContext` and `CommandBuffer` keep their `_mcsmSelf` too. The constructor holds every wrapper through each call (itself, its render target, the command buffer), so none can be collected inside one.
+
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").

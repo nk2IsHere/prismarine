@@ -399,8 +399,9 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _initialize();
     String? error;
     for (final (index, color) in renderTarget.colorAttachments.indexed) {
-      error = _setColorAttachment(
-        gpuContext,
+      error = _setColorAttachmentP(
+        _mcsmSelf,
+        gpuContext._mcsmSelf,
         index,
         color.loadAction.index,
         color.storeAction.index,
@@ -408,7 +409,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
         color.clearValue.g,
         color.clearValue.b,
         color.clearValue.a,
-        color.texture,
+        color.texture._mcsmSelf,
         color.resolveTexture,
         color.mipLevel,
         color.slice,
@@ -419,14 +420,15 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     }
     if (renderTarget.depthStencilAttachment != null) {
       final ds = renderTarget.depthStencilAttachment!;
-      error = _setDepthStencilAttachment(
+      error = _setDepthStencilAttachmentP(
+        _mcsmSelf,
         ds.depthLoadAction.index,
         ds.depthStoreAction.index,
         ds.depthClearValue,
         ds.stencilLoadAction.index,
         ds.stencilStoreAction.index,
         ds.stencilClearValue,
-        ds.texture,
+        ds.texture._mcsmSelf,
         ds.mipLevel,
         ds.slice,
       );
@@ -434,7 +436,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
         throw Exception(error);
       }
     }
-    error = _begin(commandBuffer);
+    error = _beginP(_mcsmSelf, commandBuffer._mcsmSelf);
     if (error != null) {
       throw Exception(error);
     }
@@ -938,8 +940,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       Int,
     )
   >(symbol: 'InternalFlutterGpu_RenderPass_SetColorAttachment')
-  external String? _setColorAttachment(
-    GpuContext context,
+  // mcsm G12: the wrappers by their kept pointers (a Pointer per wrapper
+  // argument per call otherwise); the caller holds every one through it.
+  external static String? _setColorAttachmentP(
+    Pointer<Void> self,
+    Pointer<Void> context,
     int colorAttachmentIndex,
     int loadAction,
     int storeAction,
@@ -947,7 +952,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     double clearColorG,
     double clearColorB,
     double clearColorA,
-    Texture texture,
+    Pointer<Void> texture,
     Texture? resolveTexture,
     int mipLevel,
     int slice,
@@ -967,14 +972,16 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       Int,
     )
   >(symbol: 'InternalFlutterGpu_RenderPass_SetDepthStencilAttachment')
-  external String? _setDepthStencilAttachment(
+  external static String? _setDepthStencilAttachmentP(
+    // mcsm G12
+    Pointer<Void> self,
     int depthLoadAction,
     int depthStoreAction,
     double depthClearValue,
     int stencilLoadAction,
     int stencilStoreAction,
     int stencilClearValue,
-    Texture texture,
+    Pointer<Void> texture,
     int mipLevel,
     int slice,
   );
@@ -982,7 +989,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   @Native<Handle Function(Pointer<Void>, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_RenderPass_Begin',
   )
-  external String? _begin(CommandBuffer commandBuffer);
+  external static String? _beginP(
+    // mcsm G12
+    Pointer<Void> self,
+    Pointer<Void> commandBuffer,
+  );
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindPipeline',

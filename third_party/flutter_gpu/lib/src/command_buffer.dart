@@ -115,6 +115,10 @@ base class TextureDestinationRegion {
 }
 
 base class CommandBuffer extends NativeFieldWrapperClass1 {
+  /// mcsm G12: this object's native pointer, read once (RenderPass's
+  /// natives take it as a pointer).
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   final GpuContext _gpuContext;
 
   /// Creates a new CommandBuffer.

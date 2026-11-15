@@ -10,6 +10,10 @@ part of flutter_gpu;
 ///
 /// To obtain the default graphics context, use [getContext].
 base class GpuContext extends NativeFieldWrapperClass1 {
+  /// mcsm G12: this object's native pointer, read once (RenderPass's
+  /// natives take it as a pointer).
+  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
   /// Creates a new graphics context that corresponds to the default Impeller
   /// context.
   GpuContext._createDefault() {
