@@ -177,9 +177,13 @@ Future<String?> _metalOptions(_S2 s2) async {
     p.bindUniform(f.getUniformSlot('Zero'), s2.floats([0, 0, 0, 0]));
   });
   final c = await centre(out);
-  return near(c, [0, 255, 0, 255])
-      ? null
-      : 'IEEE arithmetic folded away: got $c';
+  // Red NaN, green Inf: what the translated shaders rely on. Blue: -0 + 0
+  // came out +0; a driver that drops the addition (Intel's UHD 620 on
+  // Vulkan) does what spirv-opt does in the shipped bundles, so it is said,
+  // not failed.
+  if (c[0] < 128 || c[1] < 128) return 'NaN or Inf folded away: got $c';
+  if (c[2] < 128) s2.log('SMOKE mcsm9 -0 + 0 stays -0 on this driver: got $c');
+  return null;
 }
 
 Future<String?> _computeBuffers(_S2 s2) async {

@@ -182,7 +182,8 @@ Future<bool> mcsm9Checks(void Function(String) log) async {
     () => _storageFormats(s2),
   );
   await check(
-    'IEEE arithmetic (NaN, Inf, -0 + 0) without SPIR-V or Metal fast math',
+    'IEEE arithmetic (NaN, Inf; -0 + 0 reported) without SPIR-V or Metal fast '
+    'math',
     () => _metalOptions(s2),
   );
   await check(
