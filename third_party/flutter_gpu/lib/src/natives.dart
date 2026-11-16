@@ -55,6 +55,33 @@ final bool _mcsmEngineS2 = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_ComputePass_McsmDispatch',
 );
 
+// mcsm G15: whether the engine detaches wrappers from their native objects
+// and collects at the caller's idle point (third_party/flutter_engine patch
+// 0028, mcsm11).
+final bool _mcsmEngine11 = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_McsmDetach',
+);
+
+@Native<Void Function(Handle)>(symbol: 'InternalFlutterGpu_McsmDetach')
+external void _mcsmDetach(Object wrapper);
+
+@Native<Int64 Function(Int64, Int64, Int64)>(
+  symbol: 'InternalFlutterGpu_McsmGcIdle',
+)
+external int _mcsmGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes);
+
+/// mcsm G15: whether [mcsmGcIdle] reaches the VM (an mcsm11 engine).
+bool get mcsmGcIdleSupported => _mcsmEngine11;
+
+/// mcsm G15: the Dart VM's collections at the caller's idle point, every
+/// isolate of the group with it. A young collection runs when new space
+/// holds at least [minNewBytes] and the VM expects it to end within
+/// [budgetMicros], or when it holds [maxNewBytes]; a finished old-space mark
+/// is finalized and a due one started. Returns what ran (1 a young
+/// collection, 2 a mark started, 4 a mark finalized); 0 on other engines.
+int mcsmGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes) =>
+    _mcsmEngine11 ? _mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes) : 0;
+
 /// mcsm G11: [o]'s native pointer (libc `memmove(p, p, 0)` returns p; the
 /// FFI passes a wrapper as its native field). Read once per object
 /// ([_mcsmSelf]): a wrapper passed to a native call becomes a new Pointer

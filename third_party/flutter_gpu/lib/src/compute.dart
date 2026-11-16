@@ -321,7 +321,23 @@ extension McsmGpuContextCompute on GpuContext {
 
 extension McsmCommandBufferCompute on CommandBuffer {
   /// A compute pass, encoded in turn with this command buffer's other passes.
-  ComputePass createComputePass() => ComputePass._(this);
+  ComputePass createComputePass() {
+    if (!_mcsmEngine11) return ComputePass._(this);
+    // mcsm G15: as render passes (CommandBuffer.createRenderPass).
+    final ctx = _gpuContext;
+    final ComputePass pass;
+    final free = ctx._mcsmFreeCompute;
+    if (free != null) {
+      ctx._mcsmFreeCompute = free._mcsmNext;
+      free._mcsmNext = null;
+      pass = free.._mcsmSetup(this, again: true);
+    } else {
+      pass = ComputePass._(this);
+    }
+    pass._mcsmNext = _mcsmComputes;
+    _mcsmComputes = pass;
+    return pass;
+  }
 }
 
 base class ComputePipeline extends NativeFieldWrapperClass1 {
@@ -350,10 +366,20 @@ base class ComputePipeline extends NativeFieldWrapperClass1 {
 base class ComputePass extends NativeFieldWrapperClass1 {
   /// mcsm G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (mcsm G15: read again when the object is made again.)
+  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
+  // mcsm G15: the next pass of this one's command buffer, or of the
+  // context's free list.
+  ComputePass? _mcsmNext;
 
   ComputePass._(CommandBuffer commandBuffer) {
+    _mcsmSetup(commandBuffer, again: false);
+  }
+
+  void _mcsmSetup(CommandBuffer commandBuffer, {required bool again}) {
     _initialize();
+    if (again) _mcsmSelf = _mcsmPointerOf(this);
     final String? error = _begin(commandBuffer);
     if (error != null) {
       throw Exception(error);

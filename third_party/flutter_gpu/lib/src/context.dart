@@ -274,8 +274,24 @@ base class GpuContext extends NativeFieldWrapperClass1 {
 
   /// Create a new command buffer that can be used to submit GPU commands.
   CommandBuffer createCommandBuffer() {
+    // mcsm G15: a submitted one again.
+    final free = _mcsmFreeBuffer;
+    if (free != null) {
+      _mcsmFreeBuffer = free._mcsmNext;
+      free._mcsmNext = null;
+      return free.._mcsmAgain();
+    }
     return CommandBuffer._(this);
   }
+
+  // mcsm G15: submitted command buffers and their passes, detached from
+  // their native objects at submit and made again from here (each list
+  // through the objects' own links): a frame's ~100 passes otherwise die
+  // young and are destroyed natively inside a collection's pause, every
+  // isolate stopped.
+  CommandBuffer? _mcsmFreeBuffer;
+  RenderPass? _mcsmFreePass;
+  ComputePass? _mcsmFreeCompute;
 
   RenderPipeline createRenderPipeline(
     Shader vertexShader,

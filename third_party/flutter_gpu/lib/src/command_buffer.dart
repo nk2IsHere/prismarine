@@ -117,7 +117,8 @@ base class TextureDestinationRegion {
 base class CommandBuffer extends NativeFieldWrapperClass1 {
   /// mcsm G12: this object's native pointer, read once (RenderPass's
   /// natives take it as a pointer).
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (mcsm G15: read again when the object is made again.)
+  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
 
   final GpuContext _gpuContext;
 
@@ -131,8 +132,62 @@ base class CommandBuffer extends NativeFieldWrapperClass1 {
   /// Whether [submit] has been called on this command buffer.
   bool get submitted => _submitted;
 
+  // mcsm G15: this command buffer's passes (through their links), and its
+  // own link in the context's free list.
+  RenderPass? _mcsmPasses;
+  ComputePass? _mcsmComputes;
+  CommandBuffer? _mcsmNext;
+
+  /// mcsm G15: a submitted command buffer taken from the free list.
+  void _mcsmAgain() {
+    _initialize(_gpuContext);
+    _mcsmSelf = _mcsmPointerOf(this);
+    _submitted = false;
+  }
+
+  /// mcsm G15: after submit, the passes and this command buffer leave their
+  /// native objects (released here, not by a collection) and wait in the
+  /// context's free lists. None of them is used after its submit.
+  void _mcsmRelease() {
+    final ctx = _gpuContext;
+    var pass = _mcsmPasses;
+    _mcsmPasses = null;
+    while (pass != null) {
+      final next = pass._mcsmNext;
+      _mcsmDetach(pass);
+      pass._mcsmNext = ctx._mcsmFreePass;
+      ctx._mcsmFreePass = pass;
+      pass = next;
+    }
+    var compute = _mcsmComputes;
+    _mcsmComputes = null;
+    while (compute != null) {
+      final next = compute._mcsmNext;
+      _mcsmDetach(compute);
+      compute._mcsmNext = ctx._mcsmFreeCompute;
+      ctx._mcsmFreeCompute = compute;
+      compute = next;
+    }
+    _mcsmDetach(this);
+    _mcsmNext = ctx._mcsmFreeBuffer;
+    ctx._mcsmFreeBuffer = this;
+  }
+
   RenderPass createRenderPass(RenderTarget renderTarget) {
-    return RenderPass._(_gpuContext, this, renderTarget);
+    if (!_mcsmEngine11) return RenderPass._(_gpuContext, this, renderTarget);
+    final ctx = _gpuContext;
+    final RenderPass pass;
+    final free = ctx._mcsmFreePass;
+    if (free != null) {
+      ctx._mcsmFreePass = free._mcsmNext;
+      free._mcsmNext = null;
+      pass = free.._mcsmAgain(ctx, this, renderTarget);
+    } else {
+      pass = RenderPass._(ctx, this, renderTarget);
+    }
+    pass._mcsmNext = _mcsmPasses;
+    _mcsmPasses = pass;
+    return pass;
   }
 
   /// Copies tightly packed texel data from [source] into [destination].
@@ -250,6 +305,7 @@ base class CommandBuffer extends NativeFieldWrapperClass1 {
       throw Exception(error);
     }
     _submitted = true;
+    if (_mcsmEngine11) _mcsmRelease();
   }
 
   /// Wrap with native counterpart.

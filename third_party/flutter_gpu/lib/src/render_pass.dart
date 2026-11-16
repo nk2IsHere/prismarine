@@ -345,7 +345,33 @@ void _validateAttachmentSubresource(
 base class RenderPass extends NativeFieldWrapperClass1 {
   /// mcsm G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (mcsm G15: read again when the object is made again.)
+  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+
+  // mcsm G15: the next pass of this one's command buffer, or of the
+  // context's free list.
+  RenderPass? _mcsmNext;
+
+  /// mcsm G15: a pass of a submitted command buffer made again: a new native
+  /// object, this object's memos as a new pass's (the clear number goes on,
+  /// so a shader's bound-texture memo of the old pass never matches).
+  void _mcsmAgain(
+    GpuContext gpuContext,
+    CommandBuffer commandBuffer,
+    RenderTarget renderTarget,
+  ) {
+    _boundVertexSlotsMask = 0;
+    _maxBoundVertexSlot = -1;
+    _clearEpoch++;
+    _cullMode = -1;
+    _windingOrder = -1;
+    _primitiveType = -1;
+    _polygonMode = -1;
+    _boundVertices = false;
+    if (identical(_vertexViewsOwner, this)) _vertexViewsOwner = null;
+    _pipeline = null;
+    _mcsmSetup(gpuContext, commandBuffer, renderTarget, again: true);
+  }
 
   /// The maximum number of vertex buffer slots that can be bound to a single
   /// draw. Matches `flutter::gpu::RenderPass::kMaxVertexBufferSlots` on the
@@ -416,6 +442,15 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     CommandBuffer commandBuffer,
     RenderTarget renderTarget,
   ) {
+    _mcsmSetup(gpuContext, commandBuffer, renderTarget, again: false);
+  }
+
+  void _mcsmSetup(
+    GpuContext gpuContext,
+    CommandBuffer commandBuffer,
+    RenderTarget renderTarget, {
+    required bool again,
+  }) {
     renderTarget._validateAttachments();
     assert(() {
       renderTarget._validate();
@@ -423,6 +458,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     }());
 
     _initialize();
+    if (again) _mcsmSelf = _mcsmPointerOf(this);
     String? error;
     for (final (index, color) in renderTarget.colorAttachments.indexed) {
       error = _setColorAttachmentP(

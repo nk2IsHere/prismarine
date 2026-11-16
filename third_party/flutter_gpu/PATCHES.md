@@ -75,3 +75,10 @@ See `third_party/flutter_engine/README.md` and status-perf ("E").
 ## G14: one vertex view list for every pass
 
 - `render_pass.dart`: G13's per-pass list of vertex views is one static list, held by the pass that bound a vertex buffer last (a pass binds and draws before the next one binds). A draw from a first instance on the fallback path asks its views only while its pass holds the list, and throws otherwise (perf: a list per pass a frame, the UI isolate's largest site).
+
+## G15: passes and command buffers made again; collections at an idle point (mcsm11)
+
+- `natives.dart`: `_mcsmEngine11` (the process exports `InternalFlutterGpu_McsmDetach`, third_party/flutter_engine patch 0028). `mcsmGcIdleSupported` and `mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes)`: the Dart VM's collections at the caller's idle point (0 and nothing on other engines).
+- `command_buffer.dart`, `render_pass.dart`, `compute.dart`, `context.dart`: at `submit` a command buffer detaches its render and compute passes and itself from their native objects (`_mcsmDetach`: released there, no weak handle left for a collection to finalize) and links the Dart objects into the context's free lists; `createCommandBuffer`, `createRenderPass` and `createComputePass` take one from there and initialize it again (`_mcsmAgain`, `_mcsmSetup`; `_mcsmSelf` is read again, so it is no longer final). A pass made again counts its clear number on, so a shader's bound-texture memo (G5) of the pass before never matches. Without the export nothing is linked or reused.
+  Why: ~100 passes a frame died young, and a young collection destroyed their native objects one by one inside its pause (about 80 % of the pause on the playtest route).
+  A command buffer or pass must not be used after its submit (the object is another pass by then).
