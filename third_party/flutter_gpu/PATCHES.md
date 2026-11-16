@@ -71,3 +71,7 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 ## Measured
 
 See `third_party/flutter_engine/README.md` and status-perf ("E").
+
+## G14: one vertex view list for every pass
+
+- `render_pass.dart`: G13's per-pass list of vertex views is one static list, held by the pass that bound a vertex buffer last (a pass binds and draws before the next one binds). A draw from a first instance on the fallback path asks its views only while its pass holds the list, and throws otherwise (perf: a list per pass a frame, the UI isolate's largest site).

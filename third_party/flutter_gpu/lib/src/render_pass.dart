@@ -379,8 +379,36 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   // mcsm G7: the view bound at each vertex buffer slot (for draws from a
   // first instance on engines without RenderPass_McsmDrawInstanced). mcsm
-  // G13: made on the first vertex bind (a full-screen pass binds none).
-  List<BufferView?>? _vertexViews;
+  // G14: one list for every pass, held by the pass that bound last (a pass
+  // binds and draws before the next one binds; a list per pass was a
+  // frame's garbage); a pass that bound asks its views only while it holds
+  // the list.
+  static final _sharedVertexViews = List<BufferView?>.filled(
+    _kMaxVertexBufferSlots,
+    null,
+  );
+  static RenderPass? _vertexViewsOwner;
+  bool _boundVertices = false;
+
+  List<BufferView?> get _ownVertexViews {
+    if (!identical(_vertexViewsOwner, this)) {
+      _sharedVertexViews.fillRange(0, _kMaxVertexBufferSlots, null);
+      _vertexViewsOwner = this;
+    }
+    _boundVertices = true;
+    return _sharedVertexViews;
+  }
+
+  BufferView? _vertexViewAt(int slot) {
+    if (!_boundVertices) return null;
+    if (!identical(_vertexViewsOwner, this)) {
+      throw StateError(
+        'a draw from a first instance after another pass bound vertex '
+        'buffers (mcsm G14)',
+      );
+    }
+    return _sharedVertexViews[slot];
+  }
 
   /// Creates a new RenderPass.
   RenderPass._(
@@ -482,10 +510,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (slot > _maxBoundVertexSlot) {
       _maxBoundVertexSlot = slot;
     }
-    (_vertexViews ??= List<BufferView?>.filled(
-      _kMaxVertexBufferSlots,
-      null,
-    ))[slot] = bufferView;
+    _ownVertexViews[slot] = bufferView;
     bufferView.buffer._bindAsVertexBuffer(
       this,
       bufferView.offsetInBytes,
@@ -843,7 +868,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     final moved = <int, BufferView>{};
     for (var slot = 0; slot < buffers.length; slot++) {
       final layout = buffers[slot];
-      final view = _vertexViews?[slot];
+      final view = _vertexViewAt(slot);
       if (layout.stepMode != VertexStepMode.instance || view == null) continue;
       final skip = first * layout.strideInBytes;
       if (skip + instanceCount * layout.strideInBytes > view.lengthInBytes) {
