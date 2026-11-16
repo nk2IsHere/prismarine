@@ -55,6 +55,12 @@ target_os = ["win"]
 '@ | Set-Content -Encoding ascii .gclient
 "== $(Get-Date -Format T) gclient"
 gclient sync --no-history -j8
+# The Dart SDK's patches, uncommitted at its DEPS revision (build.sh "patch"):
+# patch 0028 calls the VM's Dart_McsmIdle (dart/0002).
+$dart = 'engine\src\flutter\third_party\dart'
+$dartRev = (Select-String -Path DEPS -Pattern "^  'dart_revision': '([0-9a-f]+)'").Matches[0].Groups[1].Value
+git -C $dart checkout -q -f --detach $dartRev
+git -C $dart -c core.autocrlf=false apply (Get-ChildItem "$here\patches\dart\*.patch" | Sort-Object Name | ForEach-Object FullName)
 Set-Location engine\src
 $common = @('flutter/lib/snapshot:kernel_platform_files')
 $hostTools = @('flutter/sky/packages', 'flutter/tools/font_subset', 'flutter/tools/const_finder', 'flutter/impeller/compiler:impellerc')

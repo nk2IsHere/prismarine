@@ -15,6 +15,7 @@ import 'package:flutter_scene/scene.dart' show Scene, baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
 import 'mcsm10.dart';
+import 'mcsm11.dart';
 import 'mcsm7.dart';
 import 'mcsm9.dart';
 
@@ -177,6 +178,7 @@ Future<int> _smoke() async {
   final mcsm7 = await mcsm7Checks(_log);
   final mcsm9 = await mcsm9Checks(_log);
   final mcsm10 = await mcsm10Checks(_log);
+  final mcsm11 = await mcsm11Checks(_log);
   if (firstEmpty) {
     // ANGLE (Windows) gave an empty first readback on the stock engine too,
     // while later readbacks work. First read the same target again without
@@ -218,5 +220,5 @@ Future<int> _smoke() async {
       '(the first readback came back empty; this is a second render and readback)',
     );
   }
-  return ok && mcsm7 && mcsm9 && mcsm10 ? 0 : 2;
+  return ok && mcsm7 && mcsm9 && mcsm10 && mcsm11 ? 0 : 2;
 }
