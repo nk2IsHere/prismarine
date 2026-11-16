@@ -1,0 +1,89 @@
+From a4508ce029ab29f8a370a0aa86e182e9217b3512 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 16 Nov 2026 19:02:01 +0100
+Subject: [PATCH] flutter_gpu (mcsm11): McsmDetach (a wrapper leaves its native
+ object at once: nothing for a collection to finalize) and McsmGcIdle
+ (Dart_McsmIdle, the Dart patch vm-mcsm-idle: the VM's collections at the
+ caller's idle point); feature bit 8192
+
+---
+ engine/src/flutter/lib/gpu/context.cc | 22 +++++++++++++++++++++-
+ engine/src/flutter/lib/gpu/context.h  | 18 ++++++++++++++++++
+ 2 files changed, 39 insertions(+), 1 deletion(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 940b1190f19..ee17a898a51 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -15,6 +15,7 @@
+ #include "impeller/core/formats.h"
+ #include "impeller/core/texture_descriptor.h"
+ #include "impeller/renderer/context.h"
++#include "third_party/dart/runtime/include/dart_tools_api.h"
+ #if IMPELLER_ENABLE_VULKAN
+ #include "impeller/renderer/backend/vulkan/context_vk.h"  // nogncheck
+ #endif
+@@ -282,7 +283,9 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // more bindings per draw, leaf indirect draws
+   // (RenderPass_McsmDrawIndirectCached), the binding resend cut and sRGB
+   // texture views.
+-  const int64_t common = 1 | 2 | 4 | 8 | 512;
++  //
++  // mcsm11: 8192 = McsmDetach and McsmGcIdle (every backend).
++  const int64_t common = 1 | 2 | 4 | 8 | 512 | 8192;
+   switch (backend) {
+     case 0:
+       return common | 16 | 64 | 256 | 1024 | 2048 | 4096;
+@@ -299,3 +302,20 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+ extern int InternalFlutterGpu_McsmBackend() {
+   return g_mcsm_backend;
+ }
++
++void InternalFlutterGpu_McsmDetach(Dart_Handle wrapper) {
++  intptr_t peer = 0;
++  if (Dart_IsError(Dart_GetNativeInstanceField(
++          wrapper, tonic::DartWrappable::kPeerIndex, &peer)) ||
++      peer == 0) {
++    return;
++  }
++  reinterpret_cast<tonic::DartWrappable*>(peer)->ClearDartWrapper();
++}
++
++int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
++                                      int64_t min_new_bytes,
++                                      int64_t max_new_bytes) {
++  return Dart_McsmIdle(Dart_TimelineGetMicros() + budget_micros,
++                       min_new_bytes, max_new_bytes);
++}
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index a8dbc439a18..ce37d75957b 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -136,6 +136,24 @@ extern int64_t InternalFlutterGpu_McsmFeatures();
+ FLUTTER_GPU_EXPORT
+ extern int InternalFlutterGpu_McsmBackend();
+ 
++/// mcsm11 (feature bit 8192): detaches a Flutter GPU wrapper from its native
++/// object now. The object's reference is released here, on the caller's
++/// thread, and its weak handle deleted, so the collector has nothing to
++/// finalize for it (a frame's passes and command buffers otherwise wait for
++/// a young collection and are destroyed one by one inside its pause). The
++/// wrapper may be initialized again. Nothing happens to a detached wrapper.
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_McsmDetach(Dart_Handle wrapper);
++
++/// mcsm11: the Dart VM's collections at the caller's idle point
++/// (Dart_McsmIdle, with the deadline [budget_micros] from now). Returns what
++/// ran: 1 a young collection, 2 a mark started, 4 a mark finalized. Not a
++/// leaf call.
++FLUTTER_GPU_EXPORT
++extern int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
++                                             int64_t min_new_bytes,
++                                             int64_t max_new_bytes);
++
+ }  // extern "C"
+ 
+ #endif  // FLUTTER_LIB_GPU_CONTEXT_H_
+-- 
+2.54.0 (Apple Git-157)
+

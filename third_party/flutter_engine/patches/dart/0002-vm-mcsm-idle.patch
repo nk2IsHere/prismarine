@@ -1,0 +1,213 @@
+From: mcsm <mcsm@localhost>
+Subject: [PATCH] vm (mcsm): collections at the embedder's idle point
+ (Dart_McsmIdle): a young collection by new-space use and deadline, old-space
+ work only at the normal thresholds, a finished mark finalized by the next
+ idle call while they arrive
+
+diff --git a/runtime/include/dart_api.h b/runtime/include/dart_api.h
+index e4d6db44..ebb45790 100644
+--- a/runtime/include/dart_api.h
++++ b/runtime/include/dart_api.h
+@@ -1217,6 +1217,28 @@ DART_EXPORT void Dart_KillIsolate(Dart_Isolate isolate);
+  */
+ DART_EXPORT void Dart_NotifyIdle(int64_t deadline);
+ 
++/**
++ * mcsm: collections at the embedder's idle point, in place of Dart_NotifyIdle
++ * (which also starts an old-space mark once old space grew by two pages).
++ *
++ * A young collection runs when new space holds at least |min_new_bytes| and
++ * the VM's estimate of it ends by |deadline|, or when it holds
++ * |max_new_bytes| (then whatever the deadline). Old-space work only as the
++ * normal thresholds ask: a finished mark is finalized here, and marking
++ * starts here once the soft threshold is reached. No idle compaction; the
++ * page cache is kept. While these calls arrive (one in the last 100 ms), a
++ * finished mark waits for the next one rather than being finalized from an
++ * allocation or an interrupt.
++ *
++ * |deadline| as Dart_NotifyIdle's. Returns what ran: 1 a young collection,
++ * 2 a mark started, 4 a mark finalized.
++ *
++ * Requires there to be a current isolate.
++ */
++DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
++                                  int64_t min_new_bytes,
++                                  int64_t max_new_bytes);
++
+ typedef void (*Dart_HeapSamplingReportCallback)(void* context, void* data);
+ 
+ typedef void* (*Dart_HeapSamplingCreateCallback)(
+diff --git a/runtime/vm/dart_api_impl.cc b/runtime/vm/dart_api_impl.cc
+index ac526ee0..3471bfef 100644
+--- a/runtime/vm/dart_api_impl.cc
++++ b/runtime/vm/dart_api_impl.cc
+@@ -1745,6 +1745,17 @@ DART_EXPORT void Dart_NotifyIdle(int64_t deadline) {
+   T->isolate()->group()->idle_time_handler()->NotifyIdle(deadline);
+ }
+ 
++DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
++                                  int64_t min_new_bytes,
++                                  int64_t max_new_bytes) {
++  Thread* T = Thread::Current();
++  CHECK_ISOLATE(T->isolate());
++  API_TIMELINE_BEGIN_END(T);
++  TransitionNativeToVM transition(T);
++  return T->heap()->McsmIdle(deadline, min_new_bytes >> kWordSizeLog2,
++                             max_new_bytes >> kWordSizeLog2);
++}
++
+ DART_EXPORT void Dart_NotifyDestroyed() {
+   Thread* T = Thread::Current();
+   CHECK_ISOLATE(T->isolate());
+diff --git a/runtime/vm/heap/heap.cc b/runtime/vm/heap/heap.cc
+index a356646c..a5e54f0b 100644
+--- a/runtime/vm/heap/heap.cc
++++ b/runtime/vm/heap/heap.cc
+@@ -450,6 +450,55 @@ void Heap::NotifyIdle(int64_t deadline) {
+   }
+ }
+ 
++intptr_t Heap::McsmIdle(int64_t deadline,
++                        intptr_t min_new_words,
++                        intptr_t max_new_words) {
++  Thread* thread = Thread::Current();
++  mcsm_last_idle_micros_ = OS::GetCurrentMonotonicMicros();
++  intptr_t ran = 0;
++  // Decided before any safepoint operation: a call that runs nothing stops
++  // no other mutator.
++  if (new_space_.McsmShouldScavenge(deadline, min_new_words, max_new_words)) {
++    CollectNewSpaceGarbage(thread, GCType::kScavenge, GCReason::kIdle);
++    ran |= 1;
++  }
++  // The thresholds as they are outside latency mode: this call is where an
++  // embedder that holds the VM in latency mode lets old-space work start.
++  const Dart_PerformanceMode mode = mode_.exchange(Dart_PerformanceMode_Default);
++  PageSpace::Phase phase;
++  {
++    MonitorLocker ml(old_space_.tasks_lock());
++    phase = old_space_.phase();
++  }
++  if (phase == PageSpace::kAwaitingFinalization ||
++      (phase == PageSpace::kDone && old_space_.ReachedSoftThreshold())) {
++    // Another mutator may have acted meanwhile: decided again with every
++    // mutator stopped.
++    GcSafepointOperationScope safepoint_operation(thread);
++    {
++      MonitorLocker ml(old_space_.tasks_lock());
++      phase = old_space_.phase();
++    }
++    if (phase == PageSpace::kAwaitingFinalization) {
++      CollectOldSpaceGarbage(thread, GCType::kMarkSweep, GCReason::kFinalize);
++      ran |= 4;
++    } else if (phase == PageSpace::kDone &&
++               old_space_.ReachedSoftThreshold()) {
++      // Right after the young collection: the start pause is the root set's,
++      // mostly new space.
++      StartConcurrentMarking(thread, GCReason::kIdle);
++      ran |= 2;
++    }
++  }
++  mode_ = mode;
++  return ran;
++}
++
++bool Heap::McsmIdleRecent() const {
++  const int64_t last = mcsm_last_idle_micros_;
++  return last != 0 && (OS::GetCurrentMonotonicMicros() - last) < 100000;
++}
++
+ void Heap::NotifyDestroyed() {
+   TIMELINE_FUNCTION_GC_DURATION(Thread::Current(), "NotifyDestroyed");
+   CollectAllGarbage(GCReason::kDestroyed, /*compact=*/true);
+@@ -611,6 +660,10 @@ void Heap::CheckConcurrentMarking(Thread* thread,
+       }
+       return;
+     case PageSpace::kAwaitingFinalization:
++      // mcsm: the embedder's next idle call finalizes (Dart_McsmIdle).
++      if (McsmIdleRecent()) {
++        return;
++      }
+       CollectOldSpaceGarbage(thread, GCType::kMarkSweep, GCReason::kFinalize);
+       return;
+     case PageSpace::kDone:
+@@ -633,6 +686,10 @@ void Heap::CheckFinalizeMarking(Thread* thread) {
+   }
+ 
+   if (phase == PageSpace::kAwaitingFinalization) {
++    // mcsm: the embedder's next idle call finalizes (Dart_McsmIdle).
++    if (McsmIdleRecent()) {
++      return;
++    }
+     CollectOldSpaceGarbage(thread, GCType::kMarkSweep, GCReason::kFinalize);
+   }
+ }
+diff --git a/runtime/vm/heap/heap.h b/runtime/vm/heap/heap.h
+index 5f0c8a1e..805afa97 100644
+--- a/runtime/vm/heap/heap.h
++++ b/runtime/vm/heap/heap.h
+@@ -107,6 +107,13 @@ class Heap {
+   bool CodeContains(uword addr) const;
+ 
+   void NotifyIdle(int64_t deadline);
++  // mcsm: Dart_McsmIdle.
++  intptr_t McsmIdle(int64_t deadline,
++                    intptr_t min_new_words,
++                    intptr_t max_new_words);
++  // mcsm: whether a Dart_McsmIdle call came in the last 100 ms (the next one
++  // finalizes a finished mark).
++  bool McsmIdleRecent() const;
+   void NotifyDestroyed();
+ 
+   Dart_PerformanceMode mode() const { return mode_; }
+@@ -382,6 +389,8 @@ class Heap {
+ 
+   RelaxedAtomic<Dart_PerformanceMode> mode_ = {Dart_PerformanceMode_Default};
+ 
++  RelaxedAtomic<int64_t> mcsm_last_idle_micros_ = {0};
++
+   bool assume_scavenge_will_fail_;
+ 
+   static constexpr intptr_t kNoForcedGarbageCollection = -1;
+diff --git a/runtime/vm/heap/scavenger.cc b/runtime/vm/heap/scavenger.cc
+--- a/runtime/vm/heap/scavenger.cc
++++ b/runtime/vm/heap/scavenger.cc
+@@ -1198,6 +1198,23 @@
+   }
+ }
+ 
++bool Scavenger::McsmShouldScavenge(int64_t deadline,
++                                   intptr_t min_words,
++                                   intptr_t max_words) {
++  NoSafepointScope no_safepoint;
++  const intptr_t used_in_words = UsedInWords() + freed_in_words_;
++  if (used_in_words >= max_words) {
++    return true;
++  }
++  if (used_in_words < min_words) {
++    return false;
++  }
++  const int64_t estimated_scavenge_completion =
++      OS::GetCurrentMonotonicMicros() +
++      used_in_words / scavenge_words_per_micro_;
++  return estimated_scavenge_completion <= deadline;
++}
++
+ bool Scavenger::ShouldPerformIdleScavenge(int64_t deadline) {
+   // To make a consistent decision, we should not yield for a safepoint in the
+   // middle of deciding whether to perform an idle GC.
+diff --git a/runtime/vm/heap/scavenger.h b/runtime/vm/heap/scavenger.h
+index a455a87b..689212a7 100644
+--- a/runtime/vm/heap/scavenger.h
++++ b/runtime/vm/heap/scavenger.h
+@@ -184,6 +184,11 @@ class Scavenger {
+   void WriteProtect(bool read_only);
+ 
+   bool ShouldPerformIdleScavenge(int64_t deadline);
++  // mcsm: Dart_McsmIdle's young collection: at least min_words in use and the
++  // estimate ends by the deadline, or max_words in use.
++  bool McsmShouldScavenge(int64_t deadline,
++                          intptr_t min_words,
++                          intptr_t max_words);
+ 
+   void AddGCTime(int64_t micros) { gc_time_micros_ += micros; }
+ 
