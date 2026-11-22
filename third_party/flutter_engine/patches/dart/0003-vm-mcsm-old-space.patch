@@ -1,0 +1,122 @@
+From: mcsm <mcsm@localhost>
+Subject: [PATCH] vm (mcsm): old-space work at the embedder's chosen idle point
+ (Dart_McsmOldSpace): a mark started now, or a compaction that gives back
+ the pages fragmentation holds; and the heap's figures
+
+diff --git a/runtime/include/dart_api.h b/runtime/include/dart_api.h
+index ebb4579..fa33dc1 100644
+--- a/runtime/include/dart_api.h
++++ b/runtime/include/dart_api.h
+@@ -1239,6 +1239,28 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+                                   int64_t min_new_bytes,
+                                   int64_t max_new_bytes);
+ 
++/**
++ * mcsm: old-space work the embedder asks for at an idle point of its own
++ * choosing (a scene switch's held frame), and the heap's figures.
++ *
++ * |request| 0: nothing, only the figures. 1: start a concurrent mark now,
++ * whatever the thresholds, unless one is running. 2: a young collection,
++ * then a mark-compact (stop-the-world; a running mark is finished first),
++ * then the page cache emptied: the old space gives back the pages its
++ * fragmentation holds, which only compaction does (the incremental
++ * compactor moves at most a quarter of new space per mark, and only from
++ * pages at most half full).
++ *
++ * |figures|, when not null, receives five values after the work, in bytes:
++ * old space used, old space capacity, old space external, new space used,
++ * new space capacity.
++ *
++ * Returns what ran: 1 a mark started, 2 a compaction.
++ *
++ * Requires there to be a current isolate.
++ */
++DART_EXPORT int64_t Dart_McsmOldSpace(int64_t request, int64_t* figures);
++
+ typedef void (*Dart_HeapSamplingReportCallback)(void* context, void* data);
+ 
+ typedef void* (*Dart_HeapSamplingCreateCallback)(
+diff --git a/runtime/vm/dart_api_impl.cc b/runtime/vm/dart_api_impl.cc
+index 3471bfe..906ac53 100644
+--- a/runtime/vm/dart_api_impl.cc
++++ b/runtime/vm/dart_api_impl.cc
+@@ -1756,6 +1756,14 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+                              max_new_bytes >> kWordSizeLog2);
+ }
+ 
++DART_EXPORT int64_t Dart_McsmOldSpace(int64_t request, int64_t* figures) {
++  Thread* T = Thread::Current();
++  CHECK_ISOLATE(T->isolate());
++  API_TIMELINE_BEGIN_END(T);
++  TransitionNativeToVM transition(T);
++  return T->heap()->McsmOldSpace(request, figures);
++}
++
+ DART_EXPORT void Dart_NotifyDestroyed() {
+   Thread* T = Thread::Current();
+   CHECK_ISOLATE(T->isolate());
+diff --git a/runtime/vm/heap/heap.cc b/runtime/vm/heap/heap.cc
+index a5e54f0..e55fa2a 100644
+--- a/runtime/vm/heap/heap.cc
++++ b/runtime/vm/heap/heap.cc
+@@ -499,6 +499,47 @@ bool Heap::McsmIdleRecent() const {
+   return last != 0 && (OS::GetCurrentMonotonicMicros() - last) < 100000;
+ }
+ 
++intptr_t Heap::McsmOldSpace(intptr_t request, int64_t* figures) {
++  Thread* thread = Thread::Current();
++  intptr_t ran = 0;
++  if (request == 1) {
++    PageSpace::Phase phase;
++    {
++      MonitorLocker ml(old_space_.tasks_lock());
++      phase = old_space_.phase();
++    }
++    if (phase == PageSpace::kDone) {
++      GcSafepointOperationScope safepoint_operation(thread);
++      {
++        MonitorLocker ml(old_space_.tasks_lock());
++        phase = old_space_.phase();
++      }
++      if (phase == PageSpace::kDone) {
++        StartConcurrentMarking(thread, GCReason::kIdle);
++        ran |= 1;
++      }
++    }
++  } else if (request == 2) {
++    // The young collection first: what dies young isn't compacted, and the
++    // old space's roots shrink.
++    CollectNewSpaceGarbage(thread, GCType::kScavenge, GCReason::kIdle);
++    // One mark: a running one is finished by this collection (its floating
++    // garbage stays until the next).
++    CollectOldSpaceGarbage(thread, GCType::kMarkCompact, GCReason::kIdle);
++    WaitForSweeperTasks(thread);
++    Page::ClearCache();
++    ran |= 2;
++  }
++  if (figures != nullptr) {
++    figures[0] = old_space_.UsedInWords() * kWordSize;
++    figures[1] = old_space_.CapacityInWords() * kWordSize;
++    figures[2] = old_space_.ExternalInWords() * kWordSize;
++    figures[3] = new_space_.UsedInWords() * kWordSize;
++    figures[4] = new_space_.CapacityInWords() * kWordSize;
++  }
++  return ran;
++}
++
+ void Heap::NotifyDestroyed() {
+   TIMELINE_FUNCTION_GC_DURATION(Thread::Current(), "NotifyDestroyed");
+   CollectAllGarbage(GCReason::kDestroyed, /*compact=*/true);
+diff --git a/runtime/vm/heap/heap.h b/runtime/vm/heap/heap.h
+index 805afa9..0e90da3 100644
+--- a/runtime/vm/heap/heap.h
++++ b/runtime/vm/heap/heap.h
+@@ -114,6 +114,8 @@ class Heap {
+   // mcsm: whether a Dart_McsmIdle call came in the last 100 ms (the next one
+   // finalizes a finished mark).
+   bool McsmIdleRecent() const;
++  // mcsm: Dart_McsmOldSpace.
++  intptr_t McsmOldSpace(intptr_t request, int64_t* figures);
+   void NotifyDestroyed();
+ 
+   Dart_PerformanceMode mode() const { return mode_; }

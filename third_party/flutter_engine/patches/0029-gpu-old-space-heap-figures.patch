@@ -1,0 +1,72 @@
+From ed6685766699f2e59a075f291451ef3aa672f9e0 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sun, 22 Nov 2026 16:38:38 +0100
+Subject: [PATCH] flutter_gpu (mcsm12): McsmOldSpace (Dart_McsmOldSpace, the
+ Dart patch vm-mcsm-old-space: a mark started now, or a compaction at the
+ caller's chosen idle point) and McsmHeap (the isolate group's heap figures);
+ feature bit 16384
+
+---
+ engine/src/flutter/lib/gpu/context.cc | 17 ++++++++++++++++-
+ engine/src/flutter/lib/gpu/context.h  | 13 +++++++++++++
+ 2 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index ee17a898a51..51d35ec0679 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -285,7 +285,9 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // texture views.
+   //
+   // mcsm11: 8192 = McsmDetach and McsmGcIdle (every backend).
+-  const int64_t common = 1 | 2 | 4 | 8 | 512 | 8192;
++  //
++  // mcsm12: 16384 = McsmOldSpace and McsmHeap (every backend).
++  const int64_t common = 1 | 2 | 4 | 8 | 512 | 8192 | 16384;
+   switch (backend) {
+     case 0:
+       return common | 16 | 64 | 256 | 1024 | 2048 | 4096;
+@@ -319,3 +321,16 @@ int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
+   return Dart_McsmIdle(Dart_TimelineGetMicros() + budget_micros,
+                        min_new_bytes, max_new_bytes);
+ }
++
++int64_t InternalFlutterGpu_McsmOldSpace(int64_t request) {
++  return Dart_McsmOldSpace(request, nullptr);
++}
++
++int64_t InternalFlutterGpu_McsmHeap(int64_t which) {
++  if (which < 0 || which > 4) {
++    return -1;
++  }
++  int64_t figures[5] = {0, 0, 0, 0, 0};
++  Dart_McsmOldSpace(0, figures);
++  return figures[which];
++}
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index ce37d75957b..c8c012070ca 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -154,6 +154,19 @@ extern int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
+                                              int64_t min_new_bytes,
+                                              int64_t max_new_bytes);
+ 
++/// mcsm12 (feature bit 16384): old-space work at the caller's chosen idle
++/// point (Dart_McsmOldSpace): [request] 1 starts a concurrent mark now, 2
++/// compacts (stop-the-world) and empties the page cache. Returns what ran:
++/// 1 a mark started, 2 a compaction. Not a leaf call.
++FLUTTER_GPU_EXPORT
++extern int64_t InternalFlutterGpu_McsmOldSpace(int64_t request);
++
++/// mcsm12: one of the isolate group's heap figures in bytes ([which] 0 old
++/// space used, 1 its capacity, 2 its external, 3 new space used, 4 its
++/// capacity; -1 for another [which]). Not a leaf call.
++FLUTTER_GPU_EXPORT
++extern int64_t InternalFlutterGpu_McsmHeap(int64_t which);
++
+ }  // extern "C"
+ 
+ #endif  // FLUTTER_LIB_GPU_CONTEXT_H_
+-- 
+2.54.0 (Apple Git-157)
+
