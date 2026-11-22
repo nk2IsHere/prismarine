@@ -33,7 +33,17 @@ abstract final class GpuMemory {
     _total += bytes;
     _bytes[kind] = (_bytes[kind] ?? 0) + bytes;
     _counts[kind] = (_counts[kind] ?? 0) + 1;
-    _finalizer.attach(o, (kind, bytes));
+    _finalizer.attach(o, (kind, bytes), detach: o);
+  }
+
+  /// mcsm G17: [o], tracked as [kind] of [bytes], let go of its native
+  /// object itself (DeviceBuffer.mcsmRelease): off the tally now, and its
+  /// finalizer never runs.
+  static void _released(Object o, String kind, int bytes) {
+    _finalizer.detach(o);
+    _bytes[kind] = (_bytes[kind] ?? 0) - bytes;
+    _counts[kind] = (_counts[kind] ?? 0) - 1;
+    _total -= bytes;
   }
 
   static String _textureKind(Texture t) {

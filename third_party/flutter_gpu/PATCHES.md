@@ -87,3 +87,9 @@ See `third_party/flutter_engine/README.md` and status-perf ("E").
 
 - `natives.dart`: `_mcsmEngine12` (the process exports `InternalFlutterGpu_McsmOldSpace`, third_party/flutter_engine patch 0029 with the Dart patch `dart/0003`). `mcsmOldSpaceSupported`, `mcsmOldSpace(request)` (1 starts an old-space mark now, 2 a young collection and a mark-compact, the VM's page cache emptied) and `mcsmHeap(which)` (old space used, capacity and external, new space used and capacity, in bytes); 0 and -1 on other engines.
   Why: the VM's old space never shrinks without compaction (the incremental compactor moves at most a quarter of new space per mark, from pages at most half full), and the release engine has no call that compacts or reads the heap: over Ep205's playtest route the old space's capacity grew 1.6 → 3.4 GB for 1.25 → 1.95 GB live.
+
+## G17: a device buffer let go when its owner drops it (mcsm11)
+
+- `buffer.dart`: `DeviceBuffer.mcsmRelease()` detaches the wrapper from its native buffer at once (`_mcsmDetach`, G15's export), so the GPU memory goes now and not when a collection finalizes the object; `memory.dart` takes it off G4's tally (`GpuMemory._released`; the finalizer is attached with the object as its detach key). A no-op without the export.
+  Why: a buffer's GPU memory carries no external size, so the VM never felt it, and buffers an owner had dropped waited for the next old-space mark-sweep: the S2 runner's block-store arenas reached 268 MB by the end of Ep205's playtest route against a 48 MB working set.
+  The frames already submitted keep what they bound (Metal's command buffers retain their resources, Vulkan's track them); the object and its views must not be used again.

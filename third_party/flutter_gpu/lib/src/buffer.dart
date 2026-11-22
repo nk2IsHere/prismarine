@@ -46,7 +46,7 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
   ) : storageMode = storageMode,
       sizeInBytes = sizeInBytes {
     _valid = _initialize(gpuContext, storageMode.index, sizeInBytes);
-    if (_valid) GpuMemory._track(this, GpuMemory.tag ?? 'buffer', sizeInBytes);
+    if (_valid) GpuMemory._track(this, _mcsmKind, sizeInBytes);
   }
 
   /// Creates a new host visible DeviceBuffer with data copied from the host.
@@ -54,11 +54,29 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
     : storageMode = StorageMode.hostVisible,
       sizeInBytes = data.lengthInBytes {
     _valid = _initializeWithHostData(gpuContext, data);
-    if (_valid) GpuMemory._track(this, GpuMemory.tag ?? 'buffer', sizeInBytes);
+    if (_valid) GpuMemory._track(this, _mcsmKind, sizeInBytes);
   }
 
   final StorageMode storageMode;
   final int sizeInBytes;
+
+  /// mcsm G4: the kind this buffer counts under, fixed when it is made.
+  final String _mcsmKind = GpuMemory.tag ?? 'buffer';
+
+  /// mcsm G17: lets go of the native buffer now, not when a collection
+  /// finalizes this object: a buffer's GPU memory has no external size, so
+  /// the VM's old space never felt it, and buffers the owner had dropped
+  /// waited for the next mark-sweep (hundreds of MB over an episode). The
+  /// frames already submitted keep what they bound (Metal's command
+  /// buffers retain their resources, Vulkan's track them). This object
+  /// and every view of it must not be used again. Without McsmDetach (an
+  /// engine before mcsm11) the collector still lets it go.
+  void mcsmRelease() {
+    if (!_mcsmEngine11 || !_valid) return;
+    _valid = false;
+    _mcsmDetach(this);
+    GpuMemory._released(this, _mcsmKind, sizeInBytes);
+  }
 
   void _bindAsVertexBuffer(
     RenderPass renderPass,
