@@ -20,7 +20,7 @@ To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third
 
 ## G4: live GPU memory (accounting only)
 
-- `memory.dart` (new, `GpuMemory`): every texture and device buffer made through the package adds its bytes to a tally by kind (`buffer`; `rt`, `rt.msaa`, `rt.transient`; `tex.shared` / `tex.private`, `.compressed` when block-compressed); a `Finalizer` takes a collected one off. `texture.dart` computes a texture's bytes from its format's blocks, mip levels and sample count (the driver's padding isn't counted). The player's `--profile` writes it every 30 frames as `mem.gpu.<kind>` (MB) with `mem.footprint`. It excludes what the engine allocates itself (the Flutter surface, Impeller's host buffers).
+- `memory.dart` (new, `GpuMemory`): every texture and device buffer made through the package adds its bytes to a tally by kind (`buffer`; `rt`, `rt.msaa`, `rt.transient`; `tex.shared` / `tex.private`, `.compressed` when block-compressed); a `Finalizer` takes a collected one off. `texture.dart` computes a texture's bytes from its format's blocks, mip levels and sample count (the driver's padding isn't counted). The player's `--profile` writes it every 30 frames as `mem.gpu.<kind>` (MB) with `mem.footprint`. It excludes what the engine allocates itself (the Flutter surface, Impeller's host buffers). `GpuMemory.tag` names the kind buffers made meanwhile count under (`buffer.<owner>`), so the census splits buffers by what holds them.
 
 ## G5: repeated texture binds skipped
 

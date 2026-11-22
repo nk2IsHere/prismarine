@@ -20,6 +20,11 @@ abstract final class GpuMemory {
 
   static int _total = 0;
 
+  /// The kind device buffers made now count under instead of `buffer`
+  /// (`buffer.<owner>`, a constant string; null after): the caller names
+  /// what its buffers are for, so the census splits them by owner.
+  static String? tag;
+
   /// [bytes] summed (mcsm G8): what the GPU holds for objects the Dart GC
   /// hasn't finalized yet, live or garbage.
   static int get totalBytes => _total;

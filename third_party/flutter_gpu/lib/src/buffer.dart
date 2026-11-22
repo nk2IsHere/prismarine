@@ -46,7 +46,7 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
   ) : storageMode = storageMode,
       sizeInBytes = sizeInBytes {
     _valid = _initialize(gpuContext, storageMode.index, sizeInBytes);
-    if (_valid) GpuMemory._track(this, 'buffer', sizeInBytes);
+    if (_valid) GpuMemory._track(this, GpuMemory.tag ?? 'buffer', sizeInBytes);
   }
 
   /// Creates a new host visible DeviceBuffer with data copied from the host.
@@ -54,7 +54,7 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
     : storageMode = StorageMode.hostVisible,
       sizeInBytes = data.lengthInBytes {
     _valid = _initializeWithHostData(gpuContext, data);
-    if (_valid) GpuMemory._track(this, 'buffer', sizeInBytes);
+    if (_valid) GpuMemory._track(this, GpuMemory.tag ?? 'buffer', sizeInBytes);
   }
 
   final StorageMode storageMode;
