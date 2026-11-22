@@ -4,10 +4,10 @@ Subject: [PATCH] vm (mcsm): old-space work at the embedder's chosen idle point
  the pages fragmentation holds; and the heap's figures
 
 diff --git a/runtime/include/dart_api.h b/runtime/include/dart_api.h
-index ebb4579..fa33dc1 100644
+index ebb4579..69aacaa 100644
 --- a/runtime/include/dart_api.h
 +++ b/runtime/include/dart_api.h
-@@ -1239,6 +1239,28 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+@@ -1239,6 +1239,31 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
                                    int64_t min_new_bytes,
                                    int64_t max_new_bytes);
  
@@ -16,9 +16,12 @@ index ebb4579..fa33dc1 100644
 + * choosing (a scene switch's held frame), and the heap's figures.
 + *
 + * |request| 0: nothing, only the figures. 1: start a concurrent mark now,
-+ * whatever the thresholds, unless one is running. 2: a young collection,
-+ * then a mark-compact (stop-the-world; a running mark is finished first),
-+ * then the page cache emptied: the old space gives back the pages its
++ * whatever the thresholds, unless one is running; finished, it waits up to
++ * 30 s for request 2 (Dart_McsmIdle doesn't finalize it meanwhile, unless
++ * the hard threshold is reached), which then only compacts. 2: a young
++ * collection, then a mark-compact (stop-the-world; a running mark is
++ * finished first), then the page cache emptied: the old space gives back
++ * the pages its
 + * fragmentation holds, which only compaction does (the incremental
 + * compactor moves at most a quarter of new space per mark, and only from
 + * pages at most half full).
@@ -56,10 +59,32 @@ index 3471bfe..906ac53 100644
    Thread* T = Thread::Current();
    CHECK_ISOLATE(T->isolate());
 diff --git a/runtime/vm/heap/heap.cc b/runtime/vm/heap/heap.cc
-index a5e54f0..e55fa2a 100644
+index a5e54f0..f04ffb0 100644
 --- a/runtime/vm/heap/heap.cc
 +++ b/runtime/vm/heap/heap.cc
-@@ -499,6 +499,47 @@ bool Heap::McsmIdleRecent() const {
+@@ -470,7 +470,11 @@ intptr_t Heap::McsmIdle(int64_t deadline,
+     MonitorLocker ml(old_space_.tasks_lock());
+     phase = old_space_.phase();
+   }
+-  if (phase == PageSpace::kAwaitingFinalization ||
++  // mcsm: a mark the embedder started for a compaction (Dart_McsmOldSpace
++  // 1) waits for it, finished, unless the hard threshold is reached.
++  const bool held = OS::GetCurrentMonotonicMicros() < mcsm_mark_held_until_ &&
++                    !old_space_.ReachedHardThreshold();
++  if ((phase == PageSpace::kAwaitingFinalization && !held) ||
+       (phase == PageSpace::kDone && old_space_.ReachedSoftThreshold())) {
+     // Another mutator may have acted meanwhile: decided again with every
+     // mutator stopped.
+@@ -479,7 +483,7 @@ intptr_t Heap::McsmIdle(int64_t deadline,
+       MonitorLocker ml(old_space_.tasks_lock());
+       phase = old_space_.phase();
+     }
+-    if (phase == PageSpace::kAwaitingFinalization) {
++    if (phase == PageSpace::kAwaitingFinalization && !held) {
+       CollectOldSpaceGarbage(thread, GCType::kMarkSweep, GCReason::kFinalize);
+       ran |= 4;
+     } else if (phase == PageSpace::kDone &&
+@@ -499,6 +503,53 @@ bool Heap::McsmIdleRecent() const {
    return last != 0 && (OS::GetCurrentMonotonicMicros() - last) < 100000;
  }
  
@@ -83,7 +108,13 @@ index a5e54f0..e55fa2a 100644
 +        ran |= 1;
 +      }
 +    }
++    // Finished, it waits up to 30 s for the compaction (request 2), which
++    // then only slides: the idle calls don't finalize it meanwhile.
++    if (phase == PageSpace::kDone || phase == PageSpace::kMarking) {
++      mcsm_mark_held_until_ = OS::GetCurrentMonotonicMicros() + 30000000;
++    }
 +  } else if (request == 2) {
++    mcsm_mark_held_until_ = 0;
 +    // The young collection first: what dies young isn't compacted, and the
 +    // old space's roots shrink.
 +    CollectNewSpaceGarbage(thread, GCType::kScavenge, GCReason::kIdle);
@@ -108,7 +139,7 @@ index a5e54f0..e55fa2a 100644
    TIMELINE_FUNCTION_GC_DURATION(Thread::Current(), "NotifyDestroyed");
    CollectAllGarbage(GCReason::kDestroyed, /*compact=*/true);
 diff --git a/runtime/vm/heap/heap.h b/runtime/vm/heap/heap.h
-index 805afa9..0e90da3 100644
+index 805afa9..b9a02d2 100644
 --- a/runtime/vm/heap/heap.h
 +++ b/runtime/vm/heap/heap.h
 @@ -114,6 +114,8 @@ class Heap {
@@ -120,3 +151,13 @@ index 805afa9..0e90da3 100644
    void NotifyDestroyed();
  
    Dart_PerformanceMode mode() const { return mode_; }
+@@ -390,6 +392,9 @@ class Heap {
+   RelaxedAtomic<Dart_PerformanceMode> mode_ = {Dart_PerformanceMode_Default};
+ 
+   RelaxedAtomic<int64_t> mcsm_last_idle_micros_ = {0};
++  // mcsm: until when a mark Dart_McsmOldSpace started waits, finished, for
++  // its compaction.
++  RelaxedAtomic<int64_t> mcsm_mark_held_until_ = {0};
+ 
+   bool assume_scavenge_will_fail_;
+ 
