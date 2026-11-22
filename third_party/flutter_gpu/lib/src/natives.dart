@@ -82,6 +82,34 @@ bool get mcsmGcIdleSupported => _mcsmEngine11;
 int mcsmGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes) =>
     _mcsmEngine11 ? _mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes) : 0;
 
+// mcsm G16: whether the engine compacts the old space when asked and gives
+// the heap's figures (third_party/flutter_engine patch 0029 and the Dart
+// patch dart/0003, mcsm12).
+final bool _mcsmEngine12 = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_McsmOldSpace',
+);
+
+@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_McsmOldSpace')
+external int _mcsmOldSpace(int request);
+
+@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_McsmHeap')
+external int _mcsmHeap(int which);
+
+/// mcsm G16: whether [mcsmOldSpace] and [mcsmHeap] reach the VM (an mcsm12
+/// engine).
+bool get mcsmOldSpaceSupported => _mcsmEngine12;
+
+/// mcsm G16: old-space work now, every isolate of the group stopped for a
+/// compaction: [request] 1 starts a concurrent mark, 2 runs a young
+/// collection and a mark-compact and empties the VM's page cache. Returns
+/// what ran (1 a mark started, 2 a compaction); 0 on other engines.
+int mcsmOldSpace(int request) => _mcsmEngine12 ? _mcsmOldSpace(request) : 0;
+
+/// mcsm G16: one of the isolate group's heap figures in bytes: [which] 0
+/// old space used, 1 its capacity, 2 its external, 3 new space used, 4 its
+/// capacity; -1 on other engines.
+int mcsmHeap(int which) => _mcsmEngine12 ? _mcsmHeap(which) : -1;
+
 /// mcsm G11: [o]'s native pointer (libc `memmove(p, p, 0)` returns p; the
 /// FFI passes a wrapper as its native field). Read once per object
 /// ([_mcsmSelf]): a wrapper passed to a native call becomes a new Pointer
