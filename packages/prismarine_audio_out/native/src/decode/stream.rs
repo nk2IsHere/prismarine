@@ -89,8 +89,10 @@ struct Fed {
 const TMP_FRAMES: i64 = 4096;
 
 fn feeder() {
-    // MCSM_FEEDER_QOS=off: the class it was made with (A/B).
-    if std::env::var("MCSM_FEEDER_QOS").map_or(true, |v| v != "off") {
+    // PRISMARINE_FEEDER_QOS=off, or MCSM_FEEDER_QOS=off, keeps the class
+    // that the thread was made with (A/B runs).
+    let qos = std::env::var("PRISMARINE_FEEDER_QOS").or_else(|_| std::env::var("MCSM_FEEDER_QOS"));
+    if qos.map_or(true, |v| v != "off") {
         super::os::take_role(super::os::Role::Feeder);
     }
     let mut tmp = vec![0f32; (TMP_FRAMES * 8) as usize];

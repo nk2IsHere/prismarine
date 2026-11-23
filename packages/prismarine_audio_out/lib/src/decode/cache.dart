@@ -1,4 +1,5 @@
 import 'dart:ffi' as ffi;
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -26,6 +27,18 @@ abstract final class PcmCache {
 
   /// The default budget: 512 MB of float32 (about 45 min of mono 48 kHz).
   static const defaultBudget = 512 << 20;
+
+  /// The budget in bytes that `PRISMARINE_PCM_BUDGET=<MB>` sets, else
+  /// [fallback]. The old name `MCSM_PCM_BUDGET` is read when the new one is
+  /// not set.
+  static int budgetFromEnvironment(int fallback) {
+    final mb = int.tryParse(
+      Platform.environment['PRISMARINE_PCM_BUDGET'] ??
+          Platform.environment['MCSM_PCM_BUDGET'] ??
+          '',
+    );
+    return mb == null ? fallback : mb << 20;
+  }
 
   /// Drops everything nobody holds.
   static void clear() => pcmClear();
