@@ -1,57 +1,54 @@
 # prismarine_sample
 
 The sample of prismarine shows Intel's Sponza, the palace atrium with its arches, columns and coloured curtains. A sun
-with a shadow map and eight coloured point lights that move through the hall light it, two of them with shadows, in a
-light fog. The light of the sun, the lights and a procedural sky bounces off the walls, floors and curtains through
-irradiance probes, with ambient occlusion and reflections. TAA, auto exposure, bloom and the AgX tone map finish the
-frame. The app builds the voxel copy of the scene for the probes in about two seconds while it loads. The paths of
-the lights keep them away from its walls and columns. You fly through it with the
-mouse and keyboard or with a gamepad. [prismarine_pbr](../../docs/areas/pbr.md) builds the frames and
-[prismarine_render](../../docs/areas/render.md) records them on Flutter GPU, on Metal on macOS and on Vulkan on Linux
-and Windows. The same app is the smoke test of the gate and a performance scene.
+and eight coloured lights move through the hall in a light fog. Their light bounces off the walls, floors and curtains,
+and the floors reflect the hall. You fly through it with the mouse and keyboard or with a gamepad. It runs on Metal on
+macOS and on Vulkan on Linux and Windows.
 
-## Usage
+## Running the sample
 
-The app is a Flutter desktop app with runners for macOS, Linux and Windows that turn on Impeller and Flutter GPU. It
-needs the patched engine and the model.
+You need the patched engine and the model. The steps below assume a checkout of prismarine with its toolchain set up and
+the engine fetched, as [the build page](../../docs/building.md) describes.
 
-### The model
+The model is not part of the repository. `tool/fetch.dart` downloads it from Intel and prepares it in
+`~/.prismarine/sample`, or in `%LOCALAPPDATA%\prismarine\sample` on Windows. The download takes about 2.4 GB and the
+prepared scene about 0.6 GB. To keep the scene elsewhere, give `--out=<dir>` to the script and `--data=<dir>` to the
+app, or set `PRISMARINE_SAMPLE_DATA`.
 
-The model is not part of the repository. `tool/fetch.dart` downloads it from Intel into the data directory and
-prepares it for the GPU with `prepareGltf` of [prismarine_assets](../../docs/areas/assets.md). The script reads only
-the glTF part of each archive. The data directory is the one in `--out=<dir>` of the script or `--data=<dir>` of the
-app, else the one in `PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on
-Windows. The app and the script use the same default. An app without a prepared scene shows the fetch command.
-
-| Package | Download | Prepared | Default |
+| Part | Download | Prepared | Default |
 |---|---|---|---|
 | Sponza base scene | 2.12 GB | 0.5 GB | yes |
 | Colorful curtains | 0.24 GB | 0.1 GB | yes, `--no-curtains` leaves them out |
 | Ivy | 0.14 GB | | no, `--ivy` adds it |
 
-```
+On macOS:
+
+```sh
+source tools/toolchain/env.sh
 cd apps/prismarine_sample
-dart tool/fetch.dart [--ivy] [--texture-size=1024] [--keep-source]
+flutter pub get
+dart tool/fetch.dart
+tool/shaders.sh "$PRISMARINE_IMPELLERC"
+flutter build macos --release "${prismarine_engine_args[@]}"
+build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
 ```
 
-The prepare step takes about a minute. Textures are scaled to 1024 texels by default. `--texture-size=2048` gives
-more detail for about four times the memory.
+On Linux, build with `flutter build linux` and start `build/linux/x64/release/bundle/prismarine_sample`. On Windows the
+steps are on [the build page](../../docs/building.md#running-sample-app).
 
-### Building
+`tool/fetch.dart` takes about a minute to prepare the scene. It scales the textures to 1024 texels;
+`--texture-size=2048` gives more detail for about four times the memory.
 
-`tool/shaders.sh` builds the shaders of prismarine_pbr with the impellerc of the engine into `shaders_generated/`,
-which the build carries as assets. Then build the app in release mode with the flags of the patched engine, which
-`fetch.sh` prints after it fetched the engine. The [root README](../../README.md#building) has the steps for each
-platform.
+## Controls
 
-### Running
+- W, A, S and D move, Q and E move down and up, and Shift moves faster.
+- Drag with the mouse to turn the view. The mouse wheel sets the speed.
+- A gamepad moves with the left stick, turns with the right stick and moves down and up with the triggers.
+- Space stops and starts the lights.
+- F1 shows the debug panel, with the frame graph and the settings of the lights, the sun, the shadows, the camera and
+  each effect, with its GPU time.
 
-The app starts at the first camera of the scene. W, A, S and D move, Q and E move down and up, Shift moves faster, a
-mouse drag turns the view and the wheel sets the speed. A gamepad moves with the left stick, turns with the right
-stick and moves down and up with the triggers. Space stops and starts the lights. F1 shows the debug panel with the
-frame graph and the settings of the lights and their markers, the sun, the shadow maps with a view of them, the camera
-and each effect of the renderer. While the panel shows, the frame graph splits the GPU time into the parts of the
-frame and the title of each effect gives its GPU time.
+## Options
 
 | Option | Effect |
 |---|---|
@@ -78,35 +75,27 @@ frame and the title of each effect gives its GPU time.
 | `--gi-view=<view>` | Shows one part of the indirect light, `diffuse`, `occlusion`, `reflections` or `probes`. |
 | `--lights=<n>` | The number of point lights of the smoke frames, 8 by default. |
 
-At 1920 by 1080 with the default effects a Mac with an M2 Pro needs about 12 ms on the GPU and shows most frames at
-120 Hz, with a p95 interval of about 10 ms. The indirect light costs about 1.5 to 2 ms of it and each of the two
-shadowed point lights about 1.7 ms. Without the point shadows the Mac needs about 8.4 ms. On Linux with an RTX 4060 Ti
-the indirect light cost about 1 ms over 4.9 ms before the point shadows and the post effects joined. A frame has about
-930 draws and about 780 more for the two shadowed point lights. It records the shadow pass of the sun only when the
-sun moves and the pass of the point shadows only when the lights move. The costs of the effects are on
-[the pbr page](../../docs/areas/pbr.md#costs).
+## Frame times
 
-## Example
+At 1920 by 1080 with the default effects, a Mac with an M2 Pro needs about 12 ms of GPU time per frame and shows most
+frames at 120 Hz. The indirect light costs about 1.5 to 2 ms of it and each of the two shadowed point lights about
+1.7 ms. The costs of each effect are on [the pbr page](../../docs/areas/pbr.md#costs).
 
-A release build on an Apple silicon Mac and the smoke test, with the engine fetched into `$PRISMARINE_ENGINE_DIR` and
-the model fetched as above:
+## Smoke test
 
-    cd apps/prismarine_sample
-    flutter pub get
-    E=$PRISMARINE_ENGINE_DIR/macos-arm64/src
-    tool/shaders.sh $E/out/host_release_arm64/impellerc
-    flutter build macos --release --local-engine-src-path=$E \
-      --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
-    B=build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
-    $B --background --smoke --record
-    $B --background --smoke
+`--smoke` renders fixed frames from each camera and compares them with references in the data folder. Record the
+references once with `--smoke --record` on your computer, then run `--smoke` after a change:
 
-The code of the app is in [`lib/`](lib/main.dart) and its tools in [`tool/`](tool/fetch.dart).
+```sh
+B=build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
+$B --background --smoke --record
+$B --background --smoke
+```
 
 ## Platforms
 
-The app runs on macOS with Metal and on Linux with Vulkan. Both are checked with the smoke test and the performance
-run. The Windows build stops in the build of SDL for prismarine_pad, whose file paths are longer than MSBuild accepts.
+The sample runs on macOS with Metal and on Linux with Vulkan; both pass the smoke test and the performance run. It
+builds on Windows, but it has not run on a Windows GPU yet.
 
 ## Credits
 
@@ -148,5 +137,4 @@ Dubrovnik, Croatia
 www.princinophoto.com
 ```
 
-The sample changes the model for the GPU. The geometry is split into parts with 16-bit indices and the textures are
-scaled down and stored as KTX2 with mip levels. None of it is distributed.
+The sample converts the model for the GPU on your computer. It does not distribute the model or its conversion.
