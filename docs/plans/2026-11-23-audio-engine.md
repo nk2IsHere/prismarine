@@ -35,24 +35,28 @@ same checksum, with the native replay identical.
    the pubspecs of `mcsm_audio_out` and the player. The rules of mcsm that name `dmath.rs` point to prismarine.
 4. The parity sets, unchanged, with the parity example of prismarine.
 
-## Step 3: allocation
+## Step 3: the alloc roots
 
-1. The roots of prismarine's alloc lint gain the render, the apply, the lockstep step and the post.
-2. The render keeps its buffers: per strip as today, the outputs of instances by bus in kept buffers in first-use
-   order, the queue sorted in place, the problems in a kept set. The count of the roots falls to the starts of
-   instances, each marked.
-3. The parity sets, unchanged.
+1. The roots of prismarine's alloc lint gain the render, the apply, the schedule, the lockstep step and the post.
+2. The post writes its texts into native buffers that the isolate keeps and counts no place.
+3. The count of the Dart render is the baseline, which only falls.
 
-## Step 4: the project format and docs
+## Step 4: the synthetic project and docs
 
-1. `AudioProject.fromJson` and `toJson` with defaults for the behaviour fields, and a test that the round trip of the
-   synthetic project gives the same blob.
-2. The synthetic project in `prismarine_audio/test/` with generated samples, rendered by the Dart engine in a test
-   with a stored checksum, and by the crate in `cargo test` from a blob that the Dart test writes.
-3. The page `docs/areas/audio.md` with the table of effect kinds and their parameters, the README and the example of
-   the package, and `docs/areas/audio_out.md` for the native engine. The state page, the decisions and the goals.
-4. mcsm: `docs/areas/audio.md` links to prismarine's pages and keeps the adapter, the bridge and the checks against
+1. The synthetic project in `prismarine_audio/test/` with generated samples, rendered by the Dart engine in a test
+   with a stored checksum. `tool/synthetic_parity.dart` writes its parity session, and the tests workflow replays it
+   on the native engine in a debug build.
+2. The page `docs/areas/audio.md` with the table of effect kinds and their parameters, the README and the example of
+   the package, and `docs/areas/audio_out.md` for the native engine. The state page and the goals.
+3. mcsm: `docs/areas/audio.md` links to prismarine's pages and keeps the adapter, the bridge and the checks against
    FMOD. The rules that name the Dart render and `dmath.rs` change with it.
+
+## Step 5: the Dart render without allocation
+
+1. The render keeps its buffers: per strip as today, the outputs of instances by bus in kept buffers in first-use
+   order, the queue sorted in place, the problems in a kept set. Records of doubles become fields or kept typed lists.
+2. The allocations at the start of an instance carry `// alloc:` with the reason.
+3. Each part ends with the synthetic checksum unchanged and mcsm's parity sets unchanged.
 
 ## Hand-back
 

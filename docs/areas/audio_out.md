@@ -38,6 +38,31 @@ stream, the isolate keeps the ring filled a given lead ahead of the device, and 
 starve it. Without one, the isolate renders the blocks that you ask for with `render`. Other messages that you send go
 to the renderer.
 
+## The native engine
+
+The crate holds the native render of the audio engine of [prismarine_audio](audio.md) in `native/src/mix/`, a module
+for each Dart file that it mirrors. `NativeAudioEngine.fromBlob` makes an engine from the bytes of `projectBlob`, with
+the directory of the slot sounds and the `AudioRules`. In lockstep `render` renders on the calling thread and every
+sample is decoded before its start is posted. In real time `startDevice` renders in the callback of the output device,
+outside the Dart heap.
+
+`NativeMixerPort` posts commands from any isolate. A poster builds the instance of a start with its strips, effects,
+sound slots and nested pools and pushes the command into a lock-free queue. The render applies commands at their
+frames and lets go of finished instances through the collector of `basedrop`. The render does not allocate or free,
+and debug builds abort on an allocation inside it. A post does not allocate either. The limits are 256 instances, 64
+mix states, 64 sounds per instance and 2 instances per nested instrument, and a full pool refuses with a problem.
+
+The maths of the engine come from the `libm` crate in `mix/dmath.rs`, mirrored bit for bit by `libm.dart` of
+`prismarine_math`, and the two change together. The render gives the same bits as the Dart render on macOS, Linux and
+Windows, arm64 and x86-64. The `parity` example replays a session that `package:prismarine_audio/testing.dart` wrote
+and compares the bits.
+
+| Variable | Effect |
+|---|---|
+| `PRISMARINE_STREAM_HOLD` | `off` reads silence until the stream feeder reaches a start in place of holding the start. |
+| `PRISMARINE_AUDIO_TAP` | A file that gets every sample of the device as raw float32 stereo at 48 kHz. |
+| `PRISMARINE_MIX_DEBUG` | Set, the reader of the model logs its counts. |
+
 ## Native code of an app
 
 An app whose own Rust crate uses the cache, streams or device of `native/` needs both in one library. Otherwise each
@@ -66,7 +91,8 @@ Each variable also reads its `MCSM_` form when the `PRISMARINE_` form is not set
 
 - `dart test` in `packages/prismarine_audio_out` decodes the synthetic files and runs the cache, a stream and a
   render isolate.
-- `cargo test` in `packages/prismarine_audio_out/native` checks the decoded bits, the cache, the ring and the thread
-  roles of each OS.
+- `cargo test` in `packages/prismarine_audio_out/native` checks the decoded bits, the cache, the ring, the thread roles
+  of each OS and the DSPs of the engine.
+- `cargo run --release --example parity -- <dir>` replays a parity session of the engine.
 - `cargo +nightly miri test` in the same directory runs the unit tests that call no C.
 - `cargo clippy --all-targets` denies an undocumented `unsafe` block and the maths of the platform.

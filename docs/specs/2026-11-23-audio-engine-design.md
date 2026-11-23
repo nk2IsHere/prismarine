@@ -11,8 +11,8 @@ moves to prismarine and loses every FMOD and game word on the way. mcsm's output
 
 ## Goals
 
-- A game uses the engine without any knowledge of FMOD or of a game. It loads a project from JSON or builds one in
-  code, makes an engine and sends commands.
+- A game uses the engine without any knowledge of FMOD or of a game. It builds a project in code, makes an engine and
+  sends commands. A JSON form of the project comes later, as a goal.
 - One model and one render for every user. The behaviours that differ between FMOD 1.06 and 1.09 become data of the
   model, set by mcsm's adapter, or settings of the engine with neutral names.
 - The Dart render and the native render give identical bits on macOS, Linux and Windows, arm64 and x86-64. A parity
@@ -35,7 +35,7 @@ moves to prismarine and loses every FMOD and game word on the way. mcsm's output
 
 | Package | Contents after the change |
 |---|---|
-| `prismarine_audio` | `PcmSource`, `WavWriter`, the project model with its JSON and binary codecs, the Dart engine with its commands, `LockstepAudio` and `AudioClock`. The parity writer is in a separate library, `package:prismarine_audio/testing.dart`, which a game does not import. |
+| `prismarine_audio` | `PcmSource`, `WavWriter`, the project model with its binary codec, the Dart engine with its commands, `LockstepAudio` and `AudioClock`. The parity writer is in a separate library, `package:prismarine_audio/testing.dart`, which a game does not import. |
 | `prismarine_audio_out` | The output device, the push ring, the decoders and the cache as today, plus the native engine in the crate, `NativeAudioEngine` and `NativeMixerPort`. The parity replay is an example of the crate and not part of its library. |
 
 ## Two renders
@@ -60,12 +60,11 @@ multiply-adds already holds for the crate.
 ## The project model
 
 A project is the static description of the sound of a game. The engine reads it once. The Dart classes are immutable
-after load. `AudioProject.fromJson` reads the JSON form, and `projectBlob` writes the binary form that the native
-engine reads.
+after load. `projectBlob` writes the binary form that the native engine reads. The events and mix states are maps by
+path, and a game that merges several sources keeps the first entry of a path.
 
 | Part | Contents |
 |---|---|
-| `AudioProject` | The events and mix states by name, the mixer and the waveforms. A later entry with a known name is ignored. |
 | `MixerDef` | The buses of the mixer, each a `StripDef`, with one master bus. |
 | `EventDef` | Its name, its kind (`event` or `mixState`), a master track, tracks, returns and an optional output strip, parameters, a timeline, a polyphony limit, `oneShot` and, for a mix state, its `MixStateDef`. |
 | `StripDef` | An id, an optional name, the strip it feeds and the mixer bus that an event's output strip feeds, a volume in dB, a pitch, a channel layout, effects and automated properties. |
@@ -92,7 +91,7 @@ parameter. A parameter with nothing keeps its default and has no stored value fo
 ### Behaviour that is data
 
 FMOD 1.06 and 1.09 differ in a few places. Each one becomes a field of the model, and the adapter of mcsm sets it from
-the version of the bank. A project in JSON gives the field or takes its default.
+the version of the bank. A project built in code gives the field or takes its default.
 
 | Field | Meaning | 1.06 | 1.09 |
 |---|---|---|---|
@@ -180,11 +179,11 @@ game's registry, as today. This boundary is agreed with the replay design.
 
 ## Allocation
 
-The roots of prismarine's alloc lint gain `AudioEngine.render`, `AudioEngine.apply`, `LockstepAudio.advanceTo` and
-`NativeMixerPort.post`. The Dart render keeps its buffers per strip and per instance, sums the outputs of instances
-into kept buffers by bus and keeps its queue sorted in place. Allocations that remain at a start of an instance, such
-as its strips and effects, carry `// alloc: <reason>`. A start is not a steady frame, but a frame can start an
-instance, so the marked count stays visible in the lint.
+The roots of prismarine's alloc lint gain `AudioEngine.render`, `apply` and `schedule`, `LockstepAudio.advanceTo` and
+`NativeMixerPort.post`. The post allocates nothing. The Dart render starts with 547 counted places, which form the
+baseline and only fall. Its rewrite keeps its buffers per strip and per instance, sums the outputs of instances into
+kept buffers by bus and keeps its queue sorted in place. Allocations that remain at a start of an instance, such as its
+strips and effects, carry `// alloc: <reason>`. The rewrite is a step of its own with its own parity runs.
 
 ## Steps
 
@@ -192,9 +191,10 @@ instance, so the marked count stays visible in the lint.
    with the parity checksums unchanged. This cut can land on its own.
 2. The move: the Dart engine to `prismarine_audio`, the crate's engine to `prismarine_audio_out`, with prismarine
    names and comments. mcsm imports them and deletes its copies and its crate.
-3. The Dart render without allocation in steady frames, and the alloc roots.
-4. The JSON form, the synthetic project with its stored checksum, the page of the package, its README and its
+3. The alloc roots with the post at zero and the Dart render's count as the baseline.
+4. The synthetic project with its stored checksum and its native parity, the page of the package, its README and its
    example. mcsm's audio page links to it.
+5. The Dart render without allocation in steady frames, with its own parity runs.
 
 ## Risks
 

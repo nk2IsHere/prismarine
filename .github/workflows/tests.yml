@@ -141,3 +141,12 @@ jobs:
             echo "== $d"
             cargo test -q --manifest-path "$c" --target-dir "build/cargo/${d//\//_}" || exit 1
           done
+      # The synthetic project of the audio engine rendered in Dart and
+      # replayed on the native engine in a debug build, where an allocation
+      # inside the render aborts. The two renders give the same bits.
+      - name: audio engine parity
+        run: |
+          d=packages/prismarine_audio_out/native
+          dart run packages/prismarine_audio/tool/synthetic_parity.dart "$RUNNER_TEMP/parity"
+          cargo run -q --example parity --manifest-path "$d/Cargo.toml" --target-dir "build/cargo/${d//\//_}" -- "$RUNNER_TEMP/parity" | tee "$RUNNER_TEMP/parity.txt"
+          grep -q '^IDENTICAL' "$RUNNER_TEMP/parity.txt"

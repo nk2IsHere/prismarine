@@ -27,6 +27,9 @@ precompiled Metal libraries and a command line. mcsm keeps the settings of its s
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
 and texture arrays of the cook. GitHub workflows run the lints and the tests for a pull request and by hand, as
 [CI](../areas/ci.md) describes. They are not yet enabled on GitHub.
+The audio engine of [its design](../specs/2026-11-23-audio-engine-design.md) is in `prismarine_audio`, with its Dart
+render, and in `prismarine_audio_out`, with its native render. mcsm's FMOD bank adapter and sound rules drive it
+without a crate of their own. The Dart render without allocation is the next step of its plan.
 Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
 its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
 setup and the build of the sample app for each platform, checked on macOS and Linux.
