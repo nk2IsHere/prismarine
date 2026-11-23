@@ -1,0 +1,164 @@
+From ef2a7679a8009c55a6802932a0056bcaa73aa275 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Wed, 21 Oct 2026 22:13:50 +0200
+Subject: [PATCH] shell: release builds take the new generation's size and
+ --verbose_gc as Dart flags, read from FLUTTER_ENGINE_SWITCHES (dart-flags
+ only; on Windows from the live process environment, which the statically
+ linked CRT's getenv doesn't see); profile builds also take --no-inline-alloc
+ and --profile_vm (mcsm6)
+
+---
+ engine/src/flutter/shell/common/switches.cc   | 24 +++++++++
+ .../shell/platform/common/engine_switches.cc  | 49 ++++++++++++++++---
+ .../common/engine_switches_unittests.cc       | 12 +++++
+ 3 files changed, 79 insertions(+), 6 deletions(-)
+
+diff --git a/engine/src/flutter/shell/common/switches.cc b/engine/src/flutter/shell/common/switches.cc
+index 24f86001135..91281642d52 100644
+--- a/engine/src/flutter/shell/common/switches.cc
++++ b/engine/src/flutter/shell/common/switches.cc
+@@ -42,6 +42,17 @@ struct SwitchDesc {
+ static const std::string kAllowedDartFlags[] = {
+     "--enable-isolate-groups",
+     "--no-enable-isolate-groups",
++    // mcsm6: the new generation's size (product VM flags). Every scavenge
++    // stops the whole isolate group, so a game whose isolates allocate
++    // steadily wants fewer, not smaller, ones.
++    "--new_gen_semi_max_size",
++    "--new-gen-semi-max-size",
++    "--new_gen_semi_initial_size",
++    "--new-gen-semi-initial-size",
++    // mcsm6: each collection's sizes and pauses on stderr, to choose the
++    // above per scene.
++    "--verbose_gc",
++    "--verbose-gc",
+ };
+ // clang-format on
+ 
+@@ -63,6 +74,19 @@ static const std::string kAllowedDartFlags[] = {
+     "--write-service-info",
+     "--max_subtype_cache_entries",
+     "--enable-asserts",
++    // mcsm6: the release list's GC sizing, plus profiling aids: complete
++    // allocation profiles (no inline allocation fast paths) and native
++    // stacks in CPU samples.
++    "--new_gen_semi_max_size",
++    "--new-gen-semi-max-size",
++    "--new_gen_semi_initial_size",
++    "--new-gen-semi-initial-size",
++    "--no-inline-alloc",
++    "--no_inline_alloc",
++    "--profile_vm",
++    "--profile-vm",
++    "--verbose_gc",
++    "--verbose-gc",
+ };
+ // clang-format on
+ 
+diff --git a/engine/src/flutter/shell/platform/common/engine_switches.cc b/engine/src/flutter/shell/platform/common/engine_switches.cc
+index 37b98fae47f..70f4cd932d1 100644
+--- a/engine/src/flutter/shell/platform/common/engine_switches.cc
++++ b/engine/src/flutter/shell/platform/common/engine_switches.cc
+@@ -8,17 +8,48 @@
+ #include <cstdlib>
+ #include <iostream>
+ #include <sstream>
++#include <string>
++
++#ifdef _WIN32
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++#endif
+ 
+ namespace flutter {
+ 
++namespace {
++
++// mcsm6: the process's environment as it is now. On Windows this library
++// links the C runtime statically, and its getenv reads a copy of the
++// environment taken when the DLL loaded, so a variable a runner sets before
++// starting the engine would never be seen.
++const char* GetEnv(const char* name, std::string& storage) {
++#ifdef _WIN32
++  char buffer[32767];
++  DWORD length = ::GetEnvironmentVariableA(name, buffer, sizeof(buffer));
++  if (length == 0 || length >= sizeof(buffer)) {
++    return nullptr;
++  }
++  storage.assign(buffer, length);
++  return storage.c_str();
++#else
++  (void)storage;
++  return std::getenv(name);
++#endif
++}
++
++}  // namespace
++
+ std::vector<std::string> GetSwitchesFromEnvironment() {
+   std::vector<std::string> switches;
+-  // Read engine switches from the environment in debug/profile. If release mode
+-  // support is needed in the future, it should likely use a whitelist.
+-#ifndef FLUTTER_RELEASE
++  // Read engine switches from the environment in debug/profile.
++  // mcsm6: release builds read them too, but keep only `dart-flags=…`
++  // (whose flags the engine still checks against its release list).
+   const char* switch_count_key = "FLUTTER_ENGINE_SWITCHES";
+   const int kMaxSwitchCount = 50;
+-  const char* switch_count_string = std::getenv(switch_count_key);
++  std::string switch_count_storage;
++  const char* switch_count_string =
++      GetEnv(switch_count_key, switch_count_storage);
+   if (!switch_count_string) {
+     return switches;
+   }
+@@ -26,7 +57,14 @@ std::vector<std::string> GetSwitchesFromEnvironment() {
+   for (int i = 1; i <= switch_count; ++i) {
+     std::ostringstream switch_key;
+     switch_key << "FLUTTER_ENGINE_SWITCH_" << i;
+-    const char* switch_value = std::getenv(switch_key.str().c_str());
++    std::string switch_value_storage;
++    const char* switch_value =
++        GetEnv(switch_key.str().c_str(), switch_value_storage);
++#ifdef FLUTTER_RELEASE
++    if (switch_value && std::string(switch_value).rfind("dart-flags=", 0) != 0) {
++      continue;
++    }
++#endif  // FLUTTER_RELEASE
+     if (switch_value) {
+       std::ostringstream switch_value_as_flag;
+       switch_value_as_flag << "--" << switch_value;
+@@ -36,7 +74,6 @@ std::vector<std::string> GetSwitchesFromEnvironment() {
+                 << ", but " << switch_key.str() << " is missing." << std::endl;
+     }
+   }
+-#endif  // !FLUTTER_RELEASE
+   return switches;
+ }
+ 
+diff --git a/engine/src/flutter/shell/platform/common/engine_switches_unittests.cc b/engine/src/flutter/shell/platform/common/engine_switches_unittests.cc
+index ac7b01ded50..502cfcc4eca 100644
+--- a/engine/src/flutter/shell/platform/common/engine_switches_unittests.cc
++++ b/engine/src/flutter/shell/platform/common/engine_switches_unittests.cc
+@@ -44,6 +44,18 @@ TEST(FlutterProjectBundle, SwitchesIgnoredInRelease) {
+   std::vector<std::string> switches = GetSwitchesFromEnvironment();
+   EXPECT_EQ(switches.size(), 0U);
+ }
++
++// mcsm6: only dart-flags pass in release.
++TEST(FlutterProjectBundle, DartFlagsReadInRelease) {
++  SetEnvironmentVariable("FLUTTER_ENGINE_SWITCHES", "2");
++  SetEnvironmentVariable("FLUTTER_ENGINE_SWITCH_1", "abc");
++  SetEnvironmentVariable("FLUTTER_ENGINE_SWITCH_2",
++                         "dart-flags=--new_gen_semi_max_size=32");
++
++  std::vector<std::string> switches = GetSwitchesFromEnvironment();
++  EXPECT_EQ(switches.size(), 1U);
++  EXPECT_EQ(switches[0], "--dart-flags=--new_gen_semi_max_size=32");
++}
+ #endif  // FLUTTER_RELEASE
+ 
+ #ifndef FLUTTER_RELEASE
+-- 
+2.54.0 (Apple Git-157)
+

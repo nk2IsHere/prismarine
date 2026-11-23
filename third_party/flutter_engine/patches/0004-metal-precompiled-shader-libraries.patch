@@ -1,0 +1,179 @@
+From 7441f54fdc8987169f85b583f91a511e75f038d6 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sat, 17 Oct 2026 10:32:50 +0200
+Subject: [PATCH 4/4] impeller, flutter_gpu: shader bundles may carry a compiled
+ Metal library (BackendShader.compiled); Flutter GPU registers it with
+ newLibraryWithData and compiles the source only when there is none or it
+ doesn't load (mcsm perf E stage 5)
+
+---
+ .../backend/metal/shader_library_mtl.mm       | 27 +++++++++++++++++++
+ .../impeller/shader_bundle/shader_bundle.fbs  |  5 ++++
+ engine/src/flutter/lib/gpu/shader.cc          | 23 ++++++++++------
+ engine/src/flutter/lib/gpu/shader.h           |  7 +++++
+ engine/src/flutter/lib/gpu/shader_library.cc  | 14 ++++++++++
+ 5 files changed, 68 insertions(+), 8 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
+index ab3d3e3fa16..7243b712c75 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
+@@ -4,7 +4,10 @@
+ 
+ #include "impeller/renderer/backend/metal/shader_library_mtl.h"
+ 
++#include <cstring>
++
+ #include "flutter/fml/closure.h"
++#include "flutter/fml/logging.h"
+ #include "impeller/base/validation.h"
+ #include "impeller/renderer/backend/metal/shader_function_mtl.h"
+ 
+@@ -117,6 +120,30 @@ static MTLFunctionType ToMTLFunctionType(ShaderStage stage) {
+     return;
+   }
+ 
++  // mcsm: a compiled Metal library (a .metallib, magic "MTLB") loads as is;
++  // anything else is MSL source and is compiled here.
++  if (code->GetSize() >= 4 &&
++      std::memcmp(code->GetMapping(), "MTLB", 4) == 0) {
++    // DISPATCH_DATA_DESTRUCTOR_DEFAULT copies the bytes: the library keeps
++    // its data, independent of the bundle's lifetime.
++    auto data = dispatch_data_create(code->GetMapping(), code->GetSize(),
++                                     nullptr, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
++    NSError* error = nil;
++    id<MTLLibrary> library = [device newLibraryWithData:data error:&error];
++    if (!library) {
++      // Not a validation error: the caller then compiles the source (e.g. a
++      // library built for a newer macOS than this one).
++      FML_LOG(WARNING) << "Could not load the compiled shader library ("
++                       << error.localizedDescription.UTF8String
++                       << "); compiling its source instead.";
++      return;
++    }
++    RegisterLibraryAndCacheFunction(library, name, stage);
++    failure_callback->Release();
++    callback(true);
++    return;
++  }
++
+   auto source = [[NSString alloc] initWithBytes:code->GetMapping()
+                                          length:code->GetSize()
+                                        encoding:NSUTF8StringEncoding];
+diff --git a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+index b1681cf2b9d..aaf69a2bc1d 100644
+--- a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
++++ b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+@@ -103,6 +103,11 @@ table BackendShader {
+   uniform_structs: [ShaderUniformStruct];
+   uniform_textures: [ShaderUniformTexture];
+   shader: [ubyte];
++  // mcsm: the shader compiled ahead of time for this backend (a Metal
++  // library, `.metallib`, for metal_desktop/metal_ios), so the engine needn't
++  // compile `shader` at run time. Optional; engines that don't know this field
++  // keep compiling `shader`, which stays the source.
++  compiled: [ubyte];
+ }
+ 
+ table Shader {
+diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
+index 561303439ff..cefafa6ba9a 100644
+--- a/engine/src/flutter/lib/gpu/shader.cc
++++ b/engine/src/flutter/lib/gpu/shader.cc
+@@ -105,6 +105,7 @@ void Shader::ResetFrom(Shader& other) {
+   entrypoint_ = std::move(other.entrypoint_);
+   stage_ = other.stage_;
+   code_mapping_ = std::move(other.code_mapping_);
++  compiled_mapping_ = std::move(other.compiled_mapping_);
+   inputs_ = std::move(other.inputs_);
+   layouts_ = std::move(other.layouts_);
+   uniform_structs_ = std::move(other.uniform_structs_);
+@@ -135,14 +136,20 @@ bool Shader::RegisterSync(Context& context) {
+     lib.UnregisterFunction(scoped_name, stage_);
+   }
+ 
+-  std::promise<bool> promise;
+-  auto future = promise.get_future();
+-  lib.RegisterFunction(
+-      scoped_name, stage_, code_mapping_,
+-      fml::MakeCopyable([promise = std::move(promise)](bool result) mutable {
+-        promise.set_value(result);
+-      }));
+-  if (!future.get()) {
++  auto register_code = [&](const std::shared_ptr<fml::Mapping>& code) {
++    std::promise<bool> promise;
++    auto future = promise.get_future();
++    lib.RegisterFunction(
++        scoped_name, stage_, code,
++        fml::MakeCopyable([promise = std::move(promise)](bool result) mutable {
++          promise.set_value(result);
++        }));
++    return future.get();
++  };
++  // mcsm: the build's compiled library first; the source when there is none
++  // or it doesn't load (e.g. built for a newer OS than this one).
++  if (!(compiled_mapping_ && register_code(compiled_mapping_)) &&
++      !register_code(code_mapping_)) {
+     return false;  // Registration failed.
+   }
+   is_dirty_ = false;
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index 93a59bb9681..7cb6bfa3b73 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -59,6 +59,12 @@ class Shader : public RefCountedDartWrappable<Shader> {
+ 
+   bool RegisterSync(Context& context);
+ 
++  /// mcsm: the shader compiled ahead of time for the backend (a .metallib),
++  /// registered in place of the source when it loads.
++  void SetCompiledMapping(std::shared_ptr<fml::Mapping> compiled) {
++    compiled_mapping_ = std::move(compiled);
++  }
++
+   /// Whether this shader needs to be re-registered with the impeller shader
+   /// library on next use. Fresh shaders start dirty. Set back to false by
+   /// `RegisterSync` after registration completes, and back to true by
+@@ -129,6 +135,7 @@ class Shader : public RefCountedDartWrappable<Shader> {
+   std::string entrypoint_;
+   impeller::ShaderStage stage_;
+   std::shared_ptr<fml::Mapping> code_mapping_;
++  std::shared_ptr<fml::Mapping> compiled_mapping_;  // mcsm
+   std::vector<impeller::ShaderStageIOSlot> inputs_;
+   std::vector<impeller::ShaderStageBufferLayout> layouts_;
+   std::unordered_map<std::string, UniformBinding> uniform_structs_;
+diff --git a/engine/src/flutter/lib/gpu/shader_library.cc b/engine/src/flutter/lib/gpu/shader_library.cc
+index 7960a5cf44f..d9313475b6b 100644
+--- a/engine/src/flutter/lib/gpu/shader_library.cc
++++ b/engine/src/flutter/lib/gpu/shader_library.cc
+@@ -236,6 +236,19 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+         backend_shader->shader()->size(),   //
+         [payload = payload](auto, auto) {}  //
+     );
++    // mcsm: a Metal library compiled at build time, when the bundle has one
++    // (Shader::RegisterSync loads it and compiles the source only if it
++    // doesn't load).
++    std::shared_ptr<fml::Mapping> compiled_mapping;
++    if (backend_type == impeller::Context::BackendType::kMetal &&
++        backend_shader->compiled() != nullptr &&
++        backend_shader->compiled()->size() > 0) {
++      compiled_mapping = std::make_shared<fml::NonOwnedMapping>(
++          backend_shader->compiled()->data(),  //
++          backend_shader->compiled()->size(),  //
++          [payload = payload](auto, auto) {}   //
++      );
++    }
+ 
+     std::vector<impeller::DescriptorSetLayout> descriptor_set_layouts;
+ 
+@@ -350,6 +363,7 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+         ToShaderStage(backend_shader->stage()), std::move(code_mapping),
+         std::move(inputs), std::move(layouts), std::move(uniform_structs),
+         std::move(uniform_textures), std::move(descriptor_set_layouts));
++    shader->SetCompiledMapping(std::move(compiled_mapping));  // mcsm
+     shader_map[bundled_shader->name()->str()] = std::move(shader);
+   }
+ 
+-- 
+2.54.0 (Apple Git-157)
+

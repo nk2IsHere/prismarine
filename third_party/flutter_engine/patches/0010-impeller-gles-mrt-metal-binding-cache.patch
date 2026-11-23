@@ -1,0 +1,678 @@
+From 9b0a905efe14764523e5eb0e269512286c17f6c0 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Sun, 25 Oct 2026 11:37:55 +0100
+Subject: [PATCH 2/2] impeller (mcsm7): GLES runs several colour attachments in
+ one pass (attachments 1..N on the cached FBO, draw buffers, a clear per
+ attachment, per-buffer blend state where the driver has it, discards); Metal
+ re-arms the same pipeline without encoder calls and keeps its binding cache
+ in flat arrays
+
+---
+ .../renderer/backend/gles/proc_table_gles.h   |  38 ++-
+ .../renderer/backend/gles/render_pass_gles.cc | 232 +++++++++++++++++-
+ .../renderer/backend/gles/texture_gles.cc     |  53 ++++
+ .../renderer/backend/gles/texture_gles.h      |  21 ++
+ .../backend/metal/pass_bindings_cache_mtl.h   |  21 ++
+ .../backend/metal/pass_bindings_cache_mtl.mm  |  50 ++++
+ .../renderer/backend/metal/render_pass_mtl.h  |   2 +
+ .../renderer/backend/metal/render_pass_mtl.mm |   7 +
+ 8 files changed, 410 insertions(+), 14 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/proc_table_gles.h b/engine/src/flutter/impeller/renderer/backend/gles/proc_table_gles.h
+index e9e52f36db5..a95b0038d80 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/proc_table_gles.h
++++ b/engine/src/flutter/impeller/renderer/backend/gles/proc_table_gles.h
+@@ -254,6 +254,28 @@ void(glDepthRangef)(GLfloat n, GLfloat f);
+ void(glClearDepth)(GLdouble depth);
+ void(glDepthRange)(GLdouble n, GLdouble f);
+ 
++// mcsm7: per-draw-buffer blend state (GLES 3.2 and desktop GL 4.0 core,
++// OES_draw_buffers_indexed), for several colour attachments with different
++// blends or write masks. Declared here for the proc table's decltype (the
++// ES 3.0 headers don't); resolved at run time where the driver has them.
++extern "C" {
++GL_APICALL void GL_APIENTRY glEnablei(GLenum target, GLuint index);
++GL_APICALL void GL_APIENTRY glDisablei(GLenum target, GLuint index);
++GL_APICALL void GL_APIENTRY glBlendFuncSeparatei(GLuint buf,
++                                                 GLenum srcRGB,
++                                                 GLenum dstRGB,
++                                                 GLenum srcAlpha,
++                                                 GLenum dstAlpha);
++GL_APICALL void GL_APIENTRY glBlendEquationSeparatei(GLuint buf,
++                                                     GLenum modeRGB,
++                                                     GLenum modeAlpha);
++GL_APICALL void GL_APIENTRY glColorMaski(GLuint index,
++                                         GLboolean r,
++                                         GLboolean g,
++                                         GLboolean b,
++                                         GLboolean a);
++}
++
+ #define FOR_EACH_IMPELLER_DESKTOP_ONLY_PROC(PROC) \
+   PROC(ClearDepth);                               \
+   PROC(DepthRange);
+@@ -269,7 +291,9 @@ void(glDepthRange)(GLdouble n, GLdouble f);
+   PROC(WaitSync);                          \
+   PROC(RenderbufferStorageMultisample);    \
+   PROC(BlitFramebuffer);                   \
+-  PROC(InvalidateFramebuffer);
++  PROC(InvalidateFramebuffer);             \
++  PROC(DrawBuffers);                       \
++  PROC(ClearBufferfv);
+ 
+ #define FOR_EACH_IMPELLER_EXT_PROC(PROC)    \
+   PROC(DebugMessageControlKHR);             \
+@@ -292,7 +316,17 @@ void(glDepthRange)(GLdouble n, GLdouble f);
+   PROC(DrawArraysInstanced);                \
+   PROC(DrawArraysInstancedEXT);             \
+   PROC(DrawElementsInstanced);              \
+-  PROC(DrawElementsInstancedEXT);
++  PROC(DrawElementsInstancedEXT);           \
++  PROC(Enablei);                            \
++  PROC(Disablei);                           \
++  PROC(BlendFuncSeparatei);                 \
++  PROC(BlendEquationSeparatei);             \
++  PROC(ColorMaski);                         \
++  PROC(EnableiOES);                         \
++  PROC(DisableiOES);                        \
++  PROC(BlendFuncSeparateiOES);              \
++  PROC(BlendEquationSeparateiOES);          \
++  PROC(ColorMaskiOES);
+ 
+ enum class DebugResourceType {
+   kTexture,
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/render_pass_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/render_pass_gles.cc
+index 9efab5e56d4..63f66dba95c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/render_pass_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/render_pass_gles.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "impeller/renderer/backend/gles/render_pass_gles.h"
+ 
++#include <algorithm>
+ #include <cstdint>
+ 
+ #include "flutter/fml/trace_event.h"
+@@ -150,9 +151,94 @@ struct RenderPassData {
+   bool discard_depth_attachment = true;
+   bool discard_stencil_attachment = true;
+ 
++  // mcsm7: colour attachments 1…N (multiple render targets).
++  struct ExtraColor {
++    std::shared_ptr<Texture> texture;
++    uint32_t mip_level = 0u;
++    uint32_t slice = 0u;
++    Color clear_color;
++    bool clear = true;
++    bool discard = true;
++  };
++  std::vector<ExtraColor> extra_colors;
++
+   std::string label;
+ };
+ 
++// mcsm7: blending and write masks for a pipeline with several colour
++// attachments. One shared state when they all agree (the global calls apply
++// to every draw buffer); else per draw buffer where the driver has the
++// indexed calls (GLES 3.2 / GL 4.0 core, or OES_draw_buffers_indexed).
++static bool ConfigureBlendingMulti(const ProcTableGLES& gl,
++                                   const PipelineDescriptor& desc) {
++  const auto& colors = desc.GetColorAttachmentDescriptors();
++  const ColorAttachmentDescriptor* first = nullptr;
++  bool same = true;
++  for (const auto& [index, color] : colors) {
++    if (!first) {
++      first = &color;
++      continue;
++    }
++    if (color.blending_enabled != first->blending_enabled ||
++        color.write_mask != first->write_mask ||
++        (color.blending_enabled &&
++         (color.src_color_blend_factor != first->src_color_blend_factor ||
++          color.dst_color_blend_factor != first->dst_color_blend_factor ||
++          color.src_alpha_blend_factor != first->src_alpha_blend_factor ||
++          color.dst_alpha_blend_factor != first->dst_alpha_blend_factor ||
++          color.color_blend_op != first->color_blend_op ||
++          color.alpha_blend_op != first->alpha_blend_op))) {
++      same = false;
++    }
++  }
++  if (!first) {
++    return false;
++  }
++  if (same) {
++    ConfigureBlending(gl, first);
++    return true;
++  }
++  const bool core = gl.Enablei.IsAvailable() && gl.Disablei.IsAvailable() &&
++                    gl.BlendFuncSeparatei.IsAvailable() &&
++                    gl.BlendEquationSeparatei.IsAvailable() &&
++                    gl.ColorMaski.IsAvailable();
++  const bool oes = gl.EnableiOES.IsAvailable() && gl.DisableiOES.IsAvailable() &&
++                   gl.BlendFuncSeparateiOES.IsAvailable() &&
++                   gl.BlendEquationSeparateiOES.IsAvailable() &&
++                   gl.ColorMaskiOES.IsAvailable();
++  if (!core && !oes) {
++    VALIDATION_LOG << "Colour attachments with different blends need indexed "
++                      "blend state (GLES 3.2, GL 4.0 or "
++                      "OES_draw_buffers_indexed).";
++    return false;
++  }
++  for (const auto& [index, color] : colors) {
++    const GLuint i = static_cast<GLuint>(index);
++    if (color.blending_enabled) {
++      core ? gl.Enablei(GL_BLEND, i) : gl.EnableiOES(GL_BLEND, i);
++      const GLenum sc = ToBlendFactor(color.src_color_blend_factor);
++      const GLenum dc = ToBlendFactor(color.dst_color_blend_factor);
++      const GLenum sa = ToBlendFactor(color.src_alpha_blend_factor);
++      const GLenum da = ToBlendFactor(color.dst_alpha_blend_factor);
++      core ? gl.BlendFuncSeparatei(i, sc, dc, sa, da)
++           : gl.BlendFuncSeparateiOES(i, sc, dc, sa, da);
++      const GLenum mc = ToBlendOperation(color.color_blend_op);
++      const GLenum ma = ToBlendOperation(color.alpha_blend_op);
++      core ? gl.BlendEquationSeparatei(i, mc, ma)
++           : gl.BlendEquationSeparateiOES(i, mc, ma);
++    } else {
++      core ? gl.Disablei(GL_BLEND, i) : gl.DisableiOES(GL_BLEND, i);
++    }
++    const auto m = color.write_mask;
++    const GLboolean r = (m & ColorWriteMaskBits::kRed) ? GL_TRUE : GL_FALSE;
++    const GLboolean g = (m & ColorWriteMaskBits::kGreen) ? GL_TRUE : GL_FALSE;
++    const GLboolean b = (m & ColorWriteMaskBits::kBlue) ? GL_TRUE : GL_FALSE;
++    const GLboolean a = (m & ColorWriteMaskBits::kAlpha) ? GL_TRUE : GL_FALSE;
++    core ? gl.ColorMaski(i, r, g, b, a) : gl.ColorMaskiOES(i, r, g, b, a);
++  }
++  return true;
++}
++
+ static bool BindVertexBuffer(const ProcTableGLES& gl,
+                              BufferBindingsGLES* vertex_desc_gles,
+                              const BufferView& vertex_buffer_view,
+@@ -262,6 +348,15 @@ static void EncodeViewport(const ProcTableGLES& gl,
+   const bool is_wrapped_fbo = color_gles.IsWrapped();
+ 
+   std::optional<GLuint> fbo = 0;
++  // mcsm7: whether the FBO's draw buffers must be set (several colour
++  // attachments now, or a different set than it had).
++  bool set_draw_buffers = !pass_data.extra_colors.empty();
++  if (set_draw_buffers && (is_wrapped_fbo || !gl.DrawBuffers.IsAvailable() ||
++                           !gl.ClearBufferfv.IsAvailable())) {
++    VALIDATION_LOG << "Several colour attachments need an offscreen pass on "
++                      "GLES 3.";
++    return false;
++  }
+   if (is_wrapped_fbo) {
+     if (color_gles.GetFBO().has_value()) {
+       // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+@@ -284,9 +379,41 @@ static void EncodeViewport(const ProcTableGLES& gl,
+     }
+     gl.BindFramebuffer(GL_FRAMEBUFFER, fbo.value());
+ 
+-    if (needs_attachment ||
++    // mcsm7: the colour attachments past the first, as (unique id, mip,
++    // slice); a cached FBO holding others is re-attached.
++    std::vector<uint64_t> extra_signature;
++    for (const auto& extra : pass_data.extra_colors) {
++      extra_signature.push_back(
++          TextureGLES::Cast(*extra.texture).GetMcsmUniqueId());
++      extra_signature.push_back(extra.mip_level);
++      extra_signature.push_back(extra.slice);
++    }
++    const bool extras_match =
++        color_gles.McsmCachedFBOExtraColors() == extra_signature;
++
++    if (needs_attachment || !extras_match ||
+         !color_gles.CachedFBOMatchesSubresource(pass_data.color_mip_level,
+                                                 pass_data.color_slice)) {
++      // mcsm7: colour attachments 1…N, and none past them.
++      const size_t old_extras =
++          color_gles.McsmCachedFBOExtraColors().size() / 3;
++      set_draw_buffers |= old_extras > 0;
++      for (size_t i = 0; i < pass_data.extra_colors.size(); i++) {
++        const auto& extra = pass_data.extra_colors[i];
++        if (!TextureGLES::Cast(*extra.texture)
++                 .SetAsFramebufferColorAttachment(GL_FRAMEBUFFER, i + 1,
++                                                  extra.mip_level,
++                                                  extra.slice)) {
++          return false;
++        }
++      }
++      for (size_t i = pass_data.extra_colors.size(); i < old_extras; i++) {
++        gl.FramebufferTexture2D(GL_FRAMEBUFFER,
++                                GL_COLOR_ATTACHMENT0 + 1 + i, GL_TEXTURE_2D,
++                                0, 0);
++      }
++      color_gles.McsmCachedFBOExtraColors() = extra_signature;
++
+       if (!color_gles.SetAsFramebufferAttachment(
+               GL_FRAMEBUFFER, TextureGLES::AttachmentType::kColor0,
+               pass_data.color_mip_level, pass_data.color_slice)) {
+@@ -349,7 +476,38 @@ static void EncodeViewport(const ProcTableGLES& gl,
+ 
+   RenderPassGLES::ResetGLState(gl);
+ 
+-  gl.Clear(clear_bits);
++  // mcsm7: several colour attachments: every one is a draw buffer, and each
++  // clears to its own colour.
++  const size_t color_count = 1 + pass_data.extra_colors.size();
++  if (set_draw_buffers) {
++    static constexpr GLenum kDrawBuffers[8] = {
++        GL_COLOR_ATTACHMENT0,     GL_COLOR_ATTACHMENT0 + 1,
++        GL_COLOR_ATTACHMENT0 + 2, GL_COLOR_ATTACHMENT0 + 3,
++        GL_COLOR_ATTACHMENT0 + 4, GL_COLOR_ATTACHMENT0 + 5,
++        GL_COLOR_ATTACHMENT0 + 6, GL_COLOR_ATTACHMENT0 + 7};
++    gl.DrawBuffers(static_cast<GLsizei>(std::min<size_t>(color_count, 8)),
++                   kDrawBuffers);
++  }
++  if (color_count > 1) {
++    gl.Clear(clear_bits & ~GL_COLOR_BUFFER_BIT);
++    if (pass_data.clear_color_attachment) {
++      const GLfloat c0[4] = {
++          pass_data.clear_color.red, pass_data.clear_color.green,
++          pass_data.clear_color.blue, pass_data.clear_color.alpha};
++      gl.ClearBufferfv(GL_COLOR, 0, c0);
++    }
++    for (size_t i = 0; i < pass_data.extra_colors.size(); i++) {
++      const auto& extra = pass_data.extra_colors[i];
++      if (!extra.clear) {
++        continue;
++      }
++      const GLfloat c[4] = {extra.clear_color.red, extra.clear_color.green,
++                            extra.clear_color.blue, extra.clear_color.alpha};
++      gl.ClearBufferfv(GL_COLOR, static_cast<GLint>(i + 1), c);
++    }
++  } else {
++    gl.Clear(clear_bits);
++  }
+ 
+   // Both the viewport and scissor are specified in framebuffer coordinates.
+   // Impeller's framebuffer coordinate system is top left origin, but OpenGL's
+@@ -380,19 +538,23 @@ static void EncodeViewport(const ProcTableGLES& gl,
+     const auto& pipeline = PipelineGLES::Cast(*command.pipeline);
+     impeller_context->GetPipelineLibrary()->LogPipelineUsage(
+         pipeline.GetDescriptor());
+-    const auto* color_attachment =
+-        pipeline.GetDescriptor().GetLegacyCompatibleColorAttachment();
+-    if (!color_attachment) {
++    //--------------------------------------------------------------------------
++    /// Configure blending.
++    ///
++    if (const auto* color_attachment =
++            pipeline.GetDescriptor().GetLegacyCompatibleColorAttachment()) {
++      ConfigureBlending(gl, color_attachment);
++    } else if (color_count > 1) {
++      // mcsm7: several colour attachments.
++      if (!ConfigureBlendingMulti(gl, pipeline.GetDescriptor())) {
++        return false;
++      }
++    } else {
+       VALIDATION_LOG
+           << "Color attachment is too complicated for a legacy renderer.";
+       return false;
+     }
+ 
+-    //--------------------------------------------------------------------------
+-    /// Configure blending.
+-    ///
+-    ConfigureBlending(gl, color_attachment);
+-
+     //--------------------------------------------------------------------------
+     /// Setup stencil.
+     ///
+@@ -698,7 +860,7 @@ static void EncodeViewport(const ProcTableGLES& gl,
+   const bool is_default_fbo = framebuffer_id == 0;
+ 
+   if (gl.InvalidateFramebuffer.IsAvailable()) {
+-    std::array<GLenum, 3> attachments;
++    std::array<GLenum, 3 + 7> attachments;
+     size_t attachment_count = 0;
+ 
+     bool angle_safe = gl.GetCapabilities()->IsANGLE() ? !is_default_fbo : true;
+@@ -707,6 +869,13 @@ static void EncodeViewport(const ProcTableGLES& gl,
+       attachments[attachment_count++] =
+           (is_default_fbo ? GL_COLOR_EXT : GL_COLOR_ATTACHMENT0);
+     }
++    // mcsm7: colour attachments 1…N.
++    for (size_t i = 0; i < pass_data.extra_colors.size() && i < 7; i++) {
++      if (pass_data.extra_colors[i].discard && !is_default_fbo) {
++        attachments[attachment_count++] =
++            GL_COLOR_ATTACHMENT0 + 1 + static_cast<GLenum>(i);
++      }
++    }
+ 
+     if (pass_data.discard_depth_attachment && angle_safe) {
+       attachments[attachment_count++] =
+@@ -722,7 +891,7 @@ static void EncodeViewport(const ProcTableGLES& gl,
+                              attachments.data()  // size
+     );
+   } else if (gl.DiscardFramebufferEXT.IsAvailable()) {
+-    std::array<GLenum, 3> attachments;
++    std::array<GLenum, 3 + 7> attachments;
+     size_t attachment_count = 0;
+ 
+     // TODO(130048): discarding stencil or depth on the default fbo causes Angle
+@@ -734,6 +903,13 @@ static void EncodeViewport(const ProcTableGLES& gl,
+       attachments[attachment_count++] =
+           (is_default_fbo ? GL_COLOR_EXT : GL_COLOR_ATTACHMENT0);
+     }
++    // mcsm7: colour attachments 1…N.
++    for (size_t i = 0; i < pass_data.extra_colors.size() && i < 7; i++) {
++      if (pass_data.extra_colors[i].discard && !is_default_fbo) {
++        attachments[attachment_count++] =
++            GL_COLOR_ATTACHMENT0 + 1 + static_cast<GLenum>(i);
++      }
++    }
+ 
+     if (pass_data.discard_depth_attachment && angle_safe) {
+       attachments[attachment_count++] =
+@@ -801,6 +977,38 @@ bool RenderPassGLES::OnEncodeCommands(const Context& context) const {
+         !context.GetCapabilities()->SupportsImplicitResolvingMSAA();
+   }
+ 
++  //----------------------------------------------------------------------------
++  /// mcsm7: colour attachments 1…N, which must be contiguous, single-sampled
++  /// and offscreen.
++  ///
++  {
++    size_t count = 0;
++    render_target.IterateAllColorAttachments(
++        [&](size_t index, const ColorAttachment&) -> bool {
++          count = std::max(count, index + 1);
++          return true;
++        });
++    for (size_t i = 1; i < count; i++) {
++      if (!render_target.HasColorAttachment(i)) {
++        VALIDATION_LOG << "Colour attachments must be contiguous on GLES.";
++        return false;
++      }
++      const ColorAttachment& color = render_target.GetColorAttachment(i);
++      if (color.resolve_texture || !color.texture) {
++        VALIDATION_LOG << "A resolved colour attachment past the first.";
++        return false;
++      }
++      RenderPassData::ExtraColor extra;
++      extra.texture = color.texture;
++      extra.mip_level = color.mip_level;
++      extra.slice = color.slice;
++      extra.clear_color = color.clear_color;
++      extra.clear = CanClearAttachment(color.load_action);
++      extra.discard = CanDiscardAttachmentWhenDone(color.store_action);
++      pass_data->extra_colors.push_back(std::move(extra));
++    }
++  }
++
+   //----------------------------------------------------------------------------
+   /// Setup depth data.
+   ///
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
+index 4c008886834..66c79978543 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "impeller/renderer/backend/gles/texture_gles.h"
+ 
++#include <atomic>
++
+ #include <format>
+ #include <optional>
+ #include <utility>
+@@ -632,6 +634,11 @@ TextureGLES::Type TextureGLES::GetType() const {
+   return type_;
+ }
+ 
++uint64_t TextureGLES::NextMcsmUniqueId() {
++  static std::atomic<uint64_t> next{1};
++  return next.fetch_add(1, std::memory_order_relaxed);
++}
++
+ static GLenum ToAttachmentType(TextureGLES::AttachmentType point) {
+   switch (point) {
+     case TextureGLES::AttachmentType::kColor0:
+@@ -748,6 +755,52 @@ bool TextureGLES::SetAsFramebufferAttachment(GLenum target,
+   return true;
+ }
+ 
++bool TextureGLES::SetAsFramebufferColorAttachment(GLenum target,
++                                                  uint32_t index,
++                                                  uint32_t mip_level,
++                                                  uint32_t slice) {
++  if (!IsValid()) {
++    return false;
++  }
++  InitializeContentsIfNecessary();
++  const auto& gl = reactor_->GetProcTable();
++  if (mip_level > 0 &&
++      !gl.GetCapabilities()->SupportsFramebufferRenderMipmap()) {
++    VALIDATION_LOG << "Rendering into a non-zero mip level is not supported on "
++                      "the GLES backend.";
++    return false;
++  }
++  if (!EnsureSliceMipLevelStorage(slice, mip_level)) {
++    return false;
++  }
++  auto handle = GetGLHandle();
++  if (!handle.has_value()) {
++    return false;
++  }
++  const GLenum attachment = GL_COLOR_ATTACHMENT0 + index;
++  switch (ComputeTypeForBinding(target)) {
++    case Type::kTexture: {
++      GLenum textarget =
++          GetTextureDescriptor().type == TextureType::kTextureCube
++              ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + slice
++              : GL_TEXTURE_2D;
++      gl.FramebufferTexture2D(target, attachment, textarget, handle.value(),
++                              static_cast<GLint>(mip_level));
++      return true;
++    }
++    case Type::kRenderBuffer:
++      gl.FramebufferRenderbuffer(target, attachment, GL_RENDERBUFFER,
++                                 handle.value());
++      return true;
++    case Type::kTextureMultisampled:
++    case Type::kRenderBufferMultisampled:
++      // Multisampled colour attachments past the first aren't supported.
++      VALIDATION_LOG << "A multisampled colour attachment past the first.";
++      return false;
++  }
++  return false;
++}
++
+ bool TextureGLES::IsWrapped() const {
+   return is_wrapped_;
+ }
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.h b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.h
+index c1a52f0946a..67b7373f237 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.h
++++ b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.h
+@@ -7,6 +7,7 @@
+ 
+ #include <array>
+ #include <bitset>
++#include <vector>
+ 
+ #include "fml/logging.h"
+ #include "impeller/base/backend_cast.h"
+@@ -100,6 +101,22 @@ class TextureGLES final : public Texture,
+                                                 uint32_t mip_level = 0,
+                                                 uint32_t slice = 0);
+ 
++  /// mcsm7: attaches this texture as colour attachment [index] (GL_COLOR_
++  /// ATTACHMENT0 + index) of the bound framebuffer.
++  [[nodiscard]] bool SetAsFramebufferColorAttachment(GLenum target,
++                                                     uint32_t index,
++                                                     uint32_t mip_level,
++                                                     uint32_t slice);
++
++  /// mcsm7: a process-unique id (GL names and addresses get reused).
++  uint64_t GetMcsmUniqueId() const { return mcsm_uid_; }
++
++  /// mcsm7: what the cached FBO (this texture its colour attachment 0) has
++  /// at colour attachments 1…N, as (unique id, mip, slice) triples.
++  std::vector<uint64_t>& McsmCachedFBOExtraColors() {
++    return mcsm_fbo_extra_colors_;
++  }
++
+   Type GetType() const;
+ 
+   bool IsWrapped() const;
+@@ -196,6 +213,10 @@ class TextureGLES final : public Texture,
+   const std::optional<GLuint> wrapped_fbo_;
+   UniqueHandleGLES cached_fbo_;
+   uint32_t cached_fbo_mip_level_ = 0;
++  // mcsm7.
++  static uint64_t NextMcsmUniqueId();
++  const uint64_t mcsm_uid_ = NextMcsmUniqueId();
++  std::vector<uint64_t> mcsm_fbo_extra_colors_;
+   uint32_t cached_fbo_slice_ = 0;
+   bool is_valid_ = false;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
+index 3e6c21dbdd3..f24984ba516 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.h
+@@ -7,6 +7,8 @@
+ 
+ #include <Metal/Metal.h>
+ 
++#include <array>
++
+ #include "impeller/renderer/render_pass.h"
+ #include "impeller/renderer/render_target.h"
+ 
+@@ -96,6 +98,25 @@ struct PassBindingsCacheMTL {
+   std::map<ShaderStage, BufferMap> buffers_;
+   std::map<ShaderStage, TextureMap> textures_;
+   std::map<ShaderStage, SamplerMap> samplers_;
++  // mcsm7: the vertex and fragment stages' first 32 indices in flat
++  // arrays (two std::map lookups per bind before). Unretained: a command
++  // buffer retains every resource bound on its encoders, so an address can't
++  // be reused while this pass encodes.
++  static constexpr uint64_t kFlatSlots = 32;
++  struct FlatBuffer {
++    __unsafe_unretained id<MTLBuffer> buffer = nil;
++    size_t offset = 0u;
++  };
++  std::array<FlatBuffer, kFlatSlots> flat_buffers_[2];
++  std::array<__unsafe_unretained id<MTLTexture>, kFlatSlots> flat_textures_[2] =
++      {};
++  std::array<__unsafe_unretained id<MTLSamplerState>, kFlatSlots>
++      flat_samplers_[2] = {};
++  static int FlatStage(ShaderStage stage) {
++    return stage == ShaderStage::kVertex     ? 0
++           : stage == ShaderStage::kFragment ? 1
++                                             : -1;
++  }
+   std::optional<Viewport> viewport_;
+   std::optional<IRect32> scissor_;
+   std::optional<uint32_t> stencil_ref_;
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+index 295967784eb..f36609b9be9 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pass_bindings_cache_mtl.mm
+@@ -32,6 +32,30 @@
+                                      uint64_t index,
+                                      uint64_t offset,
+                                      id<MTLBuffer> buffer) {
++  // mcsm7: flat slots for the common stages and indices.
++  if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
++    auto& slot = flat_buffers_[st][index];
++    if (slot.buffer == buffer) {
++      if (slot.offset == offset) {
++        return true;
++      }
++      slot.offset = offset;
++      if (st == 0) {
++        [encoder_ setVertexBufferOffset:offset atIndex:index];
++      } else {
++        [encoder_ setFragmentBufferOffset:offset atIndex:index];
++      }
++      return true;
++    }
++    slot.buffer = buffer;
++    slot.offset = offset;
++    if (st == 0) {
++      [encoder_ setVertexBuffer:buffer offset:offset atIndex:index];
++    } else {
++      [encoder_ setFragmentBuffer:buffer offset:offset atIndex:index];
++    }
++    return true;
++  }
+   auto& buffers_map = buffers_[stage];
+   auto found = buffers_map.find(index);
+   if (found != buffers_map.end() && found->second.buffer == buffer) {
+@@ -75,6 +99,19 @@
+ bool PassBindingsCacheMTL::SetTexture(ShaderStage stage,
+                                       uint64_t index,
+                                       id<MTLTexture> texture) {
++  if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
++    auto& slot = flat_textures_[st][index];
++    if (slot == texture) {
++      return true;
++    }
++    slot = texture;
++    if (st == 0) {
++      [encoder_ setVertexTexture:texture atIndex:index];
++    } else {
++      [encoder_ setFragmentTexture:texture atIndex:index];
++    }
++    return true;
++  }
+   auto& texture_map = textures_[stage];
+   auto found = texture_map.find(index);
+   if (found != texture_map.end() && found->second == texture) {
+@@ -99,6 +136,19 @@
+ bool PassBindingsCacheMTL::SetSampler(ShaderStage stage,
+                                       uint64_t index,
+                                       id<MTLSamplerState> sampler) {
++  if (const int st = FlatStage(stage); st >= 0 && index < kFlatSlots) {
++    auto& slot = flat_samplers_[st][index];
++    if (slot == sampler) {
++      return true;
++    }
++    slot = sampler;
++    if (st == 0) {
++      [encoder_ setVertexSamplerState:sampler atIndex:index];
++    } else {
++      [encoder_ setFragmentSamplerState:sampler atIndex:index];
++    }
++    return true;
++  }
+   auto& sampler_map = samplers_[stage];
+   auto found = sampler_map.find(index);
+   if (found != sampler_map.end() && found->second == sampler) {
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+index fe9107302e9..c503cce4d76 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+@@ -39,6 +39,8 @@ class RenderPassMTL final : public RenderPass {
+   size_t base_vertex_ = 0u;
+   size_t vertex_count_ = 0u;
+   bool has_valid_pipeline_ = false;
++  // mcsm7: the pipeline whose state the encoder holds.
++  const Pipeline<PipelineDescriptor>* last_pipeline_ = nullptr;
+   bool has_label_ = false;
+   BufferView index_buffer_ = {};
+   PrimitiveType primitive_type_ = {};
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+index 36e3866b198..356fa75f79c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+@@ -233,6 +233,13 @@ static bool Bind(PassBindingsCacheMTL& pass,
+   const PipelineDescriptor& pipeline_desc = pipeline->GetDescriptor();
+   context_->GetPipelineLibrary()->LogPipelineUsage(pipeline_desc);
+   primitive_type_ = pipeline_desc.GetPrimitiveType();
++  // mcsm7: the encoder already holds this pipeline's states, winding, cull
++  // and fill mode (the same pipeline as the last draw's): only re-arm.
++  if (pipeline.get() == last_pipeline_) {
++    has_valid_pipeline_ = true;
++    return;
++  }
++  last_pipeline_ = pipeline.get();
+   pass_bindings_.SetRenderPipelineState(
+       PipelineMTL::Cast(*pipeline).GetMTLRenderPipelineState());
+   pass_bindings_.SetDepthStencilState(
+-- 
+2.54.0 (Apple Git-157)
+

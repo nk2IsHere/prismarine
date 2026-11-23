@@ -1,0 +1,331 @@
+From 13326879a1f2067b741305ed99bb1e5a23a632e4 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Wed, 11 Nov 2026 16:54:45 +0100
+Subject: [PATCH] impellerc, flutter_gpu (mcsm10): a resource a stage declares
+ but never reads is marked in the bundle (mcsm_unused); Flutter GPU leaves it
+ out of the descriptor layout and binds it as a no-op (on Vulkan its binding
+ stayed 0, another stage's, and binding it replaced that stage's resource)
+
+---
+ engine/src/flutter/impeller/compiler/reflector.cc | 12 ++++++++++++
+ .../impeller/compiler/shader_bundle_data.cc       |  4 ++++
+ .../impeller/compiler/shader_bundle_data.h        |  3 +++
+ .../impeller/shader_bundle/shader_bundle.fbs      |  8 ++++++++
+ engine/src/flutter/lib/gpu/compute_pass.cc        | 15 +++++++++++++++
+ engine/src/flutter/lib/gpu/render_pass.cc         |  6 ++++++
+ engine/src/flutter/lib/gpu/shader.h               |  2 ++
+ engine/src/flutter/lib/gpu/shader_library.cc      | 14 ++++++++++++++
+ 8 files changed, 64 insertions(+)
+
+diff --git a/engine/src/flutter/impeller/compiler/reflector.cc b/engine/src/flutter/impeller/compiler/reflector.cc
+index 5f5ca41f72e..c20fe4473a7 100644
+--- a/engine/src/flutter/impeller/compiler/reflector.cc
++++ b/engine/src/flutter/impeller/compiler/reflector.cc
+@@ -595,6 +595,12 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+     data->AddUniformStruct(uniform_struct);
+   }
+ 
++  // mcsm10: what the entry point never reads (declared only): marked, so the
++  // engine binds it as a no-op and leaves it out of the descriptor layout.
++  const auto mcsm_active = compiler_->get_active_interface_variables();
++  const auto mcsm_unused = [&](spirv_cross::ID id) {
++    return mcsm_active.count(id) == 0;
++  };
+   const auto sampled_images = compiler_->get_shader_resources().sampled_images;
+   for (const auto& image : sampled_images) {
+     // mcsm: a samplerBuffer is a texel buffer, not a texture.
+@@ -607,6 +613,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+           image.id, spv::Decoration::DecorationDescriptorSet);
+       buffer.binding = compiler_->get_decoration(
+           image.id, spv::Decoration::DecorationBinding);
++      buffer.unused = mcsm_unused(image.id);
+       data->AddTexelBuffer(std::move(buffer));
+       continue;
+     }
+@@ -634,6 +641,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+         buffer.id, spv::Decoration::DecorationBinding);
+     storage.read_only = compiler_->get_buffer_block_flags(buffer.id).get(
+         spv::Decoration::DecorationNonWritable);
++    storage.unused = mcsm_unused(buffer.id);
+     data->AddStorageBuffer(std::move(storage));
+   }
+   for (const auto& image : resources.storage_images) {
+@@ -651,6 +659,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+       buffer.binding = compiler_->get_decoration(
+           image.id, spv::Decoration::DecorationBinding);
+       buffer.storage = true;
++      buffer.unused = mcsm_unused(image.id);
+       data->AddTexelBuffer(std::move(buffer));
+       continue;
+     }
+@@ -664,6 +673,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+         compiler_->get_decoration(image.id, spv::Decoration::DecorationBinding);
+     storage.read_only = compiler_->has_decoration(
+         image.id, spv::Decoration::DecorationNonWritable);
++    storage.unused = mcsm_unused(image.id);
+     data->AddStorageImage(std::move(storage));
+   }
+   // mcsm: textures and samplers declared apart (texture2D + sampler; a
+@@ -678,6 +688,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+         resource.id, spv::Decoration::DecorationDescriptorSet);
+     texture.binding = compiler_->get_decoration(
+         resource.id, spv::Decoration::DecorationBinding);
++    texture.unused = mcsm_unused(resource.id);
+     if (sampler) {
+       data->AddSeparateSampler(std::move(texture));
+     } else {
+@@ -694,6 +705,7 @@ std::shared_ptr<ShaderBundleData> Reflector::GenerateShaderBundleData() const {
+           image.id, spv::Decoration::DecorationDescriptorSet);
+       buffer.binding = compiler_->get_decoration(
+           image.id, spv::Decoration::DecorationBinding);
++      buffer.unused = mcsm_unused(image.id);
+       data->AddTexelBuffer(std::move(buffer));
+     } else {
+       add_separate(image, false);
+diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
+index 7b0890f7f5c..984ec884196 100644
+--- a/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
++++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.cc
+@@ -242,6 +242,7 @@ ShaderBundleData::CreateFlatbuffer() const {
+     desc->set = buffer.set;
+     desc->binding = buffer.binding;
+     desc->read_only = buffer.read_only;
++    desc->mcsm_unused = buffer.unused;
+     shader_bundle->storage_buffers.emplace_back(std::move(desc));
+   }
+   for (const auto& image : storage_images_) {
+@@ -251,6 +252,7 @@ ShaderBundleData::CreateFlatbuffer() const {
+     desc->set = image.set;
+     desc->binding = image.binding;
+     desc->read_only = image.read_only;
++    desc->mcsm_unused = image.unused;
+     shader_bundle->storage_images.emplace_back(std::move(desc));
+   }
+   shader_bundle->workgroup_size = workgroup_size_;
+@@ -262,6 +264,7 @@ ShaderBundleData::CreateFlatbuffer() const {
+     desc->set = buffer.set;
+     desc->binding = buffer.binding;
+     desc->storage = buffer.storage;
++    desc->mcsm_unused = buffer.unused;
+     shader_bundle->texel_buffers.emplace_back(std::move(desc));
+   }
+   const auto add_textures = [](const std::vector<ShaderUniformTexture>& from,
+@@ -272,6 +275,7 @@ ShaderBundleData::CreateFlatbuffer() const {
+       desc->ext_res_0 = texture.ext_res_0;
+       desc->set = texture.set;
+       desc->binding = texture.binding;
++      desc->mcsm_unused = texture.unused;
+       to.emplace_back(std::move(desc));
+     }
+   };
+diff --git a/engine/src/flutter/impeller/compiler/shader_bundle_data.h b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
+index 974fc774c19..a77bcab1aaf 100644
+--- a/engine/src/flutter/impeller/compiler/shader_bundle_data.h
++++ b/engine/src/flutter/impeller/compiler/shader_bundle_data.h
+@@ -46,6 +46,7 @@ class ShaderBundleData {
+     size_t ext_res_0 = 0u;
+     size_t set = 0u;
+     size_t binding = 0u;
++    bool unused = false;  // mcsm10: declared, never read (mcsm_unused).
+   };
+ 
+   // mcsm
+@@ -55,6 +56,7 @@ class ShaderBundleData {
+     size_t set = 0u;
+     size_t binding = 0u;
+     bool read_only = false;
++    bool unused = false;  // mcsm10: declared, never read (mcsm_unused).
+   };
+ 
+   ShaderBundleData(std::string entrypoint,
+@@ -82,6 +84,7 @@ class ShaderBundleData {
+     size_t set = 0u;
+     size_t binding = 0u;
+     bool storage = false;
++    bool unused = false;  // mcsm10: declared, never read (mcsm_unused).
+   };
+   void AddTexelBuffer(ShaderTexelBuffer buffer);
+   void AddSeparateTexture(ShaderUniformTexture texture);
+diff --git a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+index 11f104892f6..c1f0671634c 100644
+--- a/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
++++ b/engine/src/flutter/impeller/shader_bundle/shader_bundle.fbs
+@@ -94,6 +94,11 @@ table ShaderUniformTexture {
+   ext_res_0: uint64;
+   set: uint64;
+   binding: uint64;
++  // mcsm10: the stage declares it but never reads it (not in its entry
++  // point's interface): it has no Metal index, and on Vulkan no binding of
++  // its own (its decoration stays 0, which another stage's resource may
++  // hold). Binding it is a no-op.
++  mcsm_unused: bool;
+ }
+ 
+ // mcsm: a storage (shader storage) buffer a shader reads or writes.
+@@ -103,6 +108,7 @@ table ShaderStorageBuffer {
+   set: uint64;
+   binding: uint64;
+   read_only: bool;
++  mcsm_unused: bool;  // mcsm10: as ShaderUniformTexture's.
+ }
+ 
+ // mcsm: a storage image (an image the shader loads from or stores to without
+@@ -113,6 +119,7 @@ table ShaderStorageImage {
+   set: uint64;
+   binding: uint64;
+   read_only: bool;
++  mcsm_unused: bool;  // mcsm10: as ShaderUniformTexture's.
+ }
+ 
+ // mcsm: a texel buffer (a buffer read or written as typed texels:
+@@ -126,6 +133,7 @@ table ShaderTexelBuffer {
+   set: uint64;
+   binding: uint64;
+   storage: bool;
++  mcsm_unused: bool;  // mcsm10: as ShaderUniformTexture's.
+ }
+ 
+ table BackendShader {
+diff --git a/engine/src/flutter/lib/gpu/compute_pass.cc b/engine/src/flutter/lib/gpu/compute_pass.cc
+index 5a80f5df0da..63defc45b07 100644
+--- a/engine/src/flutter/lib/gpu/compute_pass.cc
++++ b/engine/src/flutter/lib/gpu/compute_pass.cc
+@@ -96,6 +96,9 @@ bool ComputePass::BindStorageBuffer(
+   if (!binding) {
+     return false;
+   }
++  if (binding->unused) {
++    return true;  // mcsm10: the shader never reads it.
++  }
+   static const impeller::ShaderMetadata kNoMetadata;
+   return pass_->BindResource(
+       impeller::ShaderStage::kCompute, impeller::DescriptorType::kStorageBuffer,
+@@ -133,6 +136,9 @@ bool ComputePass::BindStorageImage(
+   if (!binding) {
+     return false;
+   }
++  if (binding->unused) {
++    return true;  // mcsm10: the shader never reads it.
++  }
+   static const impeller::ShaderMetadata kNoMetadata;
+   const impeller::SampledImageSlot slot{
+       .name = binding->name.c_str(),
+@@ -160,6 +166,9 @@ bool ComputePass::BindTexelBuffer(
+   if (!slot) {
+     return false;
+   }
++  if (slot->unused) {
++    return true;  // mcsm10: the shader never reads it.
++  }
+   return pass_->McsmBindTexelBuffer(
+       impeller::ShaderStage::kCompute,
+       {.metal_texture = slot->ext_res_0,
+@@ -177,6 +186,9 @@ bool ComputePass::BindSeparateTexture(
+     return false;
+   }
+   const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(3, index);
++  if (slot && slot->unused) {
++    return true;  // mcsm10: the shader never reads it.
++  }
+   return slot && pass_->McsmBindSeparateTexture(impeller::ShaderStage::kCompute,
+                                                 slot->ext_res_0, slot->binding,
+                                                 std::move(texture));
+@@ -189,6 +201,9 @@ bool ComputePass::BindSeparateSampler(
+     return false;
+   }
+   const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(4, index);
++  if (slot && slot->unused) {
++    return true;  // mcsm10: the shader never reads it.
++  }
+   return slot && pass_->McsmBindSeparateSampler(
+                      impeller::ShaderStage::kCompute, slot->ext_res_0,
+                      slot->binding,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 6d8b3e8f776..20a68dc17e2 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -160,6 +160,9 @@ bool RenderPass::McsmBindStorageBuffer(
+     size_t length) {
+   const Shader::StorageBinding* binding = shader.McsmGetStorageBuffer(index);
+   const impeller::ShaderStage stage = shader.GetShaderStage();
++  if (binding && binding->unused) {
++    return true;  // mcsm10: the stage never reads it.
++  }
+   if (!binding || !buffer ||
+       (stage != impeller::ShaderStage::kVertex &&
+        stage != impeller::ShaderStage::kFragment) ||
+@@ -253,6 +256,9 @@ void RenderPass::McsmSendStorageBuffers() {
+ }
+ 
+ bool RenderPass::McsmBind(McsmBinding binding) {
++  if (binding.slot.unused) {
++    return true;  // mcsm10: the stage never reads it.
++  }
+   for (auto& entry : mcsm_bindings_) {
+     if (entry.stage == binding.stage && entry.kind == binding.kind &&
+         entry.slot.binding == binding.slot.binding &&
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index 42435385831..b41606a3fed 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -47,6 +47,7 @@ class Shader : public RefCountedDartWrappable<Shader> {
+     size_t set = 0u;
+     size_t binding = 0u;
+     bool read_only = false;
++    bool unused = false;  // mcsm10: declared, never read: binds are no-ops.
+   };
+ 
+   ~Shader() override;
+@@ -96,6 +97,7 @@ class Shader : public RefCountedDartWrappable<Shader> {
+     size_t ext_res_1 = ~size_t{0};
+     size_t binding = 0u;
+     bool storage = false;
++    bool unused = false;  // mcsm10: declared, never read: binds are no-ops.
+   };
+   void McsmSetBindings(std::vector<McsmBinding> texel_buffers,
+                        std::vector<McsmBinding> textures,
+diff --git a/engine/src/flutter/lib/gpu/shader_library.cc b/engine/src/flutter/lib/gpu/shader_library.cc
+index 24cde29f8e0..06f2cd50c5d 100644
+--- a/engine/src/flutter/lib/gpu/shader_library.cc
++++ b/engine/src/flutter/lib/gpu/shader_library.cc
+@@ -344,7 +344,13 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+             .set = static_cast<size_t>(entry->set()),
+             .binding = static_cast<size_t>(entry->binding()),
+             .read_only = entry->read_only(),
++            .unused = entry->mcsm_unused(),
+         });
++        // mcsm10: a resource the stage never reads takes no descriptor (its
++        // binding may be another stage's).
++        if (entry->mcsm_unused()) {
++          continue;
++        }
+         descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
+             static_cast<uint32_t>(entry->binding()), type,
+             ToShaderStage(backend_shader->stage())});
+@@ -368,7 +374,11 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+                              : static_cast<size_t>(entry->ext_res_1()),
+             .binding = static_cast<size_t>(entry->binding()),
+             .storage = entry->storage(),
++            .unused = entry->mcsm_unused(),
+         });
++        if (entry->mcsm_unused()) {
++          continue;  // mcsm10: as storage buffers.
++        }
+         descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
+             static_cast<uint32_t>(entry->binding()),
+             entry->storage()
+@@ -388,7 +398,11 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+             .name = entry->name() ? entry->name()->str() : std::string(),
+             .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
+             .binding = static_cast<size_t>(entry->binding()),
++            .unused = entry->mcsm_unused(),
+         });
++        if (entry->mcsm_unused()) {
++          continue;  // mcsm10: as storage buffers.
++        }
+         descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
+             static_cast<uint32_t>(entry->binding()), type,
+             ToShaderStage(backend_shader->stage())});
+-- 
+2.54.0 (Apple Git-157)
+

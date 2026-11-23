@@ -1,0 +1,223 @@
+From 62e5a0db69835ffd075047f1e7fd74a0b18cc4c9 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Tue, 3 Nov 2026 11:19:23 +0100
+Subject: [PATCH 1/4] impeller (mcsm9): the text-shadow cache keys a blurred
+ text by the frame's content (runs, fonts, positioned glyphs, bounds), its
+ stroke and its transform without the whole-pixel translation, instead of the
+ TextFrame's heap address and scale: a freed frame's address drew another
+ text's cached shadow, and a shadow rendered at one sub-pixel position stood
+ in for another, so a frame depended on the allocator and on the frames before
+ it
+
+---
+ .../flutter/impeller/display_list/canvas.cc   | 14 ++--
+ .../entity/contents/text_shadow_cache.cc      | 66 +++++++++++++++++++
+ .../entity/contents/text_shadow_cache.h       | 62 ++++++++++++++---
+ 3 files changed, 124 insertions(+), 18 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/display_list/canvas.cc b/engine/src/flutter/impeller/display_list/canvas.cc
+index e4496d8a4de..6e1fceac274 100644
+--- a/engine/src/flutter/impeller/display_list/canvas.cc
++++ b/engine/src/flutter/impeller/display_list/canvas.cc
+@@ -2102,15 +2102,13 @@ bool Canvas::AttemptBlurredTextOptimization(
+           FilterInput::Make(text_contents),
+           /*is_solid_color=*/true, GetCurrentTransform());
+ 
+-  std::optional<Glyph> maybe_glyph = text_frame->AsSingleGlyph();
+-  int64_t identifier = maybe_glyph.has_value()
+-                           ? maybe_glyph.value().index
+-                           : reinterpret_cast<int64_t>(text_frame.get());
++  // mcsm: keyed by the frame's content, stroke and sub-pixel transform, not
++  // its heap address (reused once a frame is freed, which drew another
++  // text's shadow).
+   TextShadowCache::TextShadowCacheKey cache_key(
+-      /*p_max_basis=*/entity.GetTransform().GetMaxBasisLengthXY(),
+-      /*p_identifier=*/identifier,
+-      /*p_is_single_glyph=*/maybe_glyph.has_value(),
+-      /*p_font=*/text_frame->GetFont(),
++      /*p_transform=*/entity.GetTransform(),
++      /*p_frame=*/text_frame,
++      /*p_stroke=*/paint.GetStroke(),
+       /*p_sigma=*/paint.mask_blur_descriptor->sigma,
+       /*p_color=*/paint.color);
+ 
+diff --git a/engine/src/flutter/impeller/entity/contents/text_shadow_cache.cc b/engine/src/flutter/impeller/entity/contents/text_shadow_cache.cc
+index 593a4effedc..b2332fa4755 100644
+--- a/engine/src/flutter/impeller/entity/contents/text_shadow_cache.cc
++++ b/engine/src/flutter/impeller/entity/contents/text_shadow_cache.cc
+@@ -29,6 +29,72 @@ TextShadowCache::TextShadowCacheKey::TextShadowCacheKey(Scalar p_max_basis,
+                              kMaxSigmaDenominator)),
+       color(p_color) {}
+ 
++TextShadowCache::TextShadowCacheKey::TextShadowCacheKey(
++    const Matrix& p_transform,
++    const std::shared_ptr<TextFrame>& p_frame,
++    const std::optional<StrokeParameters>& p_stroke,
++    Sigma p_sigma,
++    Color p_color)
++    : max_basis(p_transform.GetMaxBasisLengthXY()),
++      identifier(HashFrameContent(*p_frame)),
++      is_single_glyph(p_frame->AsSingleGlyph().has_value()),
++      font(p_frame->GetFont()),
++      rounded_sigma(Rational(std::round(p_sigma.sigma * kMaxSigmaDenominator),
++                             kMaxSigmaDenominator)),
++      color(p_color),
++      stroke(p_stroke),
++      frame(p_frame),
++      transform(p_transform) {
++  transform.m[12] -= std::floor(transform.m[12]);
++  transform.m[13] -= std::floor(transform.m[13]);
++}
++
++int64_t TextShadowCache::TextShadowCacheKey::HashFrameContent(
++    const TextFrame& frame) {
++  size_t hash = fml::HashCombine(frame.GetRunCount(), frame.HasColor(),
++                                 static_cast<int>(frame.GetAtlasType()));
++  for (const TextRun& run : frame.GetRuns()) {
++    hash = fml::HashCombine(hash, run.GetFont().GetHash(), run.GetGlyphCount());
++    for (const TextRun::GlyphPosition& glyph : run.GetGlyphPositions()) {
++      hash = fml::HashCombine(hash, glyph.glyph.index,
++                              static_cast<int>(glyph.glyph.type),
++                              glyph.position.x, glyph.position.y);
++    }
++  }
++  return static_cast<int64_t>(hash);
++}
++
++bool TextShadowCache::TextShadowCacheKey::FrameContentEqual(
++    const TextFrame& lhs,
++    const TextFrame& rhs) {
++  if (lhs.GetRunCount() != rhs.GetRunCount() ||
++      lhs.HasColor() != rhs.HasColor() ||
++      lhs.GetAtlasType() != rhs.GetAtlasType() ||
++      lhs.GetBounds() != rhs.GetBounds()) {
++    return false;
++  }
++  const std::vector<TextRun>& lhs_runs = lhs.GetRuns();
++  const std::vector<TextRun>& rhs_runs = rhs.GetRuns();
++  for (size_t i = 0; i < lhs_runs.size(); i++) {
++    const TextRun& a = lhs_runs[i];
++    const TextRun& b = rhs_runs[i];
++    if (a.GetGlyphCount() != b.GetGlyphCount() ||
++        !a.GetFont().IsEqual(b.GetFont())) {
++      return false;
++    }
++    const auto& a_glyphs = a.GetGlyphPositions();
++    const auto& b_glyphs = b.GetGlyphPositions();
++    for (size_t j = 0; j < a_glyphs.size(); j++) {
++      if (a_glyphs[j].glyph.index != b_glyphs[j].glyph.index ||
++          a_glyphs[j].glyph.type != b_glyphs[j].glyph.type ||
++          a_glyphs[j].position != b_glyphs[j].position) {
++        return false;
++      }
++    }
++  }
++  return true;
++}
++
+ void TextShadowCache::MarkFrameStart() {
+   for (auto& entry : entries_) {
+     entry.second.used_this_frame = false;
+diff --git a/engine/src/flutter/impeller/entity/contents/text_shadow_cache.h b/engine/src/flutter/impeller/entity/contents/text_shadow_cache.h
+index 82028bd4f96..7b15d63b2b9 100644
+--- a/engine/src/flutter/impeller/entity/contents/text_shadow_cache.h
++++ b/engine/src/flutter/impeller/entity/contents/text_shadow_cache.h
+@@ -11,6 +11,8 @@
+ #include "impeller/entity/entity.h"
+ #include "impeller/geometry/scalar.h"
+ #include "impeller/geometry/sigma.h"
++#include "impeller/geometry/stroke_parameters.h"
++#include "impeller/typographer/text_frame.h"
+ #include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
+ 
+ namespace impeller {
+@@ -18,8 +20,9 @@ namespace impeller {
+ /// @brief A cache for blurred text that re-uses these across frames.
+ ///
+ /// Text shadows are generally stable, but expensive to compute as we use a
+-/// full gaussian blur. This class caches these shadows by text blob identifier
+-/// and holds them for at least one frame.
++/// full gaussian blur. This class caches these shadows by the text's content
++/// (its runs, fonts and glyph positions) and style, and holds them for at
++/// least one frame.
+ ///
+ /// Additionally, there is an optimization for a single glyph (generally an
+ /// Icon) that uses the content itself as a key.
+@@ -42,6 +45,19 @@ class TextShadowCache {
+     Font font;
+     Rational rounded_sigma;
+     Color color;
++    // mcsm: the stroke the text is drawn with (none when filled), which
++    // changes the blurred mask.
++    std::optional<StrokeParameters> stroke;
++    // mcsm: the frame, compared by content. A frame's heap address (the old
++    // identifier) is reused once the frame is freed, so a later text drawn
++    // from the same address got the earlier text's cached shadow.
++    std::shared_ptr<TextFrame> frame;
++    // mcsm: the transform without its whole-pixel translation. A shadow is
++    // reused only where it would render the same pixels, moved by whole
++    // pixels (the scale alone let a shadow rendered at one sub-pixel
++    // position stand in for another, so a frame depended on the frames
++    // before it).
++    Matrix transform;
+ 
+     TextShadowCacheKey(Scalar p_max_basis,
+                        int64_t p_identifier,
+@@ -50,23 +66,49 @@ class TextShadowCache {
+                        Sigma p_sigma,
+                        Color p_color);
+ 
++    TextShadowCacheKey(const Matrix& p_transform,
++                       const std::shared_ptr<TextFrame>& p_frame,
++                       const std::optional<StrokeParameters>& p_stroke,
++                       Sigma p_sigma,
++                       Color p_color);
++
++    /// The hash of a frame's content: its runs' fonts and positioned glyphs.
++    static int64_t HashFrameContent(const TextFrame& frame);
++
++    /// Whether two frames have the same content (what HashFrameContent
++    /// hashes, compared exactly).
++    static bool FrameContentEqual(const TextFrame& lhs, const TextFrame& rhs);
++
+     struct Hash {
+       std::size_t operator()(const TextShadowCacheKey& key) const {
+         return fml::HashCombine(key.max_basis, key.identifier,
+                                 key.is_single_glyph, key.font.GetHash(),
+                                 key.rounded_sigma.GetHash(),
+-                                key.color.ToARGB());
++                                key.color.ToARGB(), key.stroke.has_value(),
++                                key.transform.m[0], key.transform.m[5],
++                                key.transform.m[12], key.transform.m[13]);
+       }
+     };
+ 
+     struct Equal {
+-      constexpr bool operator()(const TextShadowCacheKey& lhs,
+-                                const TextShadowCacheKey& rhs) const {
+-        return lhs.max_basis == rhs.max_basis &&
+-               lhs.identifier == rhs.identifier &&
+-               lhs.is_single_glyph == rhs.is_single_glyph &&
+-               lhs.font.IsEqual(rhs.font) &&
+-               lhs.rounded_sigma == rhs.rounded_sigma && lhs.color == rhs.color;
++      bool operator()(const TextShadowCacheKey& lhs,
++                      const TextShadowCacheKey& rhs) const {
++        if (!(lhs.max_basis == rhs.max_basis &&
++              lhs.identifier == rhs.identifier &&
++              lhs.is_single_glyph == rhs.is_single_glyph &&
++              lhs.font.IsEqual(rhs.font) &&
++              lhs.rounded_sigma == rhs.rounded_sigma &&
++              lhs.color == rhs.color && lhs.stroke == rhs.stroke &&
++              lhs.transform == rhs.transform)) {
++          return false;
++        }
++        if (lhs.frame == rhs.frame) {
++          return true;
++        }
++        if (!lhs.frame || !rhs.frame) {
++          return false;
++        }
++        return FrameContentEqual(*lhs.frame, *rhs.frame);
+       }
+     };
+   };

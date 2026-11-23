@@ -1,0 +1,203 @@
+From: mcsm <mcsm@localhost>
+Subject: [PATCH] vm (mcsm): allocation by call site weighted by bytes
+ (--heap_sample_traces, message copies included), and what young collections
+ copy by class (--scavenge_census)
+
+ runtime/vm/heap/scavenger.cc    | 69 +++++++++++++++++++++++++++++++++++++++++
+ runtime/vm/object.cc            | 37 ++++++++++++++++++++++
+ runtime/vm/object_graph_copy.cc | 12 +++++++
+ 3 files changed, 118 insertions(+)
+
+diff --git a/runtime/vm/heap/scavenger.cc b/runtime/vm/heap/scavenger.cc
+index 9fba03d6..f0abd09e 100644
+--- a/runtime/vm/heap/scavenger.cc
++++ b/runtime/vm/heap/scavenger.cc
+@@ -47,6 +47,63 @@ DEFINE_FLAG(int,
+             90,
+             "Grow new gen when less than this percentage is garbage.");
+ DEFINE_FLAG(int, new_gen_growth_factor, 2, "Grow new gen by this factor.");
++// mcsm: what young collections copy, by class: the bytes copied within new
++// space (survivors) and promoted, summed over every N scavenges, printed on
++// stderr and reset (the pause is mostly that copying).
++DEFINE_FLAG(int,
++            scavenge_census,
++            0,
++            "Every N scavenges, print the bytes copied and promoted per class.");
++
++static constexpr intptr_t kCensusCids = 1 << 17;
++static std::atomic<int64_t>* census_ = nullptr;
++static intptr_t census_scavenges_ = 0;
++
++static void CensusAdd(intptr_t cid, intptr_t size, bool promoted) {
++  if (census_ == nullptr || cid >= kCensusCids) return;
++  census_[cid * 2 + (promoted ? 1 : 0)].fetch_add(size,
++                                                  std::memory_order_relaxed);
++}
++
++static void CensusPrint(ClassTable* table) {
++  struct Row {
++    intptr_t cid;
++    int64_t copied, promoted;
++  };
++  Row top[30] = {};
++  int64_t copied = 0, promoted = 0;
++  for (intptr_t cid = 0; cid < kCensusCids; cid++) {
++    const int64_t c = census_[cid * 2].exchange(0, std::memory_order_relaxed);
++    const int64_t p =
++        census_[cid * 2 + 1].exchange(0, std::memory_order_relaxed);
++    if (c + p == 0) continue;
++    copied += c;
++    promoted += p;
++    Row r{cid, c, p};
++    for (intptr_t i = 0; i < 30; i++) {
++      if (r.copied + r.promoted > top[i].copied + top[i].promoted) {
++        Row t = top[i];
++        top[i] = r;
++        r = t;
++      }
++    }
++  }
++  OS::PrintErr("[census] %d scavenges: copied %.1f MB, promoted %.1f MB\n",
++               FLAG_scavenge_census, copied / 1e6, promoted / 1e6);
++  Thread* thread = Thread::Current();
++  StackZone zone(thread);
++  for (intptr_t i = 0; i < 30 && top[i].copied + top[i].promoted > 0; i++) {
++    // The class's own name: a product build's class table keeps no names
++    // of its own.
++    const char* name =
++        table->HasValidClassAt(top[i].cid)
++            ? String::Handle(Class::Handle(table->At(top[i].cid)).Name())
++                  .ToCString()
++            : "?";
++    OS::PrintErr("[census] %9.3f %9.3f  %s\n", top[i].copied / 1e6,
++                 top[i].promoted / 1e6, name);
++  }
++}
+ 
+ // Scavenger uses the kCardRememberedBit to distinguish forwarded and
+ // non-forwarded objects. We must choose a bit that is clear for all new-space
+@@ -496,6 +553,9 @@ class ScavengerVisitor : public ObjectPointerVisitor,
+       // Try to install forwarding address.
+       uword forwarding_header = ForwardingHeader(new_obj);
+       if (InstallForwardingPointer(raw_addr, &header, forwarding_header)) {
++        if (FLAG_scavenge_census > 0) {
++          CensusAdd(cid, size, new_obj->IsOldObject());
++        }
+         if (new_obj->IsOldObject()) {
+           // If promotion succeeded then we need to remember it so that it can
+           // be traversed later.
+@@ -1855,6 +1915,10 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
+                     thread->is_marking() ? kAllowMarked : kForbidMarked);
+   }
+ 
++  if (FLAG_scavenge_census > 0 && census_ == nullptr) {
++    census_ = new std::atomic<int64_t>[kCensusCids * 2]();
++  }
++
+   // Prepare for a scavenge.
+   failed_to_promote_ = false;
+   abort_ = false;
+@@ -1933,6 +1997,11 @@ void Scavenger::Scavenge(Thread* thread, GCType type, GCReason reason) {
+   // if the VM cannot create more pages for these objects.
+   ASSERT((type != GCType::kEvacuate) || (UsedInWords() == 0) ||
+          failed_to_promote_);
++
++  if (census_ != nullptr &&
++      ++census_scavenges_ % FLAG_scavenge_census == 0) {
++    CensusPrint(heap_->isolate_group()->class_table());
++  }
+ }
+ 
+ static constexpr intptr_t kMinAutoScavengeWorkers = 2;
+diff --git a/runtime/vm/object.cc b/runtime/vm/object.cc
+index ad6572f3..3c4b2dca 100644
+--- a/runtime/vm/object.cc
++++ b/runtime/vm/object.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "vm/object.h"
+ 
++#include <math.h>
+ #include <memory>
+ 
+ #include "include/dart_api.h"
+@@ -2588,6 +2589,39 @@ void Object::CheckHandle() const {
+ #endif
+ }
+ 
++#if !defined(PRODUCT)
++// mcsm: --heap_sample_traces=<bytes> records about one allocation per that
++// many bytes as a profiler allocation trace (its Dart stack), with the bytes
++// it stands for in the identity hash: allocation by call site, weighted by
++// bytes, through getAllocationTraces. Each thread counts down a random
++// (exponential) interval so periodic allocation patterns don't alias; an
++// object crossing k sampling points stands for k intervals. Only allocations
++// that reach the VM are seen, so it is meant for --no-inline-alloc.
++DEFINE_FLAG(int,
++            heap_sample_traces,
++            0,
++            "Trace about one allocation per this many bytes (0: off).");
++
++void SampleAllocationBytes(Thread* thread, intptr_t cls_id, intptr_t size) {
++  static thread_local intptr_t left = 0;
++  static thread_local uint64_t seed = 0;
++  if (seed == 0) seed = reinterpret_cast<uint64_t>(&left) | 1;
++  left -= size;
++  if (left > 0) return;
++  intptr_t weight = 0;
++  while (left <= 0) {
++    seed ^= seed << 13;
++    seed ^= seed >> 7;
++    seed ^= seed << 17;
++    const double u = static_cast<double>(seed >> 11) * 0x1.0p-53;
++    left += 1 + static_cast<intptr_t>(-log(1 - u) * FLAG_heap_sample_traces);
++    weight += FLAG_heap_sample_traces;
++  }
++  if (Profiler::sample_block_buffer() == nullptr) return;
++  Profiler::SampleAllocation(thread, cls_id, static_cast<uint32_t>(weight));
++}
++#endif  // !defined(PRODUCT)
++
+ ObjectPtr Object::Allocate(intptr_t cls_id,
+                            intptr_t size,
+                            Heap::Space space,
+@@ -2652,6 +2686,9 @@ ObjectPtr Object::Allocate(intptr_t cls_id,
+         HeapSnapshotWriter::GetHeapSnapshotIdentityHash(thread, raw_obj);
+     Profiler::SampleAllocation(thread, cls_id, hash);
+   }
++  if (FLAG_heap_sample_traces > 0) {
++    SampleAllocationBytes(thread, cls_id, size);
++  }
+ #endif  // !defined(PRODUCT)
+   return raw_obj;
+ }
+diff --git a/runtime/vm/object_graph_copy.cc b/runtime/vm/object_graph_copy.cc
+index 4a35a5d4..45b5e762 100644
+--- a/runtime/vm/object_graph_copy.cc
++++ b/runtime/vm/object_graph_copy.cc
+@@ -94,6 +94,12 @@
+ 
+ namespace dart {
+ 
++#if !defined(PRODUCT)
++DECLARE_FLAG(int, heap_sample_traces);
++// mcsm: object.cc's byte-weighted allocation sampler.
++void SampleAllocationBytes(Thread* thread, intptr_t cid, intptr_t size);
++#endif
++
+ DEFINE_FLAG(bool,
+             enable_fast_object_copy,
+             true,
+@@ -1391,6 +1397,12 @@ class FastObjectCopyBase : public ObjectCopyBase {
+     if (Heap::IsAllocatableInNewSpace(size)) {
+       const uword alloc = new_space_->TryAllocateNoSafepoint(thread_, size);
+       if (alloc != 0) {
++#if !defined(PRODUCT)
++        // mcsm: a message's copy is allocation too (the sender's stack).
++        if (FLAG_heap_sample_traces > 0) {
++          SampleAllocationBytes(thread_, cid, size);
++        }
++#endif
+         ObjectPtr to(reinterpret_cast<UntaggedObject*>(alloc));
+         fast_forward_map_.Insert(from, to, size);
+ 

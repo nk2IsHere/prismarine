@@ -1,0 +1,4433 @@
+From ad1134d5c12bb5915ab4cde9a83a5bdae3d14729 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Tue, 3 Nov 2026 11:58:53 +0100
+Subject: [PATCH 3/4] impeller (mcsm9): what S2's frame needs on Metal and
+ Vulkan: every shared uncompressed format, D16 and D32 float, BC2/BC4/BC5
+ signed/BC6H, 2x MSAA; 2D array, 3D and cube-array textures and texture views;
+ depth-only targets and sampled depth; layered passes; indirect draws and
+ dispatches; storage images; sampler compare, border, mirror clamp and LOD
+ state; separate textures and samplers; texel buffers; half, normalized and
+ packed vertex formats and step rates; texture copies and layered mip
+ generation; Metal compile options per shader; on Vulkan the layouts, barriers
+ and device features these need
+
+---
+ engine/src/flutter/impeller/core/formats.cc   |   6 +-
+ engine/src/flutter/impeller/core/formats.h    | 254 ++++++++++++++
+ .../flutter/impeller/core/resource_binder.h   |  33 ++
+ .../impeller/core/sampler_descriptor.h        |  23 ++
+ .../src/flutter/impeller/core/shader_types.h  |  44 ++-
+ engine/src/flutter/impeller/core/texture.cc   |   4 +
+ .../impeller/core/texture_descriptor.cc       |   2 +
+ .../impeller/core/texture_descriptor.h        |  33 ++
+ .../backend/gles/blit_command_gles.cc         |   5 +
+ .../renderer/backend/gles/formats_gles.cc     |  41 +++
+ .../renderer/backend/gles/formats_gles.h      |  24 ++
+ .../renderer/backend/gles/sampler_gles.cc     |   4 +
+ .../renderer/backend/gles/texture_gles.cc     |  92 +++++
+ .../renderer/backend/metal/blit_pass_mtl.h    |  18 +
+ .../renderer/backend/metal/blit_pass_mtl.mm   |  86 ++++-
+ .../renderer/backend/metal/compute_pass_mtl.h |  18 +
+ .../backend/metal/compute_pass_mtl.mm         |  74 +++-
+ .../renderer/backend/metal/context_mtl.h      |   7 +
+ .../renderer/backend/metal/context_mtl.mm     |  35 ++
+ .../backend/metal/device_buffer_mtl.h         |  13 +
+ .../backend/metal/device_buffer_mtl.mm        |  33 ++
+ .../renderer/backend/metal/formats_mtl.h      | 175 ++++++++++
+ .../renderer/backend/metal/formats_mtl.mm     |  77 +++++
+ .../backend/metal/pipeline_library_mtl.mm     |  17 +
+ .../renderer/backend/metal/render_pass_mtl.h  |  18 +
+ .../renderer/backend/metal/render_pass_mtl.mm |  80 ++++-
+ .../backend/metal/sampler_library_mtl.mm      |  26 +-
+ .../backend/metal/shader_library_mtl.h        |  11 +
+ .../backend/metal/shader_library_mtl.mm       |  38 +-
+ .../backend/metal/vertex_descriptor_mtl.mm    |  33 +-
+ .../impeller/renderer/backend/vulkan/BUILD.gn |   2 +
+ .../renderer/backend/vulkan/allocator_vk.cc   |  60 +++-
+ .../renderer/backend/vulkan/blit_pass_vk.cc   | 166 ++++++++-
+ .../renderer/backend/vulkan/blit_pass_vk.h    |  18 +
+ .../backend/vulkan/compute_pass_vk.cc         | 176 +++++++++-
+ .../renderer/backend/vulkan/compute_pass_vk.h |  24 ++
+ .../renderer/backend/vulkan/context_vk.cc     |  35 +-
+ .../renderer/backend/vulkan/context_vk.h      |   7 +
+ .../backend/vulkan/descriptor_pool_vk.cc      |  12 +
+ .../backend/vulkan/device_buffer_vk.cc        |  29 ++
+ .../backend/vulkan/device_buffer_vk.h         |  18 +
+ .../renderer/backend/vulkan/formats_vk.h      | 324 ++++++++++++++++++
+ .../backend/vulkan/mcsm_texture_view_vk.cc    | 129 +++++++
+ .../backend/vulkan/mcsm_texture_view_vk.h     |  58 ++++
+ .../renderer/backend/vulkan/pipeline_vk.cc    |  16 +
+ .../backend/vulkan/render_pass_builder_vk.cc  |  37 +-
+ .../backend/vulkan/render_pass_builder_vk.h   |   3 +-
+ .../renderer/backend/vulkan/render_pass_vk.cc | 164 ++++++++-
+ .../renderer/backend/vulkan/render_pass_vk.h  |  21 ++
+ .../backend/vulkan/sampler_library_vk.cc      |   3 +-
+ .../renderer/backend/vulkan/sampler_vk.cc     |  23 ++
+ .../backend/vulkan/texture_source_vk.cc       |   7 +-
+ .../backend/vulkan/texture_source_vk.h        |   8 +
+ .../backend/vulkan/vertex_descriptor_vk.cc    |  29 ++
+ .../flutter/impeller/renderer/blit_pass.cc    |   2 +-
+ .../src/flutter/impeller/renderer/blit_pass.h |  24 ++
+ .../flutter/impeller/renderer/compute_pass.h  |   6 +
+ .../src/flutter/impeller/renderer/context.h   |  12 +
+ .../flutter/impeller/renderer/render_pass.h   |   8 +
+ .../impeller/renderer/render_target.cc        |  27 +-
+ .../impeller/renderer/shader_library.h        |  12 +
+ engine/src/flutter/shell/common/rasterizer.cc |  41 +++
+ .../platform/common/mcsm_vulkan_device.cc     |  60 +++-
+ 63 files changed, 2807 insertions(+), 78 deletions(-)
+ create mode 100644 engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
+ create mode 100644 engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h
+
+diff --git a/engine/src/flutter/impeller/core/formats.cc b/engine/src/flutter/impeller/core/formats.cc
+index 3c9c83c38fd..409fbe7be81 100644
+--- a/engine/src/flutter/impeller/core/formats.cc
++++ b/engine/src/flutter/impeller/core/formats.cc
+@@ -36,8 +36,10 @@ bool Attachment::IsValid() const {
+                    << " mip levels.";
+     return false;
+   }
+-  const uint32_t slice_count = desc.type == TextureType::kTextureCube ? 6u : 1u;
+-  if (slice >= slice_count) {
++  // mcsm: an array texture's layers can be rendered into too.
++  const uint32_t slice_count =
++      desc.type == TextureType::kTexture3D ? 1u : desc.GetSliceCount();
++  if (slice >= slice_count && slice != kMcsmAllLayers) {
+     VALIDATION_LOG << "Attachment slice " << slice
+                    << " is out of range for the texture type.";
+     return false;
+diff --git a/engine/src/flutter/impeller/core/formats.h b/engine/src/flutter/impeller/core/formats.h
+index b2d1520191a..f0cbfa800ae 100644
+--- a/engine/src/flutter/impeller/core/formats.h
++++ b/engine/src/flutter/impeller/core/formats.h
+@@ -136,6 +136,51 @@ enum class PixelFormat : uint8_t {
+   // ASTC HDR has no sRGB variant; the data is already linear floating point.
+   kASTC4x4HDR,
+   kASTC8x8HDR,
++  // mcsm: formats Minecraft: Story Mode S2's frame uses (Metal and Vulkan
++  // only): the HDR scene colour, the shadow moments, 16- and 32-bit depth,
++  // unsigned-integer light grids and look-up textures, half and float
++  // targets.
++  kR11G11B10UFloat,
++  kR16G16B16A16UNormInt,
++  kD16UNormInt,
++  kD32Float,
++  kR32UInt,
++  kR32G32UInt,
++  kR32G32B32A32UInt,
++  kR16Float,
++  kR16G16Float,
++  kR32G32Float,
++  kR8UInt,
++  kR8SNormInt,
++  kR8G8UInt,
++  kR8G8SNormInt,
++  kR8G8B8A8UInt,
++  kR8G8B8A8SInt,
++  kR8G8B8A8SNormInt,
++  kR10G10B10A2UNormInt,
++  kR10G10B10A2UInt,
++  kR9G9B9E5UFloat,
++  kR16UNormInt,
++  kR16SNormInt,
++  kR16UInt,
++  kR16SInt,
++  kR16G16UNormInt,
++  kR16G16SNormInt,
++  kR16G16UInt,
++  kR16G16SInt,
++  kR16G16B16A16SNormInt,
++  kR16G16B16A16UInt,
++  kR16G16B16A16SInt,
++  kR32SInt,
++  kR32G32SInt,
++  kR32G32B32A32SInt,
++  kBC2RGBAUNormInt,
++  kBC2RGBAUNormIntSRGB,
++  kBC4RUNormInt,
++  kBC4RSNormInt,
++  kBC5RGSNormInt,
++  kBC6HRGBUFloat,
++  kBC6HRGBSFloat,
+ };
+ 
+ //------------------------------------------------------------------------------
+@@ -174,6 +219,13 @@ constexpr bool IsCompressed(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return true;
+     default:
+       return false;
+@@ -192,6 +244,13 @@ constexpr CompressedTextureFamily CompressedTextureFamilyForFormat(
+     case PixelFormat::kBC5RGUNormInt:
+     case PixelFormat::kBC7RGBAUNormInt:
+     case PixelFormat::kBC7RGBAUNormIntSRGB:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return CompressedTextureFamily::kBC;
+     case PixelFormat::kETC2RGB8UNormInt:
+     case PixelFormat::kETC2RGB8UNormIntSRGB:
+@@ -220,6 +279,13 @@ constexpr size_t CompressedBlockWidthForPixelFormat(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC8x8HDR:
+       return 8u;
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+     case PixelFormat::kBC1RGBAUNormInt:
+     case PixelFormat::kBC1RGBAUNormIntSRGB:
+     case PixelFormat::kBC3RGBAUNormInt:
+@@ -248,6 +314,13 @@ constexpr size_t CompressedBlockHeightForPixelFormat(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC8x8HDR:
+       return 8u;
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+     case PixelFormat::kBC1RGBAUNormInt:
+     case PixelFormat::kBC1RGBAUNormIntSRGB:
+     case PixelFormat::kBC3RGBAUNormInt:
+@@ -272,6 +345,8 @@ constexpr bool IsDepthWritable(PixelFormat format) {
+   switch (format) {
+     case PixelFormat::kD24UnormS8Uint:
+     case PixelFormat::kD32FloatS8UInt:
++    case PixelFormat::kD16UNormInt:  // mcsm
++    case PixelFormat::kD32Float:     // mcsm
+       return true;
+     default:
+       return false;
+@@ -359,6 +434,88 @@ constexpr const char* PixelFormatToString(PixelFormat format) {
+       return "ASTC4x4HDR";
+     case PixelFormat::kASTC8x8HDR:
+       return "ASTC8x8HDR";
++    case PixelFormat::kR11G11B10UFloat:
++      return "R11G11B10UFloat";
++    case PixelFormat::kR16G16B16A16UNormInt:
++      return "R16G16B16A16UNormInt";
++    case PixelFormat::kD16UNormInt:
++      return "D16UNormInt";
++    case PixelFormat::kD32Float:
++      return "D32Float";
++    case PixelFormat::kR32UInt:
++      return "R32UInt";
++    case PixelFormat::kR32G32UInt:
++      return "R32G32UInt";
++    case PixelFormat::kR32G32B32A32UInt:
++      return "R32G32B32A32UInt";
++    case PixelFormat::kR16Float:
++      return "R16Float";
++    case PixelFormat::kR16G16Float:
++      return "R16G16Float";
++    case PixelFormat::kR32G32Float:
++      return "R32G32Float";
++    case PixelFormat::kR8UInt:
++      return "R8UInt";
++    case PixelFormat::kR8SNormInt:
++      return "R8SNormInt";
++    case PixelFormat::kR8G8UInt:
++      return "R8G8UInt";
++    case PixelFormat::kR8G8SNormInt:
++      return "R8G8SNormInt";
++    case PixelFormat::kR8G8B8A8UInt:
++      return "R8G8B8A8UInt";
++    case PixelFormat::kR8G8B8A8SInt:
++      return "R8G8B8A8SInt";
++    case PixelFormat::kR8G8B8A8SNormInt:
++      return "R8G8B8A8SNormInt";
++    case PixelFormat::kR10G10B10A2UNormInt:
++      return "R10G10B10A2UNormInt";
++    case PixelFormat::kR10G10B10A2UInt:
++      return "R10G10B10A2UInt";
++    case PixelFormat::kR9G9B9E5UFloat:
++      return "R9G9B9E5UFloat";
++    case PixelFormat::kR16UNormInt:
++      return "R16UNormInt";
++    case PixelFormat::kR16SNormInt:
++      return "R16SNormInt";
++    case PixelFormat::kR16UInt:
++      return "R16UInt";
++    case PixelFormat::kR16SInt:
++      return "R16SInt";
++    case PixelFormat::kR16G16UNormInt:
++      return "R16G16UNormInt";
++    case PixelFormat::kR16G16SNormInt:
++      return "R16G16SNormInt";
++    case PixelFormat::kR16G16UInt:
++      return "R16G16UInt";
++    case PixelFormat::kR16G16SInt:
++      return "R16G16SInt";
++    case PixelFormat::kR16G16B16A16SNormInt:
++      return "R16G16B16A16SNormInt";
++    case PixelFormat::kR16G16B16A16UInt:
++      return "R16G16B16A16UInt";
++    case PixelFormat::kR16G16B16A16SInt:
++      return "R16G16B16A16SInt";
++    case PixelFormat::kR32SInt:
++      return "R32SInt";
++    case PixelFormat::kR32G32SInt:
++      return "R32G32SInt";
++    case PixelFormat::kR32G32B32A32SInt:
++      return "R32G32B32A32SInt";
++    case PixelFormat::kBC2RGBAUNormInt:
++      return "BC2RGBAUNormInt";
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++      return "BC2RGBAUNormIntSRGB";
++    case PixelFormat::kBC4RUNormInt:
++      return "BC4RUNormInt";
++    case PixelFormat::kBC4RSNormInt:
++      return "BC4RSNormInt";
++    case PixelFormat::kBC5RGSNormInt:
++      return "BC5RGSNormInt";
++    case PixelFormat::kBC6HRGBUFloat:
++      return "BC6HRGBUFloat";
++    case PixelFormat::kBC6HRGBSFloat:
++      return "BC6HRGBSFloat";
+   }
+   FML_UNREACHABLE();
+ }
+@@ -452,6 +609,15 @@ enum class TextureType {
+   kTexture2DMultisample,
+   kTextureCube,
+   kTextureExternalOES,
++  // mcsm: layered textures (Metal and Vulkan). A 2D array has
++  // TextureDescriptor::array_layer_count layers, a 3D texture
++  // TextureDescriptor::depth slices; neither is multisampled, and a 3D texture
++  // is not a render target (compute writes it as a storage image).
++  kTexture2DArray,
++  kTexture3D,
++  // mcsm9: an array of TextureDescriptor::array_layer_count cubes (six
++  // layers each).
++  kTextureCubeArray,
+ };
+ 
+ constexpr const char* TextureTypeToString(TextureType type) {
+@@ -464,6 +630,12 @@ constexpr const char* TextureTypeToString(TextureType type) {
+       return "TextureCube";
+     case TextureType::kTextureExternalOES:
+       return "TextureExternalOES";
++    case TextureType::kTexture2DArray:
++      return "Texture2DArray";
++    case TextureType::kTexture3D:
++      return "Texture3D";
++    case TextureType::kTextureCubeArray:
++      return "TextureCubeArray";
+   }
+   FML_UNREACHABLE();
+ }
+@@ -473,6 +645,9 @@ constexpr bool IsMultisampleCapable(TextureType type) {
+     case TextureType::kTexture2D:
+     case TextureType::kTextureCube:
+     case TextureType::kTextureExternalOES:
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
+       return false;
+     case TextureType::kTexture2DMultisample:
+       return true;
+@@ -482,6 +657,8 @@ constexpr bool IsMultisampleCapable(TextureType type) {
+ 
+ enum class SampleCount : uint8_t {
+   kCount1 = 1,
++  // mcsm: S2's shadow depth targets are 2x MSAA, read per sample later.
++  kCount2 = 2,
+   kCount4 = 4,
+ };
+ 
+@@ -626,6 +803,18 @@ enum class SamplerAddressMode : uint8_t {
+   /// @brief decal sampling mode is only supported on devices that pass
+   ///        the `Capabilities.SupportsDecalSamplerAddressMode` check.
+   kDecal,
++  // mcsm9 (Metal and Vulkan): clamp to the sampler's border colour
++  // (Direct3D's BORDER), and mirror once then clamp (Direct3D's
++  // MIRROR_ONCE).
++  kMcsmClampToBorder,
++  kMcsmMirrorClampToEdge,
++};
++
++/// mcsm9: the border colours both Metal and Vulkan offer.
++enum class McsmBorderColor : uint8_t {
++  kTransparentBlack,
++  kOpaqueBlack,
++  kOpaqueWhite,
+ };
+ 
+ enum class ColorWriteMaskBits : uint64_t {
+@@ -687,6 +876,59 @@ constexpr size_t BytesPerPixelForPixelFormat(PixelFormat format) {
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
+       return 0u;
++    // mcsm (general formats)
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++      return 1u;
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++      return 2u;
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR32SInt:
++      return 4u;
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32G32SInt:
++      return 8u;
++    case PixelFormat::kR32G32B32A32SInt:
++      return 16u;
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
++      return 0u;
++    // mcsm
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kR16Float:
++      return 2u;
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kD32Float:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR16G16Float:
++      return 4u;
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32Float:
++      return 8u;
++    case PixelFormat::kR32G32B32A32UInt:
++      return 16u;
+   }
+   return 0u;
+ }
+@@ -700,6 +942,8 @@ constexpr size_t BytesPerBlockForPixelFormat(PixelFormat format) {
+     case PixelFormat::kBC1RGBAUNormIntSRGB:
+     case PixelFormat::kETC2RGB8UNormInt:
+     case PixelFormat::kETC2RGB8UNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
+       return 8u;
+     case PixelFormat::kBC3RGBAUNormInt:
+     case PixelFormat::kBC3RGBAUNormIntSRGB:
+@@ -714,6 +958,11 @@ constexpr size_t BytesPerBlockForPixelFormat(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return 16u;
+     default:
+       return BytesPerPixelForPixelFormat(format);
+@@ -905,6 +1154,11 @@ struct StencilAttachmentDescriptor {
+   }
+ };
+ 
++/// mcsm9: an attachment slice that attaches every layer of an array or cube
++/// texture's mip level: each primitive goes to the layer its vertex stage
++/// writes (gl_Layer). Metal and Vulkan.
++inline constexpr uint32_t kMcsmAllLayers = 0xFFFFFFFFu;
++
+ struct Attachment {
+   std::shared_ptr<Texture> texture;
+   std::shared_ptr<Texture> resolve_texture;
+diff --git a/engine/src/flutter/impeller/core/resource_binder.h b/engine/src/flutter/impeller/core/resource_binder.h
+index 7219d73020a..fde5916e6a3 100644
+--- a/engine/src/flutter/impeller/core/resource_binder.h
++++ b/engine/src/flutter/impeller/core/resource_binder.h
+@@ -36,6 +36,39 @@ struct ResourceBinder {
+                             const ShaderMetadata* metadata,
+                             std::shared_ptr<const Texture> texture,
+                             raw_ptr<const Sampler>) = 0;
++
++  /// mcsm9: where a texel buffer binds: Metal's texture index (and the
++  /// buffer index of its atomic view, or ~0), Vulkan's binding.
++  struct McsmTexelBufferSlot {
++    size_t metal_texture = 0u;
++    size_t metal_atomic_buffer = ~size_t{0};
++    size_t binding = 0u;
++    bool storage = false;
++  };
++
++  /// mcsm9: a buffer range read (or, storage, written) as texels of
++  /// `format`; a texture and a sampler bound apart (texture2D + sampler).
++  /// Metal and Vulkan; false elsewhere.
++  virtual bool McsmBindTexelBuffer(ShaderStage stage,
++                                   const McsmTexelBufferSlot& slot,
++                                   BufferView view,
++                                   PixelFormat format) {
++    return false;
++  }
++
++  virtual bool McsmBindSeparateTexture(ShaderStage stage,
++                                       size_t metal_index,
++                                       size_t binding,
++                                       std::shared_ptr<const Texture> texture) {
++    return false;
++  }
++
++  virtual bool McsmBindSeparateSampler(ShaderStage stage,
++                                       size_t metal_index,
++                                       size_t binding,
++                                       raw_ptr<const Sampler> sampler) {
++    return false;
++  }
+ };
+ 
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/core/sampler_descriptor.h b/engine/src/flutter/impeller/core/sampler_descriptor.h
+index d764d2fea37..aa4ba78bcae 100644
+--- a/engine/src/flutter/impeller/core/sampler_descriptor.h
++++ b/engine/src/flutter/impeller/core/sampler_descriptor.h
+@@ -5,6 +5,8 @@
+ #ifndef FLUTTER_IMPELLER_CORE_SAMPLER_DESCRIPTOR_H_
+ #define FLUTTER_IMPELLER_CORE_SAMPLER_DESCRIPTOR_H_
+ 
++#include <optional>
++
+ #include "impeller/core/formats.h"
+ 
+ namespace impeller {
+@@ -26,6 +28,27 @@ struct SamplerDescriptor final {
+   /// filtering only applies when all filters are linear.
+   uint8_t max_anisotropy = 1;
+ 
++  // mcsm9: the rest of Direct3D 11's sampler state (Metal and Vulkan): a
++  // comparison function (sample_c), the border colour, LOD clamps and a LOD
++  // bias (Vulkan only: Metal has no sampler bias). The defaults change
++  // nothing.
++  std::optional<CompareFunction> mcsm_compare;
++  McsmBorderColor mcsm_border_color = McsmBorderColor::kTransparentBlack;
++  float mcsm_min_lod = 0.0f;
++  float mcsm_max_lod = 1000.0f;  // VK_LOD_CLAMP_NONE: no clamp.
++  float mcsm_lod_bias = 0.0f;
++
++  /// mcsm9: whether two descriptors' extras (above) agree; ToKey leaves
++  /// them out.
++  static bool McsmExtrasEqual(const SamplerDescriptor& a,
++                              const SamplerDescriptor& b) {
++    return a.mcsm_compare == b.mcsm_compare &&
++           a.mcsm_border_color == b.mcsm_border_color &&
++           a.mcsm_min_lod == b.mcsm_min_lod &&
++           a.mcsm_max_lod == b.mcsm_max_lod &&
++           a.mcsm_lod_bias == b.mcsm_lod_bias;
++  }
++
+   std::string_view label = "NN Clamp Sampler";
+ 
+   SamplerDescriptor();
+diff --git a/engine/src/flutter/impeller/core/shader_types.h b/engine/src/flutter/impeller/core/shader_types.h
+index f765c8801bc..d00ef7a8aec 100644
+--- a/engine/src/flutter/impeller/core/shader_types.h
++++ b/engine/src/flutter/impeller/core/shader_types.h
+@@ -216,6 +216,23 @@ enum class VertexAttributeFormat {
+   kUInt32x2,
+   kUInt32x3,
+   kUInt32x4,
++
++  // mcsm9: normalized and packed formats (read as floats by the shader),
++  // the ones Metal and Vulkan share; Direct3D 11's vertex formats.
++  kMcsmUNorm8,
++  kMcsmUNorm8x2,
++  kMcsmUNorm8x4,
++  kMcsmSNorm8,
++  kMcsmSNorm8x2,
++  kMcsmSNorm8x4,
++  kMcsmUNorm16,
++  kMcsmUNorm16x2,
++  kMcsmUNorm16x4,
++  kMcsmSNorm16,
++  kMcsmSNorm16x2,
++  kMcsmSNorm16x4,
++  kMcsmUNorm10_10_10_2,
++  kMcsmBGRA8UNorm,
+ };
+ 
+ struct ShaderStageIOSlot {
+@@ -229,10 +246,15 @@ struct ShaderStageIOSlot {
+   size_t columns;
+   size_t offset;
+   bool relaxed_precision;
++  /// mcsm9: the attribute's format in the buffer when it isn't the shader's
++  /// input type (half, normalized, packed); kInvalid derives it from the
++  /// type.
++  VertexAttributeFormat mcsm_format = VertexAttributeFormat::kInvalid;
+ 
+   constexpr size_t GetHash() const {
+     return fml::HashCombine(name, location, set, binding, type, bit_width,
+-                            vec_size, columns, offset, relaxed_precision);
++                            vec_size, columns, offset, relaxed_precision,
++                            mcsm_format);
+   }
+ 
+   constexpr bool operator==(const ShaderStageIOSlot& other) const {
+@@ -245,7 +267,8 @@ struct ShaderStageIOSlot {
+            vec_size == other.vec_size &&                 //
+            columns == other.columns &&                   //
+            offset == other.offset &&                     //
+-           relaxed_precision == other.relaxed_precision  //
++           relaxed_precision == other.relaxed_precision &&  //
++           mcsm_format == other.mcsm_format              //
+         ;
+   }
+ 
+@@ -256,6 +279,9 @@ struct ShaderStageIOSlot {
+   ///         mismatched bit widths, and scalar kinds that are not valid vertex
+   ///         inputs (boolean, 64-bit integers, and doubles).
+   constexpr VertexAttributeFormat GetVertexAttributeFormat() const {
++    if (mcsm_format != VertexAttributeFormat::kInvalid) {
++      return mcsm_format;  // mcsm9
++    }
+     if (columns != 1u || vec_size < 1u || vec_size > 4u) {
+       return VertexAttributeFormat::kInvalid;
+     }
+@@ -362,15 +388,19 @@ struct ShaderStageBufferLayout {
+   /// per-vertex; an instanced draw reads per-instance bindings once per
+   /// instance.
+   VertexInputRate input_rate = VertexInputRate::kVertex;
++  /// mcsm9: a per-instance binding advances every this many instances
++  /// (Direct3D 11's InstanceDataStepRate).
++  uint32_t mcsm_step_rate = 1u;
+ 
+   constexpr size_t GetHash() const {
+-    return fml::HashCombine(stride, binding, input_rate);
++    return fml::HashCombine(stride, binding, input_rate, mcsm_step_rate);
+   }
+ 
+   constexpr bool operator==(const ShaderStageBufferLayout& other) const {
+     return stride == other.stride &&    //
+            binding == other.binding &&  //
+-           input_rate == other.input_rate;
++           input_rate == other.input_rate &&
++           mcsm_step_rate == other.mcsm_step_rate;
+   }
+ };
+ 
+@@ -380,6 +410,12 @@ enum class DescriptorType {
+   kSampler = 0,
+   kSampledImage = 1,
+   kImage = 2,
++  // mcsm: an image a shader loads from or stores to without a sampler.
++  kStorageImage = 3,
++  // mcsm: buffers read or written as typed texels (samplerBuffer,
++  // imageBuffer).
++  kMcsmUniformTexelBuffer = 4,
++  kMcsmStorageTexelBuffer = 5,
+   kUniformBuffer = 6,
+   kStorageBuffer = 7,
+   kInputAttachment = 10,
+diff --git a/engine/src/flutter/impeller/core/texture.cc b/engine/src/flutter/impeller/core/texture.cc
+index b12845db6a0..94614e364f2 100644
+--- a/engine/src/flutter/impeller/core/texture.cc
++++ b/engine/src/flutter/impeller/core/texture.cc
+@@ -64,6 +64,10 @@ bool Texture::IsSliceValid(size_t slice) const {
+       return slice == 0;
+     case TextureType::kTextureCube:
+       return slice <= 5;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      return slice < desc_.GetSliceCount();
+   }
+   FML_UNREACHABLE();
+ }
+diff --git a/engine/src/flutter/impeller/core/texture_descriptor.cc b/engine/src/flutter/impeller/core/texture_descriptor.cc
+index e55c7ada706..b7a1541ba8c 100644
+--- a/engine/src/flutter/impeller/core/texture_descriptor.cc
++++ b/engine/src/flutter/impeller/core/texture_descriptor.cc
+@@ -16,6 +16,8 @@ std::string TextureDescriptorToString(const TextureDescriptor& desc) {
+   stream << "Size=" << desc.size << ",";
+   stream << "MipCount=" << desc.mip_count << ",";
+   stream << "SampleCount=" << static_cast<size_t>(desc.sample_count) << ",";
++  stream << "Layers=" << desc.array_layer_count << ",";
++  stream << "Depth=" << desc.depth << ",";
+   stream << "Compression=" << CompressionTypeToString(desc.compression_type);
+   return stream.str();
+ }
+diff --git a/engine/src/flutter/impeller/core/texture_descriptor.h b/engine/src/flutter/impeller/core/texture_descriptor.h
+index e6f48c7b996..da01b74b485 100644
+--- a/engine/src/flutter/impeller/core/texture_descriptor.h
++++ b/engine/src/flutter/impeller/core/texture_descriptor.h
+@@ -44,6 +44,37 @@ struct TextureDescriptor {
+   TextureUsageMask usage = TextureUsage::kShaderRead;
+   SampleCount sample_count = SampleCount::kCount1;
+   CompressionType compression_type = CompressionType::kLossless;
++  // mcsm: the layers of a kTexture2DArray (the cubes of a
++  // kTextureCubeArray) and the depth of a kTexture3D (1 for every other
++  // type).
++  size_t array_layer_count = 1u;
++  size_t depth = 1u;
++
++  /// @brief mcsm: how many slices a slice index ranges over: a cube's six
++  ///        faces, an array's layers, a 3D texture's depth slices, else one.
++  constexpr size_t GetSliceCount() const {
++    switch (type) {
++      case TextureType::kTextureCube:
++        return 6u;
++      case TextureType::kTexture2DArray:
++        return array_layer_count;
++      case TextureType::kTexture3D:
++        return depth;
++      case TextureType::kTextureCubeArray:
++        return 6u * array_layer_count;
++      case TextureType::kTexture2D:
++      case TextureType::kTexture2DMultisample:
++      case TextureType::kTextureExternalOES:
++        return 1u;
++    }
++    return 1u;
++  }
++
++  /// @brief mcsm: how many array layers the texture's image has (a 3D
++  ///        texture's depth slices are not layers).
++  constexpr size_t GetArrayLayerCount() const {
++    return type == TextureType::kTexture3D ? 1u : GetSliceCount();
++  }
+ 
+   /// @brief The number of bytes required to store an image of the given texel
+   ///        dimensions in this format. Block-compressed formats round the
+@@ -93,6 +124,8 @@ struct TextureDescriptor {
+     return format != PixelFormat::kUnknown &&  //
+            !size.IsEmpty() &&                  //
+            mip_count >= 1u &&                  //
++           array_layer_count >= 1u &&          //
++           depth >= 1u &&                      //
+            SamplingOptionsAreValid();
+   }
+ };
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/blit_command_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/blit_command_gles.cc
+index 8bd7d1b377d..03a0e0a5c95 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/blit_command_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/blit_command_gles.cc
+@@ -185,6 +185,11 @@ bool BlitCopyBufferToTextureCommandGLES::Encode(
+       texture_type = GL_TEXTURE_EXTERNAL_OES;
+       texture_target = GL_TEXTURE_EXTERNAL_OES;
+       break;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      VALIDATION_LOG << "Layered textures need Metal or Vulkan.";
++      return false;
+   }
+ 
+   std::optional<PixelFormatGLES> gles_format =
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.cc
+index 1b7292f2bdd..c40c52bf9d8 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.cc
+@@ -209,6 +209,47 @@ std::optional<PixelFormatGLES> ToPixelFormatGLES(PixelFormat pixel_format,
+     case PixelFormat::kB10G10R10XRSRGB:
+     case PixelFormat::kB10G10R10XR:
+     case PixelFormat::kB10G10R10A10XR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return std::nullopt;
+   }
+   return format;
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.h b/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.h
+index 1d127ed99dd..897473049b3 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.h
++++ b/engine/src/flutter/impeller/renderer/backend/gles/formats_gles.h
+@@ -182,6 +182,21 @@ constexpr std::optional<GLenum> ToVertexAttribType(VertexAttributeFormat type) {
+     case VertexAttributeFormat::kUInt32x2:
+     case VertexAttributeFormat::kUInt32x3:
+     case VertexAttributeFormat::kUInt32x4:
++    // mcsm9: Metal and Vulkan only.
++    case VertexAttributeFormat::kMcsmUNorm8:
++    case VertexAttributeFormat::kMcsmUNorm8x2:
++    case VertexAttributeFormat::kMcsmUNorm8x4:
++    case VertexAttributeFormat::kMcsmSNorm8:
++    case VertexAttributeFormat::kMcsmSNorm8x2:
++    case VertexAttributeFormat::kMcsmSNorm8x4:
++    case VertexAttributeFormat::kMcsmUNorm16:
++    case VertexAttributeFormat::kMcsmUNorm16x2:
++    case VertexAttributeFormat::kMcsmUNorm16x4:
++    case VertexAttributeFormat::kMcsmSNorm16:
++    case VertexAttributeFormat::kMcsmSNorm16x2:
++    case VertexAttributeFormat::kMcsmSNorm16x4:
++    case VertexAttributeFormat::kMcsmUNorm10_10_10_2:
++    case VertexAttributeFormat::kMcsmBGRA8UNorm:
+       return std::nullopt;
+   }
+   FML_UNREACHABLE();
+@@ -197,6 +212,11 @@ constexpr GLenum ToTextureType(TextureType type) {
+       return GL_TEXTURE_CUBE_MAP;
+     case TextureType::kTextureExternalOES:
+       return GL_TEXTURE_EXTERNAL_OES;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      // mcsm: layered textures need Metal or Vulkan.
++      return GL_TEXTURE_2D;
+   }
+   FML_UNREACHABLE();
+ }
+@@ -211,6 +231,10 @@ constexpr std::optional<GLenum> ToTextureTarget(TextureType type) {
+       return GL_TEXTURE_CUBE_MAP;
+     case TextureType::kTextureExternalOES:
+       return GL_TEXTURE_EXTERNAL_OES;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      return std::nullopt;
+   }
+   FML_UNREACHABLE();
+ }
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/sampler_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/sampler_gles.cc
+index ed432c01fb1..e0e8c8e6543 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/sampler_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/sampler_gles.cc
+@@ -65,6 +65,10 @@ static GLint ToAddressMode(SamplerAddressMode mode,
+       } else {
+         return GL_CLAMP_TO_EDGE;
+       }
++    case SamplerAddressMode::kMcsmClampToBorder:
++    case SamplerAddressMode::kMcsmMirrorClampToEdge:
++      // mcsm9: Metal and Vulkan only.
++      return GL_CLAMP_TO_EDGE;
+   }
+   FML_UNREACHABLE();
+ }
+diff --git a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
+index 66c79978543..6ba99917868 100644
+--- a/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
++++ b/engine/src/flutter/impeller/renderer/backend/gles/texture_gles.cc
+@@ -59,6 +59,47 @@ static bool IsDepthStencilFormat(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return false;
+   }
+   FML_UNREACHABLE();
+@@ -267,6 +308,11 @@ bool TextureGLES::OnSetContents(std::shared_ptr<const fml::Mapping> mapping,
+       texture_type = GL_TEXTURE_EXTERNAL_OES;
+       texture_target = GL_TEXTURE_EXTERNAL_OES;
+       break;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      VALIDATION_LOG << "Layered textures need Metal or Vulkan.";
++      return false;
+   }
+ 
+   std::optional<PixelFormatGLES> gles_format =
+@@ -382,6 +428,47 @@ static std::optional<GLenum> ToRenderBufferFormat(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return std::nullopt;
+   }
+   FML_UNREACHABLE();
+@@ -613,6 +700,11 @@ bool TextureGLES::GenerateMipmap() {
+       break;
+     case TextureType::kTextureExternalOES:
+       break;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
++    case TextureType::kTextureCubeArray:
++      VALIDATION_LOG << "Layered textures need Metal or Vulkan.";
++      return false;
+   }
+ 
+   if (!Bind()) {
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.h
+index d2aff0ca27c..d5a400f18dc 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.h
+@@ -16,6 +16,24 @@ class BlitPassMTL final : public BlitPass {
+   // |RenderPass|
+   ~BlitPassMTL() override;
+ 
++  // |BlitPass| mcsm9
++  bool McsmCopyTextureToTexture(std::shared_ptr<Texture> source,
++                                std::shared_ptr<Texture> destination,
++                                IRect source_region,
++                                IPoint destination_origin,
++                                uint32_t source_mip,
++                                uint32_t source_slice,
++                                uint32_t destination_mip,
++                                uint32_t destination_slice) override;
++
++  // |BlitPass| mcsm9
++  bool McsmCopyTextureToBuffer(std::shared_ptr<Texture> source,
++                               std::shared_ptr<DeviceBuffer> destination,
++                               IRect source_region,
++                               size_t destination_offset,
++                               uint32_t source_mip,
++                               uint32_t source_slice) override;
++
+  private:
+   friend class CommandBufferMTL;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.mm
+index 6dd7c910d64..d650e81303c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/blit_pass_mtl.mm
+@@ -203,14 +203,20 @@
+     return false;
+   }
+ 
++  // mcsm: a 3D texture's slice is a depth plane (origin z), not a layer.
++  const bool is_3d =
++      destination->GetTextureDescriptor().type == TextureType::kTexture3D;
+   auto destination_origin_mtl =
+-      MTLOriginMake(destination_region.GetX(), destination_region.GetY(), 0);
++      MTLOriginMake(destination_region.GetX(), destination_region.GetY(),
++                    is_3d ? slice : 0);
+   auto source_size_mtl = MTLSizeMake(destination_region.GetWidth(),
+                                      destination_region.GetHeight(), 1);
+ 
+   auto source_bytes_per_row =
+       BytesPerRowForTextureWidth(destination->GetTextureDescriptor().format,
+                                  destination_region.GetWidth());
++  const NSUInteger source_bytes_per_image =
++      is_3d ? source_bytes_per_row * destination_region.GetHeight() : 0;
+ 
+ #ifdef IMPELLER_DEBUG
+   if (is_metal_trace_active_) {
+@@ -222,11 +228,11 @@
+              sourceOffset:source.GetRange().offset
+         sourceBytesPerRow:source_bytes_per_row
+       sourceBytesPerImage:
+-          0  // 0 for 2D textures according to
++          source_bytes_per_image  // 0 for 2D textures according to
+              // https://developer.apple.com/documentation/metal/mtlblitcommandencoder/1400752-copyfrombuffer
+                sourceSize:source_size_mtl
+                 toTexture:destination_mtl
+-         destinationSlice:slice
++         destinationSlice:is_3d ? 0 : slice
+          destinationLevel:mip_level
+         destinationOrigin:destination_origin_mtl];
+ 
+@@ -255,4 +261,78 @@
+   return result;
+ }
+ 
++// mcsm9: a 3D texture's slice is a depth plane (origin z), not a slice.
++static void McsmSliceOrigin(const Texture& texture,
++                            uint32_t slice,
++                            NSUInteger* mtl_slice,
++                            NSUInteger* z) {
++  const bool is_3d =
++      texture.GetTextureDescriptor().type == TextureType::kTexture3D;
++  *mtl_slice = is_3d ? 0 : slice;
++  *z = is_3d ? slice : 0;
++}
++
++bool BlitPassMTL::McsmCopyTextureToTexture(
++    std::shared_ptr<Texture> source,
++    std::shared_ptr<Texture> destination,
++    IRect source_region,
++    IPoint destination_origin,
++    uint32_t source_mip,
++    uint32_t source_slice,
++    uint32_t destination_mip,
++    uint32_t destination_slice) {
++  auto source_mtl = TextureMTL::Cast(*source).GetMTLTexture();
++  auto destination_mtl = TextureMTL::Cast(*destination).GetMTLTexture();
++  if (!source_mtl || !destination_mtl) {
++    return false;
++  }
++  NSUInteger src_slice, src_z, dst_slice, dst_z;
++  McsmSliceOrigin(*source, source_slice, &src_slice, &src_z);
++  McsmSliceOrigin(*destination, destination_slice, &dst_slice, &dst_z);
++  [encoder_
++        copyFromTexture:source_mtl
++            sourceSlice:src_slice
++            sourceLevel:source_mip
++           sourceOrigin:MTLOriginMake(source_region.GetX(),
++                                      source_region.GetY(), src_z)
++             sourceSize:MTLSizeMake(source_region.GetWidth(),
++                                    source_region.GetHeight(), 1)
++              toTexture:destination_mtl
++       destinationSlice:dst_slice
++       destinationLevel:destination_mip
++      destinationOrigin:MTLOriginMake(destination_origin.x,
++                                      destination_origin.y, dst_z)];
++  return true;
++}
++
++bool BlitPassMTL::McsmCopyTextureToBuffer(
++    std::shared_ptr<Texture> source,
++    std::shared_ptr<DeviceBuffer> destination,
++    IRect source_region,
++    size_t destination_offset,
++    uint32_t source_mip,
++    uint32_t source_slice) {
++  auto source_mtl = TextureMTL::Cast(*source).GetMTLTexture();
++  auto destination_mtl = DeviceBufferMTL::Cast(*destination).GetMTLBuffer();
++  if (!source_mtl || !destination_mtl) {
++    return false;
++  }
++  NSUInteger src_slice, src_z;
++  McsmSliceOrigin(*source, source_slice, &src_slice, &src_z);
++  const size_t bytes_per_row = BytesPerRowForTextureWidth(
++      source->GetTextureDescriptor().format, source_region.GetWidth());
++  [encoder_ copyFromTexture:source_mtl
++                     sourceSlice:src_slice
++                     sourceLevel:source_mip
++                    sourceOrigin:MTLOriginMake(source_region.GetX(),
++                                               source_region.GetY(), src_z)
++                      sourceSize:MTLSizeMake(source_region.GetWidth(),
++                                             source_region.GetHeight(), 1)
++                        toBuffer:destination_mtl
++               destinationOffset:destination_offset
++          destinationBytesPerRow:bytes_per_row
++        destinationBytesPerImage:bytes_per_row * source_region.GetHeight()];
++  return true;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.h
+index d9f6393070f..bba7a765f8d 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.h
+@@ -21,6 +21,24 @@ class ComputePassMTL final : public ComputePass {
+   // |RenderPass|
+   ~ComputePassMTL() override;
+ 
++  // |ResourceBinder| mcsm9
++  bool McsmBindTexelBuffer(ShaderStage stage,
++                           const McsmTexelBufferSlot& slot,
++                           BufferView view,
++                           PixelFormat format) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateTexture(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               std::shared_ptr<const Texture> texture) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateSampler(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               raw_ptr<const Sampler> sampler) override;
++
+  private:
+   friend class CommandBufferMTL;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.mm
+index d45f45392bb..5687606dd33 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/compute_pass_mtl.mm
+@@ -113,6 +113,12 @@
+                                   const ShaderMetadata* metadata,
+                                   std::shared_ptr<const Texture> texture,
+                                   raw_ptr<const Sampler> sampler) {
++  // mcsm: a storage image has no sampler.
++  if (type == DescriptorType::kStorageImage && texture && texture->IsValid()) {
++    pass_bindings_cache_.SetTexture(slot.texture_index,
++                                    TextureMTL::Cast(*texture).GetMTLTexture());
++    return true;
++  }
+   if (!sampler || !texture->IsValid()) {
+     return false;
+   }
+@@ -165,10 +171,22 @@
+                        "maximum threads per threadgroup.");
+   }
+ 
+-  [encoder_
+-       dispatchThreadgroups:MTLSizeMake(workgroup_count[0], workgroup_count[1],
+-                                        workgroup_count[2])
+-      threadsPerThreadgroup:threads_per_threadgroup];
++  if (mcsm_indirect_) {
++    // mcsm9: workgroup counts from an argument buffer.
++    [encoder_ dispatchThreadgroupsWithIndirectBuffer:
++                  DeviceBufferMTL::Cast(*mcsm_indirect_.GetBuffer())
++                      .GetMTLBuffer()
++                                indirectBufferOffset:mcsm_indirect_.GetRange()
++                                                         .offset
++                               threadsPerThreadgroup:threads_per_threadgroup];
++    mcsm_indirect_ = {};
++  } else {
++    [encoder_
++         dispatchThreadgroups:MTLSizeMake(workgroup_count[0],
++                                          workgroup_count[1],
++                                          workgroup_count[2])
++        threadsPerThreadgroup:threads_per_threadgroup];
++  }
+ 
+ #ifdef IMPELLER_DEBUG
+   if (has_label_) {
+@@ -184,4 +202,52 @@
+   return true;
+ }
+ 
++// mcsm9
++bool ComputePassMTL::McsmBindTexelBuffer(ShaderStage stage,
++                                         const McsmTexelBufferSlot& slot,
++                                         BufferView view,
++                                         PixelFormat format) {
++  if (!view.GetBuffer()) {
++    return false;
++  }
++  const auto& buffer = DeviceBufferMTL::Cast(*view.GetBuffer());
++  id<MTLTexture> texel = buffer.McsmTexelView(
++      view.GetRange().offset, view.GetRange().length, format, slot.storage);
++  if (!texel) {
++    return false;
++  }
++  pass_bindings_cache_.SetTexture(slot.metal_texture, texel);
++  if (slot.metal_atomic_buffer != ~size_t{0}) {
++    pass_bindings_cache_.SetBuffer(slot.metal_atomic_buffer,
++                                   view.GetRange().offset,
++                                   buffer.GetMTLBuffer());
++  }
++  return true;
++}
++
++bool ComputePassMTL::McsmBindSeparateTexture(
++    ShaderStage stage,
++    size_t metal_index,
++    size_t binding,
++    std::shared_ptr<const Texture> texture) {
++  if (!texture || !texture->IsValid()) {
++    return false;
++  }
++  pass_bindings_cache_.SetTexture(metal_index,
++                                  TextureMTL::Cast(*texture).GetMTLTexture());
++  return true;
++}
++
++bool ComputePassMTL::McsmBindSeparateSampler(ShaderStage stage,
++                                             size_t metal_index,
++                                             size_t binding,
++                                             raw_ptr<const Sampler> sampler) {
++  if (!sampler) {
++    return false;
++  }
++  pass_bindings_cache_.SetSampler(
++      metal_index, SamplerMTL::Cast(*sampler).GetMTLSamplerState());
++  return true;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.h
+index ffe0dfd8db8..b75502477f9 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.h
+@@ -66,6 +66,13 @@ class ContextMTL final : public Context,
+                          public BackendCast<ContextMTL, Context>,
+                          public std::enable_shared_from_this<ContextMTL> {
+  public:
++  // |Context| mcsm9
++  std::shared_ptr<Texture> McsmMakeTextureView(
++      const std::shared_ptr<Texture>& texture,
++      const TextureDescriptor& view_desc,
++      uint32_t base_mip,
++      uint32_t base_layer) const override;
++
+   static std::shared_ptr<ContextMTL> Create(
+       const Flags& flags,
+       const std::vector<std::string>& shader_library_paths,
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
+index 343dabc4d9e..b7a7468e8f1 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/context_mtl.mm
+@@ -3,6 +3,9 @@
+ // found in the LICENSE file.
+ 
+ #include "impeller/renderer/backend/metal/context_mtl.h"
++
++#include "impeller/renderer/backend/metal/formats_mtl.h"
++#include "impeller/renderer/backend/metal/texture_mtl.h"
+ #include <Metal/Metal.h>
+ 
+ #include <memory>
+@@ -543,4 +546,36 @@ new ContextMTL(flags, device, command_queue,
+   scope_active_ = false;
+ }
+ 
++std::shared_ptr<Texture> ContextMTL::McsmMakeTextureView(
++    const std::shared_ptr<Texture>& texture,
++    const TextureDescriptor& view_desc,
++    uint32_t base_mip,
++    uint32_t base_layer) const {
++  if (!texture || !view_desc.IsValid()) {
++    return nullptr;
++  }
++  const TextureDescriptor& desc = texture->GetTextureDescriptor();
++  if (desc.type == TextureType::kTexture3D ||
++      view_desc.type == TextureType::kTexture3D ||
++      base_mip + view_desc.mip_count > desc.mip_count ||
++      base_layer + view_desc.GetArrayLayerCount() > desc.GetArrayLayerCount() ||
++      view_desc.format != desc.format ||
++      view_desc.sample_count != desc.sample_count) {
++    VALIDATION_LOG << "A texture view must lie within its 2D, array or cube "
++                      "texture, in its format and sample count.";
++    return nullptr;
++  }
++  id<MTLTexture> parent = TextureMTL::Cast(*texture).GetMTLTexture();
++  id<MTLTexture> view = [parent
++      newTextureViewWithPixelFormat:ToMTLPixelFormat(view_desc.format)
++                        textureType:ToMTLTextureType(view_desc.type)
++                             levels:NSMakeRange(base_mip, view_desc.mip_count)
++                             slices:NSMakeRange(base_layer,
++                                                view_desc.GetArrayLayerCount())];
++  if (!view) {
++    return nullptr;
++  }
++  return TextureMTL::Wrapper(view_desc, view);
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.h
+index dbc61e227b0..538103dac25 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.h
+@@ -7,6 +7,9 @@
+ 
+ #include <Metal/Metal.h>
+ 
++#include <map>
++#include <tuple>
++
+ #include "impeller/base/backend_cast.h"
+ #include "impeller/core/device_buffer.h"
+ 
+@@ -23,11 +26,21 @@ class DeviceBufferMTL final
+ 
+   id<MTLBuffer> GetMTLBuffer() const;
+ 
++  /// mcsm9: the buffer range as a texture buffer of `format` (texelFetch,
++  /// imageLoad/Store), made once per range, format and access.
++  id<MTLTexture> McsmTexelView(size_t offset,
++                               size_t length,
++                               PixelFormat format,
++                               bool storage) const;
++
+  private:
+   friend class AllocatorMTL;
+ 
+   const id<MTLBuffer> buffer_;
+   const MTLStorageMode storage_mode_;
++  mutable std::map<std::tuple<size_t, size_t, PixelFormat, bool>,
++                   id<MTLTexture>>
++      mcsm_texel_views_;  // mcsm9
+ 
+   DeviceBufferMTL(DeviceBufferDescriptor desc,
+                   id<MTLBuffer> buffer,
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.mm
+index f01ccce5bc3..c1e8be3a187 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/device_buffer_mtl.mm
+@@ -93,4 +93,37 @@
+   return true;
+ }
+ 
++id<MTLTexture> DeviceBufferMTL::McsmTexelView(size_t offset,
++                                              size_t length,
++                                              PixelFormat format,
++                                              bool storage) const {
++  const auto key = std::make_tuple(offset, length, format, storage);
++  if (auto found = mcsm_texel_views_.find(key);
++      found != mcsm_texel_views_.end()) {
++    return found->second;
++  }
++  const size_t bytes_per_texel = BytesPerPixelForPixelFormat(format);
++  if (bytes_per_texel == 0 || length < bytes_per_texel) {
++    return nil;
++  }
++  MTLTextureUsage usage = MTLTextureUsageShaderRead;
++  if (storage) {
++    usage |= MTLTextureUsageShaderWrite;
++  }
++  MTLTextureDescriptor* desc = [MTLTextureDescriptor
++      textureBufferDescriptorWithPixelFormat:ToMTLPixelFormat(format)
++                                       width:length / bytes_per_texel
++                             resourceOptions:buffer_.resourceOptions
++                                       usage:usage];
++  id<MTLTexture> view =
++      [buffer_ newTextureWithDescriptor:desc
++                                 offset:offset
++                            bytesPerRow:(length / bytes_per_texel) *
++                                        bytes_per_texel];
++  if (view) {
++    mcsm_texel_views_[key] = view;
++  }
++  return view;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.h
+index 7c36087dc7e..1ff00c8437c 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.h
+@@ -49,6 +49,75 @@ constexpr PixelFormat FromMTLPixelFormat(MTLPixelFormat format) {
+       return PixelFormat::kB10G10R10XR;
+     case MTLPixelFormatBGRA10_XR:
+       return PixelFormat::kB10G10R10A10XR;
++    // mcsm
++    case MTLPixelFormatRG11B10Float:
++      return PixelFormat::kR11G11B10UFloat;
++    case MTLPixelFormatRGBA16Unorm:
++      return PixelFormat::kR16G16B16A16UNormInt;
++    case MTLPixelFormatDepth16Unorm:
++      return PixelFormat::kD16UNormInt;
++    case MTLPixelFormatDepth32Float:
++      return PixelFormat::kD32Float;
++    case MTLPixelFormatR32Uint:
++      return PixelFormat::kR32UInt;
++    case MTLPixelFormatRG32Uint:
++      return PixelFormat::kR32G32UInt;
++    case MTLPixelFormatRGBA32Uint:
++      return PixelFormat::kR32G32B32A32UInt;
++    case MTLPixelFormatR16Float:
++      return PixelFormat::kR16Float;
++    case MTLPixelFormatRG16Float:
++      return PixelFormat::kR16G16Float;
++    case MTLPixelFormatRG32Float:
++      return PixelFormat::kR32G32Float;
++    case MTLPixelFormatR8Uint:
++      return PixelFormat::kR8UInt;
++    case MTLPixelFormatR8Snorm:
++      return PixelFormat::kR8SNormInt;
++    case MTLPixelFormatRG8Uint:
++      return PixelFormat::kR8G8UInt;
++    case MTLPixelFormatRG8Snorm:
++      return PixelFormat::kR8G8SNormInt;
++    case MTLPixelFormatRGBA8Uint:
++      return PixelFormat::kR8G8B8A8UInt;
++    case MTLPixelFormatRGBA8Sint:
++      return PixelFormat::kR8G8B8A8SInt;
++    case MTLPixelFormatRGBA8Snorm:
++      return PixelFormat::kR8G8B8A8SNormInt;
++    case MTLPixelFormatRGB10A2Unorm:
++      return PixelFormat::kR10G10B10A2UNormInt;
++    case MTLPixelFormatRGB10A2Uint:
++      return PixelFormat::kR10G10B10A2UInt;
++    case MTLPixelFormatRGB9E5Float:
++      return PixelFormat::kR9G9B9E5UFloat;
++    case MTLPixelFormatR16Unorm:
++      return PixelFormat::kR16UNormInt;
++    case MTLPixelFormatR16Snorm:
++      return PixelFormat::kR16SNormInt;
++    case MTLPixelFormatR16Uint:
++      return PixelFormat::kR16UInt;
++    case MTLPixelFormatR16Sint:
++      return PixelFormat::kR16SInt;
++    case MTLPixelFormatRG16Unorm:
++      return PixelFormat::kR16G16UNormInt;
++    case MTLPixelFormatRG16Snorm:
++      return PixelFormat::kR16G16SNormInt;
++    case MTLPixelFormatRG16Uint:
++      return PixelFormat::kR16G16UInt;
++    case MTLPixelFormatRG16Sint:
++      return PixelFormat::kR16G16SInt;
++    case MTLPixelFormatRGBA16Snorm:
++      return PixelFormat::kR16G16B16A16SNormInt;
++    case MTLPixelFormatRGBA16Uint:
++      return PixelFormat::kR16G16B16A16UInt;
++    case MTLPixelFormatRGBA16Sint:
++      return PixelFormat::kR16G16B16A16SInt;
++    case MTLPixelFormatR32Sint:
++      return PixelFormat::kR32SInt;
++    case MTLPixelFormatRG32Sint:
++      return PixelFormat::kR32G32SInt;
++    case MTLPixelFormatRGBA32Sint:
++      return PixelFormat::kR32G32B32A32SInt;
+     default:
+       return PixelFormat::kUnknown;
+   }
+@@ -93,6 +162,15 @@ MTLPixelFormat SafeMTLPixelFormatASTC_8x8_LDR();
+ MTLPixelFormat SafeMTLPixelFormatASTC_8x8_sRGB();
+ MTLPixelFormat SafeMTLPixelFormatASTC_4x4_HDR();
+ MTLPixelFormat SafeMTLPixelFormatASTC_8x8_HDR();
++// mcsm
++MTLPixelFormat SafeMTLPixelFormatBC2_RGBA();
++MTLPixelFormat SafeMTLPixelFormatBC2_RGBA_sRGB();
++MTLPixelFormat SafeMTLPixelFormatBC4_RUnorm();
++MTLPixelFormat SafeMTLPixelFormatBC4_RSnorm();
++MTLPixelFormat SafeMTLPixelFormatBC5_RGSnorm();
++MTLPixelFormat SafeMTLPixelFormatBC6H_RGBUfloat();
++MTLPixelFormat SafeMTLPixelFormatBC6H_RGBFloat();
++
+ 
+ constexpr MTLPixelFormat ToMTLPixelFormat(PixelFormat format) {
+   switch (format) {
+@@ -164,6 +242,89 @@ constexpr MTLPixelFormat ToMTLPixelFormat(PixelFormat format) {
+       return SafeMTLPixelFormatASTC_4x4_HDR();
+     case PixelFormat::kASTC8x8HDR:
+       return SafeMTLPixelFormatASTC_8x8_HDR();
++    // mcsm
++    case PixelFormat::kR11G11B10UFloat:
++      return MTLPixelFormatRG11B10Float;
++    case PixelFormat::kR16G16B16A16UNormInt:
++      return MTLPixelFormatRGBA16Unorm;
++    case PixelFormat::kD16UNormInt:
++      return MTLPixelFormatDepth16Unorm;
++    case PixelFormat::kD32Float:
++      return MTLPixelFormatDepth32Float;
++    case PixelFormat::kR32UInt:
++      return MTLPixelFormatR32Uint;
++    case PixelFormat::kR32G32UInt:
++      return MTLPixelFormatRG32Uint;
++    case PixelFormat::kR32G32B32A32UInt:
++      return MTLPixelFormatRGBA32Uint;
++    case PixelFormat::kR16Float:
++      return MTLPixelFormatR16Float;
++    case PixelFormat::kR16G16Float:
++      return MTLPixelFormatRG16Float;
++    case PixelFormat::kR32G32Float:
++      return MTLPixelFormatRG32Float;
++    case PixelFormat::kR8UInt:
++      return MTLPixelFormatR8Uint;
++    case PixelFormat::kR8SNormInt:
++      return MTLPixelFormatR8Snorm;
++    case PixelFormat::kR8G8UInt:
++      return MTLPixelFormatRG8Uint;
++    case PixelFormat::kR8G8SNormInt:
++      return MTLPixelFormatRG8Snorm;
++    case PixelFormat::kR8G8B8A8UInt:
++      return MTLPixelFormatRGBA8Uint;
++    case PixelFormat::kR8G8B8A8SInt:
++      return MTLPixelFormatRGBA8Sint;
++    case PixelFormat::kR8G8B8A8SNormInt:
++      return MTLPixelFormatRGBA8Snorm;
++    case PixelFormat::kR10G10B10A2UNormInt:
++      return MTLPixelFormatRGB10A2Unorm;
++    case PixelFormat::kR10G10B10A2UInt:
++      return MTLPixelFormatRGB10A2Uint;
++    case PixelFormat::kR9G9B9E5UFloat:
++      return MTLPixelFormatRGB9E5Float;
++    case PixelFormat::kR16UNormInt:
++      return MTLPixelFormatR16Unorm;
++    case PixelFormat::kR16SNormInt:
++      return MTLPixelFormatR16Snorm;
++    case PixelFormat::kR16UInt:
++      return MTLPixelFormatR16Uint;
++    case PixelFormat::kR16SInt:
++      return MTLPixelFormatR16Sint;
++    case PixelFormat::kR16G16UNormInt:
++      return MTLPixelFormatRG16Unorm;
++    case PixelFormat::kR16G16SNormInt:
++      return MTLPixelFormatRG16Snorm;
++    case PixelFormat::kR16G16UInt:
++      return MTLPixelFormatRG16Uint;
++    case PixelFormat::kR16G16SInt:
++      return MTLPixelFormatRG16Sint;
++    case PixelFormat::kR16G16B16A16SNormInt:
++      return MTLPixelFormatRGBA16Snorm;
++    case PixelFormat::kR16G16B16A16UInt:
++      return MTLPixelFormatRGBA16Uint;
++    case PixelFormat::kR16G16B16A16SInt:
++      return MTLPixelFormatRGBA16Sint;
++    case PixelFormat::kR32SInt:
++      return MTLPixelFormatR32Sint;
++    case PixelFormat::kR32G32SInt:
++      return MTLPixelFormatRG32Sint;
++    case PixelFormat::kR32G32B32A32SInt:
++      return MTLPixelFormatRGBA32Sint;
++    case PixelFormat::kBC2RGBAUNormInt:
++      return SafeMTLPixelFormatBC2_RGBA();
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++      return SafeMTLPixelFormatBC2_RGBA_sRGB();
++    case PixelFormat::kBC4RUNormInt:
++      return SafeMTLPixelFormatBC4_RUnorm();
++    case PixelFormat::kBC4RSNormInt:
++      return SafeMTLPixelFormatBC4_RSnorm();
++    case PixelFormat::kBC5RGSNormInt:
++      return SafeMTLPixelFormatBC5_RGSnorm();
++    case PixelFormat::kBC6HRGBUFloat:
++      return SafeMTLPixelFormatBC6H_RGBUfloat();
++    case PixelFormat::kBC6HRGBSFloat:
++      return SafeMTLPixelFormatBC6H_RGBFloat();
+   }
+   return MTLPixelFormatInvalid;
+ };
+@@ -424,6 +585,14 @@ constexpr MTLSamplerAddressMode ToMTLSamplerAddressMode(
+       return MTLSamplerAddressModeMirrorRepeat;
+     case SamplerAddressMode::kDecal:
+       return MTLSamplerAddressModeClampToZero;
++    case SamplerAddressMode::kMcsmClampToBorder:
++#if !FML_OS_IOS
++      return MTLSamplerAddressModeClampToBorderColor;
++#else
++      return MTLSamplerAddressModeClampToZero;
++#endif  // FML_OS_IOS
++    case SamplerAddressMode::kMcsmMirrorClampToEdge:
++      return MTLSamplerAddressModeMirrorClampToEdge;
+   }
+   return MTLSamplerAddressModeClampToEdge;
+ }
+@@ -440,6 +609,12 @@ constexpr MTLTextureType ToMTLTextureType(TextureType type) {
+       return MTLTextureType2DMultisample;
+     case TextureType::kTextureCube:
+       return MTLTextureTypeCube;
++    case TextureType::kTexture2DArray:
++      return MTLTextureType2DArray;
++    case TextureType::kTexture3D:
++      return MTLTextureType3D;
++    case TextureType::kTextureCubeArray:
++      return MTLTextureTypeCubeArray;
+     case TextureType::kTextureExternalOES:
+       VALIDATION_LOG
+           << "kTextureExternalOES can not be used with the Metal backend.";
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.mm
+index cb6eee57f54..67391a0a226 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/formats_mtl.mm
+@@ -94,6 +94,13 @@
+   mtl_desc.width = desc.size.width;
+   mtl_desc.height = desc.size.height;
+   mtl_desc.mipmapLevelCount = desc.mip_count;
++  // mcsm: layered textures.
++  if (desc.type == TextureType::kTexture2DArray ||
++      desc.type == TextureType::kTextureCubeArray) {
++    mtl_desc.arrayLength = desc.array_layer_count;
++  } else if (desc.type == TextureType::kTexture3D) {
++    mtl_desc.depth = desc.depth;
++  }
+   mtl_desc.usage = MTLTextureUsageUnknown;
+   if (desc.usage & TextureUsage::kUnknown) {
+     mtl_desc.usage |= MTLTextureUsageUnknown;
+@@ -280,4 +287,74 @@ MTLPixelFormat SafeMTLPixelFormatASTC_8x8_HDR() {
+   return MTLPixelFormatInvalid;
+ }
+ 
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC2_RGBA() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC2_RGBA;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC2_RGBA_sRGB() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC2_RGBA_sRGB;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC4_RUnorm() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC4_RUnorm;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC4_RSnorm() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC4_RSnorm;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC5_RGSnorm() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC5_RGSnorm;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC6H_RGBUfloat() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC6H_RGBUfloat;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
++// mcsm: macOS only, as the other BC formats.
++MTLPixelFormat SafeMTLPixelFormatBC6H_RGBFloat() {
++#if !FML_OS_IOS
++  if (@available(macOS 10.11, *)) {
++    return MTLPixelFormatBC6H_RGBFloat;
++  }
++#endif  // FML_OS_IOS
++  return MTLPixelFormatInvalid;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/pipeline_library_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/pipeline_library_mtl.mm
+index 270fbe5653d..3df89ff12e7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/pipeline_library_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/pipeline_library_mtl.mm
+@@ -33,6 +33,23 @@ static void GetMTLRenderPipelineDescriptor(const PipelineDescriptor& desc,
+                                            const Callback& callback) {
+   auto descriptor = [[MTLRenderPipelineDescriptor alloc] init];
+   descriptor.label = @(desc.GetLabel().data());
++  // mcsm9: the primitive class, which Metal needs to route primitives to the
++  // layer a vertex stage writes (layered passes); other passes ignore it.
++  switch (desc.GetPrimitiveType()) {
++    case PrimitiveType::kTriangle:
++    case PrimitiveType::kTriangleStrip:
++      descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
++      break;
++    case PrimitiveType::kLine:
++    case PrimitiveType::kLineStrip:
++      descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
++      break;
++    case PrimitiveType::kPoint:
++      descriptor.inputPrimitiveTopology = MTLPrimitiveTopologyClassPoint;
++      break;
++    default:
++      break;
++  }
+   descriptor.rasterSampleCount = static_cast<NSUInteger>(desc.GetSampleCount());
+   bool created_specialized_function = false;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+index 1d510d5a8b7..911332ba47b 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.h
+@@ -18,6 +18,24 @@ class RenderPassMTL final : public RenderPass {
+   // |RenderPass|
+   ~RenderPassMTL() override;
+ 
++  // |ResourceBinder| mcsm9
++  bool McsmBindTexelBuffer(ShaderStage stage,
++                           const McsmTexelBufferSlot& slot,
++                           BufferView view,
++                           PixelFormat format) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateTexture(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               std::shared_ptr<const Texture> texture) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateSampler(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               raw_ptr<const Sampler> sampler) override;
++
+  private:
+   friend class CommandBufferMTL;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+index c94ac246e1a..23f6e77de6e 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/render_pass_mtl.mm
+@@ -67,7 +67,8 @@ static bool ConfigureAttachment(const Attachment& desc,
+   // mip_level/slice select the subresource of the primary texture. The
+   // resolve texture, if any, resolves into its own level 0 / slice 0.
+   attachment.level = desc.mip_level;
+-  attachment.slice = desc.slice;
++  // mcsm9: every layer (the pass's renderTargetArrayLength) from slice 0.
++  attachment.slice = desc.slice == kMcsmAllLayers ? 0u : desc.slice;
+ 
+   if (!ConfigureResolveTextureAttachment(desc, attachment)) {
+     return false;
+@@ -137,6 +138,16 @@ static bool ConfigureStencilAttachment(
+     return nil;
+   }
+ 
++  // mcsm9: a pass rendering to every layer of its attachments.
++  desc.IterateAllAttachments([&result](const auto& attachment) {
++    if (attachment.slice == kMcsmAllLayers && attachment.texture) {
++      result.renderTargetArrayLength = std::max<NSUInteger>(
++          result.renderTargetArrayLength,
++          attachment.texture->GetTextureDescriptor().GetArrayLayerCount());
++    }
++    return true;
++  });
++
+   return result;
+ }
+ 
+@@ -342,7 +353,27 @@ static bool Bind(PassBindingsCacheMTL& pass,
+     return fml::Status(fml::StatusCode::kCancelled, "Invalid pipeline.");
+   }
+ 
+-  if (!index_buffer_) {
++  // mcsm9: counts from an argument buffer.
++  if (mcsm_indirect_) {
++    id<MTLBuffer> args =
++        DeviceBufferMTL::Cast(*mcsm_indirect_.GetBuffer()).GetMTLBuffer();
++    const NSUInteger args_offset = mcsm_indirect_.GetRange().offset;
++    if (!index_buffer_) {
++      [encoder_ drawPrimitives:ToMTLPrimitiveType(primitive_type_)
++                indirectBuffer:args
++          indirectBufferOffset:args_offset];
++    } else {
++      [encoder_ drawIndexedPrimitives:ToMTLPrimitiveType(primitive_type_)
++                            indexType:index_type_
++                          indexBuffer:DeviceBufferMTL::Cast(
++                                          *index_buffer_.GetBuffer())
++                                          .GetMTLBuffer()
++                    indexBufferOffset:index_buffer_.GetRange().offset
++                       indirectBuffer:args
++                 indirectBufferOffset:args_offset];
++    }
++    mcsm_indirect_ = {};
++  } else if (!index_buffer_) {
+     if (instance_count_ != 1u) {
+       [encoder_ drawPrimitives:ToMTLPrimitiveType(primitive_type_)
+                    vertexStart:base_vertex_
+@@ -436,4 +467,49 @@ static bool Bind(PassBindingsCacheMTL& pass,
+   return Bind(pass_bindings_, stage, slot.texture_index, sampler, *texture);
+ }
+ 
++// mcsm9
++bool RenderPassMTL::McsmBindTexelBuffer(ShaderStage stage,
++                                        const McsmTexelBufferSlot& slot,
++                                        BufferView view,
++                                        PixelFormat format) {
++  if (!view.GetBuffer()) {
++    return false;
++  }
++  const auto& buffer = DeviceBufferMTL::Cast(*view.GetBuffer());
++  id<MTLTexture> texel = buffer.McsmTexelView(
++      view.GetRange().offset, view.GetRange().length, format, slot.storage);
++  if (!texel) {
++    return false;
++  }
++  pass_bindings_.SetTexture(stage, slot.metal_texture, texel);
++  if (slot.metal_atomic_buffer != ~size_t{0}) {
++    pass_bindings_.SetBuffer(stage, slot.metal_atomic_buffer,
++                             view.GetRange().offset, buffer.GetMTLBuffer());
++  }
++  return true;
++}
++
++bool RenderPassMTL::McsmBindSeparateTexture(
++    ShaderStage stage,
++    size_t metal_index,
++    size_t binding,
++    std::shared_ptr<const Texture> texture) {
++  if (!texture || !texture->IsValid()) {
++    return false;
++  }
++  return pass_bindings_.SetTexture(stage, metal_index,
++                                   TextureMTL::Cast(*texture).GetMTLTexture());
++}
++
++bool RenderPassMTL::McsmBindSeparateSampler(ShaderStage stage,
++                                            size_t metal_index,
++                                            size_t binding,
++                                            raw_ptr<const Sampler> sampler) {
++  if (!sampler) {
++    return false;
++  }
++  return pass_bindings_.SetSampler(
++      stage, metal_index, SamplerMTL::Cast(*sampler).GetMTLSamplerState());
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/sampler_library_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/sampler_library_mtl.mm
+index b32dc23f9d3..2717f8a1a42 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/sampler_library_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/sampler_library_mtl.mm
+@@ -19,7 +19,9 @@
+     const SamplerDescriptor& descriptor) {
+   uint64_t p_key = SamplerDescriptor::ToKey(descriptor);
+   for (const auto& [key, value] : samplers_) {
+-    if (key == p_key) {
++    if (key == p_key &&
++        SamplerDescriptor::McsmExtrasEqual(value->GetDescriptor(),
++                                           descriptor)) {
+       return raw_ptr(value);
+     }
+   }
+@@ -37,7 +39,27 @@
+   desc.maxAnisotropy =
+       std::clamp<NSUInteger>(descriptor.max_anisotropy, 1u, 16u);
+   if (@available(iOS 14.0, macos 10.12, *)) {
+-    desc.borderColor = MTLSamplerBorderColorTransparentBlack;
++    // mcsm9: the descriptor's border colour (transparent black before).
++    switch (descriptor.mcsm_border_color) {
++      case McsmBorderColor::kTransparentBlack:
++        desc.borderColor = MTLSamplerBorderColorTransparentBlack;
++        break;
++      case McsmBorderColor::kOpaqueBlack:
++        desc.borderColor = MTLSamplerBorderColorOpaqueBlack;
++        break;
++      case McsmBorderColor::kOpaqueWhite:
++        desc.borderColor = MTLSamplerBorderColorOpaqueWhite;
++        break;
++    }
++  }
++  // mcsm9: comparison and LOD clamps.
++  if (descriptor.mcsm_compare.has_value()) {
++    desc.compareFunction =
++        ToMTLCompareFunction(descriptor.mcsm_compare.value());
++  }
++  desc.lodMinClamp = descriptor.mcsm_min_lod;
++  if (descriptor.mcsm_max_lod < 1000.0f) {
++    desc.lodMaxClamp = descriptor.mcsm_max_lod;
+   }
+ #ifdef IMPELLER_DEBUG
+   if (!descriptor.label.empty()) {
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.h b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.h
+index 30c19e39a23..a6e1d4d23d7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.h
++++ b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.h
+@@ -45,12 +45,23 @@ class ShaderLibraryMTL final : public ShaderLibrary {
+   std::shared_ptr<const ShaderFunction> GetFunction(std::string_view name,
+                                                     ShaderStage stage) override;
+ 
++  // mcsm9: the compile options RegisterFunction uses for source (set by
++  // McsmRegisterFunction around its call).
++  uint32_t mcsm_metal_options_ = 0u;
++
+   // |ShaderLibrary|
+   void RegisterFunction(std::string name,
+                         ShaderStage stage,
+                         std::shared_ptr<fml::Mapping> code,
+                         RegistrationCallback callback) override;
+ 
++  // |ShaderLibrary| mcsm9
++  void McsmRegisterFunction(std::string name,
++                            ShaderStage stage,
++                            std::shared_ptr<fml::Mapping> code,
++                            uint32_t metal_options,
++                            RegistrationCallback callback) override;
++
+   // |ShaderLibrary|
+   void UnregisterFunction(std::string name, ShaderStage stage) override;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
+index 7243b712c75..4a1960dfdd1 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/shader_library_mtl.mm
+@@ -148,9 +148,33 @@ static MTLFunctionType ToMTLFunctionType(ShaderStage stage) {
+                                          length:code->GetSize()
+                                        encoding:NSUTF8StringEncoding];
+ 
++  // mcsm9: compile options (a translated Direct3D shader keeps invariant
++  // positions and IEEE arithmetic); none by default, as upstream.
++  MTLCompileOptions* compile_options = nil;
++  if (mcsm_metal_options_ != 0u) {
++    compile_options = [[MTLCompileOptions alloc] init];
++    compile_options.languageVersion = MTLLanguageVersion2_3;
++    if ((mcsm_metal_options_ & 1u) != 0u) {
++      if (@available(macOS 11.0, iOS 14.0, *)) {
++        compile_options.preserveInvariance = YES;
++      }
++    }
++    if ((mcsm_metal_options_ & 2u) != 0u) {
++      if (@available(macOS 15.0, iOS 18.0, *)) {
++        compile_options.mathMode = MTLMathModeSafe;
++        compile_options.mathFloatingPointFunctions =
++            MTLMathFloatingPointFunctionsPrecise;
++      } else {
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wdeprecated-declarations"
++        compile_options.fastMathEnabled = NO;
++#pragma clang diagnostic pop
++      }
++    }
++  }
+   auto weak_this = weak_from_this();
+   [device newLibraryWithSource:source
+-                       options:NULL
++                       options:compile_options
+              completionHandler:^(id<MTLLibrary> library, NSError* error) {
+                auto strong_this = weak_this.lock();
+                if (!strong_this) {
+@@ -170,6 +194,18 @@ static MTLFunctionType ToMTLFunctionType(ShaderStage stage) {
+              }];
+ }
+ 
++// |ShaderLibrary| mcsm9
++void ShaderLibraryMTL::McsmRegisterFunction(std::string name,
++                                            ShaderStage stage,
++                                            std::shared_ptr<fml::Mapping> code,
++                                            uint32_t metal_options,
++                                            RegistrationCallback callback) {
++  mcsm_metal_options_ = metal_options;
++  RegisterFunction(std::move(name), stage, std::move(code),
++                   std::move(callback));
++  mcsm_metal_options_ = 0u;
++}
++
+ // |ShaderLibrary|
+ void ShaderLibraryMTL::UnregisterFunction(std::string name, ShaderStage stage) {
+   WriterLock lock(libraries_mutex_);
+diff --git a/engine/src/flutter/impeller/renderer/backend/metal/vertex_descriptor_mtl.mm b/engine/src/flutter/impeller/renderer/backend/metal/vertex_descriptor_mtl.mm
+index 834f1b17231..ab63c2537ca 100644
+--- a/engine/src/flutter/impeller/renderer/backend/metal/vertex_descriptor_mtl.mm
++++ b/engine/src/flutter/impeller/renderer/backend/metal/vertex_descriptor_mtl.mm
+@@ -79,6 +79,35 @@ static MTLVertexFormat ReadStageInputFormat(const ShaderStageIOSlot& input) {
+       return MTLVertexFormatUInt3;
+     case VertexAttributeFormat::kUInt32x4:
+       return MTLVertexFormatUInt4;
++    // mcsm9
++    case VertexAttributeFormat::kMcsmUNorm8:
++      return MTLVertexFormatUCharNormalized;
++    case VertexAttributeFormat::kMcsmUNorm8x2:
++      return MTLVertexFormatUChar2Normalized;
++    case VertexAttributeFormat::kMcsmUNorm8x4:
++      return MTLVertexFormatUChar4Normalized;
++    case VertexAttributeFormat::kMcsmSNorm8:
++      return MTLVertexFormatCharNormalized;
++    case VertexAttributeFormat::kMcsmSNorm8x2:
++      return MTLVertexFormatChar2Normalized;
++    case VertexAttributeFormat::kMcsmSNorm8x4:
++      return MTLVertexFormatChar4Normalized;
++    case VertexAttributeFormat::kMcsmUNorm16:
++      return MTLVertexFormatUShortNormalized;
++    case VertexAttributeFormat::kMcsmUNorm16x2:
++      return MTLVertexFormatUShort2Normalized;
++    case VertexAttributeFormat::kMcsmUNorm16x4:
++      return MTLVertexFormatUShort4Normalized;
++    case VertexAttributeFormat::kMcsmSNorm16:
++      return MTLVertexFormatShortNormalized;
++    case VertexAttributeFormat::kMcsmSNorm16x2:
++      return MTLVertexFormatShort2Normalized;
++    case VertexAttributeFormat::kMcsmSNorm16x4:
++      return MTLVertexFormatShort4Normalized;
++    case VertexAttributeFormat::kMcsmUNorm10_10_10_2:
++      return MTLVertexFormatUInt1010102Normalized;
++    case VertexAttributeFormat::kMcsmBGRA8UNorm:
++      return MTLVertexFormatUChar4Normalized_BGRA;
+     case VertexAttributeFormat::kInvalid:
+       return MTLVertexFormatInvalid;
+   }
+@@ -112,7 +141,9 @@ static MTLVertexFormat ReadStageInputFormat(const ShaderStageIOSlot& input) {
+         descriptor.layouts[VertexDescriptor::kReservedVertexBufferIndex -
+                            layout.binding];
+     vertex_layout.stride = layout.stride;
+-    vertex_layout.stepRate = 1u;
++    vertex_layout.stepRate =
++        layout.input_rate == VertexInputRate::kInstance ? layout.mcsm_step_rate
++                                                        : 1u;  // mcsm9
+     vertex_layout.stepFunction = layout.input_rate == VertexInputRate::kInstance
+                                      ? MTLVertexStepFunctionPerInstance
+                                      : MTLVertexStepFunctionPerVertex;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/BUILD.gn b/engine/src/flutter/impeller/renderer/backend/vulkan/BUILD.gn
+index a7860e7b823..988f87a1a48 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/BUILD.gn
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/BUILD.gn
+@@ -130,6 +130,8 @@ impeller_component("vulkan") {
+     "swapchain/swapchain_transients_vk.h",
+     "swapchain/swapchain_vk.cc",
+     "swapchain/swapchain_vk.h",
++    "mcsm_texture_view_vk.cc",
++    "mcsm_texture_view_vk.h",
+     "texture_source_vk.cc",
+     "texture_source_vk.h",
+     "texture_vk.cc",
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+index 024d45feca9..e33fe591b61 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/allocator_vk.cc
+@@ -64,6 +64,9 @@ static PoolVMA CreateBufferPool(VmaAllocator allocator) {
+                       vk::BufferUsageFlagBits::eIndexBuffer |
+                       vk::BufferUsageFlagBits::eUniformBuffer |
+                       vk::BufferUsageFlagBits::eStorageBuffer |
++                      vk::BufferUsageFlagBits::eIndirectBuffer |  // mcsm9
++                      vk::BufferUsageFlagBits::eUniformTexelBuffer |
++                      vk::BufferUsageFlagBits::eStorageTexelBuffer |
+                       vk::BufferUsageFlagBits::eTransferSrc |
+                       vk::BufferUsageFlagBits::eTransferDst;
+   buffer_info.size = 1u;  // doesn't matter
+@@ -299,16 +302,20 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+         image_info_chain;
+     auto& image_info = image_info_chain.get();
+     image_info.flags = ToVKImageCreateFlags(desc.type);
+-    image_info.imageType = vk::ImageType::e2D;
++    // mcsm: 3D textures and arrays.
++    image_info.imageType = desc.type == TextureType::kTexture3D
++                               ? vk::ImageType::e3D
++                               : vk::ImageType::e2D;
+     image_info.format = ToVKImageFormat(desc.format);
+     image_info.extent = VkExtent3D{
+         static_cast<uint32_t>(desc.size.width),   // width
+         static_cast<uint32_t>(desc.size.height),  // height
+-        1u                                        // depth
++        desc.type == TextureType::kTexture3D ? static_cast<uint32_t>(desc.depth)
++                                             : 1u  // depth
+     };
+     image_info.samples = ToVKSampleCount(desc.sample_count);
+     image_info.mipLevels = desc.mip_count;
+-    image_info.arrayLayers = ToArrayLayerCount(desc.type);
++    image_info.arrayLayers = ToArrayLayerCount(desc);
+     image_info.tiling = vk::ImageTiling::eOptimal;
+     image_info.initialLayout = vk::ImageLayout::eUndefined;
+     image_info.usage = AllocatorVK::ToVKImageUsageFlags(
+@@ -412,7 +419,14 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+     view_info.format = image_info.format;
+     view_info.subresourceRange.aspectMask = ToVKImageAspectFlags(desc.format);
+     view_info.subresourceRange.levelCount = image_info.mipLevels;
+-    view_info.subresourceRange.layerCount = ToArrayLayerCount(desc.type);
++    view_info.subresourceRange.layerCount = ToArrayLayerCount(desc);
++    // mcsm: a sampled view of a depth-stencil image may name one aspect only;
++    // shaders read its depth (the attachment views below keep both).
++    const vk::ImageAspectFlags attachment_aspects =
++        view_info.subresourceRange.aspectMask;
++    if (IsDepthWritable(desc.format)) {
++      view_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
++    }
+ 
+     // Vulkan does not have an image format that is equivalent to
+     // `MTLPixelFormatA8Unorm`, so we use `R8Unorm` instead. Given that the
+@@ -434,12 +448,17 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+     // single 2D mip (one view); cube and mipmapped render targets get the
+     // full set. Non-render-target textures only need the base view.
+     view_info.viewType = vk::ImageViewType::e2D;
++    view_info.subresourceRange.aspectMask = attachment_aspects;
+     view_info.subresourceRange.levelCount = 1u;
+     view_info.subresourceRange.layerCount = 1u;
+     const bool is_render_target = !!(desc.usage & TextureUsage::kRenderTarget);
+-    const uint32_t rt_mip_count = is_render_target ? image_info.mipLevels : 1u;
++    // mcsm9: a 3D texture is never a render target, and a 2D view of a 3D
++    // image is invalid (it would need 2D_ARRAY_COMPATIBLE): no views.
++    const bool is_3d = desc.type == TextureType::kTexture3D;
++    const uint32_t rt_mip_count =
++        is_3d ? 0u : (is_render_target ? image_info.mipLevels : 1u);
+     const uint32_t rt_layer_count =
+-        is_render_target ? ToArrayLayerCount(desc.type) : 1u;
++        is_render_target ? ToArrayLayerCount(desc) : 1u;
+     std::vector<vk::UniqueImageView> rt_image_views;
+     rt_image_views.reserve(rt_mip_count * rt_layer_count);
+     for (uint32_t mip = 0; mip < rt_mip_count; mip++) {
+@@ -456,6 +475,23 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+         rt_image_views.push_back(std::move(rt_image_view));
+       }
+     }
++    // mcsm9: after them, one view of all layers per mip level, for passes
++    // that render to every layer at once (kMcsmAllLayers).
++    if (is_render_target && !is_3d && rt_layer_count > 1u) {
++      view_info.viewType = vk::ImageViewType::e2DArray;
++      view_info.subresourceRange.baseArrayLayer = 0u;
++      view_info.subresourceRange.layerCount = rt_layer_count;
++      for (uint32_t mip = 0; mip < rt_mip_count; mip++) {
++        view_info.subresourceRange.baseMipLevel = mip;
++        auto [rt_result, rt_image_view] = device.createImageViewUnique(view_info);
++        if (rt_result != vk::Result::eSuccess) {
++          VALIDATION_LOG << "Unable to create a layered render target view: "
++                         << vk::to_string(rt_result);
++          return;
++        }
++        rt_image_views.push_back(std::move(rt_image_view));
++      }
++    }
+ 
+     resource_.Swap(ImageResource(
+         ImageVMA{allocator, allocation, image}, std::move(image_view),
+@@ -480,9 +516,14 @@ class AllocatedTextureSourceVK final : public TextureSourceVK {
+     if (views.empty()) {
+       return VK_NULL_HANDLE;
+     }
+-    const uint32_t layer_count = ToArrayLayerCount(GetTextureDescriptor().type);
++    const uint32_t layer_count = ToArrayLayerCount(GetTextureDescriptor());
++    // mcsm9: the layered views follow the per-layer ones.
+     const size_t index =
+-        static_cast<size_t>(mip_level) * layer_count + array_layer;
++        array_layer == kMcsmAllLayers
++            ? static_cast<size_t>(GetTextureDescriptor().mip_count) *
++                      layer_count +
++                  mip_level
++            : static_cast<size_t>(mip_level) * layer_count + array_layer;
+     return index < views.size() ? views[index].get() : views[0].get();
+   }
+ 
+@@ -561,6 +602,9 @@ std::shared_ptr<DeviceBuffer> AllocatorVK::OnCreateBuffer(
+                       vk::BufferUsageFlagBits::eIndexBuffer |
+                       vk::BufferUsageFlagBits::eUniformBuffer |
+                       vk::BufferUsageFlagBits::eStorageBuffer |
++                      vk::BufferUsageFlagBits::eIndirectBuffer |  // mcsm9
++                      vk::BufferUsageFlagBits::eUniformTexelBuffer |
++                      vk::BufferUsageFlagBits::eStorageTexelBuffer |
+                       vk::BufferUsageFlagBits::eTransferSrc |
+                       vk::BufferUsageFlagBits::eTransferDst;
+   buffer_info.size = desc.size;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.cc
+index a7b991f1982..ed75296aed5 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.cc
+@@ -22,7 +22,8 @@ static void InsertImageMemoryBarrier(const vk::CommandBuffer& cmd,
+                                      vk::PipelineStageFlags src_stage,
+                                      vk::PipelineStageFlags dst_stage,
+                                      uint32_t base_mip_level,
+-                                     uint32_t mip_level_count = 1u) {
++                                     uint32_t mip_level_count = 1u,
++                                     uint32_t layer_count = 1u) {
+   if (old_layout == new_layout) {
+     return;
+   }
+@@ -39,7 +40,7 @@ static void InsertImageMemoryBarrier(const vk::CommandBuffer& cmd,
+   barrier.subresourceRange.baseMipLevel = base_mip_level;
+   barrier.subresourceRange.levelCount = mip_level_count;
+   barrier.subresourceRange.baseArrayLayer = 0u;
+-  barrier.subresourceRange.layerCount = 1u;
++  barrier.subresourceRange.layerCount = layer_count;  // mcsm9: arrays
+ 
+   cmd.pipelineBarrier(src_stage, dst_stage, {}, nullptr, nullptr, barrier);
+ }
+@@ -270,11 +271,14 @@ bool BlitPassVK::OnCopyBufferToTextureCommand(
+   image_copy.setBufferOffset(source.GetRange().offset);
+   image_copy.setBufferRowLength(0);
+   image_copy.setBufferImageHeight(0);
++  // mcsm: a 3D texture's slice is a depth offset, not a layer.
++  const bool is_3d =
++      destination->GetTextureDescriptor().type == TextureType::kTexture3D;
+   image_copy.setImageSubresource(vk::ImageSubresourceLayers(
+-      vk::ImageAspectFlagBits::eColor, mip_level, slice, 1));
++      vk::ImageAspectFlagBits::eColor, mip_level, is_3d ? 0u : slice, 1));
+   image_copy.imageOffset.x = destination_region.GetX();
+   image_copy.imageOffset.y = destination_region.GetY();
+-  image_copy.imageOffset.z = 0u;
++  image_copy.imageOffset.z = is_3d ? static_cast<int32_t>(slice) : 0;
+   image_copy.imageExtent.width = destination_region.GetWidth();
+   image_copy.imageExtent.height = destination_region.GetHeight();
+   image_copy.imageExtent.depth = 1u;
+@@ -402,6 +406,8 @@ bool BlitPassVK::OnGenerateMipmapCommand(std::shared_ptr<Texture> texture,
+ 
+   const auto size = src.GetTextureDescriptor().size;
+   uint32_t mip_count = src.GetTextureDescriptor().mip_count;
++  // mcsm9: every layer of an array or cube at once.
++  const uint32_t layers = ToArrayLayerCount(src.GetTextureDescriptor());
+ 
+   if (mip_count < 2u) {
+     return true;
+@@ -431,7 +437,8 @@ bool BlitPassVK::OnGenerateMipmapCommand(std::shared_ptr<Texture> texture,
+           vk::PipelineStageFlagBits::eColorAttachmentOutput,
+       /*dst_stage=*/vk::PipelineStageFlagBits::eTransfer,
+       /*base_mip_level=*/0u,
+-      /*mip_level_count=*/mip_count);
++      /*mip_level_count=*/mip_count,
++      /*layer_count=*/layers);
+ 
+   vk::ImageMemoryBarrier barrier;
+   barrier.image = image;
+@@ -439,7 +446,7 @@ bool BlitPassVK::OnGenerateMipmapCommand(std::shared_ptr<Texture> texture,
+   barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+   barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+   barrier.subresourceRange.baseArrayLayer = 0;
+-  barrier.subresourceRange.layerCount = 1;
++  barrier.subresourceRange.layerCount = layers;
+   barrier.subresourceRange.levelCount = 1;
+ 
+   // Blit from the mip level N - 1 to mip level N.
+@@ -463,12 +470,12 @@ bool BlitPassVK::OnGenerateMipmapCommand(std::shared_ptr<Texture> texture,
+     vk::ImageBlit blit;
+     blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+     blit.srcSubresource.baseArrayLayer = 0u;
+-    blit.srcSubresource.layerCount = 1u;
++    blit.srcSubresource.layerCount = layers;
+     blit.srcSubresource.mipLevel = mip_level - 1;
+ 
+     blit.dstSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+     blit.dstSubresource.baseArrayLayer = 0u;
+-    blit.dstSubresource.layerCount = 1u;
++    blit.dstSubresource.layerCount = layers;
+     blit.dstSubresource.mipLevel = mip_level;
+ 
+     // offsets[0] is origin.
+@@ -531,4 +538,147 @@ bool BlitPassVK::OnGenerateMipmapCommand(std::shared_ptr<Texture> texture,
+   return true;
+ }
+ 
++namespace {
++// mcsm9: the aspect a copy reads or writes (depth for depth formats).
++vk::ImageAspectFlags McsmCopyAspect(PixelFormat format) {
++  if (IsDepthWritable(format)) {
++    return vk::ImageAspectFlagBits::eDepth;
++  }
++  if (IsStencilWritable(format)) {
++    return vk::ImageAspectFlagBits::eStencil;
++  }
++  return vk::ImageAspectFlagBits::eColor;
++}
++
++// mcsm9: a mip level and slice as copy subresource and offset (a 3D
++// texture's slice is a depth offset).
++void McsmCopySubresource(const TextureDescriptor& desc,
++                         uint32_t mip,
++                         uint32_t slice,
++                         vk::ImageSubresourceLayers* layers,
++                         int32_t* z) {
++  const bool is_3d = desc.type == TextureType::kTexture3D;
++  *layers = vk::ImageSubresourceLayers(McsmCopyAspect(desc.format), mip,
++                                       is_3d ? 0u : slice, 1u);
++  *z = is_3d ? static_cast<int32_t>(slice) : 0;
++}
++
++// mcsm9: moves `texture` to `layout` for a copy and returns the layout to
++// restore after (shader-read for one never written).
++vk::ImageLayout McsmToCopyLayout(const vk::CommandBuffer& cmd,
++                                 const TextureVK& texture,
++                                 vk::ImageLayout layout) {
++  vk::ImageLayout before = texture.GetLayout();
++  if (before == vk::ImageLayout::eUndefined) {
++    before = vk::ImageLayout::eShaderReadOnlyOptimal;
++  }
++  BarrierVK barrier;
++  barrier.cmd_buffer = cmd;
++  barrier.new_layout = layout;
++  barrier.src_stage = vk::PipelineStageFlagBits::eAllCommands;
++  barrier.src_access = vk::AccessFlagBits::eMemoryWrite;
++  barrier.dst_stage = vk::PipelineStageFlagBits::eTransfer;
++  barrier.dst_access =
++      vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite;
++  texture.SetLayout(barrier);
++  return before;
++}
++
++void McsmRestoreLayout(const vk::CommandBuffer& cmd,
++                       const TextureVK& texture,
++                       vk::ImageLayout layout) {
++  BarrierVK barrier;
++  barrier.cmd_buffer = cmd;
++  barrier.new_layout = layout;
++  barrier.src_stage = vk::PipelineStageFlagBits::eTransfer;
++  barrier.src_access = vk::AccessFlagBits::eTransferWrite;
++  barrier.dst_stage = vk::PipelineStageFlagBits::eAllCommands;
++  barrier.dst_access =
++      vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite;
++  texture.SetLayout(barrier);
++}
++}  // namespace
++
++bool BlitPassVK::McsmCopyTextureToTexture(
++    std::shared_ptr<Texture> source,
++    std::shared_ptr<Texture> destination,
++    IRect source_region,
++    IPoint destination_origin,
++    uint32_t source_mip,
++    uint32_t source_slice,
++    uint32_t destination_mip,
++    uint32_t destination_slice) {
++  const auto& cmd = command_buffer_->GetCommandBuffer();
++  const auto& src = TextureVK::Cast(*source);
++  const auto& dst = TextureVK::Cast(*destination);
++  if (!command_buffer_->Track(source) || !command_buffer_->Track(destination)) {
++    return false;
++  }
++  // One image (another level or slice of it) is copied in general layout.
++  const bool same = src.GetImage() == dst.GetImage();
++  const vk::ImageLayout src_layout = same ? vk::ImageLayout::eGeneral
++                                          : vk::ImageLayout::eTransferSrcOptimal;
++  const vk::ImageLayout dst_layout = same ? vk::ImageLayout::eGeneral
++                                          : vk::ImageLayout::eTransferDstOptimal;
++  const vk::ImageLayout src_before = McsmToCopyLayout(cmd, src, src_layout);
++  const vk::ImageLayout dst_before =
++      same ? src_before : McsmToCopyLayout(cmd, dst, dst_layout);
++
++  vk::ImageCopy copy;
++  int32_t src_z = 0, dst_z = 0;
++  McsmCopySubresource(src.GetTextureDescriptor(), source_mip, source_slice,
++                      &copy.srcSubresource, &src_z);
++  McsmCopySubresource(dst.GetTextureDescriptor(), destination_mip,
++                      destination_slice, &copy.dstSubresource, &dst_z);
++  copy.srcOffset = vk::Offset3D(source_region.GetX(), source_region.GetY(),
++                                src_z);
++  copy.dstOffset = vk::Offset3D(destination_origin.x, destination_origin.y,
++                                dst_z);
++  copy.extent = vk::Extent3D(source_region.GetWidth(),
++                             source_region.GetHeight(), 1);
++  cmd.copyImage(src.GetImage(), src_layout, dst.GetImage(), dst_layout, copy);
++
++  McsmRestoreLayout(cmd, src, src_before);
++  if (!same) {
++    McsmRestoreLayout(cmd, dst, dst_before);
++  }
++  return true;
++}
++
++bool BlitPassVK::McsmCopyTextureToBuffer(
++    std::shared_ptr<Texture> source,
++    std::shared_ptr<DeviceBuffer> destination,
++    IRect source_region,
++    size_t destination_offset,
++    uint32_t source_mip,
++    uint32_t source_slice) {
++  const auto& cmd = command_buffer_->GetCommandBuffer();
++  const auto& src = TextureVK::Cast(*source);
++  if (!command_buffer_->Track(source) || !command_buffer_->Track(destination)) {
++    return false;
++  }
++  const vk::ImageLayout before =
++      McsmToCopyLayout(cmd, src, vk::ImageLayout::eTransferSrcOptimal);
++  vk::BufferImageCopy copy;
++  int32_t z = 0;
++  McsmCopySubresource(src.GetTextureDescriptor(), source_mip, source_slice,
++                      &copy.imageSubresource, &z);
++  copy.bufferOffset = destination_offset;
++  copy.imageOffset = vk::Offset3D(source_region.GetX(), source_region.GetY(), z);
++  copy.imageExtent =
++      vk::Extent3D(source_region.GetWidth(), source_region.GetHeight(), 1);
++  cmd.copyImageToBuffer(src.GetImage(), vk::ImageLayout::eTransferSrcOptimal,
++                        DeviceBufferVK::Cast(*destination).GetBuffer(), copy);
++  McsmRestoreLayout(cmd, src, before);
++  if (destination->GetDeviceBufferDescriptor().readback) {
++    vk::MemoryBarrier barrier;
++    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
++    barrier.dstAccessMask = vk::AccessFlagBits::eHostRead;
++    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
++                        vk::PipelineStageFlagBits::eHost, {}, 1, &barrier, 0,
++                        {}, 0, {});
++  }
++  return true;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.h
+index a9604e70216..5109bc91db1 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/blit_pass_vk.h
+@@ -21,6 +21,24 @@ class BlitPassVK final : public BlitPass {
+   // |BlitPass|
+   ~BlitPassVK() override;
+ 
++  // |BlitPass| mcsm9
++  bool McsmCopyTextureToTexture(std::shared_ptr<Texture> source,
++                                std::shared_ptr<Texture> destination,
++                                IRect source_region,
++                                IPoint destination_origin,
++                                uint32_t source_mip,
++                                uint32_t source_slice,
++                                uint32_t destination_mip,
++                                uint32_t destination_slice) override;
++
++  // |BlitPass| mcsm9
++  bool McsmCopyTextureToBuffer(std::shared_ptr<Texture> source,
++                               std::shared_ptr<DeviceBuffer> destination,
++                               IRect source_region,
++                               size_t destination_offset,
++                               uint32_t source_mip,
++                               uint32_t source_slice) override;
++
+  private:
+   friend class CommandBufferVK;
+   FML_FRIEND_TEST(BlitPassVKTest,
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.cc
+index 947ddec9abd..5d86d7dc919 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.cc
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "impeller/renderer/backend/vulkan/context_vk.h"
++#include "impeller/renderer/backend/vulkan/device_buffer_vk.h"
+ #include "impeller/renderer/backend/vulkan/compute_pass_vk.h"
+ 
+ #include "impeller/renderer/backend/vulkan/command_buffer_vk.h"
+@@ -97,8 +99,20 @@ fml::Status ComputePassVK::Compute(std::array<uint32_t, 3> workgroup_count) {
+   // The arguments are workgroup counts. The per-workgroup invocation count (the
+   // local size) is baked into the shader module, so dispatch the counts
+   // directly.
+-  command_buffer_vk.dispatch(workgroup_count[0], workgroup_count[1],
+-                             workgroup_count[2]);
++  if (mcsm_indirect_) {
++    // mcsm9: workgroup counts from an argument buffer.
++    std::shared_ptr<const DeviceBuffer> args = mcsm_indirect_.TakeBuffer();
++    if (args) {
++      command_buffer_->Track(args);
++    }
++    command_buffer_vk.dispatchIndirect(
++        DeviceBufferVK::Cast(*mcsm_indirect_.GetBuffer()).GetBuffer(),
++        mcsm_indirect_.GetRange().offset);
++    mcsm_indirect_ = {};
++  } else {
++    command_buffer_vk.dispatch(workgroup_count[0], workgroup_count[1],
++                               workgroup_count[2]);
++  }
+ 
+ #ifdef IMPELLER_DEBUG
+   if (has_label_) {
+@@ -135,19 +149,43 @@ bool ComputePassVK::BindResource(ShaderStage stage,
+   if (bound_image_offset_ >= kMaxBindings) {
+     return false;
+   }
+-  if (!texture->IsValid() || !sampler) {
++  // mcsm: storage images (no sampler) are written in eGeneral.
++  const bool storage = type == DescriptorType::kStorageImage;
++  if (!texture || !texture->IsValid() || (!storage && !sampler)) {
+     return false;
+   }
+   const TextureVK& texture_vk = TextureVK::Cast(*texture);
+-  const SamplerVK& sampler_vk = SamplerVK::Cast(*sampler);
+ 
+   if (!command_buffer_->Track(texture)) {
+     return false;
+   }
+ 
++  // mcsm: compute runs outside a render pass, so the image is moved to the
++  // layout this binding reads it in here (upstream assumed shader-read).
++  const vk::ImageLayout layout = storage
++                                     ? vk::ImageLayout::eGeneral
++                                     : vk::ImageLayout::eShaderReadOnlyOptimal;
++  if (texture_vk.GetLayout() != layout) {
++    BarrierVK barrier;
++    barrier.cmd_buffer = command_buffer_->GetCommandBuffer();
++    barrier.new_layout = layout;
++    barrier.src_stage = vk::PipelineStageFlagBits::eAllCommands;
++    barrier.src_access = vk::AccessFlagBits::eMemoryWrite;
++    barrier.dst_stage = vk::PipelineStageFlagBits::eComputeShader;
++    barrier.dst_access =
++        vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite;
++    if (!texture_vk.SetLayout(barrier)) {
++      return false;
++    }
++  }
++  if (storage) {
++    mcsm_storage_images_.push_back(texture);
++  }
++
+   vk::DescriptorImageInfo image_info;
+-  image_info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+-  image_info.sampler = sampler_vk.GetSampler();
++  image_info.imageLayout = layout;
++  image_info.sampler =
++      storage ? vk::Sampler{} : SamplerVK::Cast(*sampler).GetSampler();
+   image_info.imageView = texture_vk.GetImageView();
+   image_workspace_[bound_image_offset_++] = image_info;
+ 
+@@ -234,16 +272,136 @@ bool ComputePassVK::EncodeCommands() const {
+ 
+   // This does not currently handle image barriers as we do not use them
+   // for anything.
++  // mcsm: what compute wrote may be read by any later stage (vertex and
++  // fragment shaders, the next compute pass, copies), not only vertex input.
+   vk::MemoryBarrier barrier;
+   barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+   barrier.dstAccessMask =
+-      vk::AccessFlagBits::eIndexRead | vk::AccessFlagBits::eVertexAttributeRead;
++      vk::AccessFlagBits::eIndexRead | vk::AccessFlagBits::eVertexAttributeRead |
++      vk::AccessFlagBits::eUniformRead | vk::AccessFlagBits::eShaderRead |
++      vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eTransferRead |
++      vk::AccessFlagBits::eIndirectCommandRead;
++  const vk::PipelineStageFlags dst_stages =
++      vk::PipelineStageFlagBits::eDrawIndirect |
++      vk::PipelineStageFlagBits::eVertexInput |
++      vk::PipelineStageFlagBits::eVertexShader |
++      vk::PipelineStageFlagBits::eFragmentShader |
++      vk::PipelineStageFlagBits::eComputeShader |
++      vk::PipelineStageFlagBits::eTransfer;
+ 
+   command_buffer_->GetCommandBuffer().pipelineBarrier(
+-      vk::PipelineStageFlagBits::eComputeShader,
+-      vk::PipelineStageFlagBits::eVertexInput, {}, 1, &barrier, 0, {}, 0, {});
++      vk::PipelineStageFlagBits::eComputeShader, dst_stages, {}, 1, &barrier, 0,
++      {}, 0, {});
++
++  // mcsm: storage images go back to shader-read, where render passes sample
++  // them (a render pass can't move an image's layout once it has begun).
++  for (const auto& texture : mcsm_storage_images_) {
++    const TextureVK& texture_vk = TextureVK::Cast(*texture);
++    if (texture_vk.GetLayout() == vk::ImageLayout::eShaderReadOnlyOptimal ||
++        !(texture->GetTextureDescriptor().usage & TextureUsage::kShaderRead)) {
++      continue;
++    }
++    BarrierVK to_read;
++    to_read.cmd_buffer = command_buffer_->GetCommandBuffer();
++    to_read.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
++    to_read.src_stage = vk::PipelineStageFlagBits::eComputeShader;
++    to_read.src_access = vk::AccessFlagBits::eShaderWrite;
++    to_read.dst_stage = dst_stages;
++    to_read.dst_access = vk::AccessFlagBits::eShaderRead;
++    texture_vk.SetLayout(to_read);
++  }
++  mcsm_storage_images_.clear();
+ 
+   return true;
+ }
+ 
++// mcsm9
++bool ComputePassVK::McsmBindTexelBuffer(ShaderStage stage,
++                               const McsmTexelBufferSlot& slot,
++                               BufferView view,
++                               PixelFormat format) {
++  if (descriptor_write_offset_ >= mcsm_texel_workspace_.size() ||
++      !view.GetBuffer()) {
++    return false;
++  }
++  const auto& buffer = DeviceBufferVK::Cast(*view.GetBuffer());
++  auto texel = buffer.McsmTexelView(ContextVK::Cast(*context_).GetDevice(),
++                                    view.GetRange().offset,
++                                    view.GetRange().length, format);
++  std::shared_ptr<const DeviceBuffer> owner = view.TakeBuffer();
++  if (!texel || (owner && !command_buffer_->Track(owner)) ||
++      !command_buffer_->Track(texel)) {
++    return false;
++  }
++  vk::BufferView& slot_view = mcsm_texel_workspace_[descriptor_write_offset_];
++  slot_view = texel->Get();
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = slot.binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = slot.storage
++                                 ? vk::DescriptorType::eStorageTexelBuffer
++                                 : vk::DescriptorType::eUniformTexelBuffer;
++  write_set.pTexelBufferView = &slot_view;
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
++bool ComputePassVK::McsmBindSeparateTexture(ShaderStage stage,
++                                   size_t metal_index,
++                                   size_t binding,
++                                   std::shared_ptr<const Texture> texture) {
++  if (bound_image_offset_ >= kMaxBindings || !texture ||
++      !texture->IsValid()) {
++    return false;
++  }
++  const TextureVK& texture_vk = TextureVK::Cast(*texture);
++  if (!command_buffer_->Track(texture)) {
++    return false;
++  }
++  // A compute pass runs outside a render pass: move the image to
++  // shader-read here.
++  if (texture_vk.GetLayout() != vk::ImageLayout::eShaderReadOnlyOptimal) {
++    BarrierVK barrier;
++    barrier.cmd_buffer = command_buffer_->GetCommandBuffer();
++    barrier.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
++    barrier.src_stage = vk::PipelineStageFlagBits::eAllCommands;
++    barrier.src_access = vk::AccessFlagBits::eMemoryWrite;
++    barrier.dst_stage = vk::PipelineStageFlagBits::eComputeShader;
++    barrier.dst_access = vk::AccessFlagBits::eShaderRead;
++    if (!texture_vk.SetLayout(barrier)) {
++      return false;
++    }
++  }
++  vk::DescriptorImageInfo image_info;
++  image_info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
++  image_info.imageView = texture_vk.GetImageView();
++  image_workspace_[bound_image_offset_++] = image_info;
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = vk::DescriptorType::eSampledImage;
++  write_set.pImageInfo = &image_workspace_[bound_image_offset_ - 1];
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
++bool ComputePassVK::McsmBindSeparateSampler(ShaderStage stage,
++                                   size_t metal_index,
++                                   size_t binding,
++                                   raw_ptr<const Sampler> sampler) {
++  if (bound_image_offset_ >= kMaxBindings || !sampler) {
++    return false;
++  }
++  vk::DescriptorImageInfo image_info;
++  image_info.sampler = SamplerVK::Cast(*sampler).GetSampler();
++  image_workspace_[bound_image_offset_++] = image_info;
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = vk::DescriptorType::eSampler;
++  write_set.pImageInfo = &image_workspace_[bound_image_offset_ - 1];
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.h
+index 3da48df5fe9..12f53ab8d31 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/compute_pass_vk.h
+@@ -18,6 +18,24 @@ class ComputePassVK final : public ComputePass {
+   // |ComputePass|
+   ~ComputePassVK() override;
+ 
++  // |ResourceBinder| mcsm9
++  bool McsmBindTexelBuffer(ShaderStage stage,
++                           const McsmTexelBufferSlot& slot,
++                           BufferView view,
++                           PixelFormat format) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateTexture(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               std::shared_ptr<const Texture> texture) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateSampler(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               raw_ptr<const Sampler> sampler) override;
++
+  private:
+   friend class CommandBufferVK;
+ 
+@@ -30,6 +48,12 @@ class ComputePassVK final : public ComputePass {
+   std::array<vk::DescriptorBufferInfo, kMaxBindings> buffer_workspace_;
+   std::array<vk::WriteDescriptorSet, kMaxBindings + kMaxBindings>
+       write_workspace_;
++  // mcsm9: the texel buffer views the writes point at, by write index.
++  std::array<vk::BufferView, kMaxBindings + kMaxBindings>
++      mcsm_texel_workspace_;
++  // mcsm: storage images bound in this pass, moved back to shader-read when
++  // it ends.
++  mutable std::vector<std::shared_ptr<const Texture>> mcsm_storage_images_;
+   size_t bound_image_offset_ = 0u;
+   size_t bound_buffer_offset_ = 0u;
+   size_t descriptor_write_offset_ = 0u;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
+index 35f9880b8ce..991a4343cb9 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "impeller/renderer/backend/vulkan/context_vk.h"
++
++#include "impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h"
+ #include <thread>
+ #include <unordered_map>
+ 
+@@ -620,11 +622,15 @@ bool ContextVK::McsmInitializeLayout(
+   range.baseMipLevel = 0u;
+   range.levelCount = desc.mip_count;
+   range.baseArrayLayer = 0u;
+-  range.layerCount = ToArrayLayerCount(desc.type);
+-  vk::ClearColorValue zero;
+-  zero.setFloat32({0.0f, 0.0f, 0.0f, 0.0f});
+-  cmd.clearColorImage(texture_vk.GetImage(),
+-                      vk::ImageLayout::eTransferDstOptimal, zero, range);
++  range.layerCount = ToArrayLayerCount(desc);
++  // mcsm9: a block-compressed image can't be cleared; its first upload
++  // defines it.
++  if (!IsCompressed(desc.format)) {
++    vk::ClearColorValue zero;
++    zero.setFloat32({0.0f, 0.0f, 0.0f, 0.0f});
++    cmd.clearColorImage(texture_vk.GetImage(),
++                        vk::ImageLayout::eTransferDstOptimal, zero, range);
++  }
+   BarrierVK to_read;
+   to_read.cmd_buffer = cmd;
+   to_read.new_layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+@@ -814,4 +820,23 @@ const WorkaroundsVK& ContextVK::GetWorkarounds() const {
+   return workarounds_;
+ }
+ 
++std::shared_ptr<Texture> ContextVK::McsmMakeTextureView(
++    const std::shared_ptr<Texture>& texture,
++    const TextureDescriptor& view_desc,
++    uint32_t base_mip,
++    uint32_t base_layer) const {
++  if (!texture) {
++    return nullptr;
++  }
++  auto source = McsmTextureViewVK::Make(
++      GetDevice(), TextureVK::Cast(*texture).GetTextureSource(), view_desc,
++      base_mip, base_layer);
++  if (!source) {
++    return nullptr;
++  }
++  std::shared_ptr<Context> context =
++      std::const_pointer_cast<ContextVK>(shared_from_this());
++  return std::make_shared<TextureVK>(context, std::move(source));
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
+index 326352f5e98..45df8c82dcb 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/context_vk.h
+@@ -255,6 +255,13 @@ class ContextVK final : public Context,
+   /// samples it).
+   bool McsmInitializeLayout(const std::shared_ptr<Texture>& texture) const;
+ 
++  // |Context| mcsm9
++  std::shared_ptr<Texture> McsmMakeTextureView(
++      const std::shared_ptr<Texture>& texture,
++      const TextureDescriptor& view_desc,
++      uint32_t base_mip,
++      uint32_t base_layer) const override;
++
+  private:
+   struct DeviceHolderImpl : public DeviceHolderVK {
+     // |DeviceHolder|
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+index 04752650883..dc184be65e3 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+@@ -158,6 +158,18 @@ vk::UniqueDescriptorPool DescriptorPoolRecyclerVK::Create() {
+                              kDefaultBindingSize.buffer_bindings},
+       vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer,
+                              kDefaultBindingSize.storage_bindings},
++      // mcsm9: storage images, texel buffers, textures and samplers bound
++      // apart.
++      vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage,
++                             kDefaultBindingSize.storage_bindings},
++      vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer,
++                             kDefaultBindingSize.texture_bindings},
++      vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer,
++                             kDefaultBindingSize.storage_bindings},
++      vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage,
++                             kDefaultBindingSize.texture_bindings},
++      vk::DescriptorPoolSize{vk::DescriptorType::eSampler,
++                             kDefaultBindingSize.texture_bindings},
+       vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment,
+                              kDefaultBindingSize.subpass_bindings}};
+   vk::DescriptorPoolCreateInfo pool_info;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.cc
+index f713d9198d5..0f43ee8d6da 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "impeller/renderer/backend/vulkan/device_buffer_vk.h"
+ 
++#include "impeller/renderer/backend/vulkan/formats_vk.h"
++
+ #include "flutter/flutter_vma/flutter_vma.h"
+ #include "impeller/renderer/backend/vulkan/context_vk.h"
+ 
+@@ -99,4 +101,31 @@ vk::Buffer DeviceBufferVK::GetBuffer() const {
+   return resource_->buffer.get().buffer;
+ }
+ 
++std::shared_ptr<SharedObjectVKT<vk::BufferView>> DeviceBufferVK::McsmTexelView(
++    const vk::Device& device,
++    size_t offset,
++    size_t length,
++    PixelFormat format) const {
++  const auto key = std::make_tuple(offset, length, format);
++  if (auto found = mcsm_texel_views_.find(key);
++      found != mcsm_texel_views_.end()) {
++    return found->second;
++  }
++  vk::BufferViewCreateInfo info;
++  info.buffer = GetBuffer();
++  info.format = ToVKImageFormat(format);
++  info.offset = offset;
++  info.range = length;
++  auto [result, view] = device.createBufferViewUnique(info);
++  if (result != vk::Result::eSuccess) {
++    VALIDATION_LOG << "Could not create a texel buffer view: "
++                   << vk::to_string(result);
++    return nullptr;
++  }
++  auto shared =
++      std::make_shared<SharedObjectVKT<vk::BufferView>>(std::move(view));
++  mcsm_texel_views_[key] = shared;
++  return shared;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.h
+index 8ec31cae8ce..653b4942a73 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/device_buffer_vk.h
+@@ -12,6 +12,12 @@
+ #include "impeller/renderer/backend/vulkan/resource_manager_vk.h"
+ #include "impeller/renderer/backend/vulkan/vma.h"
+ 
++#include <map>
++
++#include <tuple>
++
++#include "impeller/renderer/backend/vulkan/shared_object_vk.h"
++
+ namespace impeller {
+ 
+ class DeviceBufferVK final : public DeviceBuffer,
+@@ -28,6 +34,15 @@ class DeviceBufferVK final : public DeviceBuffer,
+ 
+   vk::Buffer GetBuffer() const;
+ 
++  /// mcsm9: the buffer range as a texel buffer view of `format`, made once
++  /// per range and format; the view object stays alive while a command
++  /// buffer tracks it.
++  std::shared_ptr<SharedObjectVKT<vk::BufferView>> McsmTexelView(
++      const vk::Device& device,
++      size_t offset,
++      size_t length,
++      PixelFormat format) const;
++
+   // Visible for testing.
+   bool IsHostCoherent() const;
+ 
+@@ -80,6 +95,9 @@ class DeviceBufferVK final : public DeviceBuffer,
+   DeviceBufferVK(const DeviceBufferVK&) = delete;
+ 
+   DeviceBufferVK& operator=(const DeviceBufferVK&) = delete;
++  mutable std::map<std::tuple<size_t, size_t, PixelFormat>,
++                   std::shared_ptr<SharedObjectVKT<vk::BufferView>>>
++      mcsm_texel_views_;  // mcsm9
+ };
+ 
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/formats_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/formats_vk.h
+index d8fa3721207..fc96475a2de 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/formats_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/formats_vk.h
+@@ -11,6 +11,7 @@
+ #include "fml/logging.h"
+ #include "impeller/base/validation.h"
+ #include "impeller/core/formats.h"
++#include "impeller/core/texture_descriptor.h"
+ #include "impeller/core/shader_types.h"
+ #include "impeller/renderer/backend/vulkan/vk.h"
+ #include "vulkan/vulkan_enums.hpp"
+@@ -31,6 +32,8 @@ constexpr std::optional<PixelFormat> VkFormatToImpellerFormat(
+ 
+ constexpr vk::SampleCountFlagBits ToVKSampleCountFlagBits(SampleCount count) {
+   switch (count) {
++    case SampleCount::kCount2:
++      return vk::SampleCountFlagBits::e2;
+     case SampleCount::kCount1:
+       return vk::SampleCountFlagBits::e1;
+     case SampleCount::kCount4:
+@@ -211,6 +214,89 @@ constexpr vk::Format ToVKImageFormat(PixelFormat format) {
+       return vk::Format::eAstc4x4SfloatBlock;
+     case PixelFormat::kASTC8x8HDR:
+       return vk::Format::eAstc8x8SfloatBlock;
++    // mcsm
++    case PixelFormat::kR11G11B10UFloat:
++      return vk::Format::eB10G11R11UfloatPack32;
++    case PixelFormat::kR16G16B16A16UNormInt:
++      return vk::Format::eR16G16B16A16Unorm;
++    case PixelFormat::kD16UNormInt:
++      return vk::Format::eD16Unorm;
++    case PixelFormat::kD32Float:
++      return vk::Format::eD32Sfloat;
++    case PixelFormat::kR32UInt:
++      return vk::Format::eR32Uint;
++    case PixelFormat::kR32G32UInt:
++      return vk::Format::eR32G32Uint;
++    case PixelFormat::kR32G32B32A32UInt:
++      return vk::Format::eR32G32B32A32Uint;
++    case PixelFormat::kR16Float:
++      return vk::Format::eR16Sfloat;
++    case PixelFormat::kR16G16Float:
++      return vk::Format::eR16G16Sfloat;
++    case PixelFormat::kR32G32Float:
++      return vk::Format::eR32G32Sfloat;
++    case PixelFormat::kR8UInt:
++      return vk::Format::eR8Uint;
++    case PixelFormat::kR8SNormInt:
++      return vk::Format::eR8Snorm;
++    case PixelFormat::kR8G8UInt:
++      return vk::Format::eR8G8Uint;
++    case PixelFormat::kR8G8SNormInt:
++      return vk::Format::eR8G8Snorm;
++    case PixelFormat::kR8G8B8A8UInt:
++      return vk::Format::eR8G8B8A8Uint;
++    case PixelFormat::kR8G8B8A8SInt:
++      return vk::Format::eR8G8B8A8Sint;
++    case PixelFormat::kR8G8B8A8SNormInt:
++      return vk::Format::eR8G8B8A8Snorm;
++    case PixelFormat::kR10G10B10A2UNormInt:
++      return vk::Format::eA2B10G10R10UnormPack32;
++    case PixelFormat::kR10G10B10A2UInt:
++      return vk::Format::eA2B10G10R10UintPack32;
++    case PixelFormat::kR9G9B9E5UFloat:
++      return vk::Format::eE5B9G9R9UfloatPack32;
++    case PixelFormat::kR16UNormInt:
++      return vk::Format::eR16Unorm;
++    case PixelFormat::kR16SNormInt:
++      return vk::Format::eR16Snorm;
++    case PixelFormat::kR16UInt:
++      return vk::Format::eR16Uint;
++    case PixelFormat::kR16SInt:
++      return vk::Format::eR16Sint;
++    case PixelFormat::kR16G16UNormInt:
++      return vk::Format::eR16G16Unorm;
++    case PixelFormat::kR16G16SNormInt:
++      return vk::Format::eR16G16Snorm;
++    case PixelFormat::kR16G16UInt:
++      return vk::Format::eR16G16Uint;
++    case PixelFormat::kR16G16SInt:
++      return vk::Format::eR16G16Sint;
++    case PixelFormat::kR16G16B16A16SNormInt:
++      return vk::Format::eR16G16B16A16Snorm;
++    case PixelFormat::kR16G16B16A16UInt:
++      return vk::Format::eR16G16B16A16Uint;
++    case PixelFormat::kR16G16B16A16SInt:
++      return vk::Format::eR16G16B16A16Sint;
++    case PixelFormat::kR32SInt:
++      return vk::Format::eR32Sint;
++    case PixelFormat::kR32G32SInt:
++      return vk::Format::eR32G32Sint;
++    case PixelFormat::kR32G32B32A32SInt:
++      return vk::Format::eR32G32B32A32Sint;
++    case PixelFormat::kBC2RGBAUNormInt:
++      return vk::Format::eBc2UnormBlock;
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++      return vk::Format::eBc2SrgbBlock;
++    case PixelFormat::kBC4RUNormInt:
++      return vk::Format::eBc4UnormBlock;
++    case PixelFormat::kBC4RSNormInt:
++      return vk::Format::eBc4SnormBlock;
++    case PixelFormat::kBC5RGSNormInt:
++      return vk::Format::eBc5SnormBlock;
++    case PixelFormat::kBC6HRGBUFloat:
++      return vk::Format::eBc6HUfloatBlock;
++    case PixelFormat::kBC6HRGBSFloat:
++      return vk::Format::eBc6HSfloatBlock;
+   }
+ 
+   FML_UNREACHABLE();
+@@ -242,6 +328,89 @@ constexpr PixelFormat ToPixelFormat(vk::Format format) {
+       return PixelFormat::kR8UNormInt;
+     case vk::Format::eR8G8Unorm:
+       return PixelFormat::kR8G8UNormInt;
++    // mcsm
++    case vk::Format::eB10G11R11UfloatPack32:
++      return PixelFormat::kR11G11B10UFloat;
++    case vk::Format::eR16G16B16A16Unorm:
++      return PixelFormat::kR16G16B16A16UNormInt;
++    case vk::Format::eD16Unorm:
++      return PixelFormat::kD16UNormInt;
++    case vk::Format::eD32Sfloat:
++      return PixelFormat::kD32Float;
++    case vk::Format::eR32Uint:
++      return PixelFormat::kR32UInt;
++    case vk::Format::eR32G32Uint:
++      return PixelFormat::kR32G32UInt;
++    case vk::Format::eR32G32B32A32Uint:
++      return PixelFormat::kR32G32B32A32UInt;
++    case vk::Format::eR16Sfloat:
++      return PixelFormat::kR16Float;
++    case vk::Format::eR16G16Sfloat:
++      return PixelFormat::kR16G16Float;
++    case vk::Format::eR32G32Sfloat:
++      return PixelFormat::kR32G32Float;
++    case vk::Format::eR8Uint:
++      return PixelFormat::kR8UInt;
++    case vk::Format::eR8Snorm:
++      return PixelFormat::kR8SNormInt;
++    case vk::Format::eR8G8Uint:
++      return PixelFormat::kR8G8UInt;
++    case vk::Format::eR8G8Snorm:
++      return PixelFormat::kR8G8SNormInt;
++    case vk::Format::eR8G8B8A8Uint:
++      return PixelFormat::kR8G8B8A8UInt;
++    case vk::Format::eR8G8B8A8Sint:
++      return PixelFormat::kR8G8B8A8SInt;
++    case vk::Format::eR8G8B8A8Snorm:
++      return PixelFormat::kR8G8B8A8SNormInt;
++    case vk::Format::eA2B10G10R10UnormPack32:
++      return PixelFormat::kR10G10B10A2UNormInt;
++    case vk::Format::eA2B10G10R10UintPack32:
++      return PixelFormat::kR10G10B10A2UInt;
++    case vk::Format::eE5B9G9R9UfloatPack32:
++      return PixelFormat::kR9G9B9E5UFloat;
++    case vk::Format::eR16Unorm:
++      return PixelFormat::kR16UNormInt;
++    case vk::Format::eR16Snorm:
++      return PixelFormat::kR16SNormInt;
++    case vk::Format::eR16Uint:
++      return PixelFormat::kR16UInt;
++    case vk::Format::eR16Sint:
++      return PixelFormat::kR16SInt;
++    case vk::Format::eR16G16Unorm:
++      return PixelFormat::kR16G16UNormInt;
++    case vk::Format::eR16G16Snorm:
++      return PixelFormat::kR16G16SNormInt;
++    case vk::Format::eR16G16Uint:
++      return PixelFormat::kR16G16UInt;
++    case vk::Format::eR16G16Sint:
++      return PixelFormat::kR16G16SInt;
++    case vk::Format::eR16G16B16A16Snorm:
++      return PixelFormat::kR16G16B16A16SNormInt;
++    case vk::Format::eR16G16B16A16Uint:
++      return PixelFormat::kR16G16B16A16UInt;
++    case vk::Format::eR16G16B16A16Sint:
++      return PixelFormat::kR16G16B16A16SInt;
++    case vk::Format::eR32Sint:
++      return PixelFormat::kR32SInt;
++    case vk::Format::eR32G32Sint:
++      return PixelFormat::kR32G32SInt;
++    case vk::Format::eR32G32B32A32Sint:
++      return PixelFormat::kR32G32B32A32SInt;
++    case vk::Format::eBc2UnormBlock:
++      return PixelFormat::kBC2RGBAUNormInt;
++    case vk::Format::eBc2SrgbBlock:
++      return PixelFormat::kBC2RGBAUNormIntSRGB;
++    case vk::Format::eBc4UnormBlock:
++      return PixelFormat::kBC4RUNormInt;
++    case vk::Format::eBc4SnormBlock:
++      return PixelFormat::kBC4RSNormInt;
++    case vk::Format::eBc5SnormBlock:
++      return PixelFormat::kBC5RGSNormInt;
++    case vk::Format::eBc6HUfloatBlock:
++      return PixelFormat::kBC6HRGBUFloat;
++    case vk::Format::eBc6HSfloatBlock:
++      return PixelFormat::kBC6HRGBSFloat;
+     default:
+       return PixelFormat::kUnknown;
+   }
+@@ -249,6 +418,8 @@ constexpr PixelFormat ToPixelFormat(vk::Format format) {
+ 
+ constexpr vk::SampleCountFlagBits ToVKSampleCount(SampleCount sample_count) {
+   switch (sample_count) {
++    case SampleCount::kCount2:
++      return vk::SampleCountFlagBits::e2;
+     case SampleCount::kCount1:
+       return vk::SampleCountFlagBits::e1;
+     case SampleCount::kCount4:
+@@ -291,7 +462,10 @@ constexpr vk::SamplerAddressMode ToVKSamplerAddressMode(
+     case SamplerAddressMode::kClampToEdge:
+       return vk::SamplerAddressMode::eClampToEdge;
+     case SamplerAddressMode::kDecal:
++    case SamplerAddressMode::kMcsmClampToBorder:
+       return vk::SamplerAddressMode::eClampToBorder;
++    case SamplerAddressMode::kMcsmMirrorClampToEdge:
++      return vk::SamplerAddressMode::eMirrorClampToEdge;
+   }
+ 
+   FML_UNREACHABLE();
+@@ -322,6 +496,12 @@ static_assert(static_cast<int>(DescriptorType::kImage) ==
+               static_cast<int>(vk::DescriptorType::eSampledImage));
+ static_assert(static_cast<int>(DescriptorType::kSampler) ==
+               static_cast<int>(vk::DescriptorType::eSampler));
++static_assert(static_cast<int>(DescriptorType::kStorageImage) ==
++              static_cast<int>(vk::DescriptorType::eStorageImage));
++static_assert(static_cast<int>(DescriptorType::kMcsmUniformTexelBuffer) ==
++              static_cast<int>(vk::DescriptorType::eUniformTexelBuffer));
++static_assert(static_cast<int>(DescriptorType::kMcsmStorageTexelBuffer) ==
++              static_cast<int>(vk::DescriptorType::eStorageTexelBuffer));
+ static_assert(static_cast<int>(DescriptorType::kInputAttachment) ==
+               static_cast<int>(vk::DescriptorType::eInputAttachment));
+ 
+@@ -480,7 +660,48 @@ constexpr bool PixelFormatIsDepthStencil(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return false;
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
+     case PixelFormat::kS8UInt:
+     case PixelFormat::kD24UnormS8Uint:
+     case PixelFormat::kD32FloatS8UInt:
+@@ -597,7 +818,49 @@ constexpr vk::ImageAspectFlags ToVKImageAspectFlags(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return vk::ImageAspectFlagBits::eColor;
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
++      return vk::ImageAspectFlagBits::eDepth;
+     case PixelFormat::kS8UInt:
+       return vk::ImageAspectFlagBits::eStencil;
+     case PixelFormat::kD24UnormS8Uint:
+@@ -612,6 +875,11 @@ constexpr uint32_t ToArrayLayerCount(TextureType type) {
+   switch (type) {
+     case TextureType::kTexture2D:
+     case TextureType::kTexture2DMultisample:
++    case TextureType::kTexture3D:
++      return 1u;
++    case TextureType::kTexture2DArray:
++    case TextureType::kTextureCubeArray:
++      VALIDATION_LOG << "An array texture's layer count is in its descriptor.";
+       return 1u;
+     case TextureType::kTextureCube:
+       return 6u;
+@@ -622,11 +890,22 @@ constexpr uint32_t ToArrayLayerCount(TextureType type) {
+   FML_UNREACHABLE();
+ }
+ 
++/// mcsm: the image's array layers (cube faces or array layers).
++constexpr uint32_t ToArrayLayerCount(const TextureDescriptor& desc) {
++  return static_cast<uint32_t>(desc.GetArrayLayerCount());
++}
++
+ constexpr vk::ImageViewType ToVKImageViewType(TextureType type) {
+   switch (type) {
+     case TextureType::kTexture2D:
+     case TextureType::kTexture2DMultisample:
+       return vk::ImageViewType::e2D;
++    case TextureType::kTexture2DArray:
++      return vk::ImageViewType::e2DArray;
++    case TextureType::kTexture3D:
++      return vk::ImageViewType::e3D;
++    case TextureType::kTextureCubeArray:
++      return vk::ImageViewType::eCubeArray;
+     case TextureType::kTextureCube:
+       return vk::ImageViewType::eCube;
+     case TextureType::kTextureExternalOES:
+@@ -640,8 +919,11 @@ constexpr vk::ImageCreateFlags ToVKImageCreateFlags(TextureType type) {
+   switch (type) {
+     case TextureType::kTexture2D:
+     case TextureType::kTexture2DMultisample:
++    case TextureType::kTexture2DArray:
++    case TextureType::kTexture3D:
+       return {};
+     case TextureType::kTextureCube:
++    case TextureType::kTextureCubeArray:
+       return vk::ImageCreateFlagBits::eCubeCompatible;
+     case TextureType::kTextureExternalOES:
+       VALIDATION_LOG
+@@ -689,7 +971,49 @@ constexpr vk::ImageAspectFlags ToImageAspectFlags(PixelFormat format) {
+     case PixelFormat::kASTC8x8LDRSRGB:
+     case PixelFormat::kASTC4x4HDR:
+     case PixelFormat::kASTC8x8HDR:
++    case PixelFormat::kR11G11B10UFloat:
++    case PixelFormat::kR16G16B16A16UNormInt:
++    case PixelFormat::kR32UInt:
++    case PixelFormat::kR32G32UInt:
++    case PixelFormat::kR32G32B32A32UInt:
++    case PixelFormat::kR16Float:
++    case PixelFormat::kR16G16Float:
++    case PixelFormat::kR32G32Float:
++    case PixelFormat::kR8UInt:
++    case PixelFormat::kR8SNormInt:
++    case PixelFormat::kR8G8UInt:
++    case PixelFormat::kR8G8SNormInt:
++    case PixelFormat::kR8G8B8A8UInt:
++    case PixelFormat::kR8G8B8A8SInt:
++    case PixelFormat::kR8G8B8A8SNormInt:
++    case PixelFormat::kR10G10B10A2UNormInt:
++    case PixelFormat::kR10G10B10A2UInt:
++    case PixelFormat::kR9G9B9E5UFloat:
++    case PixelFormat::kR16UNormInt:
++    case PixelFormat::kR16SNormInt:
++    case PixelFormat::kR16UInt:
++    case PixelFormat::kR16SInt:
++    case PixelFormat::kR16G16UNormInt:
++    case PixelFormat::kR16G16SNormInt:
++    case PixelFormat::kR16G16UInt:
++    case PixelFormat::kR16G16SInt:
++    case PixelFormat::kR16G16B16A16SNormInt:
++    case PixelFormat::kR16G16B16A16UInt:
++    case PixelFormat::kR16G16B16A16SInt:
++    case PixelFormat::kR32SInt:
++    case PixelFormat::kR32G32SInt:
++    case PixelFormat::kR32G32B32A32SInt:
++    case PixelFormat::kBC2RGBAUNormInt:
++    case PixelFormat::kBC2RGBAUNormIntSRGB:
++    case PixelFormat::kBC4RUNormInt:
++    case PixelFormat::kBC4RSNormInt:
++    case PixelFormat::kBC5RGSNormInt:
++    case PixelFormat::kBC6HRGBUFloat:
++    case PixelFormat::kBC6HRGBSFloat:
+       return vk::ImageAspectFlagBits::eColor;
++    case PixelFormat::kD16UNormInt:
++    case PixelFormat::kD32Float:
++      return vk::ImageAspectFlagBits::eDepth;
+     case PixelFormat::kS8UInt:
+       return vk::ImageAspectFlagBits::eStencil;
+     case PixelFormat::kD24UnormS8Uint:
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
+new file mode 100644
+index 00000000000..938f768dad0
+--- /dev/null
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.cc
+@@ -0,0 +1,129 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h"
++
++#include "impeller/base/validation.h"
++#include "impeller/renderer/backend/vulkan/formats_vk.h"
++
++namespace impeller {
++
++McsmTextureViewVK::McsmTextureViewVK(
++    std::shared_ptr<const TextureSourceVK> parent,
++    const TextureDescriptor& view_desc,
++    uint32_t base_mip,
++    uint32_t base_layer)
++    : TextureSourceVK(view_desc), parent_(std::move(parent)) {
++  McsmSetSubresourceBase(base_mip, base_layer);
++  // The view's subresources are where the parent's are.
++  SetLayoutWithoutEncoding(parent_->GetLayout());
++}
++
++McsmTextureViewVK::~McsmTextureViewVK() = default;
++
++std::shared_ptr<McsmTextureViewVK> McsmTextureViewVK::Make(
++    const vk::Device& device,
++    std::shared_ptr<const TextureSourceVK> parent,
++    const TextureDescriptor& view_desc,
++    uint32_t base_mip,
++    uint32_t base_layer) {
++  if (!parent || !view_desc.IsValid()) {
++    return nullptr;
++  }
++  const TextureDescriptor& parent_desc = parent->GetTextureDescriptor();
++  if (parent_desc.type == TextureType::kTexture3D ||
++      view_desc.type == TextureType::kTexture3D ||
++      base_mip + view_desc.mip_count > parent_desc.mip_count ||
++      base_layer + view_desc.GetArrayLayerCount() >
++          parent_desc.GetArrayLayerCount() ||
++      view_desc.format != parent_desc.format ||
++      view_desc.sample_count != parent_desc.sample_count) {
++    VALIDATION_LOG << "A texture view must lie within its 2D, array or cube "
++                      "texture, in its format and sample count.";
++    return nullptr;
++  }
++  auto view = std::shared_ptr<McsmTextureViewVK>(
++      new McsmTextureViewVK(parent, view_desc, base_mip, base_layer));
++
++  vk::ImageViewCreateInfo info;
++  info.image = parent->GetImage();
++  info.viewType = ToVKImageViewType(view_desc.type);
++  info.format = ToVKImageFormat(view_desc.format);
++  info.subresourceRange.aspectMask =
++      IsDepthWritable(view_desc.format) ? vk::ImageAspectFlagBits::eDepth
++                                        : ToVKImageAspectFlags(view_desc.format);
++  info.subresourceRange.baseMipLevel = base_mip;
++  info.subresourceRange.levelCount = view_desc.mip_count;
++  info.subresourceRange.baseArrayLayer = base_layer;
++  info.subresourceRange.layerCount = ToArrayLayerCount(view_desc);
++  auto [result, image_view] = device.createImageViewUnique(info);
++  if (result != vk::Result::eSuccess) {
++    VALIDATION_LOG << "Could not create a texture view: "
++                   << vk::to_string(result);
++    return nullptr;
++  }
++  view->image_view_ = std::move(image_view);
++
++  if (view_desc.usage & TextureUsage::kRenderTarget) {
++    info.viewType = vk::ImageViewType::e2D;
++    info.subresourceRange.aspectMask = ToVKImageAspectFlags(view_desc.format);
++    info.subresourceRange.levelCount = 1u;
++    info.subresourceRange.layerCount = 1u;
++    for (uint32_t mip = 0; mip < view_desc.mip_count; mip++) {
++      for (uint32_t layer = 0; layer < ToArrayLayerCount(view_desc); layer++) {
++        info.subresourceRange.baseMipLevel = base_mip + mip;
++        info.subresourceRange.baseArrayLayer = base_layer + layer;
++        auto [rt_result, rt_view] = device.createImageViewUnique(info);
++        if (rt_result != vk::Result::eSuccess) {
++          VALIDATION_LOG << "Could not create a texture view's attachment "
++                            "view: "
++                         << vk::to_string(rt_result);
++          return nullptr;
++        }
++        view->rt_views_.push_back(std::move(rt_view));
++      }
++    }
++    // One view of all its layers per mip level (kMcsmAllLayers).
++    if (ToArrayLayerCount(view_desc) > 1u) {
++      info.viewType = vk::ImageViewType::e2DArray;
++      info.subresourceRange.baseArrayLayer = base_layer;
++      info.subresourceRange.layerCount = ToArrayLayerCount(view_desc);
++      for (uint32_t mip = 0; mip < view_desc.mip_count; mip++) {
++        info.subresourceRange.baseMipLevel = base_mip + mip;
++        auto [rt_result, rt_view] = device.createImageViewUnique(info);
++        if (rt_result != vk::Result::eSuccess) {
++          return nullptr;
++        }
++        view->rt_views_.push_back(std::move(rt_view));
++      }
++    }
++  }
++  return view;
++}
++
++vk::Image McsmTextureViewVK::GetImage() const {
++  return parent_->GetImage();
++}
++
++vk::ImageView McsmTextureViewVK::GetImageView() const {
++  return image_view_.get();
++}
++
++vk::ImageView McsmTextureViewVK::GetRenderTargetView(
++    uint32_t mip_level,
++    uint32_t array_layer) const {
++  if (rt_views_.empty()) {
++    return VK_NULL_HANDLE;
++  }
++  const size_t index =
++      array_layer == kMcsmAllLayers
++          ? static_cast<size_t>(desc_.mip_count) * ToArrayLayerCount(desc_) +
++                mip_level
++          : static_cast<size_t>(mip_level) * ToArrayLayerCount(desc_) +
++                array_layer;
++  return index < rt_views_.size() ? rt_views_[index].get()
++                                  : rt_views_[0].get();
++}
++
++}  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h
+new file mode 100644
+index 00000000000..699e1a45a34
+--- /dev/null
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/mcsm_texture_view_vk.h
+@@ -0,0 +1,58 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef FLUTTER_IMPELLER_RENDERER_BACKEND_VULKAN_MCSM_TEXTURE_VIEW_VK_H_
++#define FLUTTER_IMPELLER_RENDERER_BACKEND_VULKAN_MCSM_TEXTURE_VIEW_VK_H_
++
++#include <memory>
++#include <vector>
++
++#include "impeller/renderer/backend/vulkan/texture_source_vk.h"
++#include "impeller/renderer/backend/vulkan/vk.h"
++
++namespace impeller {
++
++/// mcsm9: a view of some mip levels and array layers of another texture's
++/// image, sampled, rendered into or written as a storage image on its own
++/// (a mip chain built level by level, one layer of an array as a 2D target).
++///
++/// The view tracks the layout of its own subresources; the parent's tracked
++/// layout stays as it was, which holds while every user leaves the
++/// subresources in shader-read between passes (colour targets and sampled
++/// depth end their passes there, compute passes move storage images back).
++class McsmTextureViewVK final : public TextureSourceVK {
++ public:
++  static std::shared_ptr<McsmTextureViewVK> Make(
++      const vk::Device& device,
++      std::shared_ptr<const TextureSourceVK> parent,
++      const TextureDescriptor& view_desc,
++      uint32_t base_mip,
++      uint32_t base_layer);
++
++  ~McsmTextureViewVK() override;
++
++  vk::Image GetImage() const override;
++
++  vk::ImageView GetImageView() const override;
++
++  vk::ImageView GetRenderTargetView(uint32_t mip_level,
++                                    uint32_t array_layer) const override;
++
++  bool IsSwapchainImage() const override { return false; }
++
++ private:
++  McsmTextureViewVK(std::shared_ptr<const TextureSourceVK> parent,
++                    const TextureDescriptor& view_desc,
++                    uint32_t base_mip,
++                    uint32_t base_layer);
++
++  std::shared_ptr<const TextureSourceVK> parent_;
++  vk::UniqueImageView image_view_;
++  // One attachment view per (mip level, layer) of the view, row-major by mip.
++  std::vector<vk::UniqueImageView> rt_views_;
++};
++
++}  // namespace impeller
++
++#endif  // FLUTTER_IMPELLER_RENDERER_BACKEND_VULKAN_MCSM_TEXTURE_VIEW_VK_H_
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+index 07d6d5dfbb7..4340806fab0 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+@@ -439,6 +439,22 @@ fml::StatusOr<vk::UniquePipeline> MakePipeline(
+   vk::PipelineVertexInputStateCreateInfo vertex_input_state;
+   vertex_input_state.setVertexAttributeDescriptions(attr_descs);
+   vertex_input_state.setVertexBindingDescriptions(buffer_descs);
++  // mcsm9: per-instance bindings advancing every few instances
++  // (VK_EXT_vertex_attribute_divisor, which the embedder's device enables
++  // where it has it).
++  std::vector<vk::VertexInputBindingDivisorDescriptionEXT> divisors;
++  for (const ShaderStageBufferLayout& layout : stage_buffer_layouts) {
++    if (layout.input_rate == VertexInputRate::kInstance &&
++        layout.mcsm_step_rate != 1u) {
++      divisors.push_back({static_cast<uint32_t>(layout.binding),
++                          layout.mcsm_step_rate});
++    }
++  }
++  vk::PipelineVertexInputDivisorStateCreateInfoEXT divisor_state;
++  if (!divisors.empty()) {
++    divisor_state.setVertexBindingDivisors(divisors);
++    vertex_input_state.pNext = &divisor_state;
++  }
+ 
+   pipeline_info.setPVertexInputState(&vertex_input_state);
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
+index 4915d87e375..b8babe22746 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.cc
+@@ -88,7 +88,8 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetDepthStencilAttachment(
+     SampleCount sample_count,
+     LoadAction load_action,
+     StoreAction store_action,
+-    vk::ImageLayout current_layout) {
++    vk::ImageLayout current_layout,
++    bool shader_read) {
+   vk::AttachmentDescription desc;
+   desc.format = ToVKImageFormat(format);
+   desc.samples = ToVKSampleCount(sample_count);
+@@ -101,7 +102,11 @@ RenderPassBuilderVK& RenderPassBuilderVK::SetDepthStencilAttachment(
+   desc.initialLayout = load_action == LoadAction::kLoad
+                            ? current_layout
+                            : vk::ImageLayout::eUndefined;
+-  desc.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
++  // mcsm: a depth texture that shaders sample later (shadow maps, the scene
++  // depth) ends the pass in the layout they read it in.
++  desc.finalLayout = shader_read
++                         ? vk::ImageLayout::eShaderReadOnlyOptimal
++                         : vk::ImageLayout::eDepthStencilAttachmentOptimal;
+   depth_stencil_ = desc;
+   return *this;
+ }
+@@ -204,12 +209,20 @@ vk::UniqueRenderPass RenderPassBuilderVK::Build(
+   // to the onscreen.
+   deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+   deps[0].dstSubpass = 0u;
++  // mcsm: depth too (a depth target sampled earlier, or written by an
++  // earlier pass).
+   deps[0].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+-                         vk::PipelineStageFlagBits::eFragmentShader;
++                         vk::PipelineStageFlagBits::eFragmentShader |
++                         vk::PipelineStageFlagBits::eLateFragmentTests;
+   deps[0].srcAccessMask = vk::AccessFlagBits::eShaderRead |
+-                          vk::AccessFlagBits::eColorAttachmentWrite;
+-  deps[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+-  deps[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
++                          vk::AccessFlagBits::eColorAttachmentWrite |
++                          vk::AccessFlagBits::eDepthStencilAttachmentWrite;
++  deps[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
++                         vk::PipelineStageFlagBits::eEarlyFragmentTests |
++                         vk::PipelineStageFlagBits::eLateFragmentTests;
++  deps[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
++                          vk::AccessFlagBits::eDepthStencilAttachmentRead |
++                          vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+   deps[0].dependencyFlags = kSelfDependencyFlags;
+ 
+   // Self dependency for reading back the framebuffer, necessary for
+@@ -228,9 +241,15 @@ vk::UniqueRenderPass RenderPassBuilderVK::Build(
+   // swapchain.
+   deps[2].srcSubpass = 0u;  // first subpass
+   deps[2].dstSubpass = VK_SUBPASS_EXTERNAL;
+-  deps[2].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+-  deps[2].srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+-  deps[2].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
++  // mcsm: depth writes too, read by later vertex, fragment or compute
++  // shaders.
++  deps[2].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput |
++                         vk::PipelineStageFlagBits::eLateFragmentTests;
++  deps[2].srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite |
++                          vk::AccessFlagBits::eDepthStencilAttachmentWrite;
++  deps[2].dstStageMask = vk::PipelineStageFlagBits::eVertexShader |
++                         vk::PipelineStageFlagBits::eFragmentShader |
++                         vk::PipelineStageFlagBits::eComputeShader;
+   deps[2].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+   deps[2].dependencyFlags = kSelfDependencyFlags;
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
+index f888d62aebd..8350110fe0b 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_builder_vk.h
+@@ -44,7 +44,8 @@ class RenderPassBuilderVK {
+       SampleCount sample_count,
+       LoadAction load_action,
+       StoreAction store_action,
+-      vk::ImageLayout current_layout = vk::ImageLayout::eUndefined);
++      vk::ImageLayout current_layout = vk::ImageLayout::eUndefined,
++      bool shader_read = false);
+ 
+   RenderPassBuilderVK& SetStencilAttachment(
+       PixelFormat format,
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index e8252769107..c4da03adb05 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -28,6 +28,16 @@
+ 
+ namespace impeller {
+ 
++namespace {
++// mcsm9: whether a depth attachment is also sampled by shaders (a stored
++// depth texture with shader-read usage): it then ends its pass shader-read.
++bool McsmDepthIsSampled(const Texture& texture) {
++  const TextureDescriptor& desc = texture.GetTextureDescriptor();
++  return desc.storage_mode != StorageMode::kDeviceTransient &&
++         (desc.usage & TextureUsage::kShaderRead);
++}
++}  // namespace
++
+ // Warning: if any of the constant values or layouts are changed in the
+ // framebuffer fetch shader, then this input binding may need to be
+ // manually changed.
+@@ -123,7 +133,8 @@ SharedHandleVK<vk::RenderPass> RenderPassVK::CreateVKRenderPass(
+         depth->texture->GetTextureDescriptor().sample_count,  //
+         depth->load_action,                                   //
+         depth->store_action,                                  //
+-        TextureVK::Cast(*depth->texture).GetLayout()          // mcsm8
++        TextureVK::Cast(*depth->texture).GetLayout(),         // mcsm8
++        McsmDepthIsSampled(*depth->texture)                   // mcsm9
+     );
+   } else if (auto stencil = render_target_.GetStencilAttachment();
+              stencil.has_value()) {
+@@ -206,6 +217,22 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+   const ColorAttachment& color0 = render_target_.GetColorAttachment(0);
+   color_image_vk_ = color0.texture;
+   resolve_image_vk_ = color0.resolve_texture;
++  // mcsm9: a depth-only pass (no colour attachments) keys its cached render
++  // pass and framebuffer on its depth (or stencil) texture.
++  std::optional<Attachment> depth_only;
++  if (!color_image_vk_) {
++    if (auto depth = render_target_.GetDepthAttachment(); depth.has_value()) {
++      depth_only = *depth;
++    } else if (auto stencil = render_target_.GetStencilAttachment();
++               stencil.has_value()) {
++      depth_only = *stencil;
++    }
++    if (!depth_only.has_value() || !depth_only->texture) {
++      VALIDATION_LOG << "A render pass needs a colour or depth attachment.";
++      is_valid_ = false;
++      return;
++    }
++  }
+ 
+   const auto& vk_context = ContextVK::Cast(*context);
+   command_buffer_vk_ = command_buffer_->GetCommandBuffer();
+@@ -251,15 +278,21 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+   FramebufferAndRenderPass frame_data;
+   bool is_swapchain = false;
+   SampleCount sample_count =
+-      color_image_vk_->GetTextureDescriptor().sample_count;
++      color_image_vk_ ? color_image_vk_->GetTextureDescriptor().sample_count
++                      : depth_only->texture->GetTextureDescriptor()
++                            .sample_count;
+   // The framebuffer references attachment views bound to a specific
+   // subresource, so the cache is keyed on color0's (mip_level, slice) as
+   // well as sample count. Caller-side invariants on the rest of the
+   // attachment set are the same as before.
+-  const uint32_t cache_mip_level = color0.mip_level;
+-  const uint32_t cache_slice = color0.slice;
++  const uint32_t cache_mip_level =
++      color_image_vk_ ? color0.mip_level : depth_only->mip_level;
++  const uint32_t cache_slice =
++      color_image_vk_ ? color0.slice : depth_only->slice;
+   TextureVK& frame_data_texture = TextureVK::Cast(
+-      resolve_image_vk_ ? *resolve_image_vk_ : *color_image_vk_);
++      resolve_image_vk_ ? *resolve_image_vk_
++      : color_image_vk_ ? *color_image_vk_
++                        : *depth_only->texture);
+   is_swapchain = frame_data_texture.IsSwapchainImage();
+   const uint64_t attachments_key =
+       McsmAttachmentsKey(render_target_, is_swapchain);  // mcsm8
+@@ -381,13 +414,20 @@ RenderPassVK::RenderPassVK(const std::shared_ptr<const Context>& context,
+   if (auto depth = render_target_.GetDepthAttachment(); depth.has_value()) {
+     TextureVK::Cast(*depth->texture)
+         .SetLayoutWithoutEncoding(
+-            vk::ImageLayout::eDepthStencilAttachmentOptimal);
++            McsmDepthIsSampled(*depth->texture)
++                ? vk::ImageLayout::eShaderReadOnlyOptimal
++                : vk::ImageLayout::eDepthStencilAttachmentOptimal);
+   }
++  // mcsm9: a texture that is the depth attachment too ended the pass in the
++  // depth's final layout (one attachment description holds both).
+   if (auto stencil = render_target_.GetStencilAttachment();
+       stencil.has_value()) {
+-    TextureVK::Cast(*stencil->texture)
+-        .SetLayoutWithoutEncoding(
+-            vk::ImageLayout::eDepthStencilAttachmentOptimal);
++    auto depth = render_target_.GetDepthAttachment();
++    if (!depth.has_value() || depth->texture != stencil->texture) {
++      TextureVK::Cast(*stencil->texture)
++          .SetLayoutWithoutEncoding(
++              vk::ImageLayout::eDepthStencilAttachmentOptimal);
++    }
+   }
+ 
+   // Set the initial viewport.
+@@ -433,6 +473,16 @@ SharedHandleVK<vk::Framebuffer> RenderPassVK::CreateVKFramebuffer(
+   fb_info.width = target_size.width;
+   fb_info.height = target_size.height;
+   fb_info.layers = 1u;
++  // mcsm9: a pass that renders to every layer of its attachments.
++  render_target_.IterateAllAttachments([&fb_info](const auto& attachment) {
++    if (attachment.slice == kMcsmAllLayers && attachment.texture) {
++      fb_info.layers = std::max<uint32_t>(
++          fb_info.layers,
++          static_cast<uint32_t>(
++              attachment.texture->GetTextureDescriptor().GetArrayLayerCount()));
++    }
++    return true;
++  });
+ 
+   std::array<vk::ImageView, kMaxAttachments> attachments;
+   size_t count = 0;
+@@ -770,6 +820,9 @@ fml::Status RenderPassVK::Draw() {
+       key.push_back(reinterpret_cast<uint64_t>(
+           static_cast<VkSampler>(w.pImageInfo->sampler)));
+       key.push_back(static_cast<uint64_t>(w.pImageInfo->imageLayout));
++    } else if (w.pTexelBufferView != nullptr) {  // mcsm9
++      key.push_back(reinterpret_cast<uint64_t>(
++          static_cast<VkBufferView>(*w.pTexelBufferView)));
+     }
+   }
+   vk::DescriptorSet descriptor_set = mcsm_bound_set_;
+@@ -837,7 +890,23 @@ fml::Status RenderPassVK::Draw() {
+         command_buffer_vk_, TextureVK::Cast(*color_image_vk_).GetImage());
+   }
+ 
+-  if (has_index_buffer_) {
++  if (mcsm_indirect_) {
++    // mcsm9: counts from an argument buffer.
++    std::shared_ptr<const DeviceBuffer> args = mcsm_indirect_.TakeBuffer();
++    if (args && !command_buffer_->Track(args)) {
++      return fml::Status(fml::StatusCode::kAborted,
++                         "Could not track the indirect buffer.");
++    }
++    const vk::Buffer args_vk =
++        DeviceBufferVK::Cast(*mcsm_indirect_.GetBuffer()).GetBuffer();
++    const vk::DeviceSize args_offset = mcsm_indirect_.GetRange().offset;
++    if (has_index_buffer_) {
++      command_buffer_vk_.drawIndexedIndirect(args_vk, args_offset, 1u, 20u);
++    } else {
++      command_buffer_vk_.drawIndirect(args_vk, args_offset, 1u, 16u);
++    }
++    mcsm_indirect_ = {};
++  } else if (has_index_buffer_) {
+     command_buffer_vk_.drawIndexed(element_count_,   // index count
+                                    instance_count_,  // instance count
+                                    0u,               // first index
+@@ -978,4 +1047,79 @@ bool RenderPassVK::OnEncodeCommands(const Context& context) const {
+   return true;
+ }
+ 
++// mcsm9
++bool RenderPassVK::McsmBindTexelBuffer(ShaderStage stage,
++                               const McsmTexelBufferSlot& slot,
++                               BufferView view,
++                               PixelFormat format) {
++  if (descriptor_write_offset_ >= mcsm_texel_workspace_.size() ||
++      !view.GetBuffer()) {
++    return false;
++  }
++  const auto& buffer = DeviceBufferVK::Cast(*view.GetBuffer());
++  auto texel = buffer.McsmTexelView(ContextVK::Cast(*context_).GetDevice(),
++                                    view.GetRange().offset,
++                                    view.GetRange().length, format);
++  std::shared_ptr<const DeviceBuffer> owner = view.TakeBuffer();
++  if (!texel || (owner && !command_buffer_->Track(owner)) ||
++      !command_buffer_->Track(texel)) {
++    return false;
++  }
++  vk::BufferView& slot_view = mcsm_texel_workspace_[descriptor_write_offset_];
++  slot_view = texel->Get();
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = slot.binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = slot.storage
++                                 ? vk::DescriptorType::eStorageTexelBuffer
++                                 : vk::DescriptorType::eUniformTexelBuffer;
++  write_set.pTexelBufferView = &slot_view;
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
++bool RenderPassVK::McsmBindSeparateTexture(ShaderStage stage,
++                                   size_t metal_index,
++                                   size_t binding,
++                                   std::shared_ptr<const Texture> texture) {
++  if (bound_image_offset_ >= kMaxBindings || !texture ||
++      !texture->IsValid()) {
++    return false;
++  }
++  const TextureVK& texture_vk = TextureVK::Cast(*texture);
++  if (!command_buffer_->Track(texture)) {
++    return false;
++  }
++  vk::DescriptorImageInfo image_info;
++  image_info.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
++  image_info.imageView = texture_vk.GetImageView();
++  image_workspace_[bound_image_offset_++] = image_info;
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = vk::DescriptorType::eSampledImage;
++  write_set.pImageInfo = &image_workspace_[bound_image_offset_ - 1];
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
++bool RenderPassVK::McsmBindSeparateSampler(ShaderStage stage,
++                                   size_t metal_index,
++                                   size_t binding,
++                                   raw_ptr<const Sampler> sampler) {
++  if (bound_image_offset_ >= kMaxBindings || !sampler) {
++    return false;
++  }
++  vk::DescriptorImageInfo image_info;
++  image_info.sampler = SamplerVK::Cast(*sampler).GetSampler();
++  image_workspace_[bound_image_offset_++] = image_info;
++  vk::WriteDescriptorSet write_set;
++  write_set.dstBinding = binding;
++  write_set.descriptorCount = 1u;
++  write_set.descriptorType = vk::DescriptorType::eSampler;
++  write_set.pImageInfo = &image_workspace_[bound_image_offset_ - 1];
++  write_workspace_[descriptor_write_offset_++] = write_set;
++  return true;
++}
++
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+index b45cf920ad4..68be30088a7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+@@ -25,6 +25,24 @@ class RenderPassVK final : public RenderPass {
+   // |RenderPass|
+   ~RenderPassVK() override;
+ 
++  // |ResourceBinder| mcsm9
++  bool McsmBindTexelBuffer(ShaderStage stage,
++                           const McsmTexelBufferSlot& slot,
++                           BufferView view,
++                           PixelFormat format) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateTexture(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               std::shared_ptr<const Texture> texture) override;
++
++  // |ResourceBinder| mcsm9
++  bool McsmBindSeparateSampler(ShaderStage stage,
++                               size_t metal_index,
++                               size_t binding,
++                               raw_ptr<const Sampler> sampler) override;
++
+  private:
+   friend class CommandBufferVK;
+ 
+@@ -43,6 +61,9 @@ class RenderPassVK final : public RenderPass {
+   std::array<vk::DescriptorBufferInfo, kMaxBindings> buffer_workspace_;
+   std::array<vk::WriteDescriptorSet, kMaxBindings + kMaxBindings>
+       write_workspace_;
++  // mcsm9: the texel buffer views the writes point at, by write index.
++  std::array<vk::BufferView, kMaxBindings + kMaxBindings>
++      mcsm_texel_workspace_;
+   size_t bound_image_offset_ = 0u;
+   size_t bound_buffer_offset_ = 0u;
+   size_t descriptor_write_offset_ = 0u;
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_library_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_library_vk.cc
+index 260db10e0f9..cec80cd171d 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_library_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_library_vk.cc
+@@ -39,7 +39,8 @@ raw_ptr<const Sampler> SamplerLibraryVK::GetSampler(
+ 
+   uint64_t p_key = SamplerDescriptor::ToKey(desc_copy);
+   for (const auto& [key, value] : samplers_) {
+-    if (key == p_key) {
++    if (key == p_key &&
++        SamplerDescriptor::McsmExtrasEqual(value->GetDescriptor(), desc_copy)) {
+       return raw_ptr(value);
+     }
+   }
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_vk.cc
+index 7246a233797..226f9f73d71 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/sampler_vk.cc
+@@ -42,6 +42,24 @@ static vk::UniqueSampler CreateSampler(
+   // samplerAnisotropy feature is unavailable.
+   sampler_info.anisotropyEnable = desc.max_anisotropy > 1;
+   sampler_info.maxAnisotropy = static_cast<float>(desc.max_anisotropy);
++  // mcsm9: the border colour, comparison and LOD bias (LOD clamps after
++  // the mip filter's below).
++  switch (desc.mcsm_border_color) {
++    case McsmBorderColor::kTransparentBlack:
++      sampler_info.borderColor = vk::BorderColor::eFloatTransparentBlack;
++      break;
++    case McsmBorderColor::kOpaqueBlack:
++      sampler_info.borderColor = vk::BorderColor::eFloatOpaqueBlack;
++      break;
++    case McsmBorderColor::kOpaqueWhite:
++      sampler_info.borderColor = vk::BorderColor::eFloatOpaqueWhite;
++      break;
++  }
++  if (desc.mcsm_compare.has_value()) {
++    sampler_info.compareEnable = true;
++    sampler_info.compareOp = ToVKCompareOp(desc.mcsm_compare.value());
++  }
++  sampler_info.mipLodBias = desc.mcsm_lod_bias;
+ 
+   // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkSamplerCreateInfo.html#_description
+   switch (desc.mip_filter) {
+@@ -56,6 +74,11 @@ static vk::UniqueSampler CreateSampler(
+       sampler_info.mipmapMode = vk::SamplerMipmapMode::eLinear;
+       break;
+   }
++  // mcsm9: LOD clamps (the defaults are Vulkan's own: 0, none).
++  if (desc.mip_filter != MipFilter::kBase) {
++    sampler_info.minLod = desc.mcsm_min_lod;
++    sampler_info.maxLod = desc.mcsm_max_lod;
++  }
+ 
+   if (yuv_conversion && yuv_conversion->IsValid()) {
+     sampler_chain.get<vk::SamplerYcbcrConversionInfo>().conversion =
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
+index 69793627a2e..75015a8d2a1 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.cc
+@@ -51,11 +51,12 @@ fml::Status TextureSourceVK::SetLayout(const BarrierVK& barrier) const {
+   image_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+   image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+   image_barrier.subresourceRange.aspectMask = ToImageAspectFlags(desc_.format);
+-  image_barrier.subresourceRange.baseMipLevel = barrier.base_mip_level;
++  image_barrier.subresourceRange.baseMipLevel =
++      mcsm_base_mip_ + barrier.base_mip_level;
+   image_barrier.subresourceRange.levelCount =
+       desc_.mip_count - barrier.base_mip_level;
+-  image_barrier.subresourceRange.baseArrayLayer = 0u;
+-  image_barrier.subresourceRange.layerCount = ToArrayLayerCount(desc_.type);
++  image_barrier.subresourceRange.baseArrayLayer = mcsm_base_layer_;
++  image_barrier.subresourceRange.layerCount = ToArrayLayerCount(desc_);
+ 
+   barrier.cmd_buffer.pipelineBarrier(barrier.src_stage,  // src stage
+                                      barrier.dst_stage,  // dst stage
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
+index 7b46689de18..076f2883d97 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/texture_source_vk.h
+@@ -180,6 +180,12 @@ class TextureSourceVK {
+ 
+   explicit TextureSourceVK(TextureDescriptor desc);
+ 
++  /// mcsm9: where a view's subresources start in its image.
++  void McsmSetSubresourceBase(uint32_t base_mip, uint32_t base_layer) {
++    mcsm_base_mip_ = base_mip;
++    mcsm_base_layer_ = base_layer;
++  }
++
+  private:
+   struct CachedFrameDataEntry {
+     SampleCount sample_count;
+@@ -195,6 +201,8 @@ class TextureSourceVK {
+   // mip chain).
+   std::vector<CachedFrameDataEntry> frame_data_;
+   mutable vk::ImageLayout layout_ = vk::ImageLayout::eUndefined;
++  uint32_t mcsm_base_mip_ = 0u;    // mcsm9
++  uint32_t mcsm_base_layer_ = 0u;  // mcsm9
+ };
+ 
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/vertex_descriptor_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/vertex_descriptor_vk.cc
+index d6ee69de203..594d828c4af 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/vertex_descriptor_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/vertex_descriptor_vk.cc
+@@ -74,6 +74,35 @@ vk::Format ToVertexDescriptorFormat(const ShaderStageIOSlot& input) {
+       return vk::Format::eR32G32B32Uint;
+     case VertexAttributeFormat::kUInt32x4:
+       return vk::Format::eR32G32B32A32Uint;
++    // mcsm9
++    case VertexAttributeFormat::kMcsmUNorm8:
++      return vk::Format::eR8Unorm;
++    case VertexAttributeFormat::kMcsmUNorm8x2:
++      return vk::Format::eR8G8Unorm;
++    case VertexAttributeFormat::kMcsmUNorm8x4:
++      return vk::Format::eR8G8B8A8Unorm;
++    case VertexAttributeFormat::kMcsmSNorm8:
++      return vk::Format::eR8Snorm;
++    case VertexAttributeFormat::kMcsmSNorm8x2:
++      return vk::Format::eR8G8Snorm;
++    case VertexAttributeFormat::kMcsmSNorm8x4:
++      return vk::Format::eR8G8B8A8Snorm;
++    case VertexAttributeFormat::kMcsmUNorm16:
++      return vk::Format::eR16Unorm;
++    case VertexAttributeFormat::kMcsmUNorm16x2:
++      return vk::Format::eR16G16Unorm;
++    case VertexAttributeFormat::kMcsmUNorm16x4:
++      return vk::Format::eR16G16B16A16Unorm;
++    case VertexAttributeFormat::kMcsmSNorm16:
++      return vk::Format::eR16Snorm;
++    case VertexAttributeFormat::kMcsmSNorm16x2:
++      return vk::Format::eR16G16Snorm;
++    case VertexAttributeFormat::kMcsmSNorm16x4:
++      return vk::Format::eR16G16B16A16Snorm;
++    case VertexAttributeFormat::kMcsmUNorm10_10_10_2:
++      return vk::Format::eA2B10G10R10UnormPack32;
++    case VertexAttributeFormat::kMcsmBGRA8UNorm:
++      return vk::Format::eB8G8R8A8Unorm;
+     case VertexAttributeFormat::kInvalid:
+       return vk::Format::eUndefined;
+   }
+diff --git a/engine/src/flutter/impeller/renderer/blit_pass.cc b/engine/src/flutter/impeller/renderer/blit_pass.cc
+index 5fcdc47c942..aef4ab5136a 100644
+--- a/engine/src/flutter/impeller/renderer/blit_pass.cc
++++ b/engine/src/flutter/impeller/renderer/blit_pass.cc
+@@ -152,7 +152,7 @@ bool BlitPass::AddCopy(BufferView source,
+                    << destination->GetMipCount() << " mip levels.";
+     return false;
+   }
+-  if (slice > 5) {
++  if (slice >= destination->GetTextureDescriptor().GetSliceCount()) {
+     VALIDATION_LOG << "Invalid value for slice: " << slice;
+     return false;
+   }
+diff --git a/engine/src/flutter/impeller/renderer/blit_pass.h b/engine/src/flutter/impeller/renderer/blit_pass.h
+index 62388168c32..866d3bd274e 100644
+--- a/engine/src/flutter/impeller/renderer/blit_pass.h
++++ b/engine/src/flutter/impeller/renderer/blit_pass.h
+@@ -37,6 +37,30 @@ class BlitPass {
+   ///             state, then convert it to that state.
+   ///
+   ///             This API is only used by Vulkan.
++  /// mcsm9: a region of one mip level and slice (a 3D texture's depth
++  /// slice) to another texture's, or the same texture's other level or
++  /// slice; and to a buffer, rows tightly packed. Metal and Vulkan; false
++  /// elsewhere. The caller checks the regions.
++  virtual bool McsmCopyTextureToTexture(std::shared_ptr<Texture> source,
++                                        std::shared_ptr<Texture> destination,
++                                        IRect source_region,
++                                        IPoint destination_origin,
++                                        uint32_t source_mip,
++                                        uint32_t source_slice,
++                                        uint32_t destination_mip,
++                                        uint32_t destination_slice) {
++    return false;
++  }
++
++  virtual bool McsmCopyTextureToBuffer(std::shared_ptr<Texture> source,
++                                       std::shared_ptr<DeviceBuffer> destination,
++                                       IRect source_region,
++                                       size_t destination_offset,
++                                       uint32_t source_mip,
++                                       uint32_t source_slice) {
++    return false;
++  }
++
+   virtual bool ConvertTextureToShaderRead(
+       const std::shared_ptr<Texture>& texture);
+ 
+diff --git a/engine/src/flutter/impeller/renderer/compute_pass.h b/engine/src/flutter/impeller/renderer/compute_pass.h
+index 47a909f09bf..d079d74a389 100644
+--- a/engine/src/flutter/impeller/renderer/compute_pass.h
++++ b/engine/src/flutter/impeller/renderer/compute_pass.h
+@@ -10,6 +10,7 @@
+ #include <string>
+ 
+ #include "fml/status.h"
++#include "impeller/core/buffer_view.h"
+ #include "impeller/core/resource_binder.h"
+ #include "impeller/renderer/compute_pipeline_descriptor.h"
+ #include "impeller/renderer/pipeline_descriptor.h"
+@@ -48,6 +49,10 @@ class ComputePass : public ResourceBinder {
+   ///
+   virtual fml::Status Compute(std::array<uint32_t, 3> workgroup_count) = 0;
+ 
++  /// mcsm9: the next Compute takes its workgroup counts from `args` (three
++  /// uint32s, as Direct3D 11's DispatchIndirect). Metal and Vulkan.
++  void McsmSetIndirect(BufferView args) { mcsm_indirect_ = std::move(args); }
++
+   /// @brief Ensures all previously encoded compute command's buffer writes are
+   ///        visible to any subsequent compute commands.
+   ///
+@@ -76,6 +81,7 @@ class ComputePass : public ResourceBinder {
+ 
+  protected:
+   const std::shared_ptr<const Context> context_;
++  BufferView mcsm_indirect_;  // mcsm9
+ 
+   explicit ComputePass(std::shared_ptr<const Context> context);
+ 
+diff --git a/engine/src/flutter/impeller/renderer/context.h b/engine/src/flutter/impeller/renderer/context.h
+index 270f2956190..3fa5e4e338d 100644
+--- a/engine/src/flutter/impeller/renderer/context.h
++++ b/engine/src/flutter/impeller/renderer/context.h
+@@ -268,6 +268,18 @@ class Context {
+   /// @brief Submit the command buffer that renders to the onscreen surface.
+   virtual bool SubmitOnscreen(std::shared_ptr<CommandBuffer> cmd_buffer);
+ 
++  /// mcsm9: a texture that is mip levels `[base_mip, base_mip +
++  /// view_desc.mip_count)` and layers `[base_layer, base_layer + view layers)`
++  /// of `texture`, sharing its memory; null where the backend has no views
++  /// (GLES) or the view doesn't fit.
++  virtual std::shared_ptr<Texture> McsmMakeTextureView(
++      const std::shared_ptr<Texture>& texture,
++      const TextureDescriptor& view_desc,
++      uint32_t base_mip,
++      uint32_t base_layer) const {
++    return nullptr;
++  }
++
+   const Flags& GetFlags() const { return flags_; }
+ 
+  protected:
+diff --git a/engine/src/flutter/impeller/renderer/render_pass.h b/engine/src/flutter/impeller/renderer/render_pass.h
+index 24a0af6bc3f..ab5e0f5f76b 100644
+--- a/engine/src/flutter/impeller/renderer/render_pass.h
++++ b/engine/src/flutter/impeller/renderer/render_pass.h
+@@ -181,6 +181,12 @@ class RenderPass : public ResourceBinder {
+   /// Record the currently pending command.
+   virtual fml::Status Draw();
+ 
++  /// mcsm9: the next Draw takes its counts from `args` (Direct3D 11's,
++  /// Metal's and Vulkan's indirect layout: index or vertex count, instance
++  /// count, first index or vertex, [base vertex,] first instance) instead of
++  /// the element and instance counts. Metal and Vulkan.
++  void McsmSetIndirect(BufferView args) { mcsm_indirect_ = std::move(args); }
++
+   // |ResourceBinder|
+   virtual bool BindResource(ShaderStage stage,
+                             DescriptorType type,
+@@ -243,6 +249,8 @@ class RenderPass : public ResourceBinder {
+   bool HasStencilAttachment() const;
+ 
+  protected:
++  BufferView mcsm_indirect_;  // mcsm9
++
+   const std::shared_ptr<const Context> context_;
+   // The following properties: sample_count, pixel_format,
+   // has_stencil_attachment, and render_target_size are cached on the
+diff --git a/engine/src/flutter/impeller/renderer/render_target.cc b/engine/src/flutter/impeller/renderer/render_target.cc
+index 2333242cb5e..20fafc30ab9 100644
+--- a/engine/src/flutter/impeller/renderer/render_target.cc
++++ b/engine/src/flutter/impeller/renderer/render_target.cc
+@@ -33,8 +33,12 @@ RenderTarget::RenderTarget() = default;
+ RenderTarget::~RenderTarget() = default;
+ 
+ bool RenderTarget::IsValid() const {
+-  // Validate that there is a color attachment at zero index.
+-  if (!HasColorAttachment(0u)) {
++  // Validate that there is a color attachment at zero index (mcsm9: or, with
++  // no colour attachments at all, a depth or stencil attachment: shadow
++  // maps render depth only).
++  const bool depth_only = !color0_.has_value() && colors_.empty() &&
++                          (depth_.has_value() || stencil_.has_value());
++  if (!HasColorAttachment(0u) && !depth_only) {
+     VALIDATION_LOG
+         << "Render target does not have color attachment at index 0.";
+     return false;
+@@ -153,6 +157,13 @@ SampleCount RenderTarget::GetSampleCount() const {
+   if (color0_.has_value()) {
+     return color0_.value().texture->GetTextureDescriptor().sample_count;
+   }
++  // mcsm9: a depth-only target's.
++  if (depth_.has_value() && depth_->texture) {
++    return depth_->texture->GetTextureDescriptor().sample_count;
++  }
++  if (stencil_.has_value() && stencil_->texture) {
++    return stencil_->texture->GetTextureDescriptor().sample_count;
++  }
+   return SampleCount::kCount1;
+ }
+ 
+@@ -185,7 +196,17 @@ std::optional<ISize> RenderTarget::GetColorAttachmentSize(size_t index) const {
+ 
+ ISize RenderTarget::GetRenderTargetSize() const {
+   auto size = GetColorAttachmentSize(0u);
+-  return size.has_value() ? size.value() : ISize{};
++  if (size.has_value()) {
++    return size.value();
++  }
++  // mcsm9: a depth-only target's.
++  if (depth_.has_value() && depth_->texture) {
++    return SizeForMipLevel(depth_->texture, depth_->mip_level);
++  }
++  if (stencil_.has_value() && stencil_->texture) {
++    return SizeForMipLevel(stencil_->texture, stencil_->mip_level);
++  }
++  return ISize{};
+ }
+ 
+ std::shared_ptr<Texture> RenderTarget::GetRenderTargetTexture() const {
+diff --git a/engine/src/flutter/impeller/renderer/shader_library.h b/engine/src/flutter/impeller/renderer/shader_library.h
+index 1421ea3e0d0..9c0dbd43ed6 100644
+--- a/engine/src/flutter/impeller/renderer/shader_library.h
++++ b/engine/src/flutter/impeller/renderer/shader_library.h
+@@ -33,6 +33,18 @@ class ShaderLibrary : public std::enable_shared_from_this<ShaderLibrary> {
+                                 std::shared_ptr<fml::Mapping> code,
+                                 RegistrationCallback callback);
+ 
++  /// mcsm9: RegisterFunction with Metal compile options for source (bit 1
++  /// preserves invariance, bit 2 turns fast math off); other backends
++  /// ignore them.
++  virtual void McsmRegisterFunction(std::string name,
++                                    ShaderStage stage,
++                                    std::shared_ptr<fml::Mapping> code,
++                                    uint32_t metal_options,
++                                    RegistrationCallback callback) {
++    RegisterFunction(std::move(name), stage, std::move(code),
++                     std::move(callback));
++  }
++
+   virtual void UnregisterFunction(std::string name, ShaderStage stage) = 0;
+ 
+  protected:
+diff --git a/engine/src/flutter/shell/common/rasterizer.cc b/engine/src/flutter/shell/common/rasterizer.cc
+index 6af8bfc91d5..11893b6a609 100644
+--- a/engine/src/flutter/shell/common/rasterizer.cc
++++ b/engine/src/flutter/shell/common/rasterizer.cc
+@@ -953,6 +953,47 @@ Rasterizer::ScreenshotFormat ToScreenshotFormat(impeller::PixelFormat format) {
+     case impeller::PixelFormat::kASTC8x8LDRSRGB:
+     case impeller::PixelFormat::kASTC4x4HDR:
+     case impeller::PixelFormat::kASTC8x8HDR:
++    case impeller::PixelFormat::kR11G11B10UFloat:
++    case impeller::PixelFormat::kR16G16B16A16UNormInt:
++    case impeller::PixelFormat::kD16UNormInt:
++    case impeller::PixelFormat::kD32Float:
++    case impeller::PixelFormat::kR32UInt:
++    case impeller::PixelFormat::kR32G32UInt:
++    case impeller::PixelFormat::kR32G32B32A32UInt:
++    case impeller::PixelFormat::kR16Float:
++    case impeller::PixelFormat::kR16G16Float:
++    case impeller::PixelFormat::kR32G32Float:
++    case impeller::PixelFormat::kR8UInt:
++    case impeller::PixelFormat::kR8SNormInt:
++    case impeller::PixelFormat::kR8G8UInt:
++    case impeller::PixelFormat::kR8G8SNormInt:
++    case impeller::PixelFormat::kR8G8B8A8UInt:
++    case impeller::PixelFormat::kR8G8B8A8SInt:
++    case impeller::PixelFormat::kR8G8B8A8SNormInt:
++    case impeller::PixelFormat::kR10G10B10A2UNormInt:
++    case impeller::PixelFormat::kR10G10B10A2UInt:
++    case impeller::PixelFormat::kR9G9B9E5UFloat:
++    case impeller::PixelFormat::kR16UNormInt:
++    case impeller::PixelFormat::kR16SNormInt:
++    case impeller::PixelFormat::kR16UInt:
++    case impeller::PixelFormat::kR16SInt:
++    case impeller::PixelFormat::kR16G16UNormInt:
++    case impeller::PixelFormat::kR16G16SNormInt:
++    case impeller::PixelFormat::kR16G16UInt:
++    case impeller::PixelFormat::kR16G16SInt:
++    case impeller::PixelFormat::kR16G16B16A16SNormInt:
++    case impeller::PixelFormat::kR16G16B16A16UInt:
++    case impeller::PixelFormat::kR16G16B16A16SInt:
++    case impeller::PixelFormat::kR32SInt:
++    case impeller::PixelFormat::kR32G32SInt:
++    case impeller::PixelFormat::kR32G32B32A32SInt:
++    case impeller::PixelFormat::kBC2RGBAUNormInt:
++    case impeller::PixelFormat::kBC2RGBAUNormIntSRGB:
++    case impeller::PixelFormat::kBC4RUNormInt:
++    case impeller::PixelFormat::kBC4RSNormInt:
++    case impeller::PixelFormat::kBC5RGSNormInt:
++    case impeller::PixelFormat::kBC6HRGBUFloat:
++    case impeller::PixelFormat::kBC6HRGBSFloat:
+       FML_DCHECK(false);
+       return Rasterizer::ScreenshotFormat::kUnknown;
+     case impeller::PixelFormat::kR8G8B8A8UNormInt:
+diff --git a/engine/src/flutter/shell/platform/common/mcsm_vulkan_device.cc b/engine/src/flutter/shell/platform/common/mcsm_vulkan_device.cc
+index 8e183e34ec4..4739e766030 100644
+--- a/engine/src/flutter/shell/platform/common/mcsm_vulkan_device.cc
++++ b/engine/src/flutter/shell/platform/common/mcsm_vulkan_device.cc
+@@ -410,6 +410,11 @@ bool McsmVulkanDevice::Init(const Options& options, std::string* error) {
+       properties_ = props;
+       device_extensions_.clear();
+       device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
++      // mcsm9, optional: per-instance step rates above one.
++      if (HasExtension(exts, VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) {
++        device_extensions_.push_back(
++            VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
++      }
+       // Optional: the viewport index from the vertex stage on 1.1 devices.
+       if (props.apiVersion < VK_API_VERSION_1_2 &&
+           HasExtension(exts, VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)) {
+@@ -445,13 +450,17 @@ bool McsmVulkanDevice::Init(const Options& options, std::string* error) {
+       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
+   VkPhysicalDeviceVulkan12Features v12_supported = {
+       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
++  // mcsm9: gl_BaseInstance and gl_BaseVertex (shaderDrawParameters).
++  VkPhysicalDeviceShaderDrawParametersFeatures draw_params_supported = {
++      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES};
+   const bool has_12 = api_version_ >= VK_API_VERSION_1_2;
+   if (procs_->GetPhysicalDeviceFeatures2 != nullptr) {
+     VkPhysicalDeviceFeatures2 features2 = {
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+     features2.pNext = &storage16_supported;
++    storage16_supported.pNext = &draw_params_supported;
+     if (has_12) {
+-      storage16_supported.pNext = &v12_supported;
++      draw_params_supported.pNext = &v12_supported;
+     }
+     procs_->GetPhysicalDeviceFeatures2(physical_device_, &features2);
+   }
+@@ -460,6 +469,30 @@ bool McsmVulkanDevice::Init(const Options& options, std::string* error) {
+   enabled.samplerAnisotropy = supported.samplerAnisotropy;
+   enabled.multiViewport = supported.multiViewport;
+   multi_viewport_ = supported.multiViewport == VK_TRUE;
++  // mcsm9: what S2's frame may use, where the device has it: BC textures,
++  // cube arrays, per-attachment blending, indirect draws from a first
++  // instance and many at once, stores from the vertex and fragment stages,
++  // storage images in more formats and without one, gathers with offsets,
++  // depth clamping.
++  enabled.textureCompressionBC = supported.textureCompressionBC;
++  enabled.imageCubeArray = supported.imageCubeArray;
++  enabled.independentBlend = supported.independentBlend;
++  enabled.drawIndirectFirstInstance = supported.drawIndirectFirstInstance;
++  enabled.multiDrawIndirect = supported.multiDrawIndirect;
++  enabled.vertexPipelineStoresAndAtomics =
++      supported.vertexPipelineStoresAndAtomics;
++  enabled.fragmentStoresAndAtomics = supported.fragmentStoresAndAtomics;
++  enabled.shaderStorageImageExtendedFormats =
++      supported.shaderStorageImageExtendedFormats;
++  enabled.shaderStorageImageReadWithoutFormat =
++      supported.shaderStorageImageReadWithoutFormat;
++  enabled.shaderStorageImageWriteWithoutFormat =
++      supported.shaderStorageImageWriteWithoutFormat;
++  enabled.shaderImageGatherExtended = supported.shaderImageGatherExtended;
++  enabled.depthClamp = supported.depthClamp;
++  enabled.sampleRateShading = supported.sampleRateShading;
++  enabled.shaderClipDistance = supported.shaderClipDistance;
++  enabled.shaderCullDistance = supported.shaderCullDistance;
+   VkPhysicalDevice16BitStorageFeatures storage16 = {
+       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
+   storage16.uniformAndStorageBuffer16BitAccess =
+@@ -469,6 +502,7 @@ bool McsmVulkanDevice::Init(const Options& options, std::string* error) {
+   if (has_12) {
+     v12.shaderOutputViewportIndex = v12_supported.shaderOutputViewportIndex;
+     v12.shaderOutputLayer = v12_supported.shaderOutputLayer;
++    v12.samplerMirrorClampToEdge = v12_supported.samplerMirrorClampToEdge;
+     viewport_index_ = v12_supported.shaderOutputViewportIndex == VK_TRUE;
+     storage16.pNext = &v12;
+   } else {
+@@ -477,6 +511,30 @@ bool McsmVulkanDevice::Init(const Options& options, std::string* error) {
+                   std::string(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)) !=
+         device_extensions_.end();
+   }
++  // mcsm9: draw parameters, chained first.
++  VkPhysicalDeviceShaderDrawParametersFeatures draw_params = {
++      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES};
++  draw_params.shaderDrawParameters = draw_params_supported.shaderDrawParameters;
++  draw_params.pNext = storage16.pNext;
++  storage16.pNext = &draw_params;
++  // mcsm9: the divisor extension's feature, chained after the others.
++  VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT divisor = {
++      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT};
++  if (std::find(device_extensions_.begin(), device_extensions_.end(),
++                std::string(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) !=
++          device_extensions_.end() &&
++      procs_->GetPhysicalDeviceFeatures2 != nullptr) {
++    VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT divisor_supported = {
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT};
++    VkPhysicalDeviceFeatures2 query = {
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
++    query.pNext = &divisor_supported;
++    procs_->GetPhysicalDeviceFeatures2(physical_device_, &query);
++    divisor.vertexAttributeInstanceRateDivisor =
++        divisor_supported.vertexAttributeInstanceRateDivisor;
++    divisor.pNext = storage16.pNext;
++    storage16.pNext = &divisor;
++  }
+   for (const auto& e : device_extensions_) {
+     device_extension_ptrs_.push_back(e.c_str());
+   }

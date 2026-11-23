@@ -1,0 +1,179 @@
+From 55f3ba666f45d1bbe63436fef458c30151849577 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 16:10:36 +0100
+Subject: [PATCH 2/2] =?UTF-8?q?flutter=5Fgpu=20(mcsm7):=20draws=20from=20a?=
+ =?UTF-8?q?=20first=20instance=20=E2=80=94=20RenderPass=5FMcsmDrawInstance?=
+ =?UTF-8?q?d=20offsets=20the=20bound=20instance-rate=20vertex=20buffers=20?=
+ =?UTF-8?q?by=20first=5Finstance=20=C2=B7=20stride=20for=20that=20draw=20o?=
+ =?UTF-8?q?n=20every=20backend=20(the=20shader's=20instance=20index=20stil?=
+ =?UTF-8?q?l=20counts=20from=200),=20recorded=20as=20drawn;=20McsmFeatures?=
+ =?UTF-8?q?=20bit=20512?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ engine/src/flutter/lib/gpu/context.cc     |  5 +-
+ engine/src/flutter/lib/gpu/context.h      |  1 +
+ engine/src/flutter/lib/gpu/render_pass.cc | 69 ++++++++++++++++++++++-
+ engine/src/flutter/lib/gpu/render_pass.h  | 20 ++++++-
+ 4 files changed, 91 insertions(+), 4 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index e3703371c2a..28ba701e134 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -197,7 +197,8 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // without a staging buffer or command buffer), 64 = several passes in
+   // turn on one command buffer (Metal), 128 = several colour attachments on
+   // GLES (impeller render_pass_gles), 256 = viewport arrays on Metal
+-  // (RenderPass_McsmSetViewports; false on other backends). (32 is unused: a
++  // (RenderPass_McsmSetViewports; false on other backends), 512 = draws from
++  // a first instance (RenderPass_McsmDrawInstanced). (32 is unused: a
+   // batched encoding was tried and measured no cheaper than the leaf calls.)
+-  return 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256;
++  return 1 | 2 | 4 | 8 | 16 | 64 | 128 | 256 | 512;
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index 21388e6204f..70269e2f27d 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -119,6 +119,7 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   64: several render passes in turn on one command buffer (mcsm7)
+ ///   128: several colour attachments in one pass on GLES (mcsm7)
+ ///   256: viewport arrays, RenderPass_McsmSetViewports (Metal only) (mcsm7)
++///   512: RenderPass_McsmDrawInstanced, draws from a first instance (mcsm7)
+ FLUTTER_GPU_EXPORT
+ extern int64_t InternalFlutterGpu_McsmFeatures();
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index b8d5847479d..3aa9f177a87 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -469,10 +469,59 @@ bool RenderPass::SendTexture(impeller::ShaderStage stage,
+ 
+ bool RenderPass::Draw(size_t element_count,
+                       size_t instance_count,
+-                      bool indexed) {
++                      bool indexed,
++                      size_t first_instance) {
+   if (element_count == 0u || instance_count == 0u) {
+     return true;
+   }
++  if (first_instance > 0u) {
++    // mcsm7: the instance-rate buffers from first_instance, for this draw.
++    const auto pipeline = GetCachedPipeline();
++    if (!pipeline) {
++      return false;
++    }
++    std::array<impeller::BufferView, kMaxVertexBufferSlots> saved;
++    std::array<bool, kMaxVertexBufferSlots> moved{};
++    for (const auto& layout :
++         pipeline->GetDescriptor().GetVertexDescriptor()->GetStageLayouts()) {
++      const size_t b = layout.binding;
++      if (layout.input_rate != impeller::VertexInputRate::kInstance ||
++          b >= vertex_buffer_count || moved[b]) {
++        continue;
++      }
++      const auto range = vertex_buffers[b].GetRange();
++      const size_t skip = first_instance * layout.stride;
++      if (skip + instance_count * layout.stride > range.length) {
++        for (size_t k = 0; k < kMaxVertexBufferSlots; k++) {
++          if (moved[k]) {
++            vertex_buffers[k] = saved[k];
++          }
++        }
++        return false;
++      }
++      saved[b] = vertex_buffers[b];
++      moved[b] = true;
++      // Owning the buffer as the bound view does (GLES encodes later).
++      impeller::BufferView copy = vertex_buffers[b];
++      auto owner = copy.TakeBuffer();
++      const impeller::Range moved_range(range.offset + skip,
++                                        range.length - skip);
++      vertex_buffers[b] =
++          owner ? impeller::BufferView(std::move(owner), moved_range)
++                : impeller::BufferView(const_cast<impeller::DeviceBuffer*>(
++                                           vertex_buffers[b].GetBuffer()),
++                                       moved_range);
++      vertex_buffer_dirty[b] = true;
++    }
++    const bool ok = Draw(element_count, instance_count, indexed, 0u);
++    for (size_t k = 0; k < kMaxVertexBufferSlots; k++) {
++      if (moved[k]) {
++        vertex_buffers[k] = saved[k];
++        vertex_buffer_dirty[k] = true;
++      }
++    }
++    return ok;
++  }
+ 
+   if (indexed && index_buffer_type == impeller::IndexType::kNone) {
+     // drawIndexed was called without an index buffer bound.
+@@ -1338,6 +1387,24 @@ int InternalFlutterGpu_RenderPass_DrawCached(
+   return wrapper->Draw(element_count, instance_count, indexed) ? 1 : 0;
+ }
+ 
++int InternalFlutterGpu_RenderPass_McsmDrawInstanced(
++    flutter::gpu::RenderPass* wrapper,
++    int element_count,
++    int instance_count,
++    int first_instance,
++    bool indexed) {
++  if (element_count < 0 || instance_count < 0 || first_instance < 0) {
++    return 0;
++  }
++  if (!wrapper->HasCachedPipeline()) {
++    return 2;
++  }
++  return wrapper->Draw(element_count, instance_count, indexed,
++                       static_cast<size_t>(first_instance))
++             ? 1
++             : 0;
++}
++
+ bool InternalFlutterGpu_RenderPass_DrawIndexed(
+     flutter::gpu::RenderPass* wrapper,
+     int index_count,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 3d5ba6733dd..e26f9b9429f 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -145,7 +145,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   /// Append a draw to the underlying render pass. [element_count] is the
+   /// vertex count for a non-indexed draw, or the index count when
+   /// [indexed] is true. [instance_count] is the number of instances to draw.
+-  bool Draw(size_t element_count, size_t instance_count, bool indexed);
++  /// mcsm7: [first_instance] starts the instance-rate vertex buffers at that
++  /// instance (their bound views offset by first_instance · stride for this
++  /// draw; the instance index in the shader still counts from 0 on every
++  /// backend). False when that runs past a bound view.
++  bool Draw(size_t element_count,
++            size_t instance_count,
++            bool indexed,
++            size_t first_instance = 0);
+ 
+   struct BufferAndUniformSlot {
+     impeller::ShaderUniformSlot slot;
+@@ -436,6 +443,17 @@ extern bool InternalFlutterGpu_RenderPass_BindTextureIndexed(
+ /// mcsm E3: draws only when the pipeline is already cached on this pass
+ /// (never blocks): 1 drawn, 0 failed, 2 not cached (nothing done; use
+ /// Draw/DrawIndexed).
++/// mcsm7: a draw of [instance_count] instances from [first_instance] (see
++/// RenderPass::Draw); 1 = drawn, 2 = the pass has no cached pipeline yet
++/// (nothing done: draw once through the non-leaf path), 0 = failed. Leaf.
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_RenderPass_McsmDrawInstanced(
++    flutter::gpu::RenderPass* wrapper,
++    int element_count,
++    int instance_count,
++    int first_instance,
++    bool indexed);
++
+ FLUTTER_GPU_EXPORT
+ extern int InternalFlutterGpu_RenderPass_DrawCached(
+     flutter::gpu::RenderPass* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+

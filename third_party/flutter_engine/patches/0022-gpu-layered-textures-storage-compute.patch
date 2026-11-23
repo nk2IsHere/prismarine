@@ -1,0 +1,2519 @@
+From adff1761475de40e34db27456bb156672b76b101 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Tue, 3 Nov 2026 11:58:53 +0100
+Subject: [PATCH 4/4] flutter_gpu (mcsm9): layered textures and texture views,
+ the added formats and 2x MSAA, storage buffers in render passes, compute
+ pipelines and passes (uniform and storage buffers, textures, storage images,
+ texel buffers, separate textures and samplers, dispatch, indirect dispatch,
+ barrier), indirect draws, whole sampler states, texture copies and mip
+ generation, shaders registered with their bundle's Metal options, the added
+ vertex formats and step rates, depth-only attachments, feature bit 2048
+
+---
+ engine/src/flutter/lib/gpu/BUILD.gn           |   2 +
+ engine/src/flutter/lib/gpu/command_buffer.cc  | 162 +++++++
+ engine/src/flutter/lib/gpu/command_buffer.h   |  67 +++
+ engine/src/flutter/lib/gpu/compute_pass.cc    | 425 ++++++++++++++++++
+ engine/src/flutter/lib/gpu/compute_pass.h     | 238 ++++++++++
+ engine/src/flutter/lib/gpu/context.cc         |  13 +-
+ engine/src/flutter/lib/gpu/formats.h          | 246 ++++++++++
+ engine/src/flutter/lib/gpu/render_pass.cc     | 279 +++++++++++-
+ engine/src/flutter/lib/gpu/render_pass.h      | 102 +++++
+ engine/src/flutter/lib/gpu/render_pipeline.cc |  45 +-
+ engine/src/flutter/lib/gpu/shader.cc          |  94 +++-
+ engine/src/flutter/lib/gpu/shader.h           |  88 ++++
+ engine/src/flutter/lib/gpu/shader_library.cc  |  84 ++++
+ engine/src/flutter/lib/gpu/texture.cc         | 144 +++++-
+ engine/src/flutter/lib/gpu/texture.h          |  38 ++
+ 15 files changed, 2000 insertions(+), 27 deletions(-)
+ create mode 100644 engine/src/flutter/lib/gpu/compute_pass.cc
+ create mode 100644 engine/src/flutter/lib/gpu/compute_pass.h
+
+diff --git a/engine/src/flutter/lib/gpu/BUILD.gn b/engine/src/flutter/lib/gpu/BUILD.gn
+index 5c41c24d6ab..cba195839ba 100644
+--- a/engine/src/flutter/lib/gpu/BUILD.gn
++++ b/engine/src/flutter/lib/gpu/BUILD.gn
+@@ -34,6 +34,8 @@ source_set("gpu") {
+     sources = [
+       "command_buffer.cc",
+       "command_buffer.h",
++      "compute_pass.cc",
++      "compute_pass.h",
+       "context.cc",
+       "context.h",
+       "device_buffer.cc",
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
+index 576fd6fa3e8..b48e8d950c9 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.cc
++++ b/engine/src/flutter/lib/gpu/command_buffer.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "flutter/lib/gpu/command_buffer.h"
+ 
++#include <algorithm>
++
+ #include "dart_api.h"
+ #include "fml/make_copyable.h"
+ #include "impeller/core/buffer_view.h"
+@@ -39,6 +41,9 @@ bool CommandBuffer::Encodable::EncodeCommands() const {
+   if (blit_pass) {
+     return blit_pass->EncodeCommands();
+   }
++  if (compute_pass) {
++    return compute_pass->EncodeCommands();  // mcsm9
++  }
+   return false;
+ }
+ 
+@@ -74,6 +79,15 @@ void CommandBuffer::AddRenderPass(
+   encodables_.push_back(std::move(encodable));
+ }
+ 
++void CommandBuffer::AddComputePass(
++    std::shared_ptr<impeller::ComputePass> compute_pass,
++    std::shared_ptr<bool> ended) {
++  Encodable encodable;
++  encodable.compute_pass = std::move(compute_pass);
++  encodable.ended = std::move(ended);
++  encodables_.push_back(std::move(encodable));
++}
++
+ std::shared_ptr<impeller::BlitPass> CommandBuffer::GetOrCreateBlitPass() {
+   if (!encodables_.empty() && encodables_.back().blit_pass &&
+       !(encodables_.back().ended && *encodables_.back().ended)) {
+@@ -134,6 +148,94 @@ bool CommandBuffer::CopyTextureToTexture(Texture& source,
+                             "CommandBuffer.copyTextureToTexture");
+ }
+ 
++namespace {
++// mcsm9: whether a region of a mip level and slice lies in the texture.
++bool McsmRegionFits(const impeller::Texture& texture,
++                    impeller::IRect region,
++                    uint32_t mip,
++                    uint32_t slice) {
++  const impeller::TextureDescriptor& desc = texture.GetTextureDescriptor();
++  if (mip >= desc.mip_count) {
++    return false;
++  }
++  const int64_t w = std::max<int64_t>(1, desc.size.width >> mip);
++  const int64_t h = std::max<int64_t>(1, desc.size.height >> mip);
++  const size_t slices =
++      desc.type == impeller::TextureType::kTexture3D
++          ? std::max<size_t>(1, desc.depth >> mip)
++          : desc.GetSliceCount();
++  return slice < slices && region.GetX() >= 0 && region.GetY() >= 0 &&
++         region.GetWidth() > 0 && region.GetHeight() > 0 &&
++         region.GetRight() <= w && region.GetBottom() <= h;
++}
++
++bool McsmCopiesSupported(const impeller::Context& context) {
++  return context.GetBackendType() == impeller::Context::BackendType::kMetal ||
++         context.GetBackendType() == impeller::Context::BackendType::kVulkan;
++}
++}  // namespace
++
++bool CommandBuffer::McsmCopyTextureToTexture(
++    Texture& source,
++    Texture& destination,
++    impeller::IRect source_region,
++    impeller::IPoint destination_origin,
++    uint32_t source_mip,
++    uint32_t source_slice,
++    uint32_t destination_mip,
++    uint32_t destination_slice) {
++  const auto src = source.GetTexture();
++  const auto dst = destination.GetTexture();
++  const auto dst_region = impeller::IRect::MakeXYWH(
++      destination_origin.x, destination_origin.y, source_region.GetWidth(),
++      source_region.GetHeight());
++  if (!McsmCopiesSupported(*context_) || source.McsmIsView() ||
++      destination.McsmIsView() ||
++      src->GetTextureDescriptor().format != dst->GetTextureDescriptor().format ||
++      !McsmRegionFits(*src, source_region, source_mip, source_slice) ||
++      !McsmRegionFits(*dst, dst_region, destination_mip, destination_slice)) {
++    return false;
++  }
++  auto blit_pass = GetOrCreateBlitPass();
++  return blit_pass &&
++         blit_pass->McsmCopyTextureToTexture(
++             src, dst, source_region, destination_origin, source_mip,
++             source_slice, destination_mip, destination_slice);
++}
++
++bool CommandBuffer::McsmCopyTextureToBuffer(Texture& source,
++                                            impeller::IRect source_region,
++                                            uint32_t source_mip,
++                                            uint32_t source_slice,
++                                            DeviceBuffer& destination,
++                                            size_t destination_offset) {
++  const auto src = source.GetTexture();
++  const size_t bytes = impeller::BytesForTextureRegion(
++      src->GetTextureDescriptor().format, source_region.GetWidth(),
++      source_region.GetHeight());
++  if (!McsmCopiesSupported(*context_) || source.McsmIsView() ||
++      !McsmRegionFits(*src, source_region, source_mip, source_slice) ||
++      destination_offset + bytes >
++          destination.GetBuffer()->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  auto blit_pass = GetOrCreateBlitPass();
++  return blit_pass && blit_pass->McsmCopyTextureToBuffer(
++                          src, destination.GetBuffer(), source_region,
++                          destination_offset, source_mip, source_slice);
++}
++
++bool CommandBuffer::McsmGenerateMipmap(Texture& texture) {
++  if (!McsmCopiesSupported(*context_) || texture.McsmIsView() ||
++      texture.GetTexture()->GetTextureDescriptor().type ==
++          impeller::TextureType::kTexture3D) {
++    return false;
++  }
++  auto blit_pass = GetOrCreateBlitPass();
++  return blit_pass && blit_pass->GenerateMipmap(texture.GetTexture(),
++                                                "CommandBuffer.mcsmMipmap");
++}
++
+ bool CommandBuffer::AddCompletionCallback(
+     impeller::CommandBuffer::CompletionCallback completion_callback) {
+   if (submitted_) {
+@@ -348,3 +450,63 @@ Dart_Handle InternalFlutterGpu_CommandBuffer_CopyTextureToTexture(
+   }
+   return Dart_Null();
+ }
++
++Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* source,
++    flutter::gpu::Texture* destination,
++    int source_x,
++    int source_y,
++    int source_width,
++    int source_height,
++    int destination_x,
++    int destination_y,
++    int source_mip,
++    int source_slice,
++    int destination_mip,
++    int destination_slice) {
++  if (!source || !destination || source_mip < 0 || source_slice < 0 ||
++      destination_mip < 0 || destination_slice < 0 ||
++      !wrapper->McsmCopyTextureToTexture(
++          *source, *destination,
++          impeller::IRect::MakeXYWH(source_x, source_y, source_width,
++                                    source_height),
++          impeller::IPoint(destination_x, destination_y), source_mip,
++          source_slice, destination_mip, destination_slice)) {
++    return tonic::ToDart("Failed to copy between the textures.");
++  }
++  return Dart_Null();
++}
++
++Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* source,
++    int source_x,
++    int source_y,
++    int source_width,
++    int source_height,
++    int source_mip,
++    int source_slice,
++    flutter::gpu::DeviceBuffer* destination,
++    int destination_offset_in_bytes) {
++  if (!source || !destination || source_mip < 0 || source_slice < 0 ||
++      destination_offset_in_bytes < 0 ||
++      !wrapper->McsmCopyTextureToBuffer(
++          *source,
++          impeller::IRect::MakeXYWH(source_x, source_y, source_width,
++                                    source_height),
++          source_mip, source_slice, *destination,
++          static_cast<size_t>(destination_offset_in_bytes))) {
++    return tonic::ToDart("Failed to copy the texture to the buffer.");
++  }
++  return Dart_Null();
++}
++
++Dart_Handle InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* texture) {
++  if (!texture || !wrapper->McsmGenerateMipmap(*texture)) {
++    return tonic::ToDart("Failed to generate the mip levels.");
++  }
++  return Dart_Null();
++}
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.h b/engine/src/flutter/lib/gpu/command_buffer.h
+index 20c21e13658..efb34fa1a24 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.h
++++ b/engine/src/flutter/lib/gpu/command_buffer.h
+@@ -16,6 +16,7 @@
+ #include "impeller/geometry/point.h"
+ #include "impeller/geometry/rect.h"
+ #include "impeller/renderer/blit_pass.h"
++#include "impeller/renderer/compute_pass.h"
+ #include "impeller/renderer/command_buffer.h"
+ #include "impeller/renderer/context.h"
+ #include "impeller/renderer/render_pass.h"
+@@ -36,6 +37,15 @@ class CommandBuffer : public RefCountedDartWrappable<CommandBuffer> {
+   void AddRenderPass(std::shared_ptr<impeller::RenderPass> render_pass,
+                      std::shared_ptr<bool> ended = nullptr);
+ 
++  /// mcsm9: a compute pass, encoded in turn with the render and blit passes.
++  void AddComputePass(std::shared_ptr<impeller::ComputePass> compute_pass,
++                      std::shared_ptr<bool> ended);
++
++  /// mcsm9
++  const std::shared_ptr<impeller::Context>& McsmGetContext() const {
++    return context_;
++  }
++
+   /// mcsm7: ends the encoder of this command buffer's last pass, if still
+   /// open, before a new one starts (Metal creates each pass's encoder at
+   /// once and allows one open encoder per command buffer, so upstream could
+@@ -64,6 +74,24 @@ class CommandBuffer : public RefCountedDartWrappable<CommandBuffer> {
+                             impeller::IRect source_region,
+                             impeller::IPoint destination_origin);
+ 
++  /// mcsm9: copies between mip levels and slices, to buffers, and mip
++  /// generation (every layer of an array or cube).
++  bool McsmCopyTextureToTexture(Texture& source,
++                                Texture& destination,
++                                impeller::IRect source_region,
++                                impeller::IPoint destination_origin,
++                                uint32_t source_mip,
++                                uint32_t source_slice,
++                                uint32_t destination_mip,
++                                uint32_t destination_slice);
++  bool McsmCopyTextureToBuffer(Texture& source,
++                               impeller::IRect source_region,
++                               uint32_t source_mip,
++                               uint32_t source_slice,
++                               DeviceBuffer& destination,
++                               size_t destination_offset);
++  bool McsmGenerateMipmap(Texture& texture);
++
+   bool Submit();
+   bool Submit(
+       const impeller::CommandBuffer::CompletionCallback& completion_callback);
+@@ -77,6 +105,7 @@ class CommandBuffer : public RefCountedDartWrappable<CommandBuffer> {
+   struct Encodable {
+     std::shared_ptr<impeller::RenderPass> render_pass;
+     std::shared_ptr<impeller::BlitPass> blit_pass;
++    std::shared_ptr<impeller::ComputePass> compute_pass;  // mcsm9
+     // mcsm7: set once encoded (ended early or at submit); shared with the
+     // flutter::gpu::RenderPass so it refuses later draws.
+     std::shared_ptr<bool> ended;
+@@ -150,6 +179,44 @@ extern Dart_Handle InternalFlutterGpu_CommandBuffer_CopyTextureToTexture(
+     int destination_x,
+     int destination_y);
+ 
++/// mcsm9: CommandBuffer::McsmCopyTextureToTexture; null on success, else an
++/// error string.
++FLUTTER_GPU_EXPORT
++extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* source,
++    flutter::gpu::Texture* destination,
++    int source_x,
++    int source_y,
++    int source_width,
++    int source_height,
++    int destination_x,
++    int destination_y,
++    int source_mip,
++    int source_slice,
++    int destination_mip,
++    int destination_slice);
++
++/// mcsm9: CommandBuffer::McsmCopyTextureToBuffer.
++FLUTTER_GPU_EXPORT
++extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* source,
++    int source_x,
++    int source_y,
++    int source_width,
++    int source_height,
++    int source_mip,
++    int source_slice,
++    flutter::gpu::DeviceBuffer* destination,
++    int destination_offset_in_bytes);
++
++/// mcsm9: CommandBuffer::McsmGenerateMipmap.
++FLUTTER_GPU_EXPORT
++extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap(
++    flutter::gpu::CommandBuffer* wrapper,
++    flutter::gpu::Texture* texture);
++
+ }  // extern "C"
+ 
+ #endif  // FLUTTER_LIB_GPU_COMMAND_BUFFER_H_
+diff --git a/engine/src/flutter/lib/gpu/compute_pass.cc b/engine/src/flutter/lib/gpu/compute_pass.cc
+new file mode 100644
+index 00000000000..5a80f5df0da
+--- /dev/null
++++ b/engine/src/flutter/lib/gpu/compute_pass.cc
+@@ -0,0 +1,425 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "flutter/lib/gpu/compute_pass.h"
++
++#include <algorithm>
++
++#include "flutter/lib/gpu/formats.h"
++#include "impeller/core/sampler_descriptor.h"
++#include "impeller/renderer/pipeline_library.h"
++#include "impeller/renderer/sampler_library.h"
++#include "tonic/converter/dart_converter.h"
++
++namespace flutter {
++namespace gpu {
++
++IMPLEMENT_WRAPPERTYPEINFO(flutter_gpu, ComputePipeline);
++IMPLEMENT_WRAPPERTYPEINFO(flutter_gpu, ComputePass);
++
++ComputePipeline::ComputePipeline(fml::RefPtr<Shader> shader,
++                                 std::shared_ptr<ImpellerPipeline> pipeline)
++    : shader_(std::move(shader)), pipeline_(std::move(pipeline)) {}
++
++ComputePipeline::~ComputePipeline() = default;
++
++ComputePass::ComputePass() = default;
++
++ComputePass::~ComputePass() = default;
++
++bool ComputePass::Begin(CommandBuffer& command_buffer) {
++  // The command buffer's open render or blit encoder ends first (Metal
++  // allows one open encoder per command buffer).
++  command_buffer.McsmEndOpenEncoder();
++  pass_ = command_buffer.GetCommandBuffer()->CreateComputePass();
++  if (!pass_ || !pass_->IsValid()) {
++    pass_ = nullptr;
++    return false;
++  }
++  context_ = command_buffer.McsmGetContext();
++  ended_ = std::make_shared<bool>(false);
++  command_buffer.AddComputePass(pass_, ended_);
++  return true;
++}
++
++bool ComputePass::SetPipeline(fml::RefPtr<ComputePipeline> pipeline) {
++  if (!pass_ || *ended_ || !pipeline || !pipeline->GetPipeline()) {
++    return false;
++  }
++  pipeline_ = std::move(pipeline);
++  pass_->SetPipeline(pipeline_->GetPipeline());
++  return true;
++}
++
++static impeller::ShaderUniformSlot McsmSlot(
++    const Shader::StorageBinding& binding) {
++  return impeller::ShaderUniformSlot{
++      .name = binding.name.c_str(),
++      .ext_res_0 = binding.ext_res_0,
++      .set = binding.set,
++      .binding = binding.binding,
++  };
++}
++
++bool ComputePass::BindUniform(
++    int index,
++    std::shared_ptr<const impeller::DeviceBuffer> buffer,
++    size_t offset,
++    size_t length) {
++  if (!pass_ || *ended_ || !pipeline_ || !buffer ||
++      offset + length > buffer->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  const Shader::UniformBinding* uniform =
++      pipeline_->GetShader()->GetResolvedUniformStruct(index);
++  if (!uniform) {
++    return false;
++  }
++  return pass_->BindResource(
++      impeller::ShaderStage::kCompute, impeller::DescriptorType::kUniformBuffer,
++      uniform->slot, &uniform->metadata,
++      impeller::BufferView(std::move(buffer), impeller::Range(offset, length)));
++}
++
++bool ComputePass::BindStorageBuffer(
++    int index,
++    std::shared_ptr<const impeller::DeviceBuffer> buffer,
++    size_t offset,
++    size_t length) {
++  if (!pass_ || *ended_ || !pipeline_ || !buffer ||
++      offset + length > buffer->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  const Shader::StorageBinding* binding =
++      pipeline_->GetShader()->McsmGetStorageBuffer(index);
++  if (!binding) {
++    return false;
++  }
++  static const impeller::ShaderMetadata kNoMetadata;
++  return pass_->BindResource(
++      impeller::ShaderStage::kCompute, impeller::DescriptorType::kStorageBuffer,
++      McsmSlot(*binding), &kNoMetadata,
++      impeller::BufferView(std::move(buffer), impeller::Range(offset, length)));
++}
++
++bool ComputePass::BindTexture(int index,
++                              std::shared_ptr<const impeller::Texture> texture,
++                              const impeller::SamplerDescriptor& sampler) {
++  if (!pass_ || *ended_ || !pipeline_ || !texture) {
++    return false;
++  }
++  const Shader::TextureBinding* binding =
++      pipeline_->GetShader()->GetResolvedUniformTexture(index);
++  if (!binding) {
++    return false;
++  }
++  return pass_->BindResource(
++      impeller::ShaderStage::kCompute, impeller::DescriptorType::kSampledImage,
++      binding->slot, &binding->metadata, std::move(texture),
++      context_->GetSamplerLibrary()->GetSampler(sampler));
++}
++
++bool ComputePass::BindStorageImage(
++    int index,
++    std::shared_ptr<const impeller::Texture> texture) {
++  if (!pass_ || *ended_ || !pipeline_ || !texture ||
++      !(texture->GetTextureDescriptor().usage &
++        impeller::TextureUsage::kShaderWrite)) {
++    return false;
++  }
++  const Shader::StorageBinding* binding =
++      pipeline_->GetShader()->McsmGetStorageImage(index);
++  if (!binding) {
++    return false;
++  }
++  static const impeller::ShaderMetadata kNoMetadata;
++  const impeller::SampledImageSlot slot{
++      .name = binding->name.c_str(),
++      .texture_index = binding->ext_res_0,
++      .set = binding->set,
++      .binding = binding->binding,
++  };
++  return pass_->BindResource(impeller::ShaderStage::kCompute,
++                             impeller::DescriptorType::kStorageImage, slot,
++                             &kNoMetadata, std::move(texture),
++                             impeller::raw_ptr<const impeller::Sampler>());
++}
++
++bool ComputePass::BindTexelBuffer(
++    int index,
++    std::shared_ptr<const impeller::DeviceBuffer> buffer,
++    size_t offset,
++    size_t length,
++    impeller::PixelFormat format) {
++  if (!pass_ || *ended_ || !pipeline_ || !buffer ||
++      offset + length > buffer->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(2, index);
++  if (!slot) {
++    return false;
++  }
++  return pass_->McsmBindTexelBuffer(
++      impeller::ShaderStage::kCompute,
++      {.metal_texture = slot->ext_res_0,
++       .metal_atomic_buffer = slot->ext_res_1,
++       .binding = slot->binding,
++       .storage = slot->storage},
++      impeller::BufferView(std::move(buffer), impeller::Range(offset, length)),
++      format);
++}
++
++bool ComputePass::BindSeparateTexture(
++    int index,
++    std::shared_ptr<const impeller::Texture> texture) {
++  if (!pass_ || *ended_ || !pipeline_ || !texture) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(3, index);
++  return slot && pass_->McsmBindSeparateTexture(impeller::ShaderStage::kCompute,
++                                                slot->ext_res_0, slot->binding,
++                                                std::move(texture));
++}
++
++bool ComputePass::BindSeparateSampler(
++    int index,
++    const impeller::SamplerDescriptor& sampler) {
++  if (!pass_ || *ended_ || !pipeline_) {
++    return false;
++  }
++  const Shader::McsmBinding* slot = pipeline_->GetShader()->McsmGet(4, index);
++  return slot && pass_->McsmBindSeparateSampler(
++                     impeller::ShaderStage::kCompute, slot->ext_res_0,
++                     slot->binding,
++                     context_->GetSamplerLibrary()->GetSampler(sampler));
++}
++
++bool ComputePass::Dispatch(uint32_t x, uint32_t y, uint32_t z) {
++  if (!pass_ || *ended_ || !pipeline_) {
++    return false;
++  }
++  // Impeller drops a pipeline's bindings after each dispatch (Vulkan) and
++  // needs it set again before the next.
++  const bool ok = pass_->Compute({x, y, z}).ok();
++  pass_->SetPipeline(pipeline_->GetPipeline());
++  return ok;
++}
++
++bool ComputePass::DispatchIndirect(
++    std::shared_ptr<const impeller::DeviceBuffer> args,
++    size_t offset) {
++  if (!pass_ || *ended_ || !pipeline_ || !args || offset % 4 != 0 ||
++      offset + 12u > args->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  pass_->McsmSetIndirect(
++      impeller::BufferView(std::move(args), impeller::Range(offset, 12u)));
++  return Dispatch(1u, 1u, 1u);
++}
++
++void ComputePass::Barrier() {
++  if (!pass_ || *ended_) {
++    return;
++  }
++  pass_->AddBufferMemoryBarrier();
++  pass_->AddTextureMemoryBarrier();
++}
++
++}  // namespace gpu
++}  // namespace flutter
++
++//----------------------------------------------------------------------------
++/// Exports
++///
++
++Dart_Handle InternalFlutterGpu_ComputePipeline_McsmInitialize(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Shader* shader) {
++  impeller::Context& context = gpu_context->GetContext();
++  if (context.GetBackendType() == impeller::Context::BackendType::kOpenGLES) {
++    return tonic::ToDart("Compute pipelines need Metal or Vulkan.");
++  }
++  if (!shader || shader->GetShaderStage() != impeller::ShaderStage::kCompute) {
++    return tonic::ToDart("The shader is not a compute shader.");
++  }
++  if (!shader->RegisterSync(*gpu_context)) {
++    return tonic::ToDart("Failed to register the compute shader.");
++  }
++  impeller::ComputePipelineDescriptor desc;
++  desc.SetLabel("mcsm compute");
++  desc.SetStageEntrypoint(
++      shader->GetFunctionFromLibrary(*context.GetShaderLibrary()));
++  desc.SetWorkgroupSize(shader->McsmGetWorkgroupSize());
++  const auto& layouts = shader->GetDescriptorSetLayouts();
++  desc.RegisterDescriptorSetLayouts(layouts.data(), layouts.size());
++  auto pipeline = context.GetPipelineLibrary()->GetPipeline(desc).Get();
++  if (!pipeline || !pipeline->IsValid()) {
++    return tonic::ToDart("Failed to create the compute pipeline.");
++  }
++  auto res = fml::MakeRefCounted<flutter::gpu::ComputePipeline>(
++      fml::Ref(shader), std::move(pipeline));
++  res->AssociateWithDartWrapper(wrapper);
++  return Dart_Null();
++}
++
++void InternalFlutterGpu_ComputePass_McsmInitialize(Dart_Handle wrapper) {
++  auto res = fml::MakeRefCounted<flutter::gpu::ComputePass>();
++  res->AssociateWithDartWrapper(wrapper);
++}
++
++Dart_Handle InternalFlutterGpu_ComputePass_McsmBegin(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::CommandBuffer* command_buffer) {
++  if (!wrapper->Begin(*command_buffer)) {
++    return tonic::ToDart("Failed to begin the compute pass.");
++  }
++  return Dart_Null();
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindPipeline(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::ComputePipeline* pipeline) {
++  return wrapper->SetPipeline(fml::Ref(pipeline));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindUniform(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes) {
++  if (!buffer || offset_in_bytes < 0 || length_in_bytes <= 0) {
++    return false;
++  }
++  return wrapper->BindUniform(index, buffer->GetBuffer(),
++                              static_cast<size_t>(offset_in_bytes),
++                              static_cast<size_t>(length_in_bytes));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes) {
++  if (!buffer || offset_in_bytes < 0 || length_in_bytes <= 0) {
++    return false;
++  }
++  return wrapper->BindStorageBuffer(index, buffer->GetBuffer(),
++                                    static_cast<size_t>(offset_in_bytes),
++                                    static_cast<size_t>(length_in_bytes));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture,
++    int min_filter,
++    int mag_filter,
++    int mip_filter,
++    int width_address_mode,
++    int height_address_mode) {
++  if (!texture) {
++    return false;
++  }
++  impeller::SamplerDescriptor sampler;
++  sampler.min_filter = flutter::gpu::ToImpellerMinMagFilter(min_filter);
++  sampler.mag_filter = flutter::gpu::ToImpellerMinMagFilter(mag_filter);
++  sampler.mip_filter = flutter::gpu::ToImpellerMipFilter(mip_filter);
++  sampler.width_address_mode =
++      flutter::gpu::ToImpellerSamplerAddressMode(width_address_mode);
++  sampler.height_address_mode =
++      flutter::gpu::ToImpellerSamplerAddressMode(height_address_mode);
++  return wrapper->BindTexture(index, texture->GetTexture(), sampler);
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindStorageImage(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture) {
++  if (!texture) {
++    return false;
++  }
++  return wrapper->BindStorageImage(index, texture->GetTexture());
++}
++
++bool InternalFlutterGpu_ComputePass_McsmDispatch(
++    flutter::gpu::ComputePass* wrapper,
++    int x,
++    int y,
++    int z) {
++  if (x <= 0 || y <= 0 || z <= 0) {
++    return false;
++  }
++  return wrapper->Dispatch(static_cast<uint32_t>(x), static_cast<uint32_t>(y),
++                           static_cast<uint32_t>(z));
++}
++
++void InternalFlutterGpu_ComputePass_McsmBarrier(
++    flutter::gpu::ComputePass* wrapper) {
++  wrapper->Barrier();
++}
++
++bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes) {
++  if (!args || offset_in_bytes < 0) {
++    return false;
++  }
++  return wrapper->DispatchIndirect(args->GetBuffer(),
++                                   static_cast<size_t>(offset_in_bytes));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  if (!texture) {
++    return false;
++  }
++  return wrapper->BindTexture(
++      index, texture->GetTexture(),
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format) {
++  if (!buffer || offset_in_bytes < 0 || length_in_bytes <= 0) {
++    return false;
++  }
++  return wrapper->BindTexelBuffer(index, buffer->GetBuffer(),
++                                  static_cast<size_t>(offset_in_bytes),
++                                  static_cast<size_t>(length_in_bytes),
++                                  flutter::gpu::ToImpellerPixelFormat(format));
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture) {
++  return texture && wrapper->BindSeparateTexture(index, texture->GetTexture());
++}
++
++bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  return wrapper->BindSeparateSampler(
++      index,
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++}
+diff --git a/engine/src/flutter/lib/gpu/compute_pass.h b/engine/src/flutter/lib/gpu/compute_pass.h
+new file mode 100644
+index 00000000000..939c9397c74
+--- /dev/null
++++ b/engine/src/flutter/lib/gpu/compute_pass.h
+@@ -0,0 +1,238 @@
++// Copyright 2013 The Flutter Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef FLUTTER_LIB_GPU_COMPUTE_PASS_H_
++#define FLUTTER_LIB_GPU_COMPUTE_PASS_H_
++
++#include <memory>
++
++#include "flutter/lib/gpu/command_buffer.h"
++#include "flutter/lib/gpu/context.h"
++#include "flutter/lib/gpu/device_buffer.h"
++#include "flutter/lib/gpu/export.h"
++#include "flutter/lib/gpu/shader.h"
++#include "flutter/lib/gpu/texture.h"
++#include "flutter/lib/ui/dart_wrapper.h"
++#include "impeller/renderer/compute_pass.h"
++#include "impeller/renderer/compute_pipeline_descriptor.h"
++#include "impeller/renderer/pipeline.h"
++
++namespace flutter {
++namespace gpu {
++
++/// mcsm9: a compute pipeline made from a compute shader of a shader bundle
++/// (Metal and Vulkan).
++class ComputePipeline : public RefCountedDartWrappable<ComputePipeline> {
++  DEFINE_WRAPPERTYPEINFO();
++  FML_FRIEND_MAKE_REF_COUNTED(ComputePipeline);
++
++ public:
++  using ImpellerPipeline =
++      impeller::Pipeline<impeller::ComputePipelineDescriptor>;
++
++  ComputePipeline(fml::RefPtr<Shader> shader,
++                  std::shared_ptr<ImpellerPipeline> pipeline);
++
++  ~ComputePipeline() override;
++
++  const fml::RefPtr<Shader>& GetShader() const { return shader_; }
++
++  const std::shared_ptr<ImpellerPipeline>& GetPipeline() const {
++    return pipeline_;
++  }
++
++ private:
++  fml::RefPtr<Shader> shader_;
++  std::shared_ptr<ImpellerPipeline> pipeline_;
++
++  FML_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);
++};
++
++/// mcsm9: a compute pass on a command buffer: a pipeline, its uniform and
++/// storage buffers, sampled textures and storage images, then dispatches of
++/// workgroups. Bindings hold until the next dispatch.
++class ComputePass : public RefCountedDartWrappable<ComputePass> {
++  DEFINE_WRAPPERTYPEINFO();
++  FML_FRIEND_MAKE_REF_COUNTED(ComputePass);
++
++ public:
++  ComputePass();
++
++  ~ComputePass() override;
++
++  bool Begin(CommandBuffer& command_buffer);
++
++  bool SetPipeline(fml::RefPtr<ComputePipeline> pipeline);
++
++  bool BindUniform(int index,
++                   std::shared_ptr<const impeller::DeviceBuffer> buffer,
++                   size_t offset,
++                   size_t length);
++
++  bool BindStorageBuffer(int index,
++                         std::shared_ptr<const impeller::DeviceBuffer> buffer,
++                         size_t offset,
++                         size_t length);
++
++  bool BindTexture(int index,
++                   std::shared_ptr<const impeller::Texture> texture,
++                   const impeller::SamplerDescriptor& sampler);
++
++  bool BindStorageImage(int index,
++                        std::shared_ptr<const impeller::Texture> texture);
++
++  /// Texel buffers, textures and samplers bound apart (kinds as
++  /// Shader::McsmResolve).
++  bool BindTexelBuffer(int index,
++                       std::shared_ptr<const impeller::DeviceBuffer> buffer,
++                       size_t offset,
++                       size_t length,
++                       impeller::PixelFormat format);
++  bool BindSeparateTexture(int index,
++                           std::shared_ptr<const impeller::Texture> texture);
++  bool BindSeparateSampler(int index,
++                           const impeller::SamplerDescriptor& sampler);
++
++  bool Dispatch(uint32_t x, uint32_t y, uint32_t z);
++
++  /// Workgroup counts from `args` (three uint32s).
++  bool DispatchIndirect(std::shared_ptr<const impeller::DeviceBuffer> args,
++                        size_t offset);
++
++  /// Orders this pass's earlier dispatches' writes before its later ones'
++  /// reads (buffers and images).
++  void Barrier();
++
++ private:
++  std::shared_ptr<const impeller::Context> context_;
++  std::shared_ptr<impeller::ComputePass> pass_;
++  std::shared_ptr<bool> ended_;
++  fml::RefPtr<ComputePipeline> pipeline_;
++
++  FML_DISALLOW_COPY_AND_ASSIGN(ComputePass);
++};
++
++}  // namespace gpu
++}  // namespace flutter
++
++//----------------------------------------------------------------------------
++/// Exports
++///
++
++extern "C" {
++
++/// Returns null on success, else an error string.
++FLUTTER_GPU_EXPORT
++extern Dart_Handle InternalFlutterGpu_ComputePipeline_McsmInitialize(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Shader* shader);
++
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_ComputePass_McsmInitialize(Dart_Handle wrapper);
++
++/// Returns null on success, else an error string.
++FLUTTER_GPU_EXPORT
++extern Dart_Handle InternalFlutterGpu_ComputePass_McsmBegin(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::CommandBuffer* command_buffer);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindPipeline(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::ComputePipeline* pipeline);
++
++/// `index` from Shader_ResolveUniformStruct.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindUniform(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes);
++
++/// `index` from Shader_McsmResolveStorageBuffer.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes);
++
++/// `index` from Shader_ResolveUniformTexture; the sampler as in
++/// RenderPass_BindTextureIndexed.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture,
++    int min_filter,
++    int mag_filter,
++    int mip_filter,
++    int width_address_mode,
++    int height_address_mode);
++
++/// A texture with a whole sampler state (McsmSamplerFromPacked).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
++
++/// `index` from Shader_McsmResolveStorageImage.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindStorageImage(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmDispatch(
++    flutter::gpu::ComputePass* wrapper,
++    int x,
++    int y,
++    int z);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    flutter::gpu::Texture* texture);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++    flutter::gpu::ComputePass* wrapper,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
++    flutter::gpu::ComputePass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes);
++
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_ComputePass_McsmBarrier(
++    flutter::gpu::ComputePass* wrapper);
++
++}  // extern "C"
++
++#endif  // FLUTTER_LIB_GPU_COMPUTE_PASS_H_
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index a354274af19..0f12b18fc11 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -269,16 +269,23 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // one command buffer: Vulkan ends the previous pass, GLES records them).
+   // Before that, every bit without 1024 (callers ask again later).
+   const int backend = g_mcsm_backend;
++  //
++  // mcsm9: 2048 = Minecraft: Story Mode S2's needs on Metal and Vulkan: 2D
++  // array and 3D textures (Texture_McsmInitializeLayered), the added pixel
++  // formats and 2x MSAA, storage buffers in render passes
++  // (RenderPass_McsmBindStorageBuffer), compute pipelines and passes
++  // (ComputePipeline_*, ComputePass_*), and shader bundles with storage
++  // resources and per-block uniform limits.
+   const int64_t common = 1 | 2 | 4 | 8 | 512;
+   switch (backend) {
+     case 0:
+-      return common | 16 | 64 | 256 | 1024;
++      return common | 16 | 64 | 256 | 1024 | 2048;
+     case 1:
+       return common | 64 | 128 | 1024;
+     case 2:
+-      return common | 64 | (g_mcsm_vk_viewports ? 256 : 0) | 1024;
++      return common | 64 | (g_mcsm_vk_viewports ? 256 : 0) | 1024 | 2048;
+     default:
+-      return common | 16 | 64 | 128 | 256;
++      return common | 16 | 64 | 128 | 256 | 2048;
+   }
+ }
+ 
+diff --git a/engine/src/flutter/lib/gpu/formats.h b/engine/src/flutter/lib/gpu/formats.h
+index 43a66e7aaa2..84c130f43bd 100644
+--- a/engine/src/flutter/lib/gpu/formats.h
++++ b/engine/src/flutter/lib/gpu/formats.h
+@@ -5,8 +5,11 @@
+ #ifndef FLUTTER_LIB_GPU_FORMATS_H_
+ #define FLUTTER_LIB_GPU_FORMATS_H_
+ 
++#include <algorithm>
++
+ #include "fml/logging.h"
+ #include "impeller/core/formats.h"
++#include "impeller/core/sampler_descriptor.h"
+ #include "impeller/core/shader_types.h"
+ 
+ // ATTENTION! ATTENTION! ATTENTION!
+@@ -84,6 +87,48 @@ enum class FlutterGPUPixelFormat {
+   // ASTC HDR has no sRGB variant; the data is already linear floating point.
+   kASTC4x4HDR,
+   kASTC8x8HDR,
++  // mcsm9
++  kR11G11B10UFloat,
++  kR16G16B16A16UNormInt,
++  kD16UNormInt,
++  kD32Float,
++  kR32UInt,
++  kR32G32UInt,
++  kR32G32B32A32UInt,
++  kR16Float,
++  kR16G16Float,
++  kR32G32Float,
++  kR8UInt,
++  kR8SNormInt,
++  kR8G8UInt,
++  kR8G8SNormInt,
++  kR8G8B8A8UInt,
++  kR8G8B8A8SInt,
++  kR8G8B8A8SNormInt,
++  kR10G10B10A2UNormInt,
++  kR10G10B10A2UInt,
++  kR9G9B9E5UFloat,
++  kR16UNormInt,
++  kR16SNormInt,
++  kR16UInt,
++  kR16SInt,
++  kR16G16UNormInt,
++  kR16G16SNormInt,
++  kR16G16UInt,
++  kR16G16SInt,
++  kR16G16B16A16SNormInt,
++  kR16G16B16A16UInt,
++  kR16G16B16A16SInt,
++  kR32SInt,
++  kR32G32SInt,
++  kR32G32B32A32SInt,
++  kBC2RGBAUNormInt,
++  kBC2RGBAUNormIntSRGB,
++  kBC4RUNormInt,
++  kBC4RSNormInt,
++  kBC5RGSNormInt,
++  kBC6HRGBUFloat,
++  kBC6HRGBSFloat,
+ };
+ 
+ enum class FlutterGPUTextureCompressionFamily {
+@@ -178,6 +223,88 @@ constexpr impeller::PixelFormat ToImpellerPixelFormat(
+       return impeller::PixelFormat::kASTC4x4HDR;
+     case FlutterGPUPixelFormat::kASTC8x8HDR:
+       return impeller::PixelFormat::kASTC8x8HDR;
++    case FlutterGPUPixelFormat::kR11G11B10UFloat:
++      return impeller::PixelFormat::kR11G11B10UFloat;
++    case FlutterGPUPixelFormat::kR16G16B16A16UNormInt:
++      return impeller::PixelFormat::kR16G16B16A16UNormInt;
++    case FlutterGPUPixelFormat::kD16UNormInt:
++      return impeller::PixelFormat::kD16UNormInt;
++    case FlutterGPUPixelFormat::kD32Float:
++      return impeller::PixelFormat::kD32Float;
++    case FlutterGPUPixelFormat::kR32UInt:
++      return impeller::PixelFormat::kR32UInt;
++    case FlutterGPUPixelFormat::kR32G32UInt:
++      return impeller::PixelFormat::kR32G32UInt;
++    case FlutterGPUPixelFormat::kR32G32B32A32UInt:
++      return impeller::PixelFormat::kR32G32B32A32UInt;
++    case FlutterGPUPixelFormat::kR16Float:
++      return impeller::PixelFormat::kR16Float;
++    case FlutterGPUPixelFormat::kR16G16Float:
++      return impeller::PixelFormat::kR16G16Float;
++    case FlutterGPUPixelFormat::kR32G32Float:
++      return impeller::PixelFormat::kR32G32Float;
++    case FlutterGPUPixelFormat::kR8UInt:
++      return impeller::PixelFormat::kR8UInt;
++    case FlutterGPUPixelFormat::kR8SNormInt:
++      return impeller::PixelFormat::kR8SNormInt;
++    case FlutterGPUPixelFormat::kR8G8UInt:
++      return impeller::PixelFormat::kR8G8UInt;
++    case FlutterGPUPixelFormat::kR8G8SNormInt:
++      return impeller::PixelFormat::kR8G8SNormInt;
++    case FlutterGPUPixelFormat::kR8G8B8A8UInt:
++      return impeller::PixelFormat::kR8G8B8A8UInt;
++    case FlutterGPUPixelFormat::kR8G8B8A8SInt:
++      return impeller::PixelFormat::kR8G8B8A8SInt;
++    case FlutterGPUPixelFormat::kR8G8B8A8SNormInt:
++      return impeller::PixelFormat::kR8G8B8A8SNormInt;
++    case FlutterGPUPixelFormat::kR10G10B10A2UNormInt:
++      return impeller::PixelFormat::kR10G10B10A2UNormInt;
++    case FlutterGPUPixelFormat::kR10G10B10A2UInt:
++      return impeller::PixelFormat::kR10G10B10A2UInt;
++    case FlutterGPUPixelFormat::kR9G9B9E5UFloat:
++      return impeller::PixelFormat::kR9G9B9E5UFloat;
++    case FlutterGPUPixelFormat::kR16UNormInt:
++      return impeller::PixelFormat::kR16UNormInt;
++    case FlutterGPUPixelFormat::kR16SNormInt:
++      return impeller::PixelFormat::kR16SNormInt;
++    case FlutterGPUPixelFormat::kR16UInt:
++      return impeller::PixelFormat::kR16UInt;
++    case FlutterGPUPixelFormat::kR16SInt:
++      return impeller::PixelFormat::kR16SInt;
++    case FlutterGPUPixelFormat::kR16G16UNormInt:
++      return impeller::PixelFormat::kR16G16UNormInt;
++    case FlutterGPUPixelFormat::kR16G16SNormInt:
++      return impeller::PixelFormat::kR16G16SNormInt;
++    case FlutterGPUPixelFormat::kR16G16UInt:
++      return impeller::PixelFormat::kR16G16UInt;
++    case FlutterGPUPixelFormat::kR16G16SInt:
++      return impeller::PixelFormat::kR16G16SInt;
++    case FlutterGPUPixelFormat::kR16G16B16A16SNormInt:
++      return impeller::PixelFormat::kR16G16B16A16SNormInt;
++    case FlutterGPUPixelFormat::kR16G16B16A16UInt:
++      return impeller::PixelFormat::kR16G16B16A16UInt;
++    case FlutterGPUPixelFormat::kR16G16B16A16SInt:
++      return impeller::PixelFormat::kR16G16B16A16SInt;
++    case FlutterGPUPixelFormat::kR32SInt:
++      return impeller::PixelFormat::kR32SInt;
++    case FlutterGPUPixelFormat::kR32G32SInt:
++      return impeller::PixelFormat::kR32G32SInt;
++    case FlutterGPUPixelFormat::kR32G32B32A32SInt:
++      return impeller::PixelFormat::kR32G32B32A32SInt;
++    case FlutterGPUPixelFormat::kBC2RGBAUNormInt:
++      return impeller::PixelFormat::kBC2RGBAUNormInt;
++    case FlutterGPUPixelFormat::kBC2RGBAUNormIntSRGB:
++      return impeller::PixelFormat::kBC2RGBAUNormIntSRGB;
++    case FlutterGPUPixelFormat::kBC4RUNormInt:
++      return impeller::PixelFormat::kBC4RUNormInt;
++    case FlutterGPUPixelFormat::kBC4RSNormInt:
++      return impeller::PixelFormat::kBC4RSNormInt;
++    case FlutterGPUPixelFormat::kBC5RGSNormInt:
++      return impeller::PixelFormat::kBC5RGSNormInt;
++    case FlutterGPUPixelFormat::kBC6HRGBUFloat:
++      return impeller::PixelFormat::kBC6HRGBUFloat;
++    case FlutterGPUPixelFormat::kBC6HRGBSFloat:
++      return impeller::PixelFormat::kBC6HRGBSFloat;
+   }
+ }
+ 
+@@ -255,6 +382,88 @@ constexpr FlutterGPUPixelFormat FromImpellerPixelFormat(
+       return FlutterGPUPixelFormat::kASTC4x4HDR;
+     case impeller::PixelFormat::kASTC8x8HDR:
+       return FlutterGPUPixelFormat::kASTC8x8HDR;
++    case impeller::PixelFormat::kR11G11B10UFloat:
++      return FlutterGPUPixelFormat::kR11G11B10UFloat;
++    case impeller::PixelFormat::kR16G16B16A16UNormInt:
++      return FlutterGPUPixelFormat::kR16G16B16A16UNormInt;
++    case impeller::PixelFormat::kD16UNormInt:
++      return FlutterGPUPixelFormat::kD16UNormInt;
++    case impeller::PixelFormat::kD32Float:
++      return FlutterGPUPixelFormat::kD32Float;
++    case impeller::PixelFormat::kR32UInt:
++      return FlutterGPUPixelFormat::kR32UInt;
++    case impeller::PixelFormat::kR32G32UInt:
++      return FlutterGPUPixelFormat::kR32G32UInt;
++    case impeller::PixelFormat::kR32G32B32A32UInt:
++      return FlutterGPUPixelFormat::kR32G32B32A32UInt;
++    case impeller::PixelFormat::kR16Float:
++      return FlutterGPUPixelFormat::kR16Float;
++    case impeller::PixelFormat::kR16G16Float:
++      return FlutterGPUPixelFormat::kR16G16Float;
++    case impeller::PixelFormat::kR32G32Float:
++      return FlutterGPUPixelFormat::kR32G32Float;
++    case impeller::PixelFormat::kR8UInt:
++      return FlutterGPUPixelFormat::kR8UInt;
++    case impeller::PixelFormat::kR8SNormInt:
++      return FlutterGPUPixelFormat::kR8SNormInt;
++    case impeller::PixelFormat::kR8G8UInt:
++      return FlutterGPUPixelFormat::kR8G8UInt;
++    case impeller::PixelFormat::kR8G8SNormInt:
++      return FlutterGPUPixelFormat::kR8G8SNormInt;
++    case impeller::PixelFormat::kR8G8B8A8UInt:
++      return FlutterGPUPixelFormat::kR8G8B8A8UInt;
++    case impeller::PixelFormat::kR8G8B8A8SInt:
++      return FlutterGPUPixelFormat::kR8G8B8A8SInt;
++    case impeller::PixelFormat::kR8G8B8A8SNormInt:
++      return FlutterGPUPixelFormat::kR8G8B8A8SNormInt;
++    case impeller::PixelFormat::kR10G10B10A2UNormInt:
++      return FlutterGPUPixelFormat::kR10G10B10A2UNormInt;
++    case impeller::PixelFormat::kR10G10B10A2UInt:
++      return FlutterGPUPixelFormat::kR10G10B10A2UInt;
++    case impeller::PixelFormat::kR9G9B9E5UFloat:
++      return FlutterGPUPixelFormat::kR9G9B9E5UFloat;
++    case impeller::PixelFormat::kR16UNormInt:
++      return FlutterGPUPixelFormat::kR16UNormInt;
++    case impeller::PixelFormat::kR16SNormInt:
++      return FlutterGPUPixelFormat::kR16SNormInt;
++    case impeller::PixelFormat::kR16UInt:
++      return FlutterGPUPixelFormat::kR16UInt;
++    case impeller::PixelFormat::kR16SInt:
++      return FlutterGPUPixelFormat::kR16SInt;
++    case impeller::PixelFormat::kR16G16UNormInt:
++      return FlutterGPUPixelFormat::kR16G16UNormInt;
++    case impeller::PixelFormat::kR16G16SNormInt:
++      return FlutterGPUPixelFormat::kR16G16SNormInt;
++    case impeller::PixelFormat::kR16G16UInt:
++      return FlutterGPUPixelFormat::kR16G16UInt;
++    case impeller::PixelFormat::kR16G16SInt:
++      return FlutterGPUPixelFormat::kR16G16SInt;
++    case impeller::PixelFormat::kR16G16B16A16SNormInt:
++      return FlutterGPUPixelFormat::kR16G16B16A16SNormInt;
++    case impeller::PixelFormat::kR16G16B16A16UInt:
++      return FlutterGPUPixelFormat::kR16G16B16A16UInt;
++    case impeller::PixelFormat::kR16G16B16A16SInt:
++      return FlutterGPUPixelFormat::kR16G16B16A16SInt;
++    case impeller::PixelFormat::kR32SInt:
++      return FlutterGPUPixelFormat::kR32SInt;
++    case impeller::PixelFormat::kR32G32SInt:
++      return FlutterGPUPixelFormat::kR32G32SInt;
++    case impeller::PixelFormat::kR32G32B32A32SInt:
++      return FlutterGPUPixelFormat::kR32G32B32A32SInt;
++    case impeller::PixelFormat::kBC2RGBAUNormInt:
++      return FlutterGPUPixelFormat::kBC2RGBAUNormInt;
++    case impeller::PixelFormat::kBC2RGBAUNormIntSRGB:
++      return FlutterGPUPixelFormat::kBC2RGBAUNormIntSRGB;
++    case impeller::PixelFormat::kBC4RUNormInt:
++      return FlutterGPUPixelFormat::kBC4RUNormInt;
++    case impeller::PixelFormat::kBC4RSNormInt:
++      return FlutterGPUPixelFormat::kBC4RSNormInt;
++    case impeller::PixelFormat::kBC5RGSNormInt:
++      return FlutterGPUPixelFormat::kBC5RGSNormInt;
++    case impeller::PixelFormat::kBC6HRGBUFloat:
++      return FlutterGPUPixelFormat::kBC6HRGBUFloat;
++    case impeller::PixelFormat::kBC6HRGBSFloat:
++      return FlutterGPUPixelFormat::kBC6HRGBSFloat;
+   }
+ }
+ 
+@@ -460,6 +669,8 @@ enum class FlutterGPUSamplerAddressMode {
+   kClampToEdge,
+   kRepeat,
+   kMirror,
++  kMcsmClampToBorder,      // mcsm9
++  kMcsmMirrorClampToEdge,  // mcsm9
+ };
+ 
+ constexpr impeller::SamplerAddressMode ToImpellerSamplerAddressMode(
+@@ -471,6 +682,10 @@ constexpr impeller::SamplerAddressMode ToImpellerSamplerAddressMode(
+       return impeller::SamplerAddressMode::kRepeat;
+     case FlutterGPUSamplerAddressMode::kMirror:
+       return impeller::SamplerAddressMode::kMirror;
++    case FlutterGPUSamplerAddressMode::kMcsmClampToBorder:
++      return impeller::SamplerAddressMode::kMcsmClampToBorder;
++    case FlutterGPUSamplerAddressMode::kMcsmMirrorClampToEdge:
++      return impeller::SamplerAddressMode::kMcsmMirrorClampToEdge;
+   }
+ }
+ 
+@@ -660,6 +875,37 @@ constexpr impeller::PolygonMode ToImpellerPolygonMode(int value) {
+   return ToImpellerPolygonMode(static_cast<FlutterGPUPolygonMode>(value));
+ }
+ 
++/// mcsm9: a whole sampler state from Dart's `McsmSampler`: bits 0-3 the min
++/// filter, 4-7 mag, 8-11 mip, 12-15, 16-19 and 20-23 the width, height and
++/// depth address modes, 24-31 the anisotropy, 32-35 the compare function
++/// plus one (0: no comparison), 36-39 the border colour; LOD clamps and
++/// bias apart.
++inline impeller::SamplerDescriptor McsmSamplerFromPacked(int64_t packed,
++                                                        double min_lod,
++                                                        double max_lod,
++                                                        double lod_bias) {
++  const auto field = [packed](int shift, int bits) {
++    return static_cast<int>((packed >> shift) & ((1 << bits) - 1));
++  };
++  impeller::SamplerDescriptor desc;
++  desc.min_filter = ToImpellerMinMagFilter(field(0, 4));
++  desc.mag_filter = ToImpellerMinMagFilter(field(4, 4));
++  desc.mip_filter = ToImpellerMipFilter(field(8, 4));
++  desc.width_address_mode = ToImpellerSamplerAddressMode(field(12, 4));
++  desc.height_address_mode = ToImpellerSamplerAddressMode(field(16, 4));
++  desc.depth_address_mode = ToImpellerSamplerAddressMode(field(20, 4));
++  desc.max_anisotropy = static_cast<uint8_t>(std::max(1, field(24, 8)));
++  if (field(32, 4) > 0) {
++    desc.mcsm_compare = ToImpellerCompareFunction(field(32, 4) - 1);
++  }
++  desc.mcsm_border_color = static_cast<impeller::McsmBorderColor>(
++      std::min(2, field(36, 4)));
++  desc.mcsm_min_lod = static_cast<float>(min_lod);
++  desc.mcsm_max_lod = static_cast<float>(max_lod);
++  desc.mcsm_lod_bias = static_cast<float>(lod_bias);
++  return desc;
++}
++
+ }  // namespace gpu
+ }  // namespace flutter
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index f4aba1fe300..65cc244545b 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -134,6 +134,115 @@ void RenderPass::ClearBindings() {
+   vertex_buffer_count = 0;
+   index_buffer = {};
+   index_buffer_type = impeller::IndexType::kNone;
++  mcsm_storage_bindings_.clear();  // mcsm9
++  mcsm_bindings_.clear();          // mcsm9
++}
++
++bool RenderPass::McsmDrawIndirect(impeller::BufferView args, bool indexed) {
++  const auto backend = GetContext()->GetBackendType();
++  if (backend != impeller::Context::BackendType::kMetal &&
++      backend != impeller::Context::BackendType::kVulkan) {
++    return false;
++  }
++  mcsm_pending_indirect_ = std::move(args);
++  // The counts given here only pass Draw's checks; the GPU reads the
++  // argument buffer.
++  const bool ok = Draw(1u, 1u, indexed);
++  mcsm_pending_indirect_ = {};
++  return ok;
++}
++
++bool RenderPass::McsmBindStorageBuffer(
++    const Shader& shader,
++    int index,
++    std::shared_ptr<const impeller::DeviceBuffer> buffer,
++    size_t offset,
++    size_t length) {
++  const Shader::StorageBinding* binding = shader.McsmGetStorageBuffer(index);
++  const impeller::ShaderStage stage = shader.GetShaderStage();
++  if (!binding || !buffer ||
++      (stage != impeller::ShaderStage::kVertex &&
++       stage != impeller::ShaderStage::kFragment) ||
++      offset + length > buffer->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  impeller::ShaderUniformSlot slot{
++      .name = binding->name.c_str(),
++      .ext_res_0 = binding->ext_res_0,
++      .set = binding->set,
++      .binding = binding->binding,
++  };
++  impeller::BufferView view(std::move(buffer), impeller::Range(offset, length));
++  for (auto& entry : mcsm_storage_bindings_) {
++    if (entry.stage == stage && entry.slot.binding == slot.binding &&
++        entry.slot.ext_res_0 == slot.ext_res_0) {
++      entry.slot = slot;
++      entry.view = std::move(view);
++      return true;
++    }
++  }
++  mcsm_storage_bindings_.push_back({stage, slot, std::move(view)});
++  return true;
++}
++
++void RenderPass::McsmSendStorageBuffers() {
++  // Metal's backend reads no metadata for a buffer, Vulkan's only the
++  // binding; GLES has no storage buffers.
++  static const impeller::ShaderMetadata kNoMetadata;
++  for (const auto& entry : mcsm_storage_bindings_) {
++    if (retained_bindings_) {
++      // Marks the index as written, so a uniform that held it is sent again.
++      SendBuffer(entry.stage, entry.slot.ext_res_0, &mcsm_storage_bindings_,
++                 true);
++    }
++    render_pass_->BindResource(entry.stage,
++                               impeller::DescriptorType::kStorageBuffer,
++                               entry.slot, &kNoMetadata, entry.view);
++  }
++  // mcsm9: texel buffers, textures and samplers bound apart. Their Metal
++  // indices are marked written, so a binding that held one is sent again.
++  for (const auto& entry : mcsm_bindings_) {
++    if (retained_bindings_) {
++      SendTexture(entry.stage, entry.slot.ext_res_0, &mcsm_bindings_, true);
++      if (entry.slot.ext_res_1 != ~size_t{0}) {
++        SendBuffer(entry.stage, entry.slot.ext_res_1, &mcsm_bindings_, true);
++      }
++    }
++    switch (entry.kind) {
++      case 2:
++        render_pass_->McsmBindTexelBuffer(
++            entry.stage,
++            {.metal_texture = entry.slot.ext_res_0,
++             .metal_atomic_buffer = entry.slot.ext_res_1,
++             .binding = entry.slot.binding,
++             .storage = entry.slot.storage},
++            entry.view, entry.format);
++        break;
++      case 3:
++        render_pass_->McsmBindSeparateTexture(entry.stage, entry.slot.ext_res_0,
++                                              entry.slot.binding,
++                                              entry.texture);
++        break;
++      case 4:
++        render_pass_->McsmBindSeparateSampler(entry.stage, entry.slot.ext_res_0,
++                                              entry.slot.binding,
++                                              entry.sampler);
++        break;
++    }
++  }
++}
++
++bool RenderPass::McsmBind(McsmBinding binding) {
++  for (auto& entry : mcsm_bindings_) {
++    if (entry.stage == binding.stage && entry.kind == binding.kind &&
++        entry.slot.binding == binding.slot.binding &&
++        entry.slot.ext_res_0 == binding.slot.ext_res_0) {
++      entry = std::move(binding);
++      return true;
++    }
++  }
++  mcsm_bindings_.push_back(std::move(binding));
++  return true;
+ }
+ 
+ std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+@@ -596,6 +705,7 @@ bool RenderPass::Draw(size_t element_count,
+   } else {
+     SendAllBindings();
+   }
++  McsmSendStorageBuffers();  // mcsm9
+   if (indexed) {
+     render_pass_->SetIndexBuffer(index_buffer, index_buffer_type);
+   } else {
+@@ -628,9 +738,16 @@ bool RenderPass::Draw(size_t element_count,
+     }
+   }
+ 
++  // mcsm9: an indirect draw's counts come from its argument buffer.
++  const bool indirect = static_cast<bool>(mcsm_pending_indirect_);
++  if (indirect) {
++    render_pass_->McsmSetIndirect(std::move(mcsm_pending_indirect_));
++    mcsm_pending_indirect_ = {};
++  }
++
+   bool result = render_pass_->Draw().ok();
+ 
+-  if (recording_ && result) {
++  if (recording_ && result && !indirect) {
+     Record(GetCachedPipeline(), element_count, instance_count, indexed);
+   }
+ 
+@@ -922,7 +1039,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetColorAttachment(
+                                      clear_color_b, clear_color_a);
+   desc.texture = texture->GetTexture();
+   desc.mip_level = mip_level;
+-  desc.slice = slice;
++  // mcsm9: -1 attaches every layer (impeller::kMcsmAllLayers).
++  desc.slice = slice < 0 ? impeller::kMcsmAllLayers
++                         : static_cast<uint32_t>(slice);
+   if (!Dart_IsNull(resolve_texture_wrapper)) {
+     flutter::gpu::Texture* resolve_texture =
+         tonic::DartConverter<flutter::gpu::Texture*>::FromDart(
+@@ -959,10 +1078,15 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
+     desc.clear_depth = depth_clear_value;
+     desc.texture = texture->GetTexture();
+     desc.mip_level = mip_level;
+-    desc.slice = slice;
++    // mcsm9: -1 attaches every layer (impeller::kMcsmAllLayers).
++    desc.slice = slice < 0 ? impeller::kMcsmAllLayers
++                           : static_cast<uint32_t>(slice);
+     wrapper->GetRenderTarget().SetDepthAttachment(desc);
+   }
+-  {
++  // mcsm9: a depth-only format (D16, D32 float) is no stencil attachment
++  // (Metal refuses one without stencil bits).
++  if (impeller::IsStencilWritable(
++          texture->GetTexture()->GetTextureDescriptor().format)) {
+     impeller::StencilAttachment desc;
+     desc.load_action = flutter::gpu::ToImpellerLoadAction(stencil_load_action);
+     desc.store_action =
+@@ -970,7 +1094,9 @@ Dart_Handle InternalFlutterGpu_RenderPass_SetDepthStencilAttachment(
+     desc.clear_stencil = stencil_clear_value;
+     desc.texture = texture->GetTexture();
+     desc.mip_level = mip_level;
+-    desc.slice = slice;
++    // mcsm9: -1 attaches every layer (impeller::kMcsmAllLayers).
++    desc.slice = slice < 0 ? impeller::kMcsmAllLayers
++                           : static_cast<uint32_t>(slice);
+     wrapper->GetRenderTarget().SetStencilAttachment(desc);
+   }
+ 
+@@ -1521,3 +1647,146 @@ bool InternalFlutterGpu_RenderPass_McsmSetViewports(
+   return wrapper->McsmSetViewports(viewports.data(), scissors.data(),
+                                    static_cast<size_t>(count));
+ }
++
++bool InternalFlutterGpu_RenderPass_McsmBindStorageBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* device_buffer,
++    int offset_in_bytes,
++    int length_in_bytes) {
++  if (!shader || !device_buffer || offset_in_bytes < 0 ||
++      length_in_bytes <= 0) {
++    return false;
++  }
++  return wrapper->McsmBindStorageBuffer(
++      *shader, index, device_buffer->GetBuffer(),
++      static_cast<size_t>(offset_in_bytes),
++      static_cast<size_t>(length_in_bytes));
++}
++
++// mcsm9: texel buffers, textures and samplers bound apart.
++bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(2, index) : nullptr;
++  if (!slot || !buffer || offset_in_bytes < 0 || length_in_bytes <= 0 ||
++      static_cast<size_t>(offset_in_bytes + length_in_bytes) >
++          buffer->GetBuffer()->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 2,
++      .slot = *slot,
++      .view = impeller::BufferView(
++          buffer->GetBuffer(), impeller::Range(offset_in_bytes, length_in_bytes)),
++      .format = flutter::gpu::ToImpellerPixelFormat(format),
++  });
++}
++
++bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(3, index) : nullptr;
++  if (!slot || !texture) {
++    return false;
++  }
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 3,
++      .slot = *slot,
++      .texture = texture->GetTexture(),
++  });
++}
++
++bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  const flutter::gpu::Shader::McsmBinding* slot =
++      shader ? shader->McsmGet(4, index) : nullptr;
++  if (!slot) {
++    return false;
++  }
++  auto sampler = wrapper->GetContext()->GetSamplerLibrary()->GetSampler(
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++  return wrapper->McsmBind({
++      .stage = shader->GetShaderStage(),
++      .kind = 4,
++      .slot = *slot,
++      .sampler = sampler,
++  });
++}
++
++bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes,
++    bool indexed) {
++  const size_t length = indexed ? 20u : 16u;
++  if (!args || offset_in_bytes < 0 || offset_in_bytes % 4 != 0 ||
++      static_cast<size_t>(offset_in_bytes) + length >
++          args->GetBuffer()->GetDeviceBufferDescriptor().size) {
++    return false;
++  }
++  return wrapper->McsmDrawIndirect(
++      impeller::BufferView(args->GetBuffer(),
++                           impeller::Range(offset_in_bytes, length)),
++      indexed);
++}
++
++bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias) {
++  const flutter::gpu::Shader::TextureBinding* binding =
++      shader ? shader->GetResolvedUniformTexture(index) : nullptr;
++  if (!binding || !texture) {
++    return false;
++  }
++  auto sampler = wrapper->GetContext()->GetSamplerLibrary()->GetSampler(
++      flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
++  flutter::gpu::RenderPass::TextureUniformMap* map = nullptr;
++  switch (shader->GetShaderStage()) {
++    case impeller::ShaderStage::kVertex:
++      map = &wrapper->vertex_texture_bindings;
++      break;
++    case impeller::ShaderStage::kFragment:
++      map = &wrapper->fragment_texture_bindings;
++      break;
++    case impeller::ShaderStage::kUnknown:
++    case impeller::ShaderStage::kCompute:
++      return false;
++  }
++  map->insert_or_assign(
++      binding, flutter::gpu::RenderPass::TextureBindingEntry{
++                   .binding =
++                       impeller::TextureAndSampler{
++                           .slot = binding->slot,
++                           .texture = {&binding->metadata,
++                                       texture->GetTexture()},
++                           .sampler = sampler,
++                       },
++                   .dirty = true,
++               });
++  return true;
++}
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index aebe9e48894..6624104edd2 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -142,6 +142,14 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+ 
+   void ClearBindings();
+ 
++  /// mcsm9: a storage buffer for the draws that follow (until
++  /// ClearBindings), sent at every draw. Draw lists don't record them.
++  bool McsmBindStorageBuffer(const Shader& shader,
++                             int index,
++                             std::shared_ptr<const impeller::DeviceBuffer> buffer,
++                             size_t offset,
++                             size_t length);
++
+   /// Append a draw to the underlying render pass. [element_count] is the
+   /// vertex count for a non-indexed draw, or the index count when
+   /// [indexed] is true. [instance_count] is the number of instances to draw.
+@@ -154,6 +162,11 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+             bool indexed,
+             size_t first_instance = 0);
+ 
++  /// mcsm9: a draw whose counts come from `args` (indexed: 5 uint32s, else
++  /// 4: Direct3D 11's, Metal's and Vulkan's indirect layout). Not recorded
++  /// into draw lists.
++  bool McsmDrawIndirect(impeller::BufferView args, bool indexed);
++
+   struct BufferAndUniformSlot {
+     impeller::ShaderUniformSlot slot;
+     impeller::BufferResource view;
+@@ -248,6 +261,33 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+   /// Every binding, vertex and index buffer, each time (non-Metal backends).
+   void SendAllBindings();
+ 
++  // mcsm9: the storage buffers bound (RenderPass::McsmBindStorageBuffer).
++  struct McsmStorageBinding {
++    impeller::ShaderStage stage;
++    impeller::ShaderUniformSlot slot;
++    impeller::BufferView view;
++  };
++  std::vector<McsmStorageBinding> mcsm_storage_bindings_;
++  impeller::BufferView mcsm_pending_indirect_;  // mcsm9
++  void McsmSendStorageBuffers();
++
++ public:
++  // mcsm9: texel buffers, textures and samplers bound apart (kinds as
++  // Shader::McsmResolve), sent at each draw with the storage buffers.
++  struct McsmBinding {
++    impeller::ShaderStage stage;
++    int kind;
++    Shader::McsmBinding slot;
++    impeller::BufferView view;
++    impeller::PixelFormat format = impeller::PixelFormat::kUnknown;
++    std::shared_ptr<const impeller::Texture> texture;
++    impeller::raw_ptr<const impeller::Sampler> sampler;
++  };
++  bool McsmBind(McsmBinding binding);
++
++ private:
++  std::vector<McsmBinding> mcsm_bindings_;
++
+   /// mcsm E1: the pipeline for the bound RenderPipeline and the current
+   /// state, from this pass's cache; GetOrCreatePipeline on a miss.
+   std::shared_ptr<impeller::Pipeline<impeller::PipelineDescriptor>>
+@@ -354,6 +394,68 @@ extern "C" {
+ FLUTTER_GPU_EXPORT
+ extern void InternalFlutterGpu_RenderPass_Initialize(Dart_Handle wrapper);
+ 
++/// mcsm9: a texture with a whole sampler state (McsmSamplerFromPacked);
++/// `index` from Shader_ResolveUniformTexture. The sampler comes from the
++/// context's library, not the pass's small cache.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
++
++/// mcsm9: texel buffers (`format` a Flutter GPU PixelFormat), textures and
++/// samplers bound apart; indices from Shader_McsmResolveBinding.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* buffer,
++    int offset_in_bytes,
++    int length_in_bytes,
++    int format);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::Texture* texture);
++
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    int64_t packed,
++    double min_lod,
++    double max_lod,
++    double lod_bias);
++
++/// mcsm9: RenderPass::McsmDrawIndirect.
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes,
++    bool indexed);
++
++/// mcsm9: RenderPass::McsmBindStorageBuffer (index from
++/// Shader_McsmResolveStorageBuffer).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_RenderPass_McsmBindStorageBuffer(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::Shader* shader,
++    int index,
++    flutter::gpu::DeviceBuffer* device_buffer,
++    int offset_in_bytes,
++    int length_in_bytes);
++
+ FLUTTER_GPU_EXPORT
+ extern Dart_Handle InternalFlutterGpu_RenderPass_SetColorAttachment(
+     flutter::gpu::RenderPass* wrapper,
+diff --git a/engine/src/flutter/lib/gpu/render_pipeline.cc b/engine/src/flutter/lib/gpu/render_pipeline.cc
+index 7822b719a6b..1ad701e8f27 100644
+--- a/engine/src/flutter/lib/gpu/render_pipeline.cc
++++ b/engine/src/flutter/lib/gpu/render_pipeline.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "flutter/lib/gpu/render_pipeline.h"
+ 
++#include <algorithm>
+ #include <array>
+ #include <cstdint>
+ #include <cstring>
+@@ -94,9 +95,12 @@ struct VertexFormatInfo {
+   size_t bit_width;
+   size_t vec_size;
+   size_t bytes_per_element;
++  // mcsm9: the buffer's format when it isn't the shader input's own.
++  impeller::VertexAttributeFormat mcsm_format =
++      impeller::VertexAttributeFormat::kInvalid;
+ };
+ 
+-constexpr std::array<VertexFormatInfo, 12> kVertexFormatTable = {{
++constexpr std::array<VertexFormatInfo, 36> kVertexFormatTable = {{
+     {impeller::ShaderType::kFloat, 32, 1, 4},         // float32
+     {impeller::ShaderType::kFloat, 32, 2, 8},         // float32x2
+     {impeller::ShaderType::kFloat, 32, 3, 12},        // float32x3
+@@ -109,6 +113,32 @@ constexpr std::array<VertexFormatInfo, 12> kVertexFormatTable = {{
+     {impeller::ShaderType::kSignedInt, 32, 2, 8},     // sint32x2
+     {impeller::ShaderType::kSignedInt, 32, 3, 12},    // sint32x3
+     {impeller::ShaderType::kSignedInt, 32, 4, 16},    // sint32x4
++    // mcsm9: half, normalized, packed and 8/16-bit integer formats, read by
++    // the shader as its own (32-bit) input type.
++    {impeller::ShaderType::kFloat, 32, 2, 4, impeller::VertexAttributeFormat::kFloat16x2},  // float16x2
++    {impeller::ShaderType::kFloat, 32, 4, 8, impeller::VertexAttributeFormat::kFloat16x4},  // float16x4
++    {impeller::ShaderType::kFloat, 32, 1, 1, impeller::VertexAttributeFormat::kMcsmUNorm8},  // unorm8
++    {impeller::ShaderType::kFloat, 32, 2, 2, impeller::VertexAttributeFormat::kMcsmUNorm8x2},  // unorm8x2
++    {impeller::ShaderType::kFloat, 32, 4, 4, impeller::VertexAttributeFormat::kMcsmUNorm8x4},  // unorm8x4
++    {impeller::ShaderType::kFloat, 32, 1, 1, impeller::VertexAttributeFormat::kMcsmSNorm8},  // snorm8
++    {impeller::ShaderType::kFloat, 32, 2, 2, impeller::VertexAttributeFormat::kMcsmSNorm8x2},  // snorm8x2
++    {impeller::ShaderType::kFloat, 32, 4, 4, impeller::VertexAttributeFormat::kMcsmSNorm8x4},  // snorm8x4
++    {impeller::ShaderType::kFloat, 32, 1, 2, impeller::VertexAttributeFormat::kMcsmUNorm16},  // unorm16
++    {impeller::ShaderType::kFloat, 32, 2, 4, impeller::VertexAttributeFormat::kMcsmUNorm16x2},  // unorm16x2
++    {impeller::ShaderType::kFloat, 32, 4, 8, impeller::VertexAttributeFormat::kMcsmUNorm16x4},  // unorm16x4
++    {impeller::ShaderType::kFloat, 32, 1, 2, impeller::VertexAttributeFormat::kMcsmSNorm16},  // snorm16
++    {impeller::ShaderType::kFloat, 32, 2, 4, impeller::VertexAttributeFormat::kMcsmSNorm16x2},  // snorm16x2
++    {impeller::ShaderType::kFloat, 32, 4, 8, impeller::VertexAttributeFormat::kMcsmSNorm16x4},  // snorm16x4
++    {impeller::ShaderType::kFloat, 32, 4, 4, impeller::VertexAttributeFormat::kMcsmUNorm10_10_10_2},  // unorm10_10_10_2
++    {impeller::ShaderType::kFloat, 32, 4, 4, impeller::VertexAttributeFormat::kMcsmBGRA8UNorm},  // bgra8unorm
++    {impeller::ShaderType::kUnsignedInt, 32, 2, 2, impeller::VertexAttributeFormat::kUInt8x2},  // uint8x2
++    {impeller::ShaderType::kUnsignedInt, 32, 4, 4, impeller::VertexAttributeFormat::kUInt8x4},  // uint8x4
++    {impeller::ShaderType::kSignedInt, 32, 2, 2, impeller::VertexAttributeFormat::kSInt8x2},  // sint8x2
++    {impeller::ShaderType::kSignedInt, 32, 4, 4, impeller::VertexAttributeFormat::kSInt8x4},  // sint8x4
++    {impeller::ShaderType::kUnsignedInt, 32, 2, 4, impeller::VertexAttributeFormat::kUInt16x2},  // uint16x2
++    {impeller::ShaderType::kUnsignedInt, 32, 4, 8, impeller::VertexAttributeFormat::kUInt16x4},  // uint16x4
++    {impeller::ShaderType::kSignedInt, 32, 2, 4, impeller::VertexAttributeFormat::kSInt16x2},  // sint16x2
++    {impeller::ShaderType::kSignedInt, 32, 4, 8, impeller::VertexAttributeFormat::kSInt16x4},  // sint16x4
+ }};
+ 
+ // Width of each "row" in the packed `bufferLayouts` ByteData passed from
+@@ -165,7 +195,12 @@ BuildCustomVertexDescriptor(const flutter::gpu::Shader& vertex_shader,
+           absl::StrCat("VertexBuffer.strideInBytes must be positive (got ",
+                        stride, ") on buffer at index ", buffer_index, "."));
+     }
+-    if (step_mode < 0 || step_mode > 1) {
++    // mcsm9: bits 8 and up carry a per-instance step rate (0 or 1: every
++    // instance).
++    const uint32_t step_rate =
++        std::max<uint32_t>(1u, static_cast<uint32_t>(step_mode) >> 8);
++    const int32_t step_kind = step_mode & 0xff;
++    if (step_mode < 0 || step_kind > 1) {
+       return absl::InvalidArgumentError(
+           absl::StrCat("VertexBuffer.stepMode is out of range (got ", step_mode,
+                        ") on buffer at index ", buffer_index, "."));
+@@ -178,9 +213,10 @@ BuildCustomVertexDescriptor(const flutter::gpu::Shader& vertex_shader,
+           "blob.");
+     }
+     stage_layouts.push_back({static_cast<size_t>(stride), buffer_index,
+-                             step_mode == 0
++                             step_kind == 0
+                                  ? impeller::VertexInputRate::kVertex
+-                                 : impeller::VertexInputRate::kInstance});
++                                 : impeller::VertexInputRate::kInstance,
++                             step_kind == 0 ? 1u : step_rate});
+ 
+     // Track each attribute's byte range within this buffer so we can
+     // detect overlaps after building them all.
+@@ -288,6 +324,7 @@ BuildCustomVertexDescriptor(const flutter::gpu::Shader& vertex_shader,
+       }
+ 
+       impeller::ShaderStageIOSlot built = *shader_slot;
++      built.mcsm_format = format.mcsm_format;  // mcsm9
+       built.binding = buffer_index;
+       built.offset = static_cast<size_t>(offset);
+       stage_inputs.push_back(built);
+diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
+index 89356622b02..5b27a4a8aa0 100644
+--- a/engine/src/flutter/lib/gpu/shader.cc
++++ b/engine/src/flutter/lib/gpu/shader.cc
+@@ -111,6 +111,13 @@ void Shader::ResetFrom(Shader& other) {
+   uniform_structs_ = std::move(other.uniform_structs_);
+   uniform_textures_ = std::move(other.uniform_textures_);
+   descriptor_set_layouts_ = std::move(other.descriptor_set_layouts_);
++  storage_buffers_ = std::move(other.storage_buffers_);  // mcsm9
++  storage_images_ = std::move(other.storage_images_);    // mcsm9
++  workgroup_size_ = other.workgroup_size_;               // mcsm9
++  texel_buffers_ = std::move(other.texel_buffers_);      // mcsm9
++  separate_textures_ = std::move(other.separate_textures_);
++  separate_samplers_ = std::move(other.separate_samplers_);
++  metal_options_ = other.metal_options_;
+   ReresolveUniforms();
+   if (code_changed) {
+     is_dirty_ = true;
+@@ -149,8 +156,22 @@ bool Shader::RegisterSync(Context& context) {
+   };
+   // mcsm: the build's compiled library first; the source when there is none
+   // or it doesn't load (e.g. built for a newer OS than this one).
++  // mcsm9: source with Metal compile options when the bundle asks.
++  auto register_source = [&]() {
++    if (metal_options_ == 0u) {
++      return register_code(code_mapping_);
++    }
++    std::promise<bool> promise;
++    auto future = promise.get_future();
++    lib.McsmRegisterFunction(
++        scoped_name, stage_, code_mapping_, metal_options_,
++        fml::MakeCopyable([promise = std::move(promise)](bool result) mutable {
++          promise.set_value(result);
++        }));
++    return future.get();
++  };
+   if (!(compiled_mapping_ && register_code(compiled_mapping_)) &&
+-      !register_code(code_mapping_)) {
++      !register_source()) {
+     return false;  // Registration failed.
+   }
+   is_dirty_ = false;
+@@ -200,6 +221,57 @@ const Shader::TextureBinding* Shader::GetUniformTexture(
+   return &uniform->second;
+ }
+ 
++int Shader::McsmResolveStorageBuffer(const std::string& name) const {
++  for (size_t i = 0; i < storage_buffers_.size(); i++) {
++    if (storage_buffers_[i].name == name) {
++      return static_cast<int>(i);
++    }
++  }
++  return -1;
++}
++
++int Shader::McsmResolveStorageImage(const std::string& name) const {
++  for (size_t i = 0; i < storage_images_.size(); i++) {
++    if (storage_images_[i].name == name) {
++      return static_cast<int>(i);
++    }
++  }
++  return -1;
++}
++
++int Shader::McsmResolve(int kind, const std::string& name) const {
++  const std::vector<McsmBinding>* list = nullptr;
++  switch (kind) {
++    case 2:
++      list = &texel_buffers_;
++      break;
++    case 3:
++      list = &separate_textures_;
++      break;
++    case 4:
++      list = &separate_samplers_;
++      break;
++    default:
++      return -1;
++  }
++  for (size_t i = 0; i < list->size(); i++) {
++    if ((*list)[i].name == name) {
++      return static_cast<int>(i);
++    }
++  }
++  return -1;
++}
++
++const Shader::McsmBinding* Shader::McsmGet(int kind, int index) const {
++  const std::vector<McsmBinding>* list = kind == 2   ? &texel_buffers_
++                                         : kind == 3 ? &separate_textures_
++                                         : kind == 4 ? &separate_samplers_
++                                                     : nullptr;
++  return list && index >= 0 && static_cast<size_t>(index) < list->size()
++             ? &(*list)[index]
++             : nullptr;
++}
++
+ int Shader::ResolveUniformStruct(const std::string& name) {
+   for (size_t i = 0; i < resolved_struct_names_.size(); i++) {
+     if (resolved_struct_names_[i] == name) {
+@@ -294,3 +366,23 @@ int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+ bool InternalFlutterGpu_Shader_DebugIsDirty(flutter::gpu::Shader* wrapper) {
+   return wrapper->IsDirty();
+ }
++
++int InternalFlutterGpu_Shader_McsmResolveStorageBuffer(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle name_handle) {
++  return wrapper->McsmResolveStorageBuffer(
++      tonic::StdStringFromDart(name_handle));
++}
++
++int InternalFlutterGpu_Shader_McsmResolveStorageImage(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle name_handle) {
++  return wrapper->McsmResolveStorageImage(
++      tonic::StdStringFromDart(name_handle));
++}
++
++int InternalFlutterGpu_Shader_McsmResolveBinding(flutter::gpu::Shader* wrapper,
++                                                 int kind,
++                                                 Dart_Handle name_handle) {
++  return wrapper->McsmResolve(kind, tonic::StdStringFromDart(name_handle));
++}
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index 4319f5e135f..42435385831 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -6,6 +6,7 @@
+ #define FLUTTER_LIB_GPU_SHADER_H_
+ 
+ #include <algorithm>
++#include <array>
+ #include <memory>
+ #include <string>
+ 
+@@ -39,6 +40,15 @@ class Shader : public RefCountedDartWrappable<Shader> {
+     impeller::ShaderMetadata metadata;
+   };
+ 
++  /// mcsm9: a storage buffer or storage image of the shader.
++  struct StorageBinding {
++    std::string name;
++    size_t ext_res_0 = 0u;
++    size_t set = 0u;
++    size_t binding = 0u;
++    bool read_only = false;
++  };
++
+   ~Shader() override;
+ 
+   static fml::RefPtr<Shader> Make(
+@@ -65,6 +75,58 @@ class Shader : public RefCountedDartWrappable<Shader> {
+     compiled_mapping_ = std::move(compiled);
+   }
+ 
++  /// mcsm9: the shader's storage buffers and images, and a compute shader's
++  /// workgroup size, from the bundle.
++  void McsmSetStorage(std::vector<StorageBinding> buffers,
++                      std::vector<StorageBinding> images,
++                      std::array<uint32_t, 3> workgroup_size) {
++    storage_buffers_ = std::move(buffers);
++    storage_images_ = std::move(images);
++    workgroup_size_ = workgroup_size;
++  }
++
++  /// mcsm9: the other kinds of bindings a translated shader declares, by
++  /// kind: 0 storage buffers, 1 storage images, 2 texel buffers (`set`
++  /// carries no meaning beyond Vulkan; `read_only` false = storage; `ext_res_1`
++  /// the atomic view's Metal buffer), 3 textures and 4 samplers declared
++  /// apart.
++  struct McsmBinding {
++    std::string name;
++    size_t ext_res_0 = 0u;
++    size_t ext_res_1 = ~size_t{0};
++    size_t binding = 0u;
++    bool storage = false;
++  };
++  void McsmSetBindings(std::vector<McsmBinding> texel_buffers,
++                       std::vector<McsmBinding> textures,
++                       std::vector<McsmBinding> samplers,
++                       uint32_t metal_options) {
++    texel_buffers_ = std::move(texel_buffers);
++    separate_textures_ = std::move(textures);
++    separate_samplers_ = std::move(samplers);
++    metal_options_ = metal_options;
++  }
++  int McsmResolve(int kind, const std::string& name) const;
++  const McsmBinding* McsmGet(int kind, int index) const;
++
++  /// mcsm9: the index of a storage buffer (or image) by name, or -1. Valid
++  /// until the shader is reloaded.
++  int McsmResolveStorageBuffer(const std::string& name) const;
++  int McsmResolveStorageImage(const std::string& name) const;
++  const StorageBinding* McsmGetStorageBuffer(int index) const {
++    return index >= 0 && static_cast<size_t>(index) < storage_buffers_.size()
++               ? &storage_buffers_[index]
++               : nullptr;
++  }
++  const StorageBinding* McsmGetStorageImage(int index) const {
++    return index >= 0 && static_cast<size_t>(index) < storage_images_.size()
++               ? &storage_images_[index]
++               : nullptr;
++  }
++  const std::array<uint32_t, 3>& McsmGetWorkgroupSize() const {
++    return workgroup_size_;
++  }
++
+   /// Whether this shader needs to be re-registered with the impeller shader
+   /// library on next use. Fresh shaders start dirty. Set back to false by
+   /// `RegisterSync` after registration completes, and back to true by
+@@ -145,6 +207,13 @@ class Shader : public RefCountedDartWrappable<Shader> {
+   std::unordered_map<std::string, UniformBinding> uniform_structs_;
+   std::unordered_map<std::string, TextureBinding> uniform_textures_;
+   std::vector<impeller::DescriptorSetLayout> descriptor_set_layouts_;
++  std::vector<StorageBinding> storage_buffers_;  // mcsm9
++  std::vector<StorageBinding> storage_images_;   // mcsm9
++  std::array<uint32_t, 3> workgroup_size_{};     // mcsm9
++  std::vector<McsmBinding> texel_buffers_;       // mcsm9
++  std::vector<McsmBinding> separate_textures_;   // mcsm9
++  std::vector<McsmBinding> separate_samplers_;   // mcsm9
++  uint32_t metal_options_ = 0u;                  // mcsm9
+   bool is_dirty_ = true;
+   uint64_t generation_ = 0;  // mcsm7
+ 
+@@ -187,6 +256,25 @@ extern int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+ 
+ // Test-only: exposes the per-shader dirty bit so tests can assert that
+ // reload deduplication keeps unchanged shaders clean.
++/// mcsm9: Shader::McsmResolveStorageBuffer / McsmResolveStorageImage.
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_McsmResolveStorageBuffer(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle name_handle);
++
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_McsmResolveStorageImage(
++    flutter::gpu::Shader* wrapper,
++    Dart_Handle name_handle);
++
++/// mcsm9: Shader::McsmResolve (kinds 2 texel buffers, 3 textures and 4
++/// samplers declared apart).
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_Shader_McsmResolveBinding(
++    flutter::gpu::Shader* wrapper,
++    int kind,
++    Dart_Handle name_handle);
++
+ FLUTTER_GPU_EXPORT
+ extern bool InternalFlutterGpu_Shader_DebugIsDirty(
+     flutter::gpu::Shader* wrapper);
+diff --git a/engine/src/flutter/lib/gpu/shader_library.cc b/engine/src/flutter/lib/gpu/shader_library.cc
+index d9313475b6b..e20c53c4b45 100644
+--- a/engine/src/flutter/lib/gpu/shader_library.cc
++++ b/engine/src/flutter/lib/gpu/shader_library.cc
+@@ -328,6 +328,84 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+       }
+     }
+ 
++    // mcsm9: storage buffers and images, and the workgroup size.
++    std::vector<Shader::StorageBinding> storage_buffers;
++    std::vector<Shader::StorageBinding> storage_images;
++    auto read_storage = [&](const auto* list,
++                            std::vector<Shader::StorageBinding>& out,
++                            impeller::DescriptorType type) {
++      if (list == nullptr) {
++        return;
++      }
++      for (const auto* entry : *list) {
++        out.push_back(Shader::StorageBinding{
++            .name = entry->name() ? entry->name()->str() : std::string(),
++            .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
++            .set = static_cast<size_t>(entry->set()),
++            .binding = static_cast<size_t>(entry->binding()),
++            .read_only = entry->read_only(),
++        });
++        descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
++            static_cast<uint32_t>(entry->binding()), type,
++            ToShaderStage(backend_shader->stage())});
++      }
++    };
++    read_storage(backend_shader->storage_buffers(), storage_buffers,
++                 impeller::DescriptorType::kStorageBuffer);
++    read_storage(backend_shader->storage_images(), storage_images,
++                 impeller::DescriptorType::kStorageImage);
++    // mcsm9: texel buffers, textures and samplers declared apart.
++    std::vector<Shader::McsmBinding> texel_buffers;
++    std::vector<Shader::McsmBinding> separate_textures;
++    std::vector<Shader::McsmBinding> separate_samplers;
++    if (backend_shader->texel_buffers() != nullptr) {
++      for (const auto* entry : *backend_shader->texel_buffers()) {
++        texel_buffers.push_back(Shader::McsmBinding{
++            .name = entry->name() ? entry->name()->str() : std::string(),
++            .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
++            .ext_res_1 = entry->ext_res_1() == 0xffffffffu
++                             ? ~size_t{0}
++                             : static_cast<size_t>(entry->ext_res_1()),
++            .binding = static_cast<size_t>(entry->binding()),
++            .storage = entry->storage(),
++        });
++        descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
++            static_cast<uint32_t>(entry->binding()),
++            entry->storage()
++                ? impeller::DescriptorType::kMcsmStorageTexelBuffer
++                : impeller::DescriptorType::kMcsmUniformTexelBuffer,
++            ToShaderStage(backend_shader->stage())});
++      }
++    }
++    auto read_separate = [&](const auto* list,
++                             std::vector<Shader::McsmBinding>& out,
++                             impeller::DescriptorType type) {
++      if (list == nullptr) {
++        return;
++      }
++      for (const auto* entry : *list) {
++        out.push_back(Shader::McsmBinding{
++            .name = entry->name() ? entry->name()->str() : std::string(),
++            .ext_res_0 = static_cast<size_t>(entry->ext_res_0()),
++            .binding = static_cast<size_t>(entry->binding()),
++        });
++        descriptor_set_layouts.push_back(impeller::DescriptorSetLayout{
++            static_cast<uint32_t>(entry->binding()), type,
++            ToShaderStage(backend_shader->stage())});
++      }
++    };
++    read_separate(backend_shader->separate_textures(), separate_textures,
++                  impeller::DescriptorType::kImage);
++    read_separate(backend_shader->separate_samplers(), separate_samplers,
++                  impeller::DescriptorType::kSampler);
++    std::array<uint32_t, 3> workgroup_size{};
++    if (backend_shader->workgroup_size() != nullptr) {
++      for (size_t i = 0; i < 3 && i < backend_shader->workgroup_size()->size();
++           i++) {
++        workgroup_size[i] = backend_shader->workgroup_size()->Get(i);
++      }
++    }
++
+     std::vector<impeller::ShaderStageIOSlot> inputs;
+     std::vector<impeller::ShaderStageBufferLayout> layouts;
+     if (backend_shader->stage() ==
+@@ -364,6 +442,12 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+         std::move(inputs), std::move(layouts), std::move(uniform_structs),
+         std::move(uniform_textures), std::move(descriptor_set_layouts));
+     shader->SetCompiledMapping(std::move(compiled_mapping));  // mcsm
++    shader->McsmSetStorage(std::move(storage_buffers),
++                           std::move(storage_images), workgroup_size);
++    shader->McsmSetBindings(std::move(texel_buffers),
++                            std::move(separate_textures),
++                            std::move(separate_samplers),
++                            backend_shader->metal_options());
+     shader_map[bundled_shader->name()->str()] = std::move(shader);
+   }
+ 
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 55fd1cb8cc6..6b21fa7b740 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "flutter/lib/gpu/texture.h"
+ 
++#include <algorithm>
+ #include <cstring>
+ 
+ #include "flutter/lib/gpu/formats.h"
+@@ -221,24 +222,29 @@ Dart_Handle Texture::AsImage() const {
+ /// Exports
+ ///
+ 
+-bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+-                                           flutter::gpu::Context* gpu_context,
+-                                           int storage_mode,
+-                                           int format,
+-                                           int width,
+-                                           int height,
+-                                           int sample_count,
+-                                           int texture_type,
+-                                           bool enable_render_target_usage,
+-                                           bool enable_shader_read_usage,
+-                                           bool enable_shader_write_usage,
+-                                           int mip_level_count) {
+-  if (mip_level_count < 1) {
++// mcsm9: Initialize with an array's layers or a 3D texture's depth.
++static bool McsmInitializeTexture(Dart_Handle wrapper,
++                                  flutter::gpu::Context* gpu_context,
++                                  int storage_mode,
++                                  int format,
++                                  int width,
++                                  int height,
++                                  int layers,
++                                  int depth,
++                                  int sample_count,
++                                  int texture_type,
++                                  bool enable_render_target_usage,
++                                  bool enable_shader_read_usage,
++                                  bool enable_shader_write_usage,
++                                  int mip_level_count) {
++  if (mip_level_count < 1 || layers < 1 || depth < 1) {
+     return false;
+   }
+   impeller::TextureDescriptor desc;
+   desc.storage_mode = flutter::gpu::ToImpellerStorageMode(storage_mode);
+   desc.size = {width, height};
++  desc.array_layer_count = static_cast<size_t>(layers);
++  desc.depth = static_cast<size_t>(depth);
+   desc.format = flutter::gpu::ToImpellerPixelFormat(format);
+   desc.mip_count = static_cast<size_t>(mip_level_count);
+   desc.usage = {};
+@@ -255,6 +261,9 @@ bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+     case 1:
+       desc.sample_count = impeller::SampleCount::kCount1;
+       break;
++    case 2:  // mcsm9
++      desc.sample_count = impeller::SampleCount::kCount2;
++      break;
+     case 4:
+       desc.sample_count = impeller::SampleCount::kCount4;
+       break;
+@@ -266,6 +275,25 @@ bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+       desc.sample_count != impeller::SampleCount::kCount1) {
+     return false;
+   }
++  // mcsm9: layered textures, the added formats and 2x MSAA need Metal or
++  // Vulkan; a 3D texture is no render target; layer and depth counts belong
++  // to their types.
++  const auto backend = gpu_context->GetContext().GetBackendType();
++  const bool layered = desc.type == impeller::TextureType::kTexture2DArray ||
++                       desc.type == impeller::TextureType::kTexture3D ||
++                       desc.type == impeller::TextureType::kTextureCubeArray;
++  if ((layered || desc.sample_count == impeller::SampleCount::kCount2 ||
++       desc.format > impeller::PixelFormat::kASTC8x8HDR) &&
++      backend == impeller::Context::BackendType::kOpenGLES) {
++    return false;
++  }
++  if ((desc.type == impeller::TextureType::kTexture3D &&
++       enable_render_target_usage) ||
++      (desc.type != impeller::TextureType::kTexture2DArray &&
++       desc.type != impeller::TextureType::kTextureCubeArray && layers != 1) ||
++      (desc.type != impeller::TextureType::kTexture3D && depth != 1)) {
++    return false;
++  }
+ 
+   auto texture =
+       gpu_context->GetContext().GetResourceAllocator()->CreateTexture(desc,
+@@ -294,12 +322,100 @@ bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+   return true;
+ }
+ 
++bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
++                                           flutter::gpu::Context* gpu_context,
++                                           int storage_mode,
++                                           int format,
++                                           int width,
++                                           int height,
++                                           int sample_count,
++                                           int texture_type,
++                                           bool enable_render_target_usage,
++                                           bool enable_shader_read_usage,
++                                           bool enable_shader_write_usage,
++                                           int mip_level_count) {
++  return McsmInitializeTexture(
++      wrapper, gpu_context, storage_mode, format, width, height, 1, 1,
++      sample_count, texture_type, enable_render_target_usage,
++      enable_shader_read_usage, enable_shader_write_usage, mip_level_count);
++}
++
++bool InternalFlutterGpu_Texture_McsmInitializeLayered(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    int storage_mode,
++    int format,
++    int width,
++    int height,
++    int layers,
++    int depth,
++    int sample_count,
++    int texture_type,
++    bool enable_render_target_usage,
++    bool enable_shader_read_usage,
++    bool enable_shader_write_usage,
++    int mip_level_count) {
++  return McsmInitializeTexture(
++      wrapper, gpu_context, storage_mode, format, width, height, layers, depth,
++      sample_count, texture_type, enable_render_target_usage,
++      enable_shader_read_usage, enable_shader_write_usage, mip_level_count);
++}
++
++bool InternalFlutterGpu_Texture_McsmInitializeView(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Texture* parent,
++    int texture_type,
++    int base_mip,
++    int mip_count,
++    int base_layer,
++    int layers) {
++  if (!parent || base_mip < 0 || mip_count < 1 || base_layer < 0 ||
++      layers < 1) {
++    return false;
++  }
++  const auto parent_texture = parent->GetTexture();
++  const impeller::TextureDescriptor& parent_desc =
++      parent_texture->GetTextureDescriptor();
++  impeller::TextureDescriptor desc = parent_desc;
++  desc.type = static_cast<impeller::TextureType>(texture_type);
++  desc.size = {std::max<int64_t>(1, parent_desc.size.width >> base_mip),
++               std::max<int64_t>(1, parent_desc.size.height >> base_mip)};
++  desc.mip_count = static_cast<size_t>(mip_count);
++  // `layers` counts layers; a cube array's descriptor counts cubes.
++  desc.array_layer_count =
++      desc.type == impeller::TextureType::kTexture2DArray
++          ? static_cast<size_t>(layers)
++      : desc.type == impeller::TextureType::kTextureCubeArray
++          ? static_cast<size_t>(layers / 6)
++          : 1u;
++  desc.depth = 1u;
++  if ((desc.type == impeller::TextureType::kTextureCube && layers != 6) ||
++      (desc.type == impeller::TextureType::kTextureCubeArray &&
++       (layers < 6 || layers % 6 != 0)) ||
++      ((desc.type == impeller::TextureType::kTexture2D ||
++        desc.type == impeller::TextureType::kTexture2DMultisample) &&
++       layers != 1)) {
++    return false;
++  }
++  auto view = gpu_context->GetContext().McsmMakeTextureView(
++      parent_texture, desc, static_cast<uint32_t>(base_mip),
++      static_cast<uint32_t>(base_layer));
++  if (!view) {
++    return false;
++  }
++  auto res = fml::MakeRefCounted<flutter::gpu::Texture>(std::move(view));
++  res->McsmSetView();
++  res->AssociateWithDartWrapper(wrapper);
++  return true;
++}
++
+ bool InternalFlutterGpu_Texture_Overwrite(flutter::gpu::Texture* texture,
+                                           flutter::gpu::Context* gpu_context,
+                                           Dart_Handle source_byte_data,
+                                           int mip_level,
+                                           int slice) {
+-  if (mip_level < 0 || slice < 0) {
++  if (mip_level < 0 || slice < 0 || texture->McsmIsView()) {
+     return false;
+   }
+   return texture->Overwrite(*gpu_context, tonic::DartByteData(source_byte_data),
+diff --git a/engine/src/flutter/lib/gpu/texture.h b/engine/src/flutter/lib/gpu/texture.h
+index 4e0491bb1da..d530cfe3ce1 100644
+--- a/engine/src/flutter/lib/gpu/texture.h
++++ b/engine/src/flutter/lib/gpu/texture.h
+@@ -41,7 +41,13 @@ class Texture : public RefCountedDartWrappable<Texture> {
+ 
+   Dart_Handle AsImage() const;
+ 
++  /// mcsm9: whether this is a view of another texture (copies and uploads
++  /// go through that one).
++  bool McsmIsView() const { return mcsm_is_view_; }
++  void McsmSetView() { mcsm_is_view_ = true; }
++
+  private:
++  bool mcsm_is_view_ = false;
+   std::shared_ptr<impeller::Texture> texture_;
+ 
+   FML_DISALLOW_COPY_AND_ASSIGN(Texture);
+@@ -71,6 +77,38 @@ extern bool InternalFlutterGpu_Texture_Initialize(
+     bool enable_shader_write_usage,
+     int mip_level_count);
+ 
++/// mcsm9: Initialize for 2D array textures (`layers`) and 3D textures
++/// (`depth`), the added formats and 2x MSAA (Metal and Vulkan).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_Texture_McsmInitializeLayered(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    int storage_mode,
++    int format,
++    int width,
++    int height,
++    int layers,
++    int depth,
++    int sample_count,
++    int texture_type,
++    bool enable_render_target_usage,
++    bool enable_shader_read_usage,
++    bool enable_shader_write_usage,
++    int mip_level_count);
++
++/// mcsm9: a view of `parent`'s mip levels and layers
++/// (Context::McsmMakeTextureView; Metal and Vulkan).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_Texture_McsmInitializeView(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Texture* parent,
++    int texture_type,
++    int base_mip,
++    int mip_count,
++    int base_layer,
++    int layers);
++
+ FLUTTER_GPU_EXPORT
+ extern bool InternalFlutterGpu_Texture_Overwrite(
+     flutter::gpu::Texture* wrapper,

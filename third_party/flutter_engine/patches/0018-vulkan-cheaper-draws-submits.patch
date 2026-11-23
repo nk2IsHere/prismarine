@@ -1,0 +1,875 @@
+From 6a8ac9b7b3fe1a89e8b2279bc10bc576dfea9578 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 18:54:33 +0100
+Subject: [PATCH 1/7] flutter_gpu (mcsm8): on Vulkan a draw's bindings go to
+ the render pass without a ShaderMetadata copy each (RenderPassVK reads only
+ the binding index): the UI thread's scene render was ~3.7x GLES's on the RTX
+
+---
+ engine/src/flutter/lib/gpu/render_pass.cc | 31 +++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 9ad82b055d7..d55dcc562e1 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -810,6 +810,37 @@ bool RenderPass::Replay(const DrawList& list,
+ }
+ 
+ void RenderPass::SendAllBindings() {
++  // mcsm8: Vulkan reads only the binding index (RenderPassVK ignores the
++  // metadata), so there is no metadata copy per binding per draw.
++  if (GetContext()->GetBackendType() ==
++      impeller::Context::BackendType::kVulkan) {
++    for (const auto& [_, buffer] : vertex_uniform_bindings) {
++      render_pass_->BindResource(impeller::ShaderStage::kVertex,
++                                 impeller::DescriptorType::kUniformBuffer,
++                                 buffer.slot, nullptr, buffer.view.resource);
++    }
++    for (const auto& [_, entry] : vertex_texture_bindings) {
++      const auto& texture = entry.binding;
++      render_pass_->BindResource(impeller::ShaderStage::kVertex,
++                                 impeller::DescriptorType::kSampledImage,
++                                 texture.slot, nullptr,
++                                 texture.texture.resource, texture.sampler);
++    }
++    for (const auto& [_, buffer] : fragment_uniform_bindings) {
++      render_pass_->BindResource(impeller::ShaderStage::kFragment,
++                                 impeller::DescriptorType::kUniformBuffer,
++                                 buffer.slot, nullptr, buffer.view.resource);
++    }
++    for (const auto& [_, entry] : fragment_texture_bindings) {
++      const auto& texture = entry.binding;
++      render_pass_->BindResource(impeller::ShaderStage::kFragment,
++                                 impeller::DescriptorType::kSampledImage,
++                                 texture.slot, nullptr,
++                                 texture.texture.resource, texture.sampler);
++    }
++    render_pass_->SetVertexBuffer(vertex_buffers.data(), vertex_buffer_count);
++    return;
++  }
+   for (const auto& [_, buffer] : vertex_uniform_bindings) {
+     render_pass_->BindDynamicResource(
+         impeller::ShaderStage::kVertex,
+-- 
+2.54.0 (Apple Git-157)
+
+
+From aa05dd23ee80514b8aaab4a19f656207e2428973 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 18:58:33 +0100
+Subject: [PATCH 2/7] flutter_gpu (mcsm8): on Vulkan a submit or a texture
+ overwrite disposes the thread's command and descriptor pools at most every 16
+ ms instead of every time (McsmDisposeThreadLocal): each dispose made the next
+ command buffer create new pools (~1-2 ms a pass on the RTX; SMAA 2.3 ms vs
+ 0.03 on GLES)
+
+---
+ engine/src/flutter/lib/gpu/command_buffer.cc |  3 ++-
+ engine/src/flutter/lib/gpu/context.cc        | 14 +++++++++++++-
+ engine/src/flutter/lib/gpu/context.h         |  7 +++++++
+ engine/src/flutter/lib/gpu/texture.cc        |  2 +-
+ 4 files changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
+index a1ee6dae4d9..576fd6fa3e8 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.cc
++++ b/engine/src/flutter/lib/gpu/command_buffer.cc
+@@ -210,7 +210,8 @@ bool CommandBuffer::Submit(
+ 
+   auto status = context_->GetCommandQueue()->Submit(
+       {command_buffer_}, combined_completion_callback);
+-  context_->DisposeThreadLocalCachedResources();
++  // mcsm8: at most every 16 ms on Vulkan (McsmDisposeThreadLocal).
++  McsmDisposeThreadLocal(*context_);
+   if (!status.ok() && combined_completion_callback) {
+     combined_completion_callback(impeller::CommandBuffer::Status::kError);
+   }
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index eb7bc1dce4e..a354274af19 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -5,7 +5,7 @@
+ #include "flutter/lib/gpu/context.h"
+ 
+ #include <atomic>
+-
++#include <chrono>
+ #include <future>
+ 
+ #include "flutter/lib/gpu/formats.h"
+@@ -23,6 +23,18 @@
+ namespace flutter {
+ namespace gpu {
+ 
++void McsmDisposeThreadLocal(impeller::Context& context) {
++  if (context.GetBackendType() == impeller::Context::BackendType::kVulkan) {
++    thread_local auto last_dispose = std::chrono::steady_clock::now();
++    const auto now = std::chrono::steady_clock::now();
++    if (now - last_dispose < std::chrono::milliseconds(16)) {
++      return;
++    }
++    last_dispose = now;
++  }
++  context.DisposeThreadLocalCachedResources();
++}
++
+ bool SupportsNormalOffscreenMSAA(const impeller::Context& context) {
+   auto& capabilities = context.GetCapabilities();
+   return capabilities->SupportsOffscreenMSAA() &&
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index cb8a15674eb..a8dbc439a18 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -15,6 +15,13 @@ namespace gpu {
+ 
+ bool SupportsNormalOffscreenMSAA(const impeller::Context& context);
+ 
++/// mcsm8: DisposeThreadLocalCachedResources after a UI-thread submit. On
++/// Vulkan disposing drops this thread's command and descriptor pools, so the
++/// next command buffer makes new ones (~1-2 ms each on the RTX: a frame of
++/// the look submits dozens); there it runs at most every 16 ms (about once a
++/// frame) and the pools are recycled as before. Other backends: every time.
++void McsmDisposeThreadLocal(impeller::Context& context);
++
+ class Context : public RefCountedDartWrappable<Context> {
+   DEFINE_WRAPPERTYPEINFO();
+   FML_FRIEND_MAKE_REF_COUNTED(Context);
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 5ed03cd3c6b..55fd1cb8cc6 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -144,7 +144,7 @@ bool Texture::Overwrite(Context& gpu_context,
+                                 length, destination_region, mip_level, slice)) {
+     return false;
+   }
+-  impeller_context.DisposeThreadLocalCachedResources();
++  McsmDisposeThreadLocal(impeller_context);  // mcsm8: throttled on Vulkan
+   return true;
+ }
+ 
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 436d2393ef5fef8768bc203ef92f0af941a34a93 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 19:02:42 +0100
+Subject: [PATCH 3/7] impeller (mcsm8): Vulkan submits reuse signalled fences
+ (reset, a free list of up to 64 in FenceWaiterVK) instead of creating one per
+ submit: vkCreateFence costs ~300 us on NVIDIA's Linux driver, so every
+ lib/gpu submit took ~435 us (the look submits dozens a frame)
+
+---
+ .../backend/vulkan/command_queue_vk.cc        |  7 +--
+ .../backend/vulkan/fence_waiter_vk.cc         | 46 +++++++++++++++++++
+ .../renderer/backend/vulkan/fence_waiter_vk.h |  6 +++
+ 3 files changed, 56 insertions(+), 3 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/command_queue_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/command_queue_vk.cc
+index bf48c6a60e3..b2b459afffe 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/command_queue_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/command_queue_vk.cc
+@@ -54,9 +54,10 @@ fml::Status CommandQueueVK::Submit(
+     VALIDATION_LOG << "Device lost.";
+     return fml::Status(fml::StatusCode::kCancelled, "Device lost.");
+   }
+-  auto [fence_result, fence] = context->GetDevice().createFenceUnique({});
+-  if (fence_result != vk::Result::eSuccess) {
+-    VALIDATION_LOG << "Failed to create fence: " << vk::to_string(fence_result);
++  // mcsm8: a recycled fence where one is free.
++  auto fence = context->GetFenceWaiter()->McsmAcquireFence(context->GetDevice());
++  if (!fence) {
++    VALIDATION_LOG << "Failed to create fence.";
+     return fml::Status(fml::StatusCode::kCancelled, "Failed to create fence.");
+   }
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.cc
+index 31f68018c34..3c53e3df855 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.cc
+@@ -32,6 +32,9 @@ class WaitSetEntry {
+ 
+   const vk::Fence& GetFence() const { return fence_.get(); }
+ 
++  // mcsm8: the fence back, for reuse once it signalled.
++  vk::UniqueFence TakeFence() { return std::move(fence_); }
++
+   bool IsSignalled() const { return is_signalled_; }
+ 
+  private:
+@@ -60,6 +63,22 @@ FenceWaiterVK::~FenceWaiterVK() {
+   Terminate();
+ }
+ 
++vk::UniqueFence FenceWaiterVK::McsmAcquireFence(const vk::Device& device) {
++  {
++    std::scoped_lock lock(mcsm_free_fences_mutex_);
++    if (!mcsm_free_fences_.empty()) {
++      auto fence = std::move(mcsm_free_fences_.back());
++      mcsm_free_fences_.pop_back();
++      return fence;
++    }
++  }
++  auto [result, fence] = device.createFenceUnique({});
++  if (result != vk::Result::eSuccess) {
++    return {};
++  }
++  return std::move(fence);
++}
++
+ fml::Status FenceWaiterVK::AddFence(
+     vk::UniqueFence fence,
+     const std::function<fml::Status(vk::Fence)>& submit_callback,
+@@ -201,6 +220,30 @@ bool FenceWaiterVK::Wait() {
+         wait_set_.end());
+   }
+ 
++  // mcsm8: signalled fences are reset and reused (vkCreateFence costs
++  // ~300 us on NVIDIA's Linux driver, once per submit).
++  {
++    std::vector<vk::Fence> to_reset;
++    std::vector<vk::UniqueFence> taken;
++    for (auto& entry : erased_entries) {
++      auto fence = entry->TakeFence();
++      if (fence) {
++        to_reset.push_back(fence.get());
++        taken.push_back(std::move(fence));
++      }
++    }
++    if (!to_reset.empty() &&
++        device.resetFences(to_reset.size(), to_reset.data()) ==
++            vk::Result::eSuccess) {
++      std::scoped_lock lock(mcsm_free_fences_mutex_);
++      for (auto& fence : taken) {
++        if (mcsm_free_fences_.size() < 64) {
++          mcsm_free_fences_.push_back(std::move(fence));
++        }
++      }
++    }
++  }
++
+   {
+     TRACE_EVENT0("impeller", "ClearSignaledFences");
+     // Erase the erased entries which will invoke callbacks.
+@@ -220,6 +263,9 @@ void FenceWaiterVK::Terminate() {
+   }
+   wait_set_cv_.notify_one();
+   waiter_thread_->join();
++  // mcsm8: the reusable fences go while the device is alive.
++  std::scoped_lock lock(mcsm_free_fences_mutex_);
++  mcsm_free_fences_.clear();
+ }
+ 
+ }  // namespace impeller
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.h
+index 8701aa96ef1..cafc03fba4b 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/fence_waiter_vk.h
+@@ -39,6 +39,10 @@ class FenceWaiterVK {
+       const std::function<fml::Status(vk::Fence)>& submit_callback,
+       fml::closure completion_callback);
+ 
++  /// mcsm8: an unsignalled fence, reused from completed submits when there
++  /// is one (creating fences is expensive on some drivers).
++  vk::UniqueFence McsmAcquireFence(const vk::Device& device);
++
+  private:
+   friend class ContextVK;
+ 
+@@ -48,6 +52,8 @@ class FenceWaiterVK {
+   std::condition_variable wait_set_cv_;
+   WaitSet wait_set_;
+   bool terminate_ = false;
++  std::mutex mcsm_free_fences_mutex_;
++  std::vector<vk::UniqueFence> mcsm_free_fences_;
+ 
+   explicit FenceWaiterVK(std::weak_ptr<DeviceHolderVK> device_holder);
+ 
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 65815a257728a811f9ae010043b3ff4369808631 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 19:40:32 +0100
+Subject: [PATCH 4/7] =?UTF-8?q?impeller=20(mcsm8):=20RenderPassVK=20skips?=
+ =?UTF-8?q?=20what=20didn't=20change=20between=20draws=20in=20a=20pass=20?=
+ =?UTF-8?q?=E2=80=94=20the=20pipeline=20bind,=20the=20descriptor=20set=20(?=
+ =?UTF-8?q?reused,=20with=20no=20allocation,=20update=20or=20bind,=20when?=
+ =?UTF-8?q?=20a=20draw's=20descriptor=20writes=20and=20layout=20equal=20th?=
+ =?UTF-8?q?e=20previous=20draw's),=20vertex=20and=20index=20buffer=20binds?=
+ =?UTF-8?q?,=20and=20tracking=20objects=20the=20command=20buffer=20already?=
+ =?UTF-8?q?=20holds?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../renderer/backend/vulkan/render_pass_vk.cc | 137 +++++++++++++-----
+ .../renderer/backend/vulkan/render_pass_vk.h  |  20 +++
+ 2 files changed, 123 insertions(+), 34 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index 4343f1c7efe..4a4e121345f 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -575,6 +575,17 @@ bool RenderPassVK::McsmSetViewports(const Viewport* viewports,
+   return true;
+ }
+ 
++bool RenderPassVK::McsmAlreadyTracked(const void* object) {
++  for (const void* tracked : mcsm_tracked_) {
++    if (tracked == object) {
++      return true;
++    }
++  }
++  mcsm_tracked_[mcsm_tracked_next_] = object;
++  mcsm_tracked_next_ = (mcsm_tracked_next_ + 1) % mcsm_tracked_.size();
++  return false;
++}
++
+ // |RenderPass|
+ void RenderPassVK::SetElementCount(size_t count) {
+   element_count_ = count;
+@@ -600,14 +611,26 @@ bool RenderPassVK::SetVertexBuffer(BufferView vertex_buffers[],
+     vertex_buffer_offsets[i] = vertex_buffers[i].GetRange().offset;
+     std::shared_ptr<const DeviceBuffer> device_buffer =
+         vertex_buffers[i].TakeBuffer();
+-    if (device_buffer) {
++    if (device_buffer && !McsmAlreadyTracked(device_buffer.get())) {
+       command_buffer_->Track(device_buffer);
+     }
+   }
+ 
+-  // Bind the vertex buffers.
+-  command_buffer_vk_.bindVertexBuffers(0u, vertex_buffer_count, buffers,
+-                                       vertex_buffer_offsets);
++  // Bind the vertex buffers (mcsm8: unless they are the ones bound).
++  bool same = vertex_buffer_count == mcsm_vertex_count_;
++  for (size_t i = 0; same && i < vertex_buffer_count; i++) {
++    same = buffers[i] == mcsm_vertex_buffers_[i] &&
++           vertex_buffer_offsets[i] == mcsm_vertex_offsets_[i];
++  }
++  if (!same) {
++    command_buffer_vk_.bindVertexBuffers(0u, vertex_buffer_count, buffers,
++                                         vertex_buffer_offsets);
++    for (size_t i = 0; i < vertex_buffer_count; i++) {
++      mcsm_vertex_buffers_[i] = buffers[i];
++      mcsm_vertex_offsets_[i] = vertex_buffer_offsets[i];
++    }
++    mcsm_vertex_count_ = vertex_buffer_count;
++  }
+ 
+   return true;
+ }
+@@ -635,15 +658,22 @@ bool RenderPassVK::SetIndexBuffer(BufferView index_buffer,
+ 
+     std::shared_ptr<const DeviceBuffer> index_buffer =
+         index_buffer_view.TakeBuffer();
+-    if (index_buffer && !command_buffer_->Track(index_buffer)) {
++    if (index_buffer && !McsmAlreadyTracked(index_buffer.get()) &&
++        !command_buffer_->Track(index_buffer)) {
+       return false;
+     }
+ 
+     vk::Buffer index_buffer_handle =
+         DeviceBufferVK::Cast(*index_buffer_view.GetBuffer()).GetBuffer();
+-    command_buffer_vk_.bindIndexBuffer(index_buffer_handle,
+-                                       index_buffer_view.GetRange().offset,
+-                                       ToVKIndexType(index_type));
++    const vk::DeviceSize offset = index_buffer_view.GetRange().offset;
++    const vk::IndexType type = ToVKIndexType(index_type);
++    if (index_buffer_handle != mcsm_index_buffer_ ||
++        offset != mcsm_index_offset_ || type != mcsm_index_type_) {
++      command_buffer_vk_.bindIndexBuffer(index_buffer_handle, offset, type);
++      mcsm_index_buffer_ = index_buffer_handle;
++      mcsm_index_offset_ = offset;
++      mcsm_index_type_ = type;
++    }
+   } else {
+     has_index_buffer_ = false;
+   }
+@@ -690,34 +720,72 @@ fml::Status RenderPassVK::Draw() {
+   const auto& context_vk = ContextVK::Cast(*context_);
+   const auto& pipeline_vk = PipelineVK::Cast(*pipeline_);
+ 
+-  auto descriptor_result = command_buffer_->AllocateDescriptorSets(
+-      pipeline_vk.GetDescriptorSetLayout(), pipeline_vk.GetPipelineKey(),
+-      context_vk);
+-  if (!descriptor_result.ok()) {
+-    return fml::Status(fml::StatusCode::kAborted,
+-                       "Could not allocate descriptor sets.");
+-  }
+-  const auto descriptor_set = descriptor_result.value();
+   const auto pipeline_layout = pipeline_vk.GetPipelineLayout();
+-  command_buffer_vk_.bindPipeline(vk::PipelineBindPoint::eGraphics,
+-                                  pipeline_vk.GetPipeline());
+ 
++  // mcsm8: the descriptor set of the previous draw is reused when this draw
++  // writes the same descriptors with the same layout (a set isn't changed
++  // once a draw used it, so equal writes mean an equal set).
++  auto& key = mcsm_key_scratch_;
++  key.clear();
++  key.push_back(reinterpret_cast<uint64_t>(
++      static_cast<VkDescriptorSetLayout>(pipeline_vk.GetDescriptorSetLayout())));
+   for (auto i = 0u; i < descriptor_write_offset_; i++) {
+-    write_workspace_[i].dstSet = descriptor_set;
++    const auto& w = write_workspace_[i];
++    key.push_back((static_cast<uint64_t>(w.dstBinding) << 32) |
++                  static_cast<uint64_t>(w.descriptorType));
++    if (w.pBufferInfo != nullptr) {
++      key.push_back(reinterpret_cast<uint64_t>(
++          static_cast<VkBuffer>(w.pBufferInfo->buffer)));
++      key.push_back(w.pBufferInfo->offset);
++      key.push_back(w.pBufferInfo->range);
++    } else if (w.pImageInfo != nullptr) {
++      key.push_back(reinterpret_cast<uint64_t>(
++          static_cast<VkImageView>(w.pImageInfo->imageView)));
++      key.push_back(reinterpret_cast<uint64_t>(
++          static_cast<VkSampler>(w.pImageInfo->sampler)));
++      key.push_back(static_cast<uint64_t>(w.pImageInfo->imageLayout));
++    }
++  }
++  vk::DescriptorSet descriptor_set = mcsm_bound_set_;
++  const bool reuse_set = mcsm_bound_set_ && key == mcsm_set_key_;
++  if (!reuse_set) {
++    auto descriptor_result = command_buffer_->AllocateDescriptorSets(
++        pipeline_vk.GetDescriptorSetLayout(), pipeline_vk.GetPipelineKey(),
++        context_vk);
++    if (!descriptor_result.ok()) {
++      return fml::Status(fml::StatusCode::kAborted,
++                         "Could not allocate descriptor sets.");
++    }
++    descriptor_set = descriptor_result.value();
++    for (auto i = 0u; i < descriptor_write_offset_; i++) {
++      write_workspace_[i].dstSet = descriptor_set;
++    }
++    context_vk.GetDevice().updateDescriptorSets(
++        descriptor_write_offset_, write_workspace_.data(), 0u, {});
++    mcsm_set_key_.swap(key);
++  }
++
++  const vk::Pipeline vk_pipeline = pipeline_vk.GetPipeline();
++  if (vk_pipeline != mcsm_bound_pipeline_) {
++    command_buffer_vk_.bindPipeline(vk::PipelineBindPoint::eGraphics,
++                                    vk_pipeline);
++    mcsm_bound_pipeline_ = vk_pipeline;
++  }
++
++  if (!reuse_set || pipeline_layout != mcsm_bound_layout_ ||
++      descriptor_set != mcsm_bound_set_) {
++    command_buffer_vk_.bindDescriptorSets(
++        vk::PipelineBindPoint::eGraphics,  // bind point
++        pipeline_layout,                   // layout
++        0,                                 // first set
++        1,                                 // set count
++        &descriptor_set,                   // sets
++        0,                                 // offset count
++        nullptr                            // offsets
++    );
++    mcsm_bound_layout_ = pipeline_layout;
++    mcsm_bound_set_ = descriptor_set;
+   }
+-
+-  context_vk.GetDevice().updateDescriptorSets(descriptor_write_offset_,
+-                                              write_workspace_.data(), 0u, {});
+-
+-  command_buffer_vk_.bindDescriptorSets(
+-      vk::PipelineBindPoint::eGraphics,  // bind point
+-      pipeline_layout,                   // layout
+-      0,                                 // first set
+-      1,                                 // set count
+-      &descriptor_set,                   // sets
+-      0,                                 // offset count
+-      nullptr                            // offsets
+-  );
+ 
+   if (pipeline_uses_input_attachments_) {
+     InsertBarrierForInputAttachmentRead(
+@@ -789,7 +857,8 @@ bool RenderPassVK::BindResource(size_t binding,
+   }
+ 
+   std::shared_ptr<const DeviceBuffer> device_buffer = view.TakeBuffer();
+-  if (device_buffer && !command_buffer_->Track(device_buffer)) {
++  if (device_buffer && !McsmAlreadyTracked(device_buffer.get()) &&
++      !command_buffer_->Track(device_buffer)) {
+     return false;
+   }
+ 
+@@ -835,7 +904,7 @@ bool RenderPassVK::BindResource(ShaderStage stage,
+   const TextureVK& texture_vk = TextureVK::Cast(*texture);
+   const SamplerVK& sampler_vk = SamplerVK::Cast(*sampler);
+ 
+-  if (!command_buffer_->Track(texture)) {
++  if (!McsmAlreadyTracked(texture.get()) && !command_buffer_->Track(texture)) {
+     return false;
+   }
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+index b22141a865a..136c6a18fca 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+@@ -53,6 +53,26 @@ class RenderPassVK final : public RenderPass {
+   bool pipeline_uses_input_attachments_ = false;
+   std::shared_ptr<SamplerVK> immutable_sampler_;
+ 
++  // mcsm8: state kept across draws in this pass, so what didn't change
++  // isn't sent again: the bound pipeline, the descriptor set (reused when a
++  // draw's writes and layout equal the previous draw's), the vertex and
++  // index buffers, and the objects already tracked by the command buffer.
++  vk::Pipeline mcsm_bound_pipeline_ = {};
++  vk::PipelineLayout mcsm_bound_layout_ = {};
++  vk::DescriptorSet mcsm_bound_set_ = {};
++  std::vector<uint64_t> mcsm_set_key_;
++  std::vector<uint64_t> mcsm_key_scratch_;
++  std::array<vk::Buffer, kMaxVertexBuffers> mcsm_vertex_buffers_ = {};
++  std::array<vk::DeviceSize, kMaxVertexBuffers> mcsm_vertex_offsets_ = {};
++  size_t mcsm_vertex_count_ = 0;
++  vk::Buffer mcsm_index_buffer_ = {};
++  vk::DeviceSize mcsm_index_offset_ = 0;
++  vk::IndexType mcsm_index_type_ = vk::IndexType::eUint16;
++  std::array<const void*, 64> mcsm_tracked_ = {};
++  size_t mcsm_tracked_next_ = 0;
++  // Whether [object] was tracked already by this pass (remembering it if not).
++  bool McsmAlreadyTracked(const void* object);
++
+   RenderPassVK(const std::shared_ptr<const Context>& context,
+                const RenderTarget& target,
+                std::shared_ptr<CommandBufferVK> command_buffer);
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 595e2a0b13bcc3fd6867997553b93e328d6a9c17 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 19:47:55 +0100
+Subject: [PATCH 5/7] impeller (mcsm8): Vulkan graphics pipelines take their
+ uniform buffers as dynamic descriptors (up to 8, every device's minimum), the
+ offsets given when the set is bound: draws that differ only in uniform
+ offsets (each draw's own slice of the frame's uniform buffer) reuse the
+ descriptor set instead of allocating and writing one
+
+---
+ .../backend/vulkan/descriptor_pool_vk.cc      |  4 ++
+ .../renderer/backend/vulkan/pipeline_vk.cc    | 23 +++++++++-
+ .../renderer/backend/vulkan/pipeline_vk.h     |  5 +++
+ .../renderer/backend/vulkan/render_pass_vk.cc | 43 +++++++++++++++----
+ .../renderer/backend/vulkan/render_pass_vk.h  |  3 ++
+ 5 files changed, 69 insertions(+), 9 deletions(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+index 44178962076..04752650883 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/descriptor_pool_vk.cc
+@@ -152,6 +152,10 @@ vk::UniqueDescriptorPool DescriptorPoolRecyclerVK::Create() {
+                              kDefaultBindingSize.texture_bindings},
+       vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer,
+                              kDefaultBindingSize.buffer_bindings},
++      // mcsm8: graphics pipelines bind their uniform buffers as dynamic
++      // descriptors.
++      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic,
++                             kDefaultBindingSize.buffer_bindings},
+       vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer,
+                              kDefaultBindingSize.storage_bindings},
+       vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment,
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+index 1ae31273d1f..07d6d5dfbb7 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.cc
+@@ -171,6 +171,21 @@ static vk::UniqueRenderPass CreateCompatRenderPassForPipeline(
+ }
+ 
+ namespace {
++// mcsm8: a pipeline's uniform buffers are dynamic descriptors (the offset
++// given when the set is bound), so draws that differ only in uniform offsets
++// share one descriptor set; as long as there are no more than every device
++// allows (maxDescriptorSetUniformBuffersDynamic is at least 8).
++bool McsmUsesDynamicUniforms(const PipelineDescriptor& desc) {
++  size_t count = 0;
++  for (const auto& layout :
++       desc.GetVertexDescriptor()->GetDescriptorSetLayouts()) {
++    if (layout.descriptor_type == DescriptorType::kUniformBuffer) {
++      count++;
++    }
++  }
++  return count <= 8;
++}
++
+ fml::StatusOr<vk::UniqueDescriptorSetLayout> MakeDescriptorSetLayout(
+     const PipelineDescriptor& desc,
+     const std::shared_ptr<DeviceHolderVK>& device_holder,
+@@ -181,11 +196,16 @@ fml::StatusOr<vk::UniqueDescriptorSetLayout> MakeDescriptorSetLayout(
+       immutable_sampler ? immutable_sampler->GetSampler()
+                         : static_cast<vk::Sampler>(VK_NULL_HANDLE);
+ 
++  const bool dynamic_uniforms = McsmUsesDynamicUniforms(desc);
+   for (auto layout : desc.GetVertexDescriptor()->GetDescriptorSetLayouts()) {
+     vk::DescriptorSetLayoutBinding set_binding;
+     set_binding.binding = layout.binding;
+     set_binding.descriptorCount = 1u;
+     set_binding.descriptorType = ToVKDescriptorType(layout.descriptor_type);
++    if (dynamic_uniforms &&
++        layout.descriptor_type == DescriptorType::kUniformBuffer) {
++      set_binding.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
++    }
+     set_binding.stageFlags = ToVkShaderStage(layout.shader_stage);
+     // TODO(143719): This specifies the immutable sampler for all sampled
+     // images. This is incorrect. In cases where the shader samples from the
+@@ -542,7 +562,8 @@ PipelineVK::PipelineVK(std::weak_ptr<DeviceHolderVK> device_holder,
+       layout_(std::move(layout)),
+       descriptor_set_layout_(std::move(descriptor_set_layout)),
+       immutable_sampler_(std::move(immutable_sampler)),
+-      pipeline_key_(pipeline_key) {
++      pipeline_key_(pipeline_key),
++      mcsm_dynamic_uniforms_(McsmUsesDynamicUniforms(desc)) {
+   is_valid_ = pipeline_ && render_pass_ && layout_ && descriptor_set_layout_;
+ }
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
+index a51a8b7b8fb..b627f2e52f1 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/pipeline_vk.h
+@@ -47,6 +47,10 @@ class PipelineVK final
+ 
+   PipelineKey GetPipelineKey() const { return pipeline_key_; }
+ 
++  /// mcsm8: whether the descriptor set layout makes uniform buffers dynamic
++  /// descriptors (offsets given at bind time).
++  bool McsmDynamicUniforms() const { return mcsm_dynamic_uniforms_; }
++
+  private:
+   friend class PipelineLibraryVK;
+ 
+@@ -63,6 +67,7 @@ class PipelineVK final
+   vk::UniqueDescriptorSetLayout descriptor_set_layout_;
+   std::shared_ptr<SamplerVK> immutable_sampler_;
+   const PipelineKey pipeline_key_;
++  const bool mcsm_dynamic_uniforms_ = false;
+   mutable Mutex immutable_sampler_variants_mutex_;
+   mutable ImmutableSamplerVariants immutable_sampler_variants_
+       IPLR_GUARDED_BY(immutable_sampler_variants_mutex_);
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index 4a4e121345f..f56af610250 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "impeller/renderer/backend/vulkan/render_pass_vk.h"
+ 
++#include <algorithm>
+ #include <array>
+ #include <cstdint>
+ 
+@@ -725,6 +726,31 @@ fml::Status RenderPassVK::Draw() {
+   // mcsm8: the descriptor set of the previous draw is reused when this draw
+   // writes the same descriptors with the same layout (a set isn't changed
+   // once a draw used it, so equal writes mean an equal set).
++  // Dynamic uniform buffers: the offset moves to bind time, so the set is
++  // reused across draws that differ only in it.
++  const bool dynamic_uniforms = pipeline_vk.McsmDynamicUniforms();
++  auto& dynamic = mcsm_dynamic_scratch_;
++  dynamic.clear();
++  if (dynamic_uniforms) {
++    for (auto i = 0u; i < descriptor_write_offset_; i++) {
++      auto& w = write_workspace_[i];
++      if (w.descriptorType == vk::DescriptorType::eUniformBuffer &&
++          w.pBufferInfo != nullptr) {
++        auto* info = const_cast<vk::DescriptorBufferInfo*>(w.pBufferInfo);
++        dynamic.emplace_back(w.dstBinding,
++                             static_cast<uint32_t>(info->offset));
++        info->offset = 0;
++        w.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
++      }
++    }
++    std::sort(dynamic.begin(), dynamic.end());
++  }
++  auto& offsets = mcsm_offsets_scratch_;
++  offsets.clear();
++  for (const auto& [binding, offset] : dynamic) {
++    offsets.push_back(offset);
++  }
++
+   auto& key = mcsm_key_scratch_;
+   key.clear();
+   key.push_back(reinterpret_cast<uint64_t>(
+@@ -773,18 +799,19 @@ fml::Status RenderPassVK::Draw() {
+   }
+ 
+   if (!reuse_set || pipeline_layout != mcsm_bound_layout_ ||
+-      descriptor_set != mcsm_bound_set_) {
++      descriptor_set != mcsm_bound_set_ || offsets != mcsm_bound_offsets_) {
+     command_buffer_vk_.bindDescriptorSets(
+-        vk::PipelineBindPoint::eGraphics,  // bind point
+-        pipeline_layout,                   // layout
+-        0,                                 // first set
+-        1,                                 // set count
+-        &descriptor_set,                   // sets
+-        0,                                 // offset count
+-        nullptr                            // offsets
++        vk::PipelineBindPoint::eGraphics,          // bind point
++        pipeline_layout,                           // layout
++        0,                                         // first set
++        1,                                         // set count
++        &descriptor_set,                           // sets
++        static_cast<uint32_t>(offsets.size()),     // offset count
++        offsets.empty() ? nullptr : offsets.data()  // offsets
+     );
+     mcsm_bound_layout_ = pipeline_layout;
+     mcsm_bound_set_ = descriptor_set;
++    mcsm_bound_offsets_ = offsets;
+   }
+ 
+   if (pipeline_uses_input_attachments_) {
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+index 136c6a18fca..3f7987320c5 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+@@ -62,6 +62,9 @@ class RenderPassVK final : public RenderPass {
+   vk::DescriptorSet mcsm_bound_set_ = {};
+   std::vector<uint64_t> mcsm_set_key_;
+   std::vector<uint64_t> mcsm_key_scratch_;
++  std::vector<uint32_t> mcsm_bound_offsets_;
++  std::vector<std::pair<uint32_t, uint32_t>> mcsm_dynamic_scratch_;
++  std::vector<uint32_t> mcsm_offsets_scratch_;
+   std::array<vk::Buffer, kMaxVertexBuffers> mcsm_vertex_buffers_ = {};
+   std::array<vk::DeviceSize, kMaxVertexBuffers> mcsm_vertex_offsets_ = {};
+   size_t mcsm_vertex_count_ = 0;
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 0d7acd2f7645a7c34577c23c5353d324333f2d50 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 19:52:04 +0100
+Subject: [PATCH 6/7] impeller (mcsm8): a Vulkan render pass keeps every
+ descriptor set it wrote by its writes and reuses one whose writes recur (with
+ dynamic uniform offsets, a material's set serves all of its draws in the
+ pass)
+
+---
+ .../renderer/backend/vulkan/render_pass_vk.cc | 20 ++++++++++++++++++-
+ .../renderer/backend/vulkan/render_pass_vk.h  |  9 +++++++++
+ 2 files changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+index f56af610250..e8252769107 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.cc
+@@ -773,7 +773,24 @@ fml::Status RenderPassVK::Draw() {
+     }
+   }
+   vk::DescriptorSet descriptor_set = mcsm_bound_set_;
+-  const bool reuse_set = mcsm_bound_set_ && key == mcsm_set_key_;
++  bool reuse_set = mcsm_bound_set_ && key == mcsm_set_key_;
++  uint64_t key_hash = 1469598103934665603ull;
++  if (!reuse_set) {
++    for (uint64_t v : key) {
++      key_hash = (key_hash ^ v) * 1099511628211ull;
++    }
++    auto found = mcsm_set_cache_.find(key_hash);
++    if (found != mcsm_set_cache_.end()) {
++      for (const auto& entry : found->second) {
++        if (entry.key == key) {
++          descriptor_set = entry.set;
++          reuse_set = true;
++          mcsm_set_key_ = key;
++          break;
++        }
++      }
++    }
++  }
+   if (!reuse_set) {
+     auto descriptor_result = command_buffer_->AllocateDescriptorSets(
+         pipeline_vk.GetDescriptorSetLayout(), pipeline_vk.GetPipelineKey(),
+@@ -788,6 +805,7 @@ fml::Status RenderPassVK::Draw() {
+     }
+     context_vk.GetDevice().updateDescriptorSets(
+         descriptor_write_offset_, write_workspace_.data(), 0u, {});
++    mcsm_set_cache_[key_hash].push_back({key, descriptor_set});
+     mcsm_set_key_.swap(key);
+   }
+ 
+diff --git a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+index 3f7987320c5..b45cf920ad4 100644
+--- a/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
++++ b/engine/src/flutter/impeller/renderer/backend/vulkan/render_pass_vk.h
+@@ -10,6 +10,8 @@
+ #include "impeller/renderer/backend/vulkan/pipeline_vk.h"
+ #include "impeller/renderer/backend/vulkan/shared_object_vk.h"
+ #include "impeller/renderer/command_buffer.h"
++#include <unordered_map>
++
+ #include "impeller/renderer/render_pass.h"
+ #include "impeller/renderer/render_target.h"
+ 
+@@ -65,6 +67,13 @@ class RenderPassVK final : public RenderPass {
+   std::vector<uint32_t> mcsm_bound_offsets_;
+   std::vector<std::pair<uint32_t, uint32_t>> mcsm_dynamic_scratch_;
+   std::vector<uint32_t> mcsm_offsets_scratch_;
++  // Every descriptor set this pass wrote, by its writes (with dynamic uniform
++  // offsets, a material's set serves all its draws in the pass).
++  struct McsmSetEntry {
++    std::vector<uint64_t> key;
++    vk::DescriptorSet set;
++  };
++  std::unordered_map<uint64_t, std::vector<McsmSetEntry>> mcsm_set_cache_;
+   std::array<vk::Buffer, kMaxVertexBuffers> mcsm_vertex_buffers_ = {};
+   std::array<vk::DeviceSize, kMaxVertexBuffers> mcsm_vertex_offsets_ = {};
+   size_t mcsm_vertex_count_ = 0;
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 03c2f421b7b88884ff1fac04b03cc544055ac081 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Mon, 26 Oct 2026 21:18:21 +0100
+Subject: [PATCH 7/7] flutter_gpu (mcsm8): on Vulkan a replayed draw's bindings
+ go to the render pass without a ShaderMetadata copy each, as a recorded
+ draw's do (the shadow occlusion pass replays ~110 retained draws a frame: 3.3
+ ms vs 1.3 on GLES on the UHD 620)
+
+---
+ engine/src/flutter/lib/gpu/render_pass.cc | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index d55dcc562e1..f4aba1fe300 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -705,6 +705,10 @@ bool RenderPass::Replay(const DrawList& list,
+   auto stage_index = [](impeller::ShaderStage stage) {
+     return stage == impeller::ShaderStage::kVertex ? 0 : 1;
+   };
++  // mcsm8: Vulkan reads only the binding index (as SendAllBindings): no
++  // metadata copy per binding per replayed draw.
++  const bool vulkan = GetContext()->GetBackendType() ==
++                      impeller::Context::BackendType::kVulkan;
+   for (size_t n = 0; n < count; n++) {
+     const int32_t i = indices[n];
+     if (i < 0 || static_cast<size_t>(i) >= list.draws.size()) {
+@@ -729,6 +733,10 @@ bool RenderPass::Replay(const DrawList& list,
+         render_pass_->BindResource(b.stage,
+                                    impeller::DescriptorType::kUniformBuffer,
+                                    b.slot, b.metadata, b.view);
++      } else if (vulkan) {
++        render_pass_->BindResource(b.stage,
++                                   impeller::DescriptorType::kUniformBuffer,
++                                   b.slot, nullptr, b.view);
+       } else {
+         render_pass_->BindDynamicResource(
+             b.stage, impeller::DescriptorType::kUniformBuffer, b.slot,
+@@ -749,6 +757,10 @@ bool RenderPass::Replay(const DrawList& list,
+         render_pass_->BindResource(t.stage,
+                                    impeller::DescriptorType::kSampledImage,
+                                    t.slot, t.metadata, t.texture, t.sampler);
++      } else if (vulkan) {
++        render_pass_->BindResource(t.stage,
++                                   impeller::DescriptorType::kSampledImage,
++                                   t.slot, nullptr, t.texture, t.sampler);
+       } else {
+         render_pass_->BindDynamicResource(
+             t.stage, impeller::DescriptorType::kSampledImage, t.slot,
+-- 
+2.54.0 (Apple Git-157)
+

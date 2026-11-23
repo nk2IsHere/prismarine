@@ -1,0 +1,107 @@
+From ba2f439eb5146a4b77a9a539cc339a8b7dbe6b56 Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Wed, 21 Oct 2026 22:13:17 +0200
+Subject: [PATCH] flutter_gpu: a pipeline's colour attachments take their own
+ textures' formats, a per-attachment colour write mask, and
+ InternalFlutterGpu_McsmFeatures for detection (mcsm6)
+
+---
+ engine/src/flutter/lib/gpu/context.cc     |  4 ++++
+ engine/src/flutter/lib/gpu/context.h      | 10 ++++++++++
+ engine/src/flutter/lib/gpu/render_pass.cc | 17 ++++++++++++++++-
+ engine/src/flutter/lib/gpu/render_pass.h  |  8 ++++++++
+ 4 files changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 30aee9b3b56..c460121a9e1 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -191,3 +191,7 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+   // grows it should be wired in here.
+   return true;
+ }
++
++extern int64_t InternalFlutterGpu_McsmFeatures() {
++  return 1 | 2 | 4;
++}
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index a9e98eec672..b77d3ec3fa1 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -107,6 +107,16 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+     bool shader_read,
+     bool shader_write);
+ 
++/// mcsm6: what this patched engine adds, as bits (mcsm's Dart and runners
++/// look the symbol up; Flutter's own engine has none). See
++/// third_party/flutter_engine/README.md in the mcsm repo.
++///   1: per-attachment colour formats in pipelines (lib/gpu/render_pass.cc)
++///   2: RenderPass_SetColorWriteMask
++///   4: release builds take GC sizing Dart flags from
++///      FLUTTER_ENGINE_SWITCHES (dart-flags only; shell/common/switches.cc)
++FLUTTER_GPU_EXPORT
++extern int64_t InternalFlutterGpu_McsmFeatures();
++
+ }  // extern "C"
+ 
+ #endif  // FLUTTER_LIB_GPU_CONTEXT_H_
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 6a63d2b505a..fe2da5f70ed 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -118,10 +118,16 @@ RenderPass::GetOrCreatePipeline() {
+ 
+   pipeline_desc.SetSampleCount(render_target_.GetSampleCount());
+ 
++  // mcsm6: each colour attachment's pipeline format is its own texture's.
++  // Upstream gave every attachment the render target's format (attachment
++  // 0's), so a pass with mixed formats (RGBA8 + R32F) built pipelines that
++  // don't match their targets.
+   render_target_.IterateAllColorAttachments(
+       [&](size_t index, const impeller::ColorAttachment& attachment) -> bool {
+         auto& color = GetColorAttachmentDescriptor(index);
+-        color.format = render_target_.GetRenderTargetPixelFormat();
++        color.format = attachment.texture
++                           ? attachment.texture->GetTextureDescriptor().format
++                           : render_target_.GetRenderTargetPixelFormat();
+         return true;
+       });
+ 
+@@ -779,6 +785,15 @@ void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+       flutter::gpu::ToImpellerBlendFactor(destination_alpha_blend_factor);
+ }
+ 
++void InternalFlutterGpu_RenderPass_SetColorWriteMask(
++    flutter::gpu::RenderPass* wrapper,
++    int color_attachment_index,
++    int write_mask) {
++  wrapper->MarkPipelineStateChanged();  // mcsm E1
++  auto& color = wrapper->GetColorAttachmentDescriptor(color_attachment_index);
++  color.write_mask = static_cast<impeller::ColorWriteMaskBits>(write_mask & 0xF);
++}
++
+ void InternalFlutterGpu_RenderPass_SetDepthWriteEnable(
+     flutter::gpu::RenderPass* wrapper,
+     bool enable) {
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index a905b20bada..00ff2ba58b0 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -342,6 +342,14 @@ extern void InternalFlutterGpu_RenderPass_SetColorBlendEquation(
+     int source_alpha_blend_factor,
+     int destination_alpha_blend_factor);
+ 
++/// mcsm6: the colour attachment's write mask (bits 0..3 = r, g, b, a), part
++/// of the pipeline state like the blend.
++FLUTTER_GPU_EXPORT
++extern void InternalFlutterGpu_RenderPass_SetColorWriteMask(
++    flutter::gpu::RenderPass* wrapper,
++    int color_attachment_index,
++    int write_mask);
++
+ FLUTTER_GPU_EXPORT
+ extern void InternalFlutterGpu_RenderPass_SetDepthWriteEnable(
+     flutter::gpu::RenderPass* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+

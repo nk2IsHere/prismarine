@@ -1,0 +1,374 @@
+From aa30a26b92c38f3d7a0928783f20187d4b8795eb Mon Sep 17 00:00:00 2001
+From: mcsm <mcsm@localhost>
+Date: Wed, 11 Nov 2026 16:24:12 +0100
+Subject: [PATCH 25/25] flutter_gpu (mcsm10): a vertex stage without inputs
+ loads; storage, texel, texture and sampler bindings are sent on Metal only
+ when changed or displaced; RenderPass_McsmDrawIndirectCached (leaf, 2 = no
+ cached pipeline); Texture_McsmInitializeViewFormat (the parent's sRGB twin);
+ feature bit 4096
+
+---
+ engine/src/flutter/lib/gpu/context.cc        | 13 +++-
+ engine/src/flutter/lib/gpu/render_pass.cc    | 73 +++++++++++++++++---
+ engine/src/flutter/lib/gpu/render_pass.h     | 18 ++++-
+ engine/src/flutter/lib/gpu/shader_library.cc | 36 +++++-----
+ engine/src/flutter/lib/gpu/texture.cc        | 53 +++++++++++---
+ engine/src/flutter/lib/gpu/texture.h         | 14 ++++
+ 6 files changed, 168 insertions(+), 39 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 0f12b18fc11..940b1190f19 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -276,16 +276,23 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // (RenderPass_McsmBindStorageBuffer), compute pipelines and passes
+   // (ComputePipeline_*, ComputePass_*), and shader bundles with storage
+   // resources and per-block uniform limits.
++  //
++  // mcsm10: 4096 = our renderer's needs on Metal and Vulkan: vertex stages
++  // without inputs, storage and unsigned texel buffers in pixel stages,
++  // more bindings per draw, leaf indirect draws
++  // (RenderPass_McsmDrawIndirectCached), the binding resend cut and sRGB
++  // texture views.
+   const int64_t common = 1 | 2 | 4 | 8 | 512;
+   switch (backend) {
+     case 0:
+-      return common | 16 | 64 | 256 | 1024 | 2048;
++      return common | 16 | 64 | 256 | 1024 | 2048 | 4096;
+     case 1:
+       return common | 64 | 128 | 1024;
+     case 2:
+-      return common | 64 | (g_mcsm_vk_viewports ? 256 : 0) | 1024 | 2048;
++      return common | 64 | (g_mcsm_vk_viewports ? 256 : 0) | 1024 | 2048 |
++             4096;
+     default:
+-      return common | 16 | 64 | 128 | 256 | 2048;
++      return common | 16 | 64 | 128 | 256 | 2048 | 4096;
+   }
+ }
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 65cc244545b..6d8b3e8f776 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -176,8 +176,14 @@ bool RenderPass::McsmBindStorageBuffer(
+   for (auto& entry : mcsm_storage_bindings_) {
+     if (entry.stage == stage && entry.slot.binding == slot.binding &&
+         entry.slot.ext_res_0 == slot.ext_res_0) {
++      // mcsm10: the same buffer and range again leaves the entry clean, so
++      // Metal's encoder isn't sent what it already holds.
++      if (entry.view.GetBuffer() != view.GetBuffer() ||
++          !(entry.view.GetRange() == view.GetRange())) {
++        entry.view = std::move(view);
++        entry.dirty = true;
++      }
+       entry.slot = slot;
+-      entry.view = std::move(view);
+       return true;
+     }
+   }
+@@ -189,11 +195,16 @@ void RenderPass::McsmSendStorageBuffers() {
+   // Metal's backend reads no metadata for a buffer, Vulkan's only the
+   // binding; GLES has no storage buffers.
+   static const impeller::ShaderMetadata kNoMetadata;
+-  for (const auto& entry : mcsm_storage_bindings_) {
++  for (auto& entry : mcsm_storage_bindings_) {
+     if (retained_bindings_) {
+-      // Marks the index as written, so a uniform that held it is sent again.
+-      SendBuffer(entry.stage, entry.slot.ext_res_0, &mcsm_storage_bindings_,
+-                 true);
++      // mcsm10: sent only when it changed or another binding took its
++      // index since; the entry's address is its writer key.
++      const bool send =
++          SendBuffer(entry.stage, entry.slot.ext_res_0, &entry, entry.dirty);
++      entry.dirty = false;
++      if (!send) {
++        continue;
++      }
+     }
+     render_pass_->BindResource(entry.stage,
+                                impeller::DescriptorType::kStorageBuffer,
+@@ -201,11 +212,20 @@ void RenderPass::McsmSendStorageBuffers() {
+   }
+   // mcsm9: texel buffers, textures and samplers bound apart. Their Metal
+   // indices are marked written, so a binding that held one is sent again.
+-  for (const auto& entry : mcsm_bindings_) {
++  for (auto& entry : mcsm_bindings_) {
+     if (retained_bindings_) {
+-      SendTexture(entry.stage, entry.slot.ext_res_0, &mcsm_bindings_, true);
++      // mcsm10: as storage buffers, sent only when changed or displaced.
++      // Both indices are marked, so neither check may short-circuit.
++      bool send =
++          SendTexture(entry.stage, entry.slot.ext_res_0, &entry, entry.dirty);
+       if (entry.slot.ext_res_1 != ~size_t{0}) {
+-        SendBuffer(entry.stage, entry.slot.ext_res_1, &mcsm_bindings_, true);
++        send = SendBuffer(entry.stage, entry.slot.ext_res_1, &entry,
++                          entry.dirty) ||
++               send;
++      }
++      entry.dirty = false;
++      if (!send) {
++        continue;
+       }
+     }
+     switch (entry.kind) {
+@@ -237,7 +257,17 @@ bool RenderPass::McsmBind(McsmBinding binding) {
+     if (entry.stage == binding.stage && entry.kind == binding.kind &&
+         entry.slot.binding == binding.slot.binding &&
+         entry.slot.ext_res_0 == binding.slot.ext_res_0) {
+-      entry = std::move(binding);
++      // mcsm10: the same resource again leaves the entry clean.
++      const bool same =
++          entry.view.GetBuffer() == binding.view.GetBuffer() &&
++          entry.view.GetRange() == binding.view.GetRange() &&
++          entry.format == binding.format && entry.texture == binding.texture &&
++          entry.sampler.get() == binding.sampler.get() &&
++          entry.slot.ext_res_1 == binding.slot.ext_res_1;
++      if (!same) {
++        entry = std::move(binding);
++        entry.dirty = true;
++      }
+       return true;
+     }
+   }
+@@ -1749,6 +1779,31 @@ bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
+       indexed);
+ }
+ 
++// mcsm10: an indirect draw as a leaf call: only with the pipeline already
++// cached on the pass (so it never blocks); 2 when it isn't, for the caller to
++// draw through McsmDrawIndirect.
++int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes,
++    bool indexed) {
++  const size_t length = indexed ? 20u : 16u;
++  if (!args || offset_in_bytes < 0 || offset_in_bytes % 4 != 0 ||
++      static_cast<size_t>(offset_in_bytes) + length >
++          args->GetBuffer()->GetDeviceBufferDescriptor().size) {
++    return 0;
++  }
++  if (!wrapper->HasCachedPipeline()) {
++    return 2;
++  }
++  return wrapper->McsmDrawIndirect(
++             impeller::BufferView(args->GetBuffer(),
++                                  impeller::Range(offset_in_bytes, length)),
++             indexed)
++             ? 1
++             : 0;
++}
++
+ bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 6624104edd2..4b2f584feea 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -7,6 +7,7 @@
+ 
+ #include <array>
+ #include <cstdint>
++#include <deque>
+ #include <map>
+ #include <memory>
+ #include <vector>
+@@ -266,8 +267,11 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+     impeller::ShaderStage stage;
+     impeller::ShaderUniformSlot slot;
+     impeller::BufferView view;
++    bool dirty = true;  // mcsm10: changed since the encoder last had it.
+   };
+-  std::vector<McsmStorageBinding> mcsm_storage_bindings_;
++  // mcsm10: a deque, so each entry's address stays its writer key
++  // (SendBuffer) while others are added.
++  std::deque<McsmStorageBinding> mcsm_storage_bindings_;
+   impeller::BufferView mcsm_pending_indirect_;  // mcsm9
+   void McsmSendStorageBuffers();
+ 
+@@ -282,11 +286,12 @@ class RenderPass : public RefCountedDartWrappable<RenderPass> {
+     impeller::PixelFormat format = impeller::PixelFormat::kUnknown;
+     std::shared_ptr<const impeller::Texture> texture;
+     impeller::raw_ptr<const impeller::Sampler> sampler;
++    bool dirty = true;  // mcsm10: changed since the encoder last had it.
+   };
+   bool McsmBind(McsmBinding binding);
+ 
+  private:
+-  std::vector<McsmBinding> mcsm_bindings_;
++  std::deque<McsmBinding> mcsm_bindings_;  // mcsm10: as storage, a deque.
+ 
+   /// mcsm E1: the pipeline for the bound RenderPipeline and the current
+   /// state, from this pass's cache; GetOrCreatePipeline on a miss.
+@@ -437,6 +442,15 @@ extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
+     double max_lod,
+     double lod_bias);
+ 
++/// mcsm10: RenderPass::McsmDrawIndirect as a leaf call (2: no cached
++/// pipeline yet).
++FLUTTER_GPU_EXPORT
++extern int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
++    flutter::gpu::RenderPass* wrapper,
++    flutter::gpu::DeviceBuffer* args,
++    int offset_in_bytes,
++    bool indexed);
++
+ /// mcsm9: RenderPass::McsmDrawIndirect.
+ FLUTTER_GPU_EXPORT
+ extern bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
+diff --git a/engine/src/flutter/lib/gpu/shader_library.cc b/engine/src/flutter/lib/gpu/shader_library.cc
+index e20c53c4b45..24cde29f8e0 100644
+--- a/engine/src/flutter/lib/gpu/shader_library.cc
++++ b/engine/src/flutter/lib/gpu/shader_library.cc
+@@ -412,23 +412,27 @@ static ShaderLibrary::ShaderMap ParseShaderBundle(
+         impeller::fb::shaderbundle::ShaderStage::kVertex) {
+       auto inputs_fb = backend_shader->inputs();
+ 
+-      inputs.reserve(inputs_fb->size());
++      // mcsm: a vertex stage that pulls its vertices from storage buffers
++      // declares no inputs, and the bundle then has no input list.
+       size_t default_stride = 0;
+-      for (const auto& input : *inputs_fb) {
+-        impeller::ShaderStageIOSlot slot;
+-        slot.name = input->name()->c_str();
+-        slot.location = input->location();
+-        slot.set = input->set();
+-        slot.binding = input->binding();
+-        slot.type = FromInputType(input->type());
+-        slot.bit_width = input->bit_width();
+-        slot.vec_size = input->vec_size();
+-        slot.columns = input->columns();
+-        slot.offset = input->offset();
+-        inputs.emplace_back(slot);
+-
+-        default_stride +=
+-            SizeOfInputType(input->type()) * slot.vec_size * slot.columns;
++      if (inputs_fb != nullptr) {
++        inputs.reserve(inputs_fb->size());
++        for (const auto& input : *inputs_fb) {
++          impeller::ShaderStageIOSlot slot;
++          slot.name = input->name()->c_str();
++          slot.location = input->location();
++          slot.set = input->set();
++          slot.binding = input->binding();
++          slot.type = FromInputType(input->type());
++          slot.bit_width = input->bit_width();
++          slot.vec_size = input->vec_size();
++          slot.columns = input->columns();
++          slot.offset = input->offset();
++          inputs.emplace_back(slot);
++
++          default_stride +=
++              SizeOfInputType(input->type()) * slot.vec_size * slot.columns;
++        }
+       }
+       layouts = {impeller::ShaderStageBufferLayout{
+           .stride = default_stride,
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 6b21fa7b740..44322a7905f 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -361,15 +361,17 @@ bool InternalFlutterGpu_Texture_McsmInitializeLayered(
+       enable_shader_read_usage, enable_shader_write_usage, mip_level_count);
+ }
+ 
+-bool InternalFlutterGpu_Texture_McsmInitializeView(
+-    Dart_Handle wrapper,
+-    flutter::gpu::Context* gpu_context,
+-    flutter::gpu::Texture* parent,
+-    int texture_type,
+-    int base_mip,
+-    int mip_count,
+-    int base_layer,
+-    int layers) {
++// mcsm10: `format` < 0 keeps the parent's; else a Flutter GPU pixel format,
++// the parent's or its sRGB twin.
++static bool McsmInitializeView(Dart_Handle wrapper,
++                               flutter::gpu::Context* gpu_context,
++                               flutter::gpu::Texture* parent,
++                               int texture_type,
++                               int base_mip,
++                               int mip_count,
++                               int base_layer,
++                               int layers,
++                               int format) {
+   if (!parent || base_mip < 0 || mip_count < 1 || base_layer < 0 ||
+       layers < 1) {
+     return false;
+@@ -378,6 +380,12 @@ bool InternalFlutterGpu_Texture_McsmInitializeView(
+   const impeller::TextureDescriptor& parent_desc =
+       parent_texture->GetTextureDescriptor();
+   impeller::TextureDescriptor desc = parent_desc;
++  if (format >= 0) {
++    desc.format = flutter::gpu::ToImpellerPixelFormat(format);
++    if (!impeller::McsmViewFormatAllowed(parent_desc.format, desc.format)) {
++      return false;
++    }
++  }
+   desc.type = static_cast<impeller::TextureType>(texture_type);
+   desc.size = {std::max<int64_t>(1, parent_desc.size.width >> base_mip),
+                std::max<int64_t>(1, parent_desc.size.height >> base_mip)};
+@@ -410,6 +418,33 @@ bool InternalFlutterGpu_Texture_McsmInitializeView(
+   return true;
+ }
+ 
++bool InternalFlutterGpu_Texture_McsmInitializeView(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Texture* parent,
++    int texture_type,
++    int base_mip,
++    int mip_count,
++    int base_layer,
++    int layers) {
++  return McsmInitializeView(wrapper, gpu_context, parent, texture_type,
++                            base_mip, mip_count, base_layer, layers, -1);
++}
++
++bool InternalFlutterGpu_Texture_McsmInitializeViewFormat(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Texture* parent,
++    int texture_type,
++    int base_mip,
++    int mip_count,
++    int base_layer,
++    int layers,
++    int format) {
++  return McsmInitializeView(wrapper, gpu_context, parent, texture_type,
++                            base_mip, mip_count, base_layer, layers, format);
++}
++
+ bool InternalFlutterGpu_Texture_Overwrite(flutter::gpu::Texture* texture,
+                                           flutter::gpu::Context* gpu_context,
+                                           Dart_Handle source_byte_data,
+diff --git a/engine/src/flutter/lib/gpu/texture.h b/engine/src/flutter/lib/gpu/texture.h
+index d530cfe3ce1..a7e2ac40463 100644
+--- a/engine/src/flutter/lib/gpu/texture.h
++++ b/engine/src/flutter/lib/gpu/texture.h
+@@ -109,6 +109,20 @@ extern bool InternalFlutterGpu_Texture_McsmInitializeView(
+     int base_layer,
+     int layers);
+ 
++/// mcsm10: Texture_McsmInitializeView in the parent's format or its sRGB
++/// twin (a Flutter GPU pixel format).
++FLUTTER_GPU_EXPORT
++extern bool InternalFlutterGpu_Texture_McsmInitializeViewFormat(
++    Dart_Handle wrapper,
++    flutter::gpu::Context* gpu_context,
++    flutter::gpu::Texture* parent,
++    int texture_type,
++    int base_mip,
++    int mip_count,
++    int base_layer,
++    int layers,
++    int format);
++
+ FLUTTER_GPU_EXPORT
+ extern bool InternalFlutterGpu_Texture_Overwrite(
+     flutter::gpu::Texture* wrapper,
+-- 
+2.54.0 (Apple Git-157)
+
