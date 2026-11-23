@@ -6,18 +6,13 @@ import 'package:hooks/hooks.dart';
 import 'package:prismarine_shaders/prismarine_shaders.dart';
 
 /// Builds the shader bundle of the manifest file [manifest] of the package
-/// into `build/shaderbundles/<name>.shaderbundle`. The package lists
-/// `build/shaderbundles/` as an asset and loads the bundle as
-/// `packages/<package>/build/shaderbundles/<name>.shaderbundle`.
-///
-/// The bundle keeps the backends of the target, `metal_desktop` on macOS and
-/// `vulkan` on Linux, Windows and Android. A vertex output whose name ends
-/// in `viewport_index` picks the viewport on Metal. On macOS each Metal
-/// entry also carries a Metal library compiled by the Metal compiler of
-/// Xcode. Without the compiler the bundle carries the source alone.
-/// [includeDirectories] are searched for the files that a shader includes.
-/// [glesLanguageVersion] sets the GLSL version of the OpenGL ES copy that
-/// impellerc writes before the backends are kept.
+/// into `build/shaderbundles/<name>.shaderbundle`. The package lists that
+/// folder as an asset. The bundle keeps the backend of the target. A vertex
+/// output whose name ends in `viewport_index` picks the viewport on Metal.
+/// On macOS each Metal entry carries a library from the Metal compiler of
+/// Xcode when Xcode has one. [includeDirectories] hold the files that the
+/// shaders include. [glesLanguageVersion] sets the GLSL version of the
+/// OpenGL ES copy that impellerc makes.
 Future<void> buildShaderBundle({
   required BuildInput input,
   required BuildOutputBuilder output,
