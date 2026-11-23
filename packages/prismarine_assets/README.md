@@ -16,6 +16,10 @@ index past the last vertex.
 `encodeKtx2` writes a 2D texture, a texture array, a cube map or a volume texture with all its mip levels in a
 `Ktx2Format`. `encodePng` writes RGBA8 pixels as a PNG. `decodeBc1` and `decodeBc3` turn BC blocks into RGBA8 pixels.
 
+`GltfDocument.open` reads a `.gltf` or `.glb` file with its buffers, and `floats` and `uints` read its accessors.
+`prepareGltf` writes a glTF that a renderer loads without work, with primitives of at most 65,535 vertices and 16-bit
+indices, one interleaved buffer view each and every image as RGBA8 KTX2 with mips. `readKtx2` reads such a file.
+
 `GeometryPools` collects the vertex streams of many meshes into one pool per vertex layout. `cookTextureArrays` groups
 the KTX2 textures of a directory into texture arrays by size and format.
 
