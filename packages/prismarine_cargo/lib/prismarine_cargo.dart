@@ -7,8 +7,8 @@
 /// `@Native` declarations for [assetName] resolve to it.
 ///
 /// Cargo is found through `$CARGO`, `PATH` and then `~/.cargo/bin`. Each
-/// target needs its Rust standard library, installed with `rustup target add
-/// <triple>`. A macOS app build is universal and needs both
+/// target needs its Rust standard library, installed with
+/// `rustup target add <triple>`. A macOS app build is universal and needs both
 /// `aarch64-apple-darwin` and `x86_64-apple-darwin`. Windows builds use the
 /// MSVC toolchain from the C++ build tools of Visual Studio. Linux builds
 /// need a C compiler. A crate that links ALSA needs its headers from
