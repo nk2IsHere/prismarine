@@ -1,21 +1,20 @@
-//! The host's game pads for an app. SDL3's gamepad subsystem
-//! reads the pads on every desktop platform (on macOS through its HIDAPI
-//! drivers for PlayStation, Xbox and Switch pads plus Apple's GameController
-//! framework; Windows.Gaming.Input, XInput and raw input on Windows; evdev on
-//! Linux) and maps every known pad onto the standard layout by button position.
-//! This crate picks the one the player uses and hands its state to Dart once a
-//! frame. The app decides what a game does with that state.
+//! The game pads of the host for an app. The gamepad subsystem of SDL3 reads
+//! the pads on every desktop platform. It maps every known pad onto the
+//! standard layout by button position. This crate picks the pad in use and
+//! publishes its state to Dart once a frame. The app decides what to do with
+//! that state.
 //!
-//! SDL lives on a thread of its own (`prismarine-pad`): it is started there, and
-//! every SDL call (pumping events, reading pads) happens there, as SDL asks
-//! of the thread that started its events. Some of its drivers keep state per
-//! thread (the IOKit driver's run loop on macOS, raw input's window on
-//! Windows), and a Dart isolate is not tied to one OS thread, so the readers
-//! never call SDL: the thread polls every few milliseconds and publishes a
-//! snapshot, and the `prismarine_pad_*` functions copy from it.
+//! SDL runs on a thread of its own, `prismarine-pad`. It is started there and
+//! every SDL call, such as pumping events or reading pads, happens there. SDL
+//! requires this of the thread that started its events. Some of its drivers
+//! keep state per thread, such as the run loop of the IOKit driver on macOS
+//! and the window of raw input on Windows. A Dart isolate is not tied to one
+//! OS thread. The readers therefore never call SDL. The thread polls every
+//! few milliseconds and publishes a snapshot. The `prismarine_pad_*`
+//! functions copy from it.
 //!
-//! No `unsafe` here: the `sdl3` crate wraps SDL, and the state goes back to
-//! Dart by value.
+//! The crate has no `unsafe`. The `sdl3` crate wraps SDL and the state goes
+//! back to Dart by value.
 
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -25,16 +24,17 @@ use sdl3::event::Event;
 use sdl3::gamepad::{Axis, Button, Gamepad};
 use sdl3::joystick::JoystickId;
 
-/// One reading: whether a pad is connected, its buttons (the bit order of
-/// [`BUTTONS`]), its sticks (−1…1, y up) and triggers (0…1), and its name.
+/// One reading with the connection state, the buttons in the bit order of
+/// [`BUTTONS`], the sticks from −1 to 1 with y up, the triggers from 0 to 1
+/// and the name of the pad.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PadReading {
-    /// 1 while a pad is connected; 0 when there is none (the rest is idle).
+    /// 1 while a pad is connected. With 0 the other fields are idle.
     pub connected: u8,
-    /// 1 for a Microsoft (Xbox) pad, by its USB vendor id.
+    /// 1 for a Microsoft Xbox pad, found by its USB vendor id.
     pub xbox: u8,
-    /// 1 when SDL could not start (no pad support on this machine).
+    /// 1 when SDL could not start and the machine has no pad support.
     pub unavailable: u8,
     pub reserved: u8,
     pub buttons: u32,
@@ -44,7 +44,7 @@ pub struct PadReading {
     pub right_y: f32,
     pub left_trigger: f32,
     pub right_trigger: f32,
-    /// The pad's name, UTF-8, NUL-padded (cut at 63 bytes).
+    /// The name of the pad in UTF-8, padded with NUL and cut at 63 bytes.
     pub name: [u8; 64],
 }
 
@@ -67,26 +67,28 @@ impl PadReading {
     }
 }
 
-/// One connected pad in the list (`prismarine_pad_device`): its SDL GUID (the
-/// same for two pads of one model), which of the pads with that GUID it is
-/// (in connection order), and its name. `present` 0 past the end.
+/// One connected pad in the list of `prismarine_pad_device`. It has its SDL
+/// GUID, which is the same for two pads of one model, its place among the
+/// pads with that GUID in connection order and its name. `present` is 0 past
+/// the end of the list.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PadDevice {
     pub present: u8,
     pub reserved: [u8; 3],
-    /// The n-th connected pad with this [`PadDevice::uuid`] (0-based).
+    /// The place of the pad among the connected pads with this
+    /// [`PadDevice::uuid`], from 0.
     pub nth: u32,
     pub uuid: [u8; 16],
     pub name: [u8; 64],
 }
 
-/// The buttons in [`PadReading::buttons`]' bit order: the face buttons by
-/// position (A south, B east, X west, Y north), the shoulders, Back, Start,
-/// the stick presses, then the d-pad up, down, left, right. SDL names the
-/// buttons by position for every pad, so a PlayStation pad's Cross and a
-/// Switch pad's B (both at the bottom) are the game's A, Circle and the
-/// Switch A (right) its B, and so on.
+/// The buttons in the bit order of [`PadReading::buttons`]. The face buttons
+/// come first by position, A south, B east, X west and Y north. The
+/// shoulders, Back, Start, the stick presses and the d-pad up, down, left and
+/// right follow. SDL reports the buttons by position for every pad. The
+/// Cross of a PlayStation pad and the B of a Switch pad, both at the bottom,
+/// are A. Circle and the Switch A, both on the right, are B.
 pub const BUTTONS: [Button; 14] = [
     Button::South,
     Button::East,
@@ -104,14 +106,15 @@ pub const BUTTONS: [Button; 14] = [
     Button::DPadRight,
 ];
 
-/// The Xbox pads' USB vendor (Microsoft).
+/// The USB vendor id of Microsoft, for Xbox pads.
 const MICROSOFT: u16 = 0x045e;
 
-/// How often the pad thread reads the pads: well inside a 60 fps frame.
+/// The interval at which the pad thread reads the pads, well inside a 60 fps
+/// frame.
 const POLL: Duration = Duration::from_millis(4);
 
-/// A stick or trigger moved this far (of 32767) makes its pad the one in use
-/// (Auto), as a button press does.
+/// A stick or trigger that moves this far, of 32767, makes its pad the pad
+/// in use (Auto), as a button press does.
 const MOVED: u16 = 16384;
 
 /// One connected pad as the pad thread last read it.
@@ -123,15 +126,15 @@ struct Snap {
     reading: PadReading,
 }
 
-/// What the pad thread publishes.
+/// The state that the pad thread publishes.
 struct Shared {
-    /// The thread has started SDL (or failed to).
+    /// True once the thread has tried to start SDL.
     started: bool,
-    /// SDL could not start: pads are never read.
+    /// True when SDL could not start. No pad is read then.
     unavailable: bool,
     /// The connected pads, in connection order.
     pads: Vec<Snap>,
-    /// The last pad a button, stick or trigger moved on.
+    /// The last pad on which a button, stick or trigger moved.
     active: Option<JoystickId>,
 }
 
@@ -151,8 +154,8 @@ fn lock() -> MutexGuard<'static, Shared> {
     }
 }
 
-/// The published state, starting the pad thread on the first call and
-/// waiting until SDL is up and has listed the pads already connected.
+/// Returns the published state. The first call starts the pad thread and
+/// waits until SDL is up and has listed the pads already connected.
 fn shared() -> MutexGuard<'static, Shared> {
     SPAWN.call_once(|| {
         let spawned = thread::Builder::new()
@@ -174,18 +177,19 @@ fn shared() -> MutexGuard<'static, Shared> {
     s
 }
 
-/// SDL's settings for us, before it starts: no signal handlers (the Dart
-/// VM and Flutter own SIGINT/SIGTERM); pads read while the window is in the
-/// background as well (there is no SDL window: the player decides).
+/// Sets the hints of SDL before it starts. SDL installs no signal handlers,
+/// since the Dart VM and Flutter own SIGINT and SIGTERM. Pads are read while
+/// the window is in the background too. There is no SDL window and the app
+/// decides.
 fn hints() {
     sdl3::hint::set("SDL_NO_SIGNAL_HANDLERS", "1");
     sdl3::hint::set("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
 }
 
-/// SDL with only its gamepad subsystem (and the joystick and event
-/// subsystems it needs); no video.
+/// SDL with only its gamepad subsystem and the joystick and event subsystems
+/// that it needs. It has no video.
 struct Sdl {
-    // Kept alive: dropping it shuts the subsystem down.
+    // Dropping it shuts the subsystem down.
     gamepads: sdl3::GamepadSubsystem,
     pump: sdl3::EventPump,
     #[cfg(test)]
@@ -209,8 +213,8 @@ fn start() -> Result<Sdl, String> {
     })
 }
 
-/// The pad thread: starts SDL, then reads the pads every [`POLL`] for the
-/// life of the process.
+/// Runs the pad thread. Starts SDL and then reads the pads every [`POLL`]
+/// for the life of the process.
 fn run() {
     let mut sdl = match start() {
         Ok(sdl) => sdl,
@@ -278,8 +282,8 @@ fn add(gamepads: &sdl3::GamepadSubsystem, open: &mut Vec<(JoystickId, Gamepad)>,
     }
 }
 
-/// Every open pad's reading, with its GUID and its place among the pads of
-/// that GUID.
+/// Returns the reading of every open pad with its GUID and its place among
+/// the pads of that GUID.
 fn snapshot(gamepads: &sdl3::GamepadSubsystem, open: &[(JoystickId, Gamepad)]) -> Vec<Snap> {
     let mut out: Vec<Snap> = Vec::with_capacity(open.len());
     for (id, pad) in open {
@@ -295,12 +299,12 @@ fn snapshot(gamepads: &sdl3::GamepadSubsystem, open: &[(JoystickId, Gamepad)]) -
     out
 }
 
-/// A stick axis (SDL: −32768…32767) as −1…1.
+/// Maps a stick axis of SDL from −32768…32767 to −1…1.
 fn stick(v: i16) -> f32 {
     (f32::from(v) / 32767.0).clamp(-1.0, 1.0)
 }
 
-/// A trigger axis (SDL: 0…32767) as 0…1.
+/// Maps a trigger axis of SDL from 0…32767 to 0…1.
 fn trigger(v: i16) -> f32 {
     (f32::from(v) / 32767.0).clamp(0.0, 1.0)
 }
@@ -314,7 +318,7 @@ fn reading(pad: &Gamepad) -> PadReading {
             r.buttons |= 1 << i;
         }
     }
-    // SDL's y axes point down; ours up.
+    // The y axes of SDL point down. The readings point up.
     r.left_x = stick(pad.axis(Axis::LeftX));
     r.left_y = -stick(pad.axis(Axis::LeftY));
     r.right_x = stick(pad.axis(Axis::RightX));
@@ -331,7 +335,7 @@ fn put_name(dst: &mut [u8; 64], name: &str) {
     dst[..n].copy_from_slice(&b[..n]);
 }
 
-/// The `i`-th connected pad (starts SDL on the first call).
+/// Returns the `i`-th connected pad. The first call starts SDL.
 #[no_mangle]
 pub extern "C" fn prismarine_pad_device(i: u32) -> PadDevice {
     let none = PadDevice {
@@ -354,16 +358,17 @@ pub extern "C" fn prismarine_pad_device(i: u32) -> PadDevice {
     }
 }
 
-/// The pad in use now (Auto): the last one a button, stick or trigger moved
-/// on, else the first connected one. Starts SDL on the first call.
+/// Returns the pad in use now (Auto). It is the last pad on which a button,
+/// stick or trigger moved, else the first connected pad. The first call
+/// starts SDL.
 #[no_mangle]
 pub extern "C" fn prismarine_pad_read() -> PadReading {
     read(Choice::Any)
 }
 
-/// The chosen pad: the `nth` connected pad whose GUID is `uuid_hi` ‖
-/// `uuid_lo` (big-endian halves); not connected while it isn't there, and
-/// every other pad is ignored.
+/// Returns the chosen pad, the `nth` connected pad whose GUID is `uuid_hi` ‖
+/// `uuid_lo` in big-endian halves. It reads as not connected while it is
+/// missing. Every other pad is ignored.
 #[no_mangle]
 pub extern "C" fn prismarine_pad_read_chosen(uuid_hi: u64, uuid_lo: u64, nth: u32) -> PadReading {
     let mut uuid = [0u8; 16];
@@ -372,12 +377,13 @@ pub extern "C" fn prismarine_pad_read_chosen(uuid_hi: u64, uuid_lo: u64, nth: u3
     read(Choice::Pad { uuid, nth })
 }
 
-/// Which pad the player plays with.
+/// The pad that the player plays with.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Choice {
-    /// The last one a button or stick moved on, else the first (Auto).
+    /// The last pad on which a button or stick moved, else the first (Auto).
     Any,
-    /// The `nth` connected pad with this GUID; none while it isn't there.
+    /// The `nth` connected pad with this GUID. It reads as none while it is
+    /// missing.
     Pad { uuid: [u8; 16], nth: u32 },
 }
 
@@ -407,7 +413,7 @@ mod tests {
     type Job = Box<dyn FnOnce(&Sdl, &mut Vec<Box<dyn std::any::Any>>) + Send>;
     static JOBS: Mutex<Vec<Job>> = Mutex::new(Vec::new());
 
-    /// Work for the pad thread (SDL is only called there).
+    /// The jobs for the pad thread. SDL is only called on that thread.
     pub(super) fn jobs() -> MutexGuard<'static, Vec<Job>> {
         match JOBS.lock() {
             Ok(g) => g,
@@ -427,8 +433,9 @@ mod tests {
             .expect("the pad thread runs jobs")
     }
 
-    /// Waits until `ok` holds for the published state (the pad thread polls
-    /// every few milliseconds).
+    /// Waits until `ok` holds for the published state. The pad thread polls
+    /// every few milliseconds. `what` describes the state in the message of a
+    /// timeout.
     fn eventually(what: &str, ok: impl Fn() -> bool) {
         let t = Instant::now();
         while !ok() {
@@ -437,7 +444,7 @@ mod tests {
         }
     }
 
-    /// The connected pads as the player lists them.
+    /// Returns the connected pads as an app lists them.
     fn devices() -> Vec<PadDevice> {
         let mut out = Vec::new();
         for i in 0..64 {
@@ -455,24 +462,24 @@ mod tests {
         String::from_utf8_lossy(&n[..end]).into_owned()
     }
 
-    /// The real SDL starts with our settings on this machine (the lesson of
-    /// gilrs: a setting that made the library refuse to start went unseen
-    /// while the tests used fakes).
+    /// The real SDL starts with these hints on this machine. A test with
+    /// fakes would not see a hint that makes SDL refuse to start.
     #[test]
     fn sdl_starts_with_our_settings() {
         let r = prismarine_pad_read();
         assert_eq!(r.unavailable, 0, "SDL did not start (see stderr)");
     }
 
-    /// A virtual pad attached to the real SDL: listed by name, GUID and
-    /// place; its buttons by position, sticks y up, triggers 0…1; Auto
-    /// follows the pad last used; a chosen pad reads only itself. One test,
-    /// so no other test's pads come and go meanwhile.
+    /// A virtual pad attached to the real SDL is listed by name, GUID and
+    /// place. Its buttons are read by position, its sticks with y up and its
+    /// triggers from 0 to 1. Auto follows the pad last used. A chosen pad
+    /// reads only itself. The checks are one test, which keeps the pads of
+    /// other tests from coming and going meanwhile.
     #[test]
     fn virtual_pads_through_sdl() {
         assert_eq!(prismarine_pad_read().unavailable, 0);
-        // Every button and axis SDL's gamepad has, in its own order, so the
-        // virtual pad's raw index of each is its SDL code.
+        // Every button and axis of the SDL gamepad, in the order of SDL. The
+        // raw index of each on the virtual pad is then its SDL code.
         let all = [
             Button::South,
             Button::East,
@@ -545,8 +552,9 @@ mod tests {
         assert_eq!(chosen(da).connected, 1);
         assert_eq!(chosen(da).buttons, 0);
 
-        // Positions: South is A (bit 0), East B, West X, North Y; the
-        // shoulders, Back/Start, stick presses and d-pad in BUTTONS' order.
+        // South is A at bit 0, East is B, West is X and North is Y. The
+        // shoulders, Back, Start, the stick presses and the d-pad follow in
+        // the order of BUTTONS.
         set(
             a,
             &[Button::South, Button::RightShoulder, Button::DPadLeft],
@@ -597,7 +605,7 @@ mod tests {
         eventually("LB L3 R3 up down right", || {
             chosen(da).buttons == 1 << 4 | 1 << 8 | 1 << 9 | 1 << 10 | 1 << 11 | 1 << 13
         });
-        // Guide is not one of the game's buttons.
+        // Guide is not in BUTTONS.
         set(
             a,
             &[Button::Guide],
@@ -612,7 +620,8 @@ mod tests {
             chosen(da).buttons == 0 && chosen(da).left_x == 0.0
         });
 
-        // A second pad of the same model: same GUID, the next place.
+        // A second pad of the same model has the same GUID and the next
+        // place.
         let b = attach("prismarine test pad");
         eventually("two test pads", || {
             devices().iter().filter(|d| d.uuid == da.uuid).count() == 2
@@ -621,7 +630,7 @@ mod tests {
             .into_iter()
             .find(|d| d.uuid == da.uuid && d.nth == 1)
             .unwrap();
-        // Auto follows the pad last pressed; a chosen pad reads only itself.
+        // Auto follows the pad last pressed. A chosen pad reads only itself.
         set(b, &[Button::North], &[]);
         eventually("Auto reads the second pad", || {
             prismarine_pad_read().buttons == 1 << 3
@@ -635,7 +644,7 @@ mod tests {
         });
         assert_eq!(chosen(db).buttons, 0);
 
-        // Unplugged: listed no more, and the chosen pad reads as none.
+        // An unplugged pad is no longer listed. The chosen pad reads as none.
         on_pad_thread(move |sdl, keep| {
             keep.clear();
             let _ = sdl;

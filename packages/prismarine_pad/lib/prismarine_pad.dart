@@ -1,6 +1,5 @@
-/// The host's game pads (desktop): SDL3's gamepad subsystem through a small
-/// Rust library (SDL runs on a thread of its own), read once a frame. The
-/// app turns a reading into its own pad state.
+/// The gamepads of a desktop host, read once a frame through the gamepad
+/// subsystem of SDL3. The app turns a reading into its own pad state.
 library;
 
 import 'dart:convert';
@@ -8,7 +7,7 @@ import 'dart:ffi';
 
 import 'src/native.dart';
 
-/// A pad's buttons in [PadReading.buttons]' bit order.
+/// The buttons of a pad in the bit order of [PadReading.buttons].
 enum PadButton {
   a,
   b,
@@ -26,8 +25,8 @@ enum PadButton {
   dpadRight,
 }
 
-/// One reading of the pad in use: the standard (Xbox) layout, sticks −1…1
-/// with y up, triggers 0…1.
+/// One reading of the pad in use in the standard Xbox layout. Sticks range
+/// from −1 to 1 with y up. Triggers range from 0 to 1.
 class PadReading {
   const PadReading({
     required this.connected,
@@ -40,12 +39,12 @@ class PadReading {
     this.name = '',
   });
 
-  /// No pad connected (or no pad support on this machine).
+  /// The reading when no pad is connected or the machine has no pad support.
   static const none = PadReading(connected: false);
 
   final bool connected;
 
-  /// A Microsoft (Xbox) pad, by its USB vendor.
+  /// True for a Microsoft Xbox pad, found by its USB vendor.
   final bool xbox;
   final int buttons;
   final (double, double) leftStick, rightStick;
@@ -55,9 +54,9 @@ class PadReading {
   bool pressed(PadButton b) => (buttons >> b.index) & 1 != 0;
 }
 
-/// A connected pad as the device list names it: its SDL GUID ([uuid], 32
-/// hex digits; the same for two pads of one model), which of the pads with
-/// that GUID it is ([nth], in connection order), and its name.
+/// A connected pad in the device list. [uuid] is its SDL GUID of 32 hex
+/// digits, which is the same for two pads of one model. [nth] is its place
+/// among the pads with that GUID in connection order.
 class PadDevice {
   const PadDevice({required this.uuid, this.nth = 0, required this.name});
   final String uuid;
@@ -87,11 +86,12 @@ String _text(Array<Uint8> a, int n) {
 class HostPads {
   bool _unavailable = false;
 
-  /// SDL could not start: pads are never read.
+  /// True when SDL could not start. No pad is read then.
   bool get unavailable => _unavailable;
 
-  /// The pad to play with: null for any (the last one used, else the
-  /// first), else only that one (none while it isn't connected).
+  /// The pad to play with. Null selects the last pad used, else the first
+  /// pad. A device selects only that pad, which reads as none while it is
+  /// not connected.
   PadDevice? chosen;
 
   /// The connected pads, in connection order.
@@ -115,7 +115,7 @@ class HostPads {
     return out;
   }
 
-  /// The pad in use now (see [chosen]).
+  /// Reads the pad in use now, as [chosen] selects it.
   PadReading read() {
     if (_unavailable) return PadReading.none;
     final NativePadReading r;
@@ -128,7 +128,7 @@ class HostPads {
         r = padReadChosen(hi, lo, c.nth);
       }
     } on Object {
-      // The library failed to load: no pads.
+      // The library failed to load. No pad is read.
       _unavailable = true;
       return PadReading.none;
     }
@@ -150,8 +150,8 @@ class HostPads {
   }
 }
 
-/// A GUID's 32 hex digits as two 64-bit halves (big-endian; a bad string
-/// reads as zeros).
+/// Returns the 32 hex digits of a GUID as two big-endian 64-bit halves. A
+/// bad string returns zeros.
 (int, int) uuidHalves(String hex) {
   int half(int at) {
     var v = 0;
