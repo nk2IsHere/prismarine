@@ -1,4 +1,3 @@
-// exp and log.
 part of '../../libm.dart';
 
 // --------------------------------------------------------------------- exp
@@ -13,7 +12,6 @@ const _p3 = 6.61375632143793436117e-05;
 const _p4 = -1.65339022054652515390e-06;
 const _p5 = 4.13813679705723846039e-08;
 
-/// libm's exp.
 double exp(double x) {
   final x1p1023 = _pow2(2046);
   double hi, lo;
@@ -63,7 +61,7 @@ const _lg5 = 1.818357216161805012e-01;
 const _lg6 = 1.531383769920937332e-01;
 const _lg7 = 1.479819860511658591e-01;
 
-/// libm's log (natural).
+/// Returns the natural logarithm of [x].
 double log(double x) {
   final x1p54 = _pow2(1023 + 54);
   var hx = _hi(x);
