@@ -30,8 +30,7 @@ Every part runs on macOS, Linux and Windows.
 
 The patched Flutter engine extends Flutter GPU with cheaper draws, retained draws, multiple render targets,
 instancing, compute, texel buffers, texture arrays and 3D textures. It adds Vulkan for Linux and Windows. The Dart VM
-gets collections at idle points of the frame and heap figures for the debug tools. Each engine release passes a set of
-GPU smoke tests on every platform.
+gets collections at idle points of the frame and heap figures for the debug tools.
 
 ## Platforms
 
@@ -39,8 +38,8 @@ prismarine draws through Metal on macOS and through Vulkan on Linux and Windows.
 
 ## Tools
 
-The repository carries the lints that keep frames free of allocation, a heap and allocation profiler and the release
-scripts of the engine.
+The repository carries the lints that keep frames free of allocation, a heap and allocation profiler, a GPU smoke
+tool that checks the features of the engine on a machine and the release scripts of the engine.
 
 ## Licence
 
