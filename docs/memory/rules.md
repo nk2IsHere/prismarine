@@ -1,40 +1,41 @@
 ---
 name: rules
-description: How work is done on prismarine — writing, docs, engineering; machine and landing rules are mcsm's until they move here
+description: Rules for work on prismarine, covering docs and engineering, with machine and landing rules from mcsm for now
 type: feedback
 ---
 
 # Rules
 
-These rules bind every session and every agent.
-Shared machines, git and landing follow mcsm's `docs/memory/rules.md` until they move here.
+These rules bind every session and every agent. The rules for shared machines, git and landing are in mcsm's
+`docs/memory/rules.md` until they move here.
 
 ## Writing
 
-- Write for the reader of that page, and only what they need: a README tells a newcomer what prismarine is; an area page tells a developer how a part works and how to check it.
-- Leave out detail no one would miss: sizes, internal names, how we got here.
-- No history of where code came from: a doc names another project only where it matters now (mcsm as a user of prismarine, in the specs and plans of the split).
-- Plain, everyday English, short sentences, one sentence per line in docs.
-- Say what is, not what was: no dates in prose, no "(was X, now Y)", no "Update:" sections; history belongs in git.
-- No time estimates; say what is done and what is next.
-- State rules and decisions neutrally, without quotes or attributions.
-- Commit messages say what changed and why, in a line or two.
+Every text that a person reads follows the [writing rules](writing.md).
 
 ## Docs
 
-- Update the file that owns a fact instead of adding a new one: rules, decisions and state in `docs/memory/`, how a part works in `docs/areas/`, designs in `docs/specs/`, plans in `docs/plans/`.
-- Rewrite, don't append; no status files.
-- `state.md` stays one page and is rewritten when a landing changes what is live or in flight.
-- A package that moves here takes its "how it works" with it, rewritten for prismarine; mcsm's page then links here.
+- A fact has one owner. Rules, decisions and state are in `docs/memory/`, the workings of a part in `docs/areas/`,
+  designs in `docs/specs/` and plans in `docs/plans/`.
+- A changed fact is rewritten in its file. History belongs in git.
+- No status files exist.
+- `state.md` stays one page. A merge that changes what is live or in progress rewrites it.
+- A package that moves here gets an area page written for prismarine.
 
 ## Engineering
 
-- Generic only: no game data, and no game names in code, identifiers or package names.
-- A moved file is moved verbatim (renames and imports only); any other change is its own commit with its reason.
-- Files stay under 1,000 lines (hard) and aim for 500.
-- Comments say why and cite sources as tags; no history, dates, run ids, agent names or plan pointers.
-- Code a frame runs does not allocate: the alloc lint's counts only fall; a place that must allocate says why (`// alloc: <reason>`, `// alloc-cold: <reason>`).
-- New native code is Rust, built by the package's build hook through `prismarine_cargo`; vendored C stays C behind a thin Rust wrapper; `unsafe` only at the FFI edge, each with a `// SAFETY:` comment.
-- OS-specific code (memory, thread roles, file IO, process info) has a real path on Windows, Linux and macOS alike, with platform-independent tests of its logic.
-- General infrastructure comes from established, maintained libraries; a library on a path that must be bit-identical is proven so, or it stays out.
-- Dart is `dart format`ted, Rust `cargo fmt`ed; new code adds no analyzer, clippy, size or comment findings.
+- Code is generic. The repository holds no game data except the logo. Code, identifiers and package names hold no
+  game names.
+- A moved file keeps its content. Only renames and imports change. Any other change is its own commit with its reason
+  in the message.
+- A file stays under 1,000 lines and aims for 500.
+- Code that a frame runs does not allocate. The counts of the alloc lint only fall. A place that must allocate carries
+  `// alloc: <reason>` or `// alloc-cold: <reason>`.
+- New native code is Rust, built by the build hook of its package through `prismarine_cargo`. Vendored C stays C
+  behind a thin Rust wrapper. `unsafe` is only at the FFI edge. Each such block has a `// SAFETY:` comment.
+- OS-specific code, such as memory, thread roles, file IO and process info, has a real path on Windows, Linux and
+  macOS. Its logic has tests that run on every platform.
+- General infrastructure comes from established, maintained libraries. A library on a path that must be bit-identical
+  is proven bit-identical or is not used.
+- Dart is formatted with `dart format` and Rust with `cargo fmt`. New code adds no analyzer, clippy, size or comment
+  findings.

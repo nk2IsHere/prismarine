@@ -1,10 +1,13 @@
 ---
 name: state
-description: Where prismarine is now, on one page; rewritten on every landing that changes it
+description: The current state of prismarine on one page, rewritten by every merge that changes it
 type: project
 ---
 
-# State (2026-11-23)
+# State
 
-- The owner's decisions are in [decisions](decisions.md); the split is designed in [the split design](../specs/2026-11-23-prismarine-split-design.md).
-- Migration step 1 (the skeleton) is in progress: licence, docs, the design. No packages yet; mcsm is unchanged.
+The decisions are in [decisions](decisions.md). The design of the split is in
+[the split design](../specs/2026-11-23-prismarine-split-design.md).
+
+Migration step 1, the skeleton, is in progress. The licence, the docs, the logo and the design are in place. No
+package exists yet. mcsm is unchanged.
