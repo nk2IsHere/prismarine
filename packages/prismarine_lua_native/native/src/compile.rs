@@ -185,30 +185,6 @@ pub unsafe extern "C" fn luac_free(p: *mut c_void) {
     unsafe { free(p) };
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn compiles_and_reports_syntax_errors() {
-        let chunk = compile(b"return 1 + 2", c"=t").unwrap();
-        // A 5.2 binary chunk: ESC "Lua", version 0x52.
-        assert_eq!(&chunk[..5], b"\x1bLua\x52");
-        let (status, msg) = compile(b"return +", c"=t").unwrap_err();
-        assert_eq!(status, 1);
-        assert!(String::from_utf8_lossy(&msg).starts_with("t:1:"));
-    }
-
-    #[test]
-    fn the_writer_appends() {
-        let mut b = Vec::new();
-        assert!(add(&mut b, b"ab"));
-        assert!(add(&mut b, b"c"));
-        assert_eq!(b, b"abc");
-    }
-}
-
 /// `luai_numpow` of luaconf.h for the constant folding of `^`. It is the
 /// double `pow` of the Dart VM with its fast paths and then the pow of the
 /// libm crate, as `dpow` of prismarine_math computes it. Folded constants are
@@ -245,4 +221,28 @@ pub extern "C" fn prismarine_luac_pow(b: f64, e: f64) -> f64 {
         return b.sqrt();
     }
     libm::pow(b, e)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn compiles_and_reports_syntax_errors() {
+        let chunk = compile(b"return 1 + 2", c"=t").unwrap();
+        // A 5.2 binary chunk: ESC "Lua", version 0x52.
+        assert_eq!(&chunk[..5], b"\x1bLua\x52");
+        let (status, msg) = compile(b"return +", c"=t").unwrap_err();
+        assert_eq!(status, 1);
+        assert!(String::from_utf8_lossy(&msg).starts_with("t:1:"));
+    }
+
+    #[test]
+    fn the_writer_appends() {
+        let mut b = Vec::new();
+        assert!(add(&mut b, b"ab"));
+        assert!(add(&mut b, b"c"));
+        assert_eq!(b, b"abc");
+    }
 }
