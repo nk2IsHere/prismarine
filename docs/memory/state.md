@@ -13,7 +13,8 @@ Migration steps 1 to 5 are done. The workspace, the lints with their config, the
 private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`, `prismarine_math`,
 `prismarine_jobs`, `prismarine_cargo`, `prismarine_pad`, `prismarine_frame` and `prismarine_render`, each with a page
 in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
-with its own config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both
+with its own config. It runs the heap and allocation profiler of `tools/profiler`, the package `prismarine_profiler`,
+from the same checkout. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both
 repositories use. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
 `prismarine_render` are Flutter packages outside the pub workspace. Step 9 adds `prismarine_debug`, the debug tools of
 the player of mcsm with the shell of its debug panel. mcsm adds its own sections to the shell. Step 8 adds
