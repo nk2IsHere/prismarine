@@ -114,9 +114,10 @@ of a release and its publishing.
 ## Apps on the engine
 
 A release build of an app takes the flags in `prismarine_engine_args`. Debug builds run on the stock engine. The sample
-app needs the model and its shaders. `tool/fetch.dart` downloads Intel's Sponza into `data/sample` of the checkout and
-prepares it, about 2.4 GB of download and 0.6 GB on disk. `tool/shaders.sh` builds the shaders with the impellerc of
-the engine. [The sample README](../apps/prismarine_sample/README.md) lists its options.
+app needs the model and its shaders. `tool/fetch.dart` downloads Intel's Sponza and prepares it in
+`~/.prismarine/sample`, or in `%LOCALAPPDATA%\prismarine\sample` on Windows. The scene takes about 0.6 GB on disk.
+`tool/shaders.sh` builds the shaders with the impellerc of the engine. [The sample
+README](../apps/prismarine_sample/README.md) lists its options.
 
 On macOS the commands build the app and start it.
 
