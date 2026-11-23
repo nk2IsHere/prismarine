@@ -63,9 +63,8 @@ A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha25
 `SHA256SUMS` with the checksums of all archives.
 
 `third_party/flutter_engine/fetch.sh` downloads the archive of your machine with the GitHub CLI `gh`, checks its
-SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. The repository is private. You need `gh` logged in with
-`gh auth login` to an account that can read it, or a token with read access to the repository in `GH_TOKEN`. Run the
-commands from the root of your checkout.
+SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. `gh` must be logged in, with
+`gh auth login` or a token in `GH_TOKEN`. Run the commands from the root of your checkout.
 
     source tools/toolchain/env.sh
     export PRISMARINE_ENGINE_REPO=<owner>/prismarine
