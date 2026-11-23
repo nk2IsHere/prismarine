@@ -1,0 +1,38 @@
+#version 460
+// Counts the log2 luminance of every second pixel in each direction into 256
+// bins. Bin 0 holds black pixels. The weight of a pixel falls from 4 at the
+// centre of the view to 1 at its edges.
+layout(local_size_x = 16, local_size_y = 16) in;
+#include "Pbr/bodies/exposure_block.glsl"
+
+uniform texture2D image; // t0
+uniform sampler s0;
+#define image_S s0
+
+layout(std430) buffer RawBins {
+  uint bins[];
+} bins;
+
+shared uint counts[256];
+
+void main() {
+  uint i = gl_LocalInvocationIndex;
+  counts[i] = 0u;
+  barrier();
+  ivec2 size = ivec2(cb0.size.yz);
+  ivec2 p = ivec2(gl_GlobalInvocationID.xy) * 2;
+  if (p.x < size.x && p.y < size.y) {
+    vec3 c = texelFetch(sampler2D(image, s0), p, 0).rgb;
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    uint bin = 0u;
+    if (l > 1e-6) {
+      float t = clamp((log2(l) - cb0.params.x) * cb0.params.y, 0.0, 1.0);
+      bin = uint(t * 254.0 + 1.0);
+    }
+    vec2 at = (vec2(p) + 0.5) / vec2(size) - 0.5;
+    uint w = uint(clamp(4.0 - 8.0 * dot(at, at), 1.0, 4.0));
+    atomicAdd(counts[bin], w);
+  }
+  barrier();
+  if (counts[i] > 0u) atomicAdd(bins.bins[i], counts[i]);
+}

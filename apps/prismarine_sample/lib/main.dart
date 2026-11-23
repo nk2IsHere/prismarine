@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'src/perf.dart';
+import 'src/sample_options.dart';
 import 'src/sample_renderer.dart';
 import 'src/sample_view.dart';
 import 'src/smoke.dart';
@@ -40,6 +41,12 @@ void main(List<String> args) {
       panel: args.contains('--panel'),
       shadowView: args.contains('--shadow-view'),
       noShadows: args.contains('--no-shadows'),
+      timed: args.contains('--timed'),
+      options: {
+        for (final a in args)
+          if (a.startsWith('--') && a.contains('='))
+            a.substring(2, a.indexOf('=')): a.substring(a.indexOf('=') + 1),
+      },
       sun: opt(
         'sun',
       )?.split(',').map((v) => double.parse(v) * math.pi / 180).toList(),
@@ -75,6 +82,8 @@ class SampleApp extends StatefulWidget {
     this.panel = false,
     this.shadowView = false,
     this.noShadows = false,
+    this.timed = false,
+    this.options = const {},
     this.sun,
   });
 
@@ -96,6 +105,12 @@ class SampleApp extends StatefulWidget {
 
   /// Starts with the sun's shadows off.
   final bool noShadows;
+
+  /// Splits the frames of the performance run into timed parts.
+  final bool timed;
+
+  /// The options of the command line by name, for [applyRenderOptions].
+  final Map<String, String> options;
 
   /// The elevation and azimuth of the sun in radians, or null for the
   /// directional light of the scene.
@@ -122,6 +137,8 @@ class _SampleAppState extends State<SampleApp> {
       r.builder.settings
         ..showShadowMap = widget.shadowView
         ..shadows = !widget.noShadows;
+      applyRenderOptions(r.builder.settings, (n) => widget.options[n]);
+      r.timed = widget.timed;
       if (widget.sun case [final elevation, final azimuth]) {
         r.builder.settings.sunDirection.setValues(
           math.cos(elevation) * math.cos(azimuth),

@@ -101,12 +101,20 @@ class _SampleViewState extends State<SampleView>
       _lights.place(_time);
       f.add('step', _stepClock.elapsedMicroseconds / 1000);
       final submitted = _width > 0 && _r.inFlight < 2;
-      if (submitted) _r.submit(_view, _width, _height);
+      _r.timed = _panel;
+      if (submitted) _r.submit(_view, _width, _height, dt: dt);
       final runner = _r.runner;
       f
         ..add('build', _r.lastBuildMs)
-        ..add('record', runner.lastRecordMs)
-        ..add('gpu', runner.lastGpuOwnMs);
+        ..add('record', runner.lastRecordMs);
+      if (runner.timedParts.isEmpty) {
+        f.add('gpu', runner.lastGpuOwnMs);
+      } else {
+        final sections = _r.gpuSections;
+        for (var i = 0; i < sections.length; i++) {
+          f.add(sections[i], runner.lastPartGpuMs[i]);
+        }
+      }
       _pace.end(
         _clock.elapsedMicroseconds,
         presented: submitted,

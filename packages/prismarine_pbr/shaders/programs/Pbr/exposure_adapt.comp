@@ -1,0 +1,37 @@
+#version 460
+// The mean log2 luminance of the histogram without its darkest half and its
+// brightest 2 %, clamped to the limits, and the adapted value of the last
+// frame moved towards it.
+layout(local_size_x = 1) in;
+#include "Pbr/bodies/exposure_block.glsl"
+
+layout(std430) buffer RawBins {
+  uint bins[];
+} bins;
+
+layout(r32f) uniform image2D exposure;
+
+void main() {
+  float total = 0.0;
+  for (int i = 0; i < 256; i++) total += float(bins.bins[i]);
+  float low = total * 0.5, high = total * 0.98;
+  float seen = 0.0, sum = 0.0, count = 0.0;
+  for (int i = 0; i < 256; i++) {
+    float n = float(bins.bins[i]);
+    float take = clamp(seen + n, low, high) - clamp(seen, low, high);
+    float l = i == 0 ? cb0.params.x
+                     : cb0.params.x + (float(i) - 0.5) / 254.0 / cb0.params.y;
+    sum += take * l;
+    count += take;
+    seen += n;
+  }
+  float target = count > 0.0 ? sum / count : 0.0;
+  target = clamp(target, cb0.adapt.y, cb0.adapt.z);
+  float last = imageLoad(exposure, ivec2(0)).r;
+  float adapted = target;
+  if (cb0.params.w < 0.5 && !isnan(last) && !isinf(last)) {
+    float speed = target > last ? cb0.adapt.w : cb0.size.x;
+    adapted = last + (target - last) * (1.0 - exp(-cb0.params.z * speed));
+  }
+  imageStore(exposure, ivec2(0), vec4(adapted));
+}

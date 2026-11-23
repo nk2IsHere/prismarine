@@ -1,5 +1,9 @@
 import 'package:vector_math/vector_math_64.dart';
 
+import 'pbr_post_settings.dart';
+
+export 'pbr_post_settings.dart';
+
 /// The ids of the shaders of the renderer in its bundle.
 abstract final class PbrShaderIds {
   static const litVertex = 'Pbr/lit.vert',
@@ -67,7 +71,8 @@ class PbrSettings {
   /// Draws the sun's shadows. On by default.
   bool shadows = true;
 
-  /// The factor of the light before the tone map, 1 by default.
+  /// The factor of the light before the tone map without auto exposure, 1
+  /// by default.
   double exposure = 1;
 
   /// The direction towards the sun.
@@ -101,4 +106,13 @@ class PbrSettings {
   /// The depth bias of the shadow test and the offset along the normal in
   /// world units.
   double shadowBias = 0.0008, normalOffset = 0.02;
+
+  /// Anti-aliasing, bloom, exposure and the tone map.
+  final post = PbrPostSettings();
+
+  /// The shadows of the point lights.
+  final pointShadows = PbrPointShadowSettings();
+
+  /// The volumetric light.
+  final volume = PbrVolumeSettings();
 }

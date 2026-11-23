@@ -46,9 +46,10 @@ void main() {
     final b = PbrBuilder([scene]);
     final plan = b.frame(PbrCamera(), 64, 32);
     final passes = {
-      for (final p in plan.passes.cast<RenderPassPlan>()) p.name: p.draws,
+      for (final p in plan.passes.whereType<RenderPassPlan>()) p.name: p.draws,
     };
-    expect(passes.keys, ['shadow', 'opaque', 'blend', 'markers', 'tonemap']);
+    expect(passes.keys.take(4), ['shadow', 'opaque', 'blend', 'markers']);
+    expect(passes.keys.last, 'tonemap');
     expect(passes['shadow']!.map((d) => d.label), ['OPAQUE', 'MASK']);
     expect(passes['opaque']!.map((d) => d.pixel), [
       PbrShaderIds.litPixel,
@@ -108,6 +109,54 @@ void main() {
     b.settings.sunDirection.setValues(0, 1, 0);
     b.frame(PbrCamera(), 64, 32);
     expect(plan.retained['shadow'], isNot(stamp));
+  });
+
+  test('the post passes follow the switches of the settings', () {
+    final b = PbrBuilder([scene]);
+    List<String> names() => [
+      for (final p in b.frame(PbrCamera(), 64, 32).passes)
+        if (!['shadow', 'opaque', 'blend', 'markers'].contains(p.name)) p.name,
+    ];
+    final post = b.settings.post..bloomQuality = PbrQuality.low;
+    expect(names(), [
+      'taa',
+      'exposureHistogram',
+      'exposureAdapt',
+      for (var i = 0; i < 5; i++) 'bloomDown$i',
+      for (var i = 3; i >= 0; i--) 'bloomUp$i',
+      'tonemap',
+    ]);
+    expect(b.timedPasses, ['opaque', 'taa', 'exposureHistogram', 'tonemap']);
+    expect(b.partLabels, hasLength(b.timedPasses.length + 1));
+    post
+      ..taa = false
+      ..bloom = false
+      ..autoExposure = false;
+    expect(names(), ['tonemap']);
+    final tonemap = b.frame(PbrCamera(), 64, 32).passes.last as RenderPassPlan;
+    expect(tonemap.colors.map((c) => c.target), [PbrTargets.backbuffer]);
+    post.taa = true;
+    final withTaa = b.frame(PbrCamera(), 64, 32).passes.last as RenderPassPlan;
+    expect(withTaa.colors.map((c) => c.target), [
+      PbrTargets.backbuffer,
+      PbrPostTargets.taaHistory,
+    ]);
+  });
+
+  test('the camera moves by a sub-pixel jitter with TAA', () {
+    final b = PbrBuilder([scene]);
+    final cam = PbrCamera();
+    final seen = <double>{};
+    for (var i = 0; i < 8; i++) {
+      b.frame(cam, 64, 32);
+      expect(b.jitter.x.abs(), lessThan(0.5));
+      expect(b.jitter.y.abs(), lessThan(0.5));
+      seen.add(b.jitter.x);
+    }
+    expect(seen, hasLength(8));
+    b.settings.post.taa = false;
+    b.frame(cam, 64, 32);
+    expect(b.jitter.x, 0);
   });
 
   test('lookAlong matches the view matrix of vector_math', () {
