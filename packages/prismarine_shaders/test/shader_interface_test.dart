@@ -58,4 +58,19 @@ void main() {
     expect(std140Rows('vec3 a; float b;'), 1);
     expect(std140Rows('float a; vec2 b; mat3 c;'), 4);
   });
+
+  test('storage images may have access qualifiers', () {
+    final i = shaderInterface('''
+layout(rgba16f) uniform writeonly image2D rays;
+layout(rgba16f) uniform image2D atlas;
+layout(std430) readonly buffer RawVoxels { uint words[]; } voxels;
+void main() {}
+''', 'compute');
+    expect(i['storage'], {
+      'rays': 'image2D',
+      'atlas': 'image2D',
+      'RawVoxels': 'buffer',
+    });
+    expect(i['readonly'], ['RawVoxels']);
+  });
 }

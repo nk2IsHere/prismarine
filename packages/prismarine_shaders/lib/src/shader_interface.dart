@@ -11,7 +11,7 @@
 /// | Sampler | `uniform sampler s0;`, or `uniform samplerShadow s4;` for a comparison sampler. |
 /// | Texture and sampler pair | `#define baseColor_S s0` |
 /// | Vertex input | `layout(location = 0) in vec3 vsi0_POSITION0;`, its register, semantic and index in the name. |
-/// | Storage | `uniform image2D name;` or `buffer RawName { … }`, `readonly` for one that the stage only reads. |
+/// | Storage | `uniform image2D name;`, with or without access qualifiers such as `writeonly`, or `buffer RawName { … }`, `readonly` for one that the stage only reads. |
 Map<String, Object?> shaderInterface(String source, String stage) {
   final blocks = [
     for (final m in RegExp(
@@ -66,7 +66,9 @@ Map<String, Object?> shaderInterface(String source, String stage) {
       },
   ];
   final storage = <String, String>{
-    for (final m in RegExp(r'uniform (\w*image\w*) (\w+);').allMatches(source))
+    for (final m in RegExp(
+      r'uniform (?:(?:writeonly|readonly|coherent|restrict) )*(\w*image\w*) (\w+);',
+    ).allMatches(source))
       m[2]!: m[1]!,
     for (final m in RegExp(r'buffer (Raw\w+)\s*\{').allMatches(source))
       m[1]!: 'buffer',
