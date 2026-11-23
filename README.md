@@ -15,7 +15,7 @@ Every part runs on macOS, Linux and Windows.
 | `prismarine_assets` | Readers and writers for glTF, KTX2 and PNG, with decoding of BC textures |
 | `prismarine_jobs` | A pool of worker isolates with priorities and cancellation, thread roles per OS and a check of free memory |
 | `prismarine_kept` | Maps, sets and lists that keep their storage when cleared |
-| `prismarine_snap` | Snapshots of object graphs that keep shared objects shared |
+| `prismarine_snap` | Binary snapshots of object graphs that preserve the references between objects |
 | `prismarine_replay` | Recording of input, deterministic replay and a schedule of snapshots |
 | `prismarine_math` | Maths functions that give the same bits on every OS |
 | `prismarine_lua` | An embeddable Lua 5.2 for Dart |
