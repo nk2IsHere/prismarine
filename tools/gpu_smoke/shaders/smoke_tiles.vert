@@ -3,13 +3,13 @@
 #extension GL_ARB_shader_viewport_layer_array : require
 #endif
 
-// Viewport arrays of release 7: each instance draws into the viewport its
-// `tile` names. flutter_scene P34 turns the `mcsm_viewport_index` output into
-// Metal's [[viewport_array_index]]; on Vulkan (release 8) the shader writes
-// gl_ViewportIndex itself; elsewhere it is an output nobody reads.
+// Viewport arrays of release 7. Each instance draws into the viewport of its
+// `tile`. flutter_scene P34 turns the `mcsm_viewport_index` output into the
+// [[viewport_array_index]] of Metal. On Vulkan (release 8) the shader writes
+// gl_ViewportIndex itself. Elsewhere nobody reads the output.
 
 uniform FrameInfo {
-  vec4 scale;  // x: scale of the triangle in clip space
+  vec4 scale;  // x is the scale of the triangle in clip space
 }
 frame_info;
 

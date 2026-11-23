@@ -1,10 +1,8 @@
 import 'dart:typed_data';
 
-/// Whether [a] and [b] hold the same float32 bits (−0 is not 0, a NaN is
-/// itself), allocating nothing: both are copied into scratch lists of one
-/// class and compared as integers. Reading a [Float32List] whose class the
-/// compiler can't tell (a list or a view) is a dispatched call that boxes
-/// each double in AOT, and views of the bits are objects of their own.
+/// Returns true when [a] and [b] hold the same float32 bits, where −0 is not
+/// 0 and a NaN equals itself. It allocates nothing. Both lists are copied
+/// into scratch lists of one class and compared as integers.
 bool sameFloat32Bits(Float32List? a, Float32List b) {
   if (a == null || a.length != b.length) return false;
   final n = a.length;
@@ -18,8 +16,8 @@ bool sameFloat32Bits(Float32List? a, Float32List b) {
   return true;
 }
 
-/// [w]'s floats in a scratch list of one class (valid until the next
-/// call), for reading many of them without a boxed double each.
+/// Returns the floats of [w] in a scratch list of one class, valid until the
+/// next call. Reading many of them from it boxes no double.
 Float32List scratchFloats(Float32List w) {
   if (w.length > _w.length) _w = Float32List(w.length * 2);
   return _w..setRange(0, w.length, w);

@@ -1,11 +1,11 @@
 part of 'frame_runner.dart';
 
-/// A pulled pass's rows' part as one frame made it (the runner keeps its
-/// tables while the rows hold): the instance,
-/// box and material bytes, each object row's block as bound, the buckets
-/// with their clusters, the rows left to records and why, and the camera
-/// block. Taken again when the reader's rows change, into the same
-/// storage (perf: copies of every table each time the rows changed).
+/// The part of the rows of a pulled pass as one frame made it. The runner
+/// keeps its tables while the rows hold. It has the instance, box and
+/// material bytes, the block of each object row as bound, the buckets with
+/// their clusters, the rows left to records with the reason and the camera
+/// block. It is taken again into the same storage when the rows of the
+/// reader change.
 final class _KeptRows {
   List<DrawPlan> plans = const [];
   final _instances = _Bytes(), _boxes = _Bytes(), _materials = _Bytes();
@@ -15,8 +15,8 @@ final class _KeptRows {
   final _buckets = KeptList<_PulledBucket>();
   final _clusters = KeptList<int>();
 
-  /// The buckets each frame restores into, one per kept bucket, their
-  /// counts reset (perf: a bucket per kept bucket a frame).
+  /// The buckets that each frame restores into, one per kept bucket, with
+  /// their counts reset.
   final _live = KeptList<_PulledBucket>();
   final _rest = KeptList<DrawPlan>();
   final _why = KeptMap<String, int>();
@@ -24,7 +24,7 @@ final class _KeptRows {
   int instanceCount = 0;
   Uint8List? camera;
 
-  /// [f]'s state after the rows of [plans] were added, as this.
+  /// Takes the state of [f] after the rows of [plans] were added.
   _KeptRows take(
     _PulledFrame f,
     List<DrawPlan> plans,
@@ -78,9 +78,9 @@ final class _KeptRows {
     to.length = from.length;
   }
 
-  /// Puts the kept part into [f] and the frame's lists, the objects' bytes
-  /// read again ([frameBlocks]: this frame's roles) into rows of
-  /// [objectRow].
+  /// Puts the kept part into [f] and the lists of the frame. The bytes of
+  /// the objects are read again from the roles of this frame in
+  /// [frameBlocks] into rows of [objectRow].
   void restore(
     RowLayout objectRow,
     _PulledFrame f,
@@ -105,8 +105,8 @@ final class _KeptRows {
         f.objects.add(_zero16);
       }
     }
-    // The live buckets, not the kept ones: their cluster counts are
-    // scaled per pass.
+    // The live buckets and not the kept ones, since their cluster counts
+    // are scaled per pass.
     for (var k = 0; k < _live.length; k++) {
       into[_bucketKeys[k]] = _live[k]
         ..clusters = _clusters[k]

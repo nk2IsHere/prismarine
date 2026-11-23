@@ -1,4 +1,5 @@
-// The allocation lint on its fixture: every expected place, nothing else.
+// Runs the allocation lint on its fixture and expects every expected place
+// and nothing else.
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -40,7 +41,8 @@ void main() {
     for (var i = 0; i < lines.length; i++) {
       final m = RegExp(r'// expect: (.*)$').firstMatch(lines[i]);
       if (m == null) continue;
-      // Alone on a line (where the formatter put it): the line above.
+      // A marker alone on a line, where the formatter put it, applies to the
+      // line above it.
       final alone = lines[i].trimLeft().startsWith('//');
       want[alone ? i : i + 1] = m[1]!.trim().split(' ')..sort();
     }

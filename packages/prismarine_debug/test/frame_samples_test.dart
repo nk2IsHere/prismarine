@@ -3,7 +3,8 @@ import 'dart:ui' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_debug/prismarine_debug.dart';
 
-/// Two groups: `cpu.*` sections go to the first, `gpu.*` to the second.
+/// A sample of two groups. `cpu.*` sections go to the first and `gpu.*`
+/// sections to the second.
 class _Sample extends FrameSample {
   _Sample() : super(2);
 

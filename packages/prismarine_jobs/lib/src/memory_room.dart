@@ -1,16 +1,15 @@
-// Whether the machine has memory to spare for reads far ahead of their
-// use: a read made minutes early holds its parsed data that long, which a
-// machine short of memory pays for in paging on every switch (a 1.5 GB
-// scope: a coming scene's animations read at the scene before's open made
-// its holds longer). A few system calls, at most once a second.
+// Decides if the machine has memory to spare for reads far ahead of their
+// use. A read made minutes early holds its parsed data that long. A machine
+// short of memory pays for it in paging. The check makes a few system calls
+// at most once a second.
 import 'dart:io';
 
 import 'memory_readings.dart';
 
 export 'memory_readings.dart' show MemoryReadings, readMemory;
 
-/// What the OS says about memory now: room for reads far ahead ([deep]) or
-/// not, from [readMemory] (macOS, Linux, Windows) through [decide].
+/// Decides from the memory readings of the OS if reads far ahead fit now.
+/// [deep] applies [decide] to the results of [readMemory].
 class MemoryRoom {
   MemoryRoom({int? budgetMb, int? minFreeMb, MemoryReadings Function()? read})
     : budgetMb = budgetMb ?? int.tryParse(_env('AHEAD_BUDGET_MB') ?? ''),
@@ -18,19 +17,20 @@ class MemoryRoom {
           minFreeMb ?? int.tryParse(_env('AHEAD_FREE_MB') ?? '') ?? 2048,
       _read = read ?? readMemory;
 
-  /// The process's own memory (macOS: its footprint; Linux: its resident
-  /// set; Windows: its private bytes) past which nothing is read far ahead;
-  /// null: 40 % of the machine's memory.
+  /// The memory of the process past which nothing is read far ahead. It is
+  /// the footprint on macOS, the resident set on Linux and the private bytes
+  /// on Windows. Null sets it to 40 % of the memory of the machine.
   final int? budgetMb;
 
-  /// The memory the system (and the process's cgroup, or the Windows commit
-  /// limit) must have available for reads far ahead.
+  /// The memory that the system must have available for reads far ahead.
+  /// The cgroup of the process and the commit limit of Windows must have it
+  /// too.
   final int minFreeMb;
 
   final MemoryReadings Function() _read;
 
-  /// `PRISMARINE_AHEAD=deep|short` fixes the answer (A/B runs); else the
-  /// OS's.
+  /// `PRISMARINE_AHEAD=deep|short` fixes the answer. Without it the
+  /// readings of the OS decide.
   static final _forced = _env('AHEAD');
 
   /// Reads `PRISMARINE_<name>`, else `MCSM_<name>`.
@@ -42,11 +42,11 @@ class MemoryRoom {
   final _clock = Stopwatch();
   MemoryReadings? _last;
 
-  /// Why the last check answered as it did, for the log.
+  /// The reason of the last answer, for the log.
   String why = 'not checked';
 
-  /// Whether reads far ahead fit now ([decide] over the OS's readings,
-  /// read at most once a second).
+  /// True when reads far ahead fit now. Applies [decide] to the readings of
+  /// the OS, read at most once a second.
   bool get deep {
     if (_forced case final f?) {
       why = 'PRISMARINE_AHEAD=$f';
@@ -67,10 +67,11 @@ class MemoryRoom {
     return _deep;
   }
 
-  /// The decision over [now] (and the readings a check before, [before],
-  /// for paging): no memory pressure, no paging since then, [minFreeMb]
-  /// available to the system, the process's cgroup and the commit limit
-  /// (those the OS gives), and the process within its budget.
+  /// Returns true when the readings [now] leave room for reads far ahead.
+  /// [before] holds the readings of the check before, for paging. Reads far
+  /// ahead fit with no memory pressure, no paging since [before], [minFreeMb]
+  /// available to the system, the cgroup of the process and the commit limit
+  /// where the OS gives them. The process must be within its budget too.
   bool decide(MemoryReadings now, MemoryReadings? before) {
     final budget = budgetMb ?? (now.physicalMb * 2) ~/ 5;
     final paging =
@@ -89,7 +90,8 @@ class MemoryRoom {
     return short.isEmpty;
   }
 
-  /// Paged out since the check before past which the system counts as
-  /// paging (a swap long in use with no growth is old pages, not paging).
+  /// The memory paged out since the check before past which the system
+  /// counts as paging. A swap long in use with no growth holds old pages and
+  /// is not paging.
   static const _pagingMb = 64;
 }

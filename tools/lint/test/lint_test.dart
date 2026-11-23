@@ -8,7 +8,7 @@ import '../src/rule_sets.dart';
 import '../src/rules.dart';
 
 // A config with both rule sets. It has the addresses of a 32-bit binary, a
-// 64-bit binary and a DLL and the season words of code names.
+// 64-bit binary and a DLL and a set of name words.
 const _config = r'''
 code_shape:
   history:

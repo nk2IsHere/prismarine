@@ -1,12 +1,13 @@
-// A scene's first frame without its first-use work: what a draw listed
-// ahead of its scene's open will make at its first record, made over the
-// frames before (FrameRunner.prepareSome queues it, warmSome makes it):
-// its pulled form's cooked data, and the engine's pipeline state objects
-// for the passes it will draw in.
+// Takes the first-use work out of the first frame of a scene. A draw listed
+// ahead of the open of its scene makes its first-record work over the frames
+// before. FrameRunner.prepareSome queues the draw and warmSome makes its work.
+// The work is the cooked data of its pulled form and the pipeline state objects
+// of the engine for its future passes.
 part of 'frame_runner.dart';
 
-/// What a pass's pipeline state objects depend on beyond the draw: its
-/// attachments' formats and sample count (flutter_gpu's pipeline key).
+/// The parts of a pass that its pipeline state objects depend on beyond
+/// the draw, the formats and sample count of its attachments. They form the
+/// pipeline key of flutter_gpu.
 final class _PassShape {
   _PassShape(this.colors, this.depth, this.samples)
     : key = '${colors.map((f) => f.index).join(',')}|${depth?.index}|$samples';
@@ -21,69 +22,69 @@ final class _PassShape {
   int get hashCode => key.hashCode;
 }
 
-/// A draw listed ahead and made ready ([FrameRunner.prepareSome]), waiting
-/// for its first-frame work: its setup when made by record, and the scene
-/// it is for.
+/// A draw listed ahead and made ready ([FrameRunner.prepareSome]) that waits
+/// for its first-frame work, with its setup when made by record and its
+/// scene.
 typedef _Listed = (DrawPlan, _DrawSetup?, String?);
 
-/// A draw waiting for its pipeline states: its setup, and whether it draws
-/// in pulled form.
+/// A draw that waits for its pipeline states, with its setup and a flag for
+/// the pulled form.
 typedef _WarmItem = (DrawPlan, _DrawSetup, bool);
 
-/// The runner's knowledge of which passes each program effect draws in,
-/// learned from the frames it records, and the draws waiting to have
-/// their states made.
+/// The passes that each program effect draws in, learned by the runner from the
+/// frames that it records, with the draws that wait to have their states made.
 final class _Warm {
-  /// PRISMARINE_FIRST_FRAME: `off` gives listed draws no pulled form or
-  /// pipeline states ahead (the before, to compare); `pulled` or `states`
-  /// only the one.
+  /// The mode of PRISMARINE_FIRST_FRAME. `off` gives listed draws no pulled
+  /// form or pipeline states ahead. `pulled` or `states` gives only the one.
   static final _mode = envVar('FIRST_FRAME') ?? 'on';
   static final on = _mode != 'off';
   static final pulledOn = on && _mode != 'states';
 
-  /// Pipeline states ahead on Metal only: its draw of nothing reads no
-  /// binding, where Vulkan's binds a descriptor set the warm draw never
-  /// wrote, which its rules allow only for descriptors no stage uses.
+  /// Pipeline states are made ahead on Metal only. Its draw of nothing reads
+  /// no binding. On Vulkan the draw binds a descriptor set that the warm draw
+  /// did not fill, which its rules allow only for descriptors that no stage
+  /// uses.
   static final statesOn = on && _mode != 'pulled' && Platform.isMacOS;
 
-  /// The shape of the pass being recorded (FrameRunner._render).
+  /// The shape of the pass that is being recorded (FrameRunner._render).
   _PassShape? shape;
 
-  /// By effect (a shader id's folder, `SceneGBuffer`, `Mesh`,
-  /// `SceneShadowMap`, `FX_PostColor`): the shapes of the passes its draws
-  /// were recorded in, by record and in pulled form.
+  /// The shapes of the passes that the draws of each effect were recorded
+  /// in, by record and in pulled form. The effect is the folder of a shader
+  /// id.
   final _shapes = <String, Set<_PassShape>>{};
   final _pulledShapes = <String, Set<_PassShape>>{};
   final _effects = <String, String>{};
 
-  /// The draws made ready waiting for their pulled form, then those
-  /// waiting for their states; whether a [RunnerWarm.warmSome] runs.
+  /// The draws made ready that wait for their pulled form, then in [ready]
+  /// those that wait for their states. [busy] is true while a
+  /// [RunnerWarm.warmSome] runs.
   final queue = Queue<_Listed>();
   final ready = Queue<_WarmItem>();
   bool busy = false;
 
-  /// The compute shaders coming scenes' frames will dispatch
-  /// (SceneWarm.takeComputes), made ready first.
+  /// The compute shaders that the frames of coming scenes will dispatch,
+  /// made ready first.
   final computes = Queue<String>();
 
-  /// The cooked scenes read ahead whole (RunnerWarm.cookedAhead), and
-  /// whether a step runs.
+  /// The cooked scenes read ahead whole (RunnerWarm.cookedAhead) and a flag
+  /// for a running step.
   final _cooked = <String>{};
   bool cookedBusy = false;
 
-  /// The scene whose draws are being made ready now, if not the one shown:
-  /// their pulled forms take their meshes from its cooked scene
+  /// The scene whose draws are being made ready now, if not the one shown.
+  /// Their pulled forms take their meshes from its cooked scene
   /// (Pulled.batch).
   String? pulledScene;
 
-  /// The pipeline states made so far (pipeline, shape and state), and a
-  /// tiny target per shape to make them in.
+  /// The pipeline states made so far by pipeline, shape and state, with a tiny
+  /// target per shape for making them.
   final _made = <String>{};
   final _targets = <_PassShape, gpu.RenderTarget>{};
   gpu.BufferView? _zeroArgs;
 
-  /// States made, those the engine could not make, and the time making
-  /// them (ms; the log's line).
+  /// The number of states made and of those that the engine could not make,
+  /// with the time in ms to make them.
   int states = 0, failed = 0;
   double ms = 0;
 
@@ -95,8 +96,9 @@ final class _Warm {
     return i < 0 ? id : id.substring(0, i);
   }
 
-  /// [vertex]'s draw recorded for the first time in the pass being
-  /// recorded, by record or in pulled form.
+  /// Learns the shape of the pass being recorded for the effect of [vertex],
+  /// whose draw is recorded there for the first time, by record or in
+  /// [pulled] form.
   void learn(String vertex, {required bool pulled}) {
     final s = shape;
     if (s == null) return;
@@ -108,16 +110,17 @@ final class _Warm {
   Set<_PassShape>? shapesOf(String vertex, {required bool pulled}) =>
       (pulled ? _pulledShapes : _shapes)[effectOf(vertex)];
 
-  /// PRISMARINE_FRAME_LOG runs: by a draw's shaders, the pass shapes and states
-  /// made for them ahead.
+  /// The pass shapes and states made ahead for the shaders of each draw, in
+  /// runs with PRISMARINE_FRAME_LOG.
   final _madeFor = <String, Set<String>>{};
 
   // alloc-cold: PRISMARINE_FRAME_LOG runs, a draw that made a pipeline state.
-  /// Why the states made ahead missed [d]'s, recorded in the pass being
-  /// recorded: `unlisted` (none made for its shaders, none waiting),
-  /// `waiting` (its listing's not made yet), `shape` (none in this pass's
-  /// shape), `state` (others in this shape), `same` (this one: the engine's
-  /// key held what the draw's state does not, as factors left on the pass).
+  /// Returns the reason that the states made ahead missed the state of [d]
+  /// in the pass being recorded. `unlisted` means none made for its shaders
+  /// and none waiting. `waiting` means its listing is not made yet. `shape`
+  /// means none in the shape of this pass. `state` means others in this
+  /// shape. `same` means this state, with a key of the engine that held
+  /// more than the state of the draw, such as factors left on the pass.
   String missOf(DrawPlan d) {
     final made = _madeFor['${d.vertex}|${d.pixel}'];
     if (made == null) {
@@ -134,7 +137,8 @@ final class _Warm {
 
 extension RunnerWarm on FrameRunner {
   // alloc-cold: once per render target made.
-  /// [r]'s pass shape, as its render target is made with [depth].
+  /// Returns the pass shape of [r] as its render target is made with
+  /// [depth].
   _PassShape _shapeOf(RenderPassPlan r, Attachment? depth) {
     final colors = [for (final c in r.colors) _colorTexture(c)];
     final d = depth == null ? null : targets[depth.target];
@@ -145,18 +149,20 @@ extension RunnerWarm on FrameRunner {
     );
   }
 
-  /// How many draws wait for their first-frame work ([warmSome]).
+  /// The number of draws that wait for their first-frame work ([warmSome]).
   int get statesWaiting =>
       _warm.queue.length + _warm.ready.length + _warm.computes.length;
 
-  /// Compute shaders a coming scene's frames will dispatch: made ready by
-  /// [warmSome], ahead of the frame that dispatches one first.
+  /// Queues the compute shaders [ids] that the frames of a coming scene will
+  /// dispatch. [warmSome] makes them ready ahead of the frame that
+  /// dispatches one first.
   void computesAhead(List<String> ids) {
     if (_Warm.on) _warm.computes.addAll(ids);
   }
 
-  /// [ids]' shards loaded and compute pipelines made now (a switch's hold:
-  /// its first frame would make them); the ones made before are skipped.
+  /// Loads the shards and makes the compute pipelines of [ids] now, such as
+  /// in the hold of a switch, whose first frame would make them. The
+  /// pipelines made before are skipped.
   Future<void> readyComputes(Iterable<String> ids) async {
     if (!_Warm.on) return;
     final want = [
@@ -171,22 +177,23 @@ extension RunnerWarm on FrameRunner {
     }
   }
 
-  /// The pipeline states made ahead so far and their time (a log line).
+  /// A log line with the pipeline states made ahead so far and their time.
   String get statesLine =>
       '${_warm.states} made (${_warm.failed} could not be) in '
       '${_warm.ms.toStringAsFixed(1)} ms';
 
-  /// The draws waiting for their first-frame work dropped (a prediction
-  /// given back: they hold its meshes).
+  /// Drops the draws that wait for their first-frame work, such as when a
+  /// prediction is given back. They hold its meshes.
   void forgetStates() {
     _warm.queue.clear();
     _warm.ready.clear();
   }
 
-  /// The next step of reading [scene]'s cooked data ahead of its first
-  /// frame (Pulled.sceneAhead): the pulled G-buffer of a scene's first
-  /// frame reads its cooked scene, every pool and texture array its draws
-  /// use. Whether it is all read; a call while one runs does nothing.
+  /// Runs the next step of reading the cooked data of [scene] ahead of its
+  /// first frame (Pulled.sceneAhead). The pulled passes of the first frame
+  /// of a scene read its cooked scene and every pool and texture array that
+  /// its draws use. Returns true when it is all read. A call while one runs
+  /// does nothing.
   Future<bool> cookedAhead(String scene) async {
     final p = pulled;
     final w = _warm;
@@ -206,15 +213,17 @@ extension RunnerWarm on FrameRunner {
     }
   }
 
-  /// Some of the waiting draws' first-frame work, for about [budgetMs] of
-  /// the UI's time: the next draws' pulled forms (their reads on the I/O
-  /// thread), or, while drawn forms wait, their pipeline states
-  /// ([_warmStates]). A call while one runs does nothing.
+  /// Does some of the first-frame work of the waiting draws, for about
+  /// [budgetMs] of the time of the UI. The work is the pulled forms of the
+  /// next draws, with their reads on the I/O thread, or their pipeline states
+  /// ([_warmStates]) while drawn forms wait. A call while one runs does
+  /// nothing.
   Future<void> warmSome(double budgetMs) async {
     final w = _warm;
     if (w.busy) return;
     if (w.computes.isNotEmpty) {
-      // One a step: a shard's load and a compute pipeline are a few ms.
+      // One per step, since the load of a shard and a compute pipeline take
+      // a few ms.
       w.busy = true;
       try {
         await readyComputes([w.computes.removeFirst()]);
@@ -230,7 +239,7 @@ extension RunnerWarm on FrameRunner {
     w.busy = true;
     final sw = Stopwatch()..start();
     try {
-      // The UI's own time: an awaited read is not the frame's.
+      // The own time of the UI. An awaited read does not count for the frame.
       var spentUs = 0;
       while (w.queue.isNotEmpty && spentUs < budgetMs * 1000) {
         final (d, setup, scene) = w.queue.removeFirst();
@@ -247,11 +256,11 @@ extension RunnerWarm on FrameRunner {
     }
   }
 
-  /// What [d], listed ahead and made ready by [prepareSome], draws in
-  /// pulled form at its first frame, made now: its pulled shaders, cooked
-  /// scene, pool and arrays (read off the frame where they can be). Null
-  /// when it draws by record (its effect never drew pulled, or its form
-  /// is refused).
+  /// Makes now the pulled form in which [d], listed ahead and made ready by
+  /// [prepareSome], draws at its first frame. The form has the pulled
+  /// shaders, the cooked scene of [scene], the pool and the arrays, read
+  /// away from the frame where they can be. Returns null when [d] draws by
+  /// record, since its effect did not draw pulled or its form is refused.
   Future<_DrawSetup?> _pulledAhead(DrawPlan d, String? scene) async {
     final p = pulled;
     final g = d.geometry;
@@ -280,13 +289,15 @@ extension RunnerWarm on FrameRunner {
   }
 
   // alloc-cold: while a scene is predicted, not in a steady frame.
-  /// Makes the pipeline states of the waiting draws ([warmSome]) for
-  /// about [budgetMs] (at least one draw's): each in every pass shape its
-  /// effect was recorded in, as an indirect draw of nothing in a tiny
-  /// target of that shape, on a command buffer of its own. The engine
-  /// makes a pipeline state object at a draw's first use of a pipeline,
-  /// pass formats and state (blends, depth, stencil, cull), and keeps it
-  /// with the pipeline: the scene's first frame finds them made.
+  /// Makes the pipeline states of the waiting draws ([warmSome]) for about
+  /// [budgetMs], at least those of one draw. Each state is made in every
+  /// pass shape that its effect was recorded in, as an indirect draw of
+  /// nothing in a tiny target of that shape on a command buffer of its own.
+  /// The engine makes a pipeline state object at the first use of a
+  /// pipeline, pass formats and state by a draw and keeps it with the
+  /// pipeline. The state covers blends, depth, stencil and cull. The first
+  /// frame of the scene then finds them made. Returns the number of draws
+  /// done.
   int _warmStates(double budgetMs) {
     final w = _warm;
     if (w.ready.isEmpty) return 0;
@@ -302,16 +313,16 @@ extension RunnerWarm on FrameRunner {
         final shapes = w.shapesOf(d.vertex, pulled: pulledForm);
         if (shapes == null) continue;
         for (final shape in shapes) {
-          // A pass of another attachment count is not the draw's (the
-          // builder gives a draw a blend per attachment): `Mesh` draws in
-          // the main pass and in the UI views.
+          // A pass of another attachment count is not one of the draw, since
+          // the builder gives a draw a blend per attachment.
           if (shape.colors.length != d.state.blends.length) continue;
           final made =
               '${identityHashCode(setup.pipeline)}|${shape.key}|'
               '${_stateKey(d.state)}';
           if (!w._made.add(made)) continue;
-          // A pulled draw sets its stencil always, a recorded one only with
-          // a test: apart, so no draw finds another's left on the pass.
+          // A pulled draw always sets its stencil and a recorded draw only with
+          // a test. They are kept apart. No draw then finds the stencil of
+          // another left on the pass.
           final stencil = pulledForm || d.state.stencil != null;
           final at = '${shape.key}|$stencil';
           final pass = passes[at] ??=
@@ -333,8 +344,8 @@ extension RunnerWarm on FrameRunner {
               );
             }
           } on Exception catch (e) {
-            // The engine could not make that state (a pass shape this draw
-            // never draws in): its first frame makes what it uses.
+            // The engine could not make that state, for a pass shape outside
+            // the passes of this draw. Its first frame makes what it uses.
             w.failed++;
             if (FrameRunner.firstUses && w.failed <= 3) {
               warn?.call('state not made: $e ${d.vertex} ${shape.key}');
@@ -357,8 +368,8 @@ extension RunnerWarm on FrameRunner {
     return n;
   }
 
-  /// [d]'s state set on [pass] as its record sets it ([_record], or
-  /// [_pulledBucket] in pulled form), then a draw of nothing.
+  /// Sets the state of [d] on [pass] as its record sets it, by [_record] or by
+  /// [_pulledBucket] in pulled form. Then records a draw of nothing.
   void _warmDraw(
     gpu.RenderPass pass,
     DrawPlan d,
@@ -385,7 +396,7 @@ extension RunnerWarm on FrameRunner {
         pass.setColorBlendEquation(e, colorAttachmentIndex: i);
       }
     }
-    // Counts of zero: the GPU draws nothing and reads no binding.
+    // With counts of zero the GPU draws nothing and reads no binding.
     pass.drawIndirect(
       _warm._zeroArgs ??= () {
         final b = gpu.gpuContext.createDeviceBufferWithCopy(ByteData(16));
@@ -394,7 +405,7 @@ extension RunnerWarm on FrameRunner {
     );
   }
 
-  /// A 4 × 4 target of [shape]'s formats, made once.
+  /// Returns a 4 × 4 target of the formats of [shape], made once.
   gpu.RenderTarget _warmTarget(_PassShape shape) =>
       _warm._targets[shape] ??= () {
         gpu.Texture make(gpu.PixelFormat f) => gpu.gpuContext.createTexture(

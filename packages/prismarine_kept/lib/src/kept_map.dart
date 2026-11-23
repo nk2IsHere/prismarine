@@ -1,22 +1,19 @@
 import 'dart:collection';
 import 'dart:typed_data';
 
-/// A hash map that keeps its storage when cleared, in insertion order like
-/// the default map. The VM's LinkedHashMap drops its tables on `clear()`,
-/// so a map cleared and refilled each frame grew them from empty every
-/// frame (perf: most of what the frame's maps allocated).
+/// A hash map in insertion order that keeps its storage when it is cleared.
+/// Use it for a map that is cleared and filled again every frame.
 ///
-/// Keys are compared by `==` and `hashCode`, or by identity
-/// ([KeptMap.identity]). Changing the map while walking it throws, as the
-/// default map does.
+/// Keys are compared by `==` and `hashCode`, or by identity in a map made by
+/// [KeptMap.identity]. A change to the map during a walk over it throws.
 final class KeptMap<K extends Object, V> extends MapBase<K, V> {
   KeptMap() : identity = false;
   KeptMap.identity() : identity = true;
 
   final bool identity;
 
-  /// The entries in insertion order, the first [_used] written ([_gone]
-  /// where one was removed), and each one's hash.
+  /// The entries in insertion order and the hash of each. The first [_used]
+  /// entries are in use. A removed entry holds [_gone].
   // alloc: the first storage of a new map, with the map
   var _keys = List<Object?>.filled(_initial, null);
   // alloc: the first storage of a new map, with the map
@@ -26,18 +23,19 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
   int _used = 0;
   int _length = 0;
 
-  /// Open addressing over the entries: entry + 1, 0 for an empty slot, -1
-  /// for a removed one (probes go past it). Twice the entries' capacity.
+  /// The open-addressing table of the entries, twice their capacity. A slot
+  /// holds its entry plus 1, 0 when it is empty or -1 when its entry was
+  /// removed. A probe goes past a removed slot.
   // alloc: the first storage of a new map, with the map
   var _index = Int32List(_initial * 2);
 
-  /// Changes that move entries, for the walks' checks.
+  /// The count of the changes that move entries. A walk checks it.
   int _changes = 0;
 
   static const _initial = 8;
   static final Object _gone = Object();
 
-  /// Entries the map has room for before it grows (tests).
+  /// The number of entries the map holds before it grows.
   int get capacity => _keys.length;
 
   int _hash(Object key) =>
@@ -47,7 +45,7 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
 
   static int _slot(int hash, int mask) => (hash ^ (hash >> 13)) & mask;
 
-  /// [key]'s entry, or -1.
+  /// Returns the entry of [key], or -1.
   int _find(Object? key) {
     if (key == null || _length == 0) return -1;
     final h = _hash(key);
@@ -63,7 +61,7 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
     }
   }
 
-  /// [key]'s entry, added with [value] when it has none.
+  /// Returns the entry of [key] and adds it with [value] when it is missing.
   int _findOrAdd(K key, V value) {
     final h = _hash(key);
     var index = _index;
@@ -101,8 +99,8 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
     return -1;
   }
 
-  /// Room for one more entry: the live ones packed when removals left
-  /// half the entries free, else twice the capacity.
+  /// Makes room for one more entry. Packs the live entries when removals
+  /// left half of the entries free, else doubles the capacity.
   void _grow() {
     final size = _length * 2 <= _keys.length ? _keys.length : _keys.length * 2;
     final keys = List<Object?>.filled(size, null);
@@ -177,7 +175,7 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
     }
   }
 
-  /// Empties the map, its storage kept.
+  /// Empties the map and keeps its storage.
   @override
   void clear() {
     if (_used == 0) return;
@@ -208,9 +206,9 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
     }
   }
 
-  /// The views made once, and an iterator of each given back when its
-  /// walk ends (perf: a view and an iterator per walk; a walk that stops
-  /// early leaves its iterator to the collector).
+  /// The views are made once. A walk that ends gives its iterator back for
+  /// the next walk. A walk that stops early leaves its iterator to the
+  /// garbage collector.
   @override
   late final Iterable<K> keys = _KeptKeys(this);
 
@@ -284,7 +282,7 @@ final class _KeptIterator<K extends Object, V, T> implements Iterator<T> {
       return true;
     }
     _current = null;
-    // Done: given back for the next walk.
+    // The walk ended. The iterator is kept for the next walk.
     if (_keys) {
       m._freeKeys = this as _KeptIterator<K, V, K>;
     } else {

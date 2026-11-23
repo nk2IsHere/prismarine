@@ -63,7 +63,7 @@ class LintConfig {
   Set<String> get vendoredFiles => _strs('vendored_files', []).toSet();
 
   /// The paths that code_shape checks for size only. The files of the lint
-  /// quote the patterns it looks for.
+  /// quote the patterns that it searches.
   List<String> get commentCheckExempt =>
       _strs('comment_check_exempt', ['tools/lint/']);
 

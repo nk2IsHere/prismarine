@@ -112,7 +112,7 @@ void main() {
     expect(preloadWait, lessThan(20), reason: 'not stuck behind background');
   });
 
-  // Review B-2: a closed pool (its session gone) runs nothing new.
+  // A closed pool runs no new job.
   test(
     'close fails queued jobs and every later run with JobCancelled',
     () async {

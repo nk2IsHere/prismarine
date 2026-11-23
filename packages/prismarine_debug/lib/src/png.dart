@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-/// [rgba] (8-bit RGBA rows, top first) as a PNG: unfiltered rows, zlib
-/// level 1 (fast). RGB unless [alpha] (then RGBA, straight alpha).
+/// Encodes [rgba], 8-bit RGBA rows from the top, of [width] by [height] as a
+/// PNG with unfiltered rows and zlib level 1. The PNG is RGB, or RGBA with
+/// straight alpha when [alpha] is true.
 Uint8List encodePng(
   Uint8List rgba,
   int width,

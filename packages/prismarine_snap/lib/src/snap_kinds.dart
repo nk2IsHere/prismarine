@@ -1,9 +1,9 @@
-// The container kinds the value codec knows.
 part of 'snap.dart';
 
-// Container kinds: the element types, and how the list or map was made
-// (growable, fixed-length, unmodifiable: [_Kinds.listFinish] turns the
-// growable copy read back into the same kind).
+// The container kinds that the value codec knows. A kind holds the element
+// types and the way the list or map was made, as growable, fixed-length or
+// unmodifiable. [_Kinds.listFinish] turns the growable copy that was read
+// back into the same kind.
 
 class _Kinds {
   _Kinds() {
@@ -255,27 +255,27 @@ class _Kinds {
     constMap(const <String, double>{});
     constMap(const <String, int>{});
     constMap(const <int, Object?>{});
-    // Appended at the end, which keeps the numbers of earlier kinds. Kept
-    // string-keyed maps are read back as the same kind.
+    // This kind is added last to keep the numbers of the earlier kinds. A
+    // KeptMap with string keys is read back as a KeptMap.
     _addMap(KeptMap<String, Object?>(), () => KeptMap<String, Object?>(), null);
   }
 
-  /// A const map's kind (a const literal of [K], [V]): read back as an
-  /// unmodifiable map of the same types.
+  /// Adds the kind of the const map [proto], a const literal of [K] and [V].
+  /// It is read back as an unmodifiable map of the same types.
   void constMap<K, V>(Map<K, V> proto) {
-    // An empty one is the canonical const itself.
+    // An empty const map is read back as the canonical const itself.
     Map<Object?, Object?> frozen(Map<Object?, Object?> m) =>
         m.isEmpty ? proto : Map<K, V>.unmodifiable(m as Map<K, V>);
     _addMap(proto, () => <K, V>{}, frozen);
-    // A non-empty one is written as the unmodifiable map it reads back as
-    // (no const can be made at run time), so a restored game writes the
-    // same bytes.
+    // A non-empty const map is written with the kind of an unmodifiable map
+    // of its types. No const can be made at run time. A restored state then
+    // writes the same bytes.
     map<K, V>();
     constFrozen[mapKinds[proto.runtimeType]!] =
         mapKinds[Map<K, V>.unmodifiable(const {}).runtimeType]!;
   }
 
-  /// A const map kind → the unmodifiable map kind of its types.
+  /// Maps each const map kind to the unmodifiable map kind of its types.
   final constFrozen = <int, int>{};
 
   final listKinds = <Type, int>{};
@@ -337,17 +337,20 @@ class _Kinds {
 
 final _kinds = _Kinds();
 
-/// Adds a list element type the value codec knows (both sides, before use).
+/// Adds lists of [E] to the kinds of the value codec. The writing and the
+/// reading side both call it before use.
 void snapListKind<E>() => _kinds.list<E>();
 
-/// Adds a map type the value codec knows (both sides, before use).
+/// Adds maps of [K] to [V] to the kinds of the value codec. The writing and
+/// the reading side both call it before use.
 void snapMapKind<K, V>() => _kinds.map<K, V>();
 
-/// Adds a set type the value codec knows (both sides, before use).
+/// Adds sets of [E] to the kinds of the value codec. The writing and the
+/// reading side both call it before use.
 void snapSetKind<E>() => _kinds.set<E>();
 
-/// Adds the kind of const maps like [proto] (a const literal; both sides,
-/// before use).
+/// Adds the kind of const maps such as the const literal [proto]. The
+/// writing and the reading side both call it before use.
 void snapConstMapKind<K, V>(Map<K, V> proto) => _kinds.constMap<K, V>(proto);
 
 int _typedKind(TypedData t) => switch (t) {

@@ -8,8 +8,9 @@ class _Gpu {
   final String name;
 }
 
-// What a release keeps held, whenever the collector runs, and that a
-// loosened value something else still holds is found again as itself.
+// Tests the entries that a release keeps held whenever the collector runs. It
+// also tests that a loosened value that something else still holds is found
+// again as itself.
 void main() {
   test('a value a live draw holds is the same object after loosen', () {
     final m = LooseMap<String, _Gpu>();
@@ -18,7 +19,7 @@ void main() {
     m.epoch = 1;
     expect(m.loosen(1), 1);
     expect(m.isLoose('drawn'), isTrue);
-    // The draw still holds it: an ask finds that object, held again.
+    // The draw still holds it. An ask finds that object and holds it again.
     expect(identical(m['drawn'], drawn), isTrue);
     expect(m.isLoose('drawn'), isFalse);
     expect(m.length, 1);

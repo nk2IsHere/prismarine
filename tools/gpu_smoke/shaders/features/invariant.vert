@@ -1,7 +1,7 @@
 #version 460
 #extension GL_ARB_shader_draw_parameters : require
-// An invariant position, a clip distance cutting the left half, the base
-// instance passed on.
+// An invariant position, a clip distance that cuts the left half and the
+// base instance as an output.
 in vec2 position;
 
 layout(location = 0) flat out int v_base;

@@ -1,6 +1,6 @@
 #version 460
-// A texel at a coordinate and LOD from a uniform (address modes, borders,
-// LOD clamps).
+// A texel at a coordinate and LOD from a uniform, for address modes, borders
+// and LOD clamps.
 uniform sampler2D source;
 
 uniform At {

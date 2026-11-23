@@ -26,11 +26,10 @@ Widget frameGraphLegend(FrameSamples d, TextStyle small) => Wrap(
   ],
 );
 
-/// Stacked time per group plus raster (translucent white) for the last 240
-/// frames, a tick at each frame's wall gap, lines at 16.7 and 33.3 ms. It
-/// repaints every frame on [FrameSamples.graph] (the rest of the panel
-/// rebuilds at most every 250 ms); hovering a bar lists that frame's
-/// sections.
+/// The stacked time per group and the raster time in translucent white for
+/// the last 240 frames. It has a tick at the wall gap of each frame and lines
+/// at 16.7 and 33.3 ms. It repaints every frame on [FrameSamples.graph].
+/// Hovering over a bar lists the sections of that frame.
 class FrameGraph extends StatefulWidget {
   const FrameGraph(this.state, {super.key, this.style});
   final FrameSamples state;
@@ -88,8 +87,8 @@ class _FrameGraphState extends State<FrameGraph> {
   );
 }
 
-/// A frame's groups (largest first), its gap and raster, then its sections
-/// in the order they came.
+/// Returns the groups of a frame, largest first, its gap and raster time and
+/// then its sections in the order of their arrival.
 String _hoverText(FrameSample f, List<FrameGroupStyle> groups) {
   String n(double v) => v.toStringAsFixed(v >= 10 ? 1 : 2);
   final shown = [
@@ -169,7 +168,7 @@ class _GraphPainter extends CustomPainter {
     for (final ms in [1000 / 60, 1000 / 30]) {
       canvas.drawLine(Offset(0, y(ms)), Offset(size.width, y(ms)), _line);
     }
-    // The graph's own cost, in a profile while the panel shows.
+    // The cost of the graph itself, in a profile while the panel shows.
     final ms = _sw.elapsedMicroseconds / 1000;
     UiWork.add(ms, paint: true);
     state.profiler?.add('panel.graph', ms);

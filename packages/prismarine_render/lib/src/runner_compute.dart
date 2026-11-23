@@ -1,22 +1,13 @@
 part of 'frame_runner.dart';
 
-/// The runner's compute passes: a compute shader bound as Direct3D 11 binds
-/// it, dispatched directly or from GPU-written arguments.
+/// The compute passes of the runner. A compute shader is bound as Direct3D
+/// 11 binds it and dispatched directly or from GPU-written arguments.
 extension _RunnerCompute on FrameRunner {
-  /// Records [c] into [into] when given (a pass the dispatches before it
-  /// opened, nothing recorded since), else into a new compute pass; returns
-  /// the pass. The pass's dispatches may run together (Metal's concurrent
-  /// compute encoder), so a barrier goes before a dispatch that reads or
-  /// writes what one since the last barrier wrote, or writes what one read,
-  /// and it sees their writes as it would from a pass of its own; the
-  /// skinning's hundreds of dispatches, each writing its own mesh's buffer,
-  /// run without one between them (a barrier after every dispatch kept the
-  /// GPU to one small dispatch at a time). Passes see each other's writes
-  /// as the encoders end.
-  /// [r]'s view in [state]'s [slot], again while its buffer is the one the
-  /// view was made over.
+  /// Returns the view of [r] in the [slot] of [state]. The view is used
+  /// again while its buffer is the one that the view was made over.
   gpu.BufferView _keptView(_DispatchState state, int slot, BufferRef r) {
-    // One per frame in flight: a frame buffer's three copies take turns.
+    // One view per frame in flight, since the three copies of a frame buffer
+    // take turns.
     final at = slot * 3 + _frame;
     final b = _current[r.buffer];
     final had = state.views[at];
@@ -30,19 +21,27 @@ extension _RunnerCompute on FrameRunner {
     return view;
   }
 
+  /// Records [c] into [into] when given, else into a new compute pass. Returns
+  /// the pass. [into] is a pass that the dispatches before [c] opened, with
+  /// nothing recorded since. The dispatches of a pass may run together on the
+  /// concurrent compute encoder of Metal. A barrier therefore goes before a
+  /// dispatch that reads or writes what one since the last barrier wrote, or
+  /// writes what one read. The dispatch then sees their writes as it would from
+  /// a pass of its own. Dispatches that each write their own buffer run without
+  /// a barrier between them. Passes see the writes of each other as the
+  /// encoders end.
   gpu.ComputePass _dispatch(
     gpu.CommandBuffer cb,
     DispatchPlan c,
     UniformRing host, [
     gpu.ComputePass? into,
   ]) {
-    // The shader's lookups once per shader id (the skinning's hundreds of
-    // dispatches a frame share one).
+    // The lookups of the shader, once per shader id.
     final setup = _computeSetups[c.shader] ?? _computeSetupOf(c.shader);
     final shader = setup.shader, info = setup.info, slots = setup.slots;
     final pipeline = setup.pipeline;
-    // A kept dispatch (the same object frame after frame) keeps its
-    // inputs in its shader's order and its reads and writes.
+    // A kept dispatch, the same object frame after frame, keeps its inputs
+    // in the order of its shader and its reads and writes.
     var state = c.runnerState;
     if (state is! _DispatchState ||
         !identical(state.runner, this) ||
@@ -73,11 +72,11 @@ extension _RunnerCompute on FrameRunner {
       final t = info.textures[i];
       final ref = state.textures[i];
       if (setup.texel[i]) {
-        // Two locals, not a record (one per texel bind; perf).
+        // Two locals, not a record per texel bind.
         final gpu.BufferView view;
         final String format;
         if (ref is BufferTexture) {
-          // A palette bound by role takes this frame's bytes for it.
+          // A block bound by role takes the bytes of this frame for it.
           final b = ref.bytes;
           view = _frameInline(
             c.name,
@@ -110,8 +109,8 @@ extension _RunnerCompute on FrameRunner {
         state.samplers[i],
       );
     }
-    // By index; a frame buffer's view kept with the dispatch while the
-    // buffer is the same (perf: an iterator and a view per binding).
+    // By index. The view of a frame buffer is kept with the dispatch while
+    // the buffer is the same.
     for (var si = 0; si < state.storage.length; si++) {
       final (name, ref) = state.storage[si];
       switch (ref) {
@@ -156,7 +155,7 @@ extension _RunnerCompute on FrameRunner {
         pass.dispatch(c.groups[0], c.groups[1], c.groups[2]);
       }
     } on Exception catch (e) {
-      // Reported once per shader; the frame goes on without its output.
+      // Reported once per shader. The frame goes on without its output.
       if (_failed.add(c.shader)) {
         warn?.call('renderer: dispatch ${c.shader}: $e');
       }
@@ -165,15 +164,15 @@ extension _RunnerCompute on FrameRunner {
     return pass;
   }
 
-  /// An inline storage buffer's view: bound by role ([FrameRole]; the
-  /// skin batch's tables), this frame's bytes for it.
+  /// Returns the view of an inline storage buffer. A buffer bound by role
+  /// ([FrameRole]) takes the bytes of this frame for it.
   gpu.BufferView _storageInline(String dispatch, String name, Uint8List b) =>
       b.isEmpty && _frameBlocks[b] != null
       ? _frameInline(dispatch, name, _frameBlocks[b]!)
       : _inline(b);
 
-  /// [shader]'s lookups for its dispatches, made on its first (a closure
-  /// at the call made a context for every dispatch).
+  /// Returns the lookups of the shader [id] for its dispatches, made on its
+  /// first dispatch.
   _ComputeSetup _computeSetupOf(String id) {
     final shader = assets.shader(id);
     final info = assets.shaderRecord(id)!;
@@ -190,10 +189,11 @@ extension _RunnerCompute on FrameRunner {
     );
   }
 
-  /// What [c] reads and writes on the GPU: targets and frame buffers by
-  /// name, inline storage by its bytes; a storage binding counts as written
-  /// unless the shader declares it read-only. Textures and texel data the
-  /// CPU fills (files, constants, inline texels) no dispatch writes.
+  /// Returns the reads and writes of [c] on the GPU, with targets and frame
+  /// buffers by name and inline storage by its bytes. A storage binding
+  /// counts as written unless the shader [info] declares it read-only. No
+  /// dispatch writes the textures and texel data that the CPU fills, such
+  /// as files, constants and inline texels.
   _Access _accessOf(DispatchPlan c, ShaderRecord info) {
     final a = _Access(this);
     for (final t in c.resources.textures.values) {
@@ -222,20 +222,18 @@ extension _RunnerCompute on FrameRunner {
   }
 }
 
-/// A dispatch's GPU reads and writes ([_RunnerCompute._accessOf]), or a
-/// pass's since its last barrier. Target and buffer names and inline bytes
-/// (compared by identity) do not collide.
+/// The GPU reads and writes of a dispatch ([_RunnerCompute._accessOf]) or of
+/// a pass since its last barrier. Target and buffer names and inline bytes,
+/// compared by identity, do not collide.
 final class _Access {
   _Access([this.runner]);
 
-  /// The runner whose dispatch this is (null: a pass's own).
+  /// The runner of the dispatch, or null for the access of a pass.
   final FrameRunner? runner;
-  // Kept collections: cleared per barrier and dispatch (perf: the default
-  // ones gave their storage up on each clear).
+  // Kept collections, cleared per barrier and dispatch.
   final reads = KeptSet<Object>(), writes = KeptSet<Object>();
 
-  /// The same in order, walked by index (a set's walk made an iterator per
-  /// dispatch; perf).
+  /// The same in order, walked by index without an iterator.
   final _readList = KeptList<Object>(), _writeList = KeptList<Object>();
 
   void read(Object o) {
@@ -253,8 +251,8 @@ final class _Access {
     _writeList.clear();
   }
 
-  /// Whether [next] must wait for these: it reads or writes what these
-  /// wrote, or writes what these read.
+  /// Returns true when [next] must wait for these accesses. It must wait
+  /// when it reads or writes what these wrote, or writes what these read.
   bool conflicts(_Access next) {
     final r = next._readList, w = next._writeList;
     for (var i = 0; i < r.length; i++) {
@@ -277,10 +275,10 @@ final class _Access {
   }
 }
 
-/// What a runner keeps with a dispatch (DispatchPlan.runnerState): its
-/// blocks with the bytes each binds, textures and sampler objects in its
-/// shader's order, its storage inputs, found once by name, and its reads
-/// and writes. A plan's resources are not changed once made.
+/// The state that a runner keeps with a dispatch (DispatchPlan.runnerState). It
+/// holds the blocks with the bytes that each binds, the textures and sampler
+/// objects in the order of the shader, the storage inputs found once by name
+/// and the reads and writes. The resources of a plan do not change once made.
 final class _DispatchState {
   _DispatchState(this.runner, this.setup, DispatchPlan c, this.access)
     : blocks = [for (final b in setup.info.blocks) c.resources.blocks[b.name]],
@@ -308,9 +306,9 @@ final class _DispatchState {
   final List<gpu.McsmSampler> samplers;
   final List<(String, StorageRef)> storage;
 
-  /// Each frame-buffer binding's view and the buffer it is of, by slot
-  /// (the storage bindings, the indirect arguments, then the texel refs)
-  /// and frame in flight.
+  /// The view of each frame-buffer binding and its buffer, by slot and frame
+  /// in flight. The slots are the storage bindings, the indirect arguments
+  /// and then the texel refs.
   late final views = List<gpu.BufferView?>.filled(
     (storage.length + 1 + textures.length) * 3,
     null,
@@ -318,9 +316,9 @@ final class _DispatchState {
   late final viewOf = List<gpu.DeviceBuffer?>.filled(views.length, null);
 }
 
-/// A compute shader's lookups for its dispatches: the shader, its
-/// interface, pipeline and slots, which of its textures are texel buffers
-/// and which storage images arrays.
+/// The lookups of a compute shader for its dispatches. They are the shader,
+/// its interface, pipeline and slots, its textures that are texel buffers
+/// and its storage images that are arrays.
 final class _ComputeSetup {
   _ComputeSetup(this.shader, this.info, this.pipeline, this.slots)
     : texel = [
@@ -335,6 +333,7 @@ final class _ComputeSetup {
   final arrays = <String, bool>{};
 }
 
-/// A plan's format name as the engine's format, converted once per name.
+/// Returns the format name of a plan as a format of the engine, converted
+/// once per name.
 gpu.PixelFormat _formatOf(String name) => _formats[name] ??= pixelFormat(name);
 final _formats = <String, gpu.PixelFormat>{};

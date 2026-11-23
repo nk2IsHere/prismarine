@@ -40,7 +40,7 @@ void main() {
       pagedOutMb: 17010,
     );
     expect(room().decide(now, before), isFalse);
-    // A swap long in use that does not grow is old pages.
+    // A swap long in use that does not grow holds old pages.
     expect(room().decide(still, before), isTrue);
   });
 

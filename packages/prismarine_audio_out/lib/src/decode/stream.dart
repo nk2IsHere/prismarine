@@ -8,9 +8,9 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 import '../native.dart';
 
 /// An Ogg Vorbis file decoded incrementally by the native feeder. Opening
-/// decodes only a head, and reads copy decoded frames, with silence where
-/// the feeder hasn't reached yet. Each concurrent reader position gets its
-/// own native stream.
+/// decodes only a head. Reads copy decoded frames, with silence where the
+/// feeder has not reached yet. Each concurrent reader position gets its own
+/// native stream.
 class StreamingPcmSource implements LoadingPcmSource {
   StreamingPcmSource._(
     this.path,
@@ -22,9 +22,9 @@ class StreamingPcmSource implements LoadingPcmSource {
     _streams.add(_Tap(first));
   }
 
-  /// Opens [path] (an `.ogg`) on the feeder thread; [channels],
-  /// [sampleRate] and [frames] are the caller's (the file agrees). A
-  /// [FormatException] when the file is missing.
+  /// Opens the `.ogg` file [path] on the feeder thread. [channels],
+  /// [sampleRate] and [frames] come from the caller and must match the
+  /// file. Throws a [FormatException] when the file is missing.
   factory StreamingPcmSource.open(
     String path, {
     required int channels,
@@ -43,23 +43,24 @@ class StreamingPcmSource implements LoadingPcmSource {
     );
   }
 
-  /// The first stream is open (or failed: it plays silence rather than
-  /// holding its event forever).
+  /// True when the first stream is open or failed. A failed stream plays
+  /// silence and does not hold its event forever.
   @override
   bool get ready => streamReady(_streams.first.stream) != 0;
 
-  /// The file failed to open or decode.
+  /// True when the file failed to open or decode.
   bool get failed => streamReady(_streams.first.stream) < 0;
 
   static ffi.Pointer<NativeStream> _open(String path) => using(
     (a) => streamOpen(path.toNativeUtf8(allocator: a).cast(), headSeconds),
   );
 
-  /// The head decoded at open: a start or a loop back to the beginning
-  /// plays at once while the feeder moves.
+  /// The length of the head decoded at open. A start or a loop back to the
+  /// beginning plays at once while the feeder moves.
   static const headSeconds = 0.5;
 
-  /// At most this many native streams per file (concurrent readers).
+  /// The maximum number of native streams per file, one per concurrent
+  /// reader.
   static const maxTaps = 4;
 
   final String path;
@@ -69,7 +70,8 @@ class StreamingPcmSource implements LoadingPcmSource {
   ffi.Pointer<ffi.Float> _buf = ffi.nullptr;
   int _bufFrames = 0;
 
-  /// Frames read as silence because the feeder hadn't decoded them.
+  /// Returns and clears the number of frames read as silence before the
+  /// feeder decoded them.
   int takeMissing() {
     var m = 0;
     for (final t in _streams) {
@@ -79,8 +81,9 @@ class StreamingPcmSource implements LoadingPcmSource {
   }
 
   _Tap _tapFor(int frame) {
-    // The head is in every stream: a read there (a start, a loop back to
-    // the beginning) takes the latest reader's, which then seeks past it.
+    // The head is in every stream. A read there, such as a start or a loop
+    // back to the beginning, takes the stream of the latest reader, which
+    // then seeks past it.
     if (frame < headSeconds * sampleRate) {
       var best = _streams.first;
       for (final t in _streams) {

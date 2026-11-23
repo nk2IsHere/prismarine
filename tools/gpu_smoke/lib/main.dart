@@ -1,7 +1,8 @@
-// gpu_smoke: does Flutter GPU work on this engine and platform? Renders a
-// texture through flutter_scene's base FullscreenVertex + CopyFragment into an
-// offscreen target, reads it back, checks the pixel, times draws and binds,
-// prints one SMOKE line per result and exits (code 0 when the pixel matches).
+// gpu_smoke checks that Flutter GPU works on this engine and platform. It
+// renders a texture through the base FullscreenVertex + CopyFragment of
+// flutter_scene into an offscreen target, reads it back, checks the pixel,
+// times draws and binds, prints one SMOKE line per result and exits. The exit
+// code is 0 when the pixel matches.
 //
 //   flutter run -d <linux|windows|macos> --release [--local-engine…]
 import 'dart:async';
@@ -19,11 +20,11 @@ import 'release_11.dart';
 import 'release_7.dart';
 import 'release_9.dart';
 
-// Each SMOKE line goes to stdout and, when GPU_SMOKE_OUT names a file, to it
-// too (a Windows GUI app has no console). Lines are ASCII, so the file reads
-// the same in any code page. On Windows with a log file nothing goes to
-// stdout: a GUI process's stdout has no reader, and flushing it before the
-// exit held the process for minutes.
+// Each SMOKE line goes to stdout and also to the file of GPU_SMOKE_OUT, since a
+// Windows GUI app has no console. Lines are ASCII and the file reads the same
+// in any code page. On Windows with a log file nothing goes to stdout. The
+// stdout of a GUI process has no reader. Flushing it before the exit holds the
+// process for minutes.
 final _out = Platform.environment['GPU_SMOKE_OUT'];
 final _useStdout = !(Platform.isWindows && _out != null);
 
@@ -43,7 +44,7 @@ Future<void> main() async {
   } catch (e, st) {
     _log('SMOKE error $e\n$st');
   }
-  // The last line says the run is over (the app exits right after).
+  // The last line marks the end of the run. The app exits right after it.
   _log('SMOKE done, exit code $code');
   if (_useStdout) {
     await stdout.flush().timeout(const Duration(seconds: 2), onTimeout: () {});
@@ -104,7 +105,7 @@ Future<int> _smoke() async {
     ..bindVertexBuffer(vb)
     ..bindTexture(slot, source, sampler: sampler)
     ..draw(6);
-  // Wait for the GPU (GLES runs the pass on the raster thread later).
+  // Waits for the GPU. GLES runs the pass on the raster thread later.
   final done = Completer<bool>();
   cb.submit(completionCallback: (ok) => done.complete(ok));
   _log(
@@ -134,7 +135,7 @@ Future<int> _smoke() async {
     );
   }
 
-  // Timings (µs per draw, CPU, best of 7 rounds of 2,000).
+  // Timings in µs of CPU per draw, the best of 7 rounds of 2,000.
   double time(
     void Function(gpu.RenderPass) setup,
     void Function(gpu.RenderPass) draw,
@@ -179,10 +180,10 @@ Future<int> _smoke() async {
   final release10 = await release10Checks(_log);
   final release11 = await release11Checks(_log);
   if (firstEmpty) {
-    // ANGLE (Windows) gave an empty first readback on the stock engine too,
-    // while later readbacks work. First read the same target again without
-    // drawing (tells a read that came too early from a draw that was lost),
-    // then render and read again.
+    // ANGLE on Windows gives an empty first readback on the stock engine too,
+    // while later readbacks work. The same target is read again without
+    // drawing first, which separates a read that came too early from a draw
+    // that was lost. Then it renders and reads again.
     await Future<void>.delayed(const Duration(milliseconds: 200));
     final r0 = ui.PictureRecorder();
     ui.Canvas(r0).drawImage(target.asImage(), ui.Offset.zero, ui.Paint());

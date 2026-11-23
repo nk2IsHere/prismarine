@@ -19,7 +19,7 @@ abstract interface class IsolateRenderer {
   void stop();
 }
 
-/// The render isolate's side, given to the renderer it makes.
+/// The side of the render isolate, given to the renderer that it makes.
 class RenderHost {
   RenderHost._(this._reply, this.stream);
 
@@ -34,17 +34,19 @@ class RenderHost {
   /// Reports [message] on [RenderIsolate.problems].
   void problem(String message) => _reply.send(('problem', message));
 
-  /// Seconds of audio the output device has consumed, 0 without a stream.
+  /// Returns the seconds of audio that the output device has consumed, 0
+  /// without a stream.
   double consumed() => stream?.consumed ?? 0;
 
-  /// Frames rendered and pushed into the stream so far.
+  /// The number of frames rendered and pushed into the stream so far.
   int get pushedFrames => _fill?.requestedFrames ?? 0;
 }
 
-/// An [IsolateRenderer] on its own isolate. With a [spawn] `stream` (a
-/// [PcmPushStream]'s address, opened on the main isolate) the isolate keeps
-/// it `lead` seconds ahead by itself, and hitches of the main isolate do not
-/// starve it. Without one, [render] requests come back as [blocks].
+/// An [IsolateRenderer] on its own isolate. With the `stream` of [spawn],
+/// the address of a [PcmPushStream] opened on the main isolate, the isolate
+/// keeps the stream `lead` seconds ahead by itself. Hitches of the main
+/// isolate then do not starve it. Without a stream, [render] requests come
+/// back as [blocks].
 class RenderIsolate {
   RenderIsolate._(
     this._isolate,
@@ -56,7 +58,7 @@ class RenderIsolate {
   );
 
   /// Spawns the isolate and makes its renderer there with [make]. [make] is
-  /// sent to the isolate, so it may capture only sendable values.
+  /// sent to the isolate and may capture only sendable values.
   static Future<RenderIsolate> spawn(
     IsolateRenderer Function(RenderHost host) make, {
     int? stream,
@@ -83,7 +85,7 @@ class RenderIsolate {
           problems.add(s);
       }
     });
-    // A crash in the isolate stops the audio: name it.
+    // A crash in the isolate stops the audio and is reported.
     errors.listen((e) {
       if (!problems.isClosed) problems.add('render isolate error: $e');
     });
@@ -104,7 +106,7 @@ class RenderIsolate {
   final StreamController<Float32List> _blocks;
   final StreamController<String> _problems;
 
-  /// Rendered blocks, in request order.
+  /// The rendered blocks in request order.
   Stream<Float32List> get blocks => _blocks.stream;
   Stream<String> get problems => _problems.stream;
 
@@ -114,9 +116,9 @@ class RenderIsolate {
   /// Asks for the next [frames] frames.
   void render(int frames) => port.send(('render', frames));
 
-  /// Stops the isolate's fill loop, waits for it to exit, then closes the
-  /// ports and streams: nothing it sent late reaches a closed stream, and
-  /// nothing is pushed once this completes.
+  /// Stops the fill loop of the isolate, waits for it to exit and then
+  /// closes the ports and streams. Nothing that it sent late reaches a
+  /// closed stream. Nothing is pushed once this completes.
   Future<void> dispose() async {
     port.send(('stop',));
     _isolate.kill(priority: Isolate.beforeNextEvent);
@@ -124,7 +126,7 @@ class RenderIsolate {
     for (final p in _ports) {
       p.close();
     }
-    // Not awaited: a close only completes once a listener sees it.
+    // Not awaited, since a close only completes once a listener sees it.
     unawaited(_blocks.close());
     unawaited(_problems.close());
   }
@@ -138,8 +140,9 @@ class RenderIsolate {
       stream == null ? null : PcmPushStream.at(stream),
     );
     final renderer = make(host);
-    // Self-filling: push straight into the output ring the main isolate
-    // opened (native, process-wide: any isolate reaches it by address).
+    // The isolate fills by itself and pushes straight into the output ring that
+    // the main isolate opened. The ring is native and process-wide. Any isolate
+    // reaches it by address.
     FillLoop? fill;
     if (host.stream case final out?) {
       final failed = <String>{};
@@ -149,7 +152,8 @@ class RenderIsolate {
         push: out.push,
         lead: lead,
         block: block,
-        // Each distinct failure once (a broken source may throw every block).
+        // Each distinct failure is reported once, since a broken source may
+        // throw in every block.
         onError: (e, st) {
           if (failed.add('$e')) {
             host.problem('audio render failed (silent block): $e\n$st');

@@ -95,8 +95,8 @@ void main() {
     final r = SnapReader(SnapRegistry(), w.takeBytes());
     final l1 = r.value();
     expect(l1, isA<List<double>>());
-    // (The VM reports growable, fixed and unmodifiable lists as one
-    // runtime type: they come back growable.)
+    // The VM reports growable, fixed and unmodifiable lists as one runtime
+    // type. They are read back growable.
     expect(r.value(), isA<List<int>>());
     expect(r.value(), isA<List<String>>());
     expect(r.value(), isA<Map<String, Object?>>());

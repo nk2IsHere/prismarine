@@ -1,13 +1,14 @@
-//! The vendored decoders give the same PCM on every target: no fused
-//! multiply-adds, stb_vorbis's tables from the libm crate (build.rs).
-//! tests/data holds two short
-//! files made for this test (ffmpeg's vorbis and libmp3lame encoders from
-//! generated tones and noise); CI runs this on every OS and
-//! architecture against the same checksums.
+//! The vendored decoders give the same PCM on every target, with no fused
+//! multiply-adds and the tables of stb_vorbis from the libm crate
+//! (build.rs). tests/data holds two short files made for this test with the
+//! vorbis and libmp3lame encoders of ffmpeg from generated tones and noise.
+//! CI runs this test on every OS and architecture against the same
+//! checksums.
 
 use prismarine_audio_out::decode::codec::decode_file;
 
-/// FNV-1a 64 of the decoded float32 bits.
+/// Returns the frames, channels, rate and FNV-1a 64 of the decoded float32
+/// bits of [path].
 fn checksum(path: &str) -> (i64, i32, i32, u64) {
     let p = decode_file(path).unwrap_or_else(|| panic!("{path} doesn't decode"));
     let mut h = 0xcbf29ce484222325u64;

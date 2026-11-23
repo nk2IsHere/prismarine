@@ -1,7 +1,7 @@
-// The comments that speak to the allocation lint: `// alloc: <reason>`
-// accepts a place, `// alloc-cold: <reason>` says a function is not run by
-// a steady frame, `// alloc-setup: <reason>` that it runs once and only the
-// closures it makes run per frame.
+// The marker comments of the allocation lint. `// alloc: <reason>` accepts a
+// place. `// alloc-cold: <reason>` marks a function that a steady frame does
+// not run. `// alloc-setup: <reason>` marks a function that runs once, with
+// only the closures that it makes running per frame.
 import 'program.dart';
 
 final _accept = RegExp(r'//\s*alloc:\s*(\S.*)$');
@@ -15,16 +15,18 @@ class Markers {
   static final _byFile = <String, Markers>{};
   static Markers of(SourceFile file) => _byFile[file.path] ??= Markers(file);
 
-  /// The reason on [line] (1-based) or alone on the line above it.
+  /// Returns the reason on [line], counted from 1, or alone on the line above
+  /// it.
   String? accepted(int line) => _on(_accept, line);
 
-  /// The reason a declaration starting on [line] is cold: on that line, or
-  /// in the comment lines right above it (below any doc comment or
-  /// annotation is not required: any comment line of the block counts).
+  /// Returns the reason that a declaration starting on [line] is cold. The
+  /// reason is on that line or in the comment lines right above it. Any comment
+  /// line of the block counts. The marker need not be below a doc comment or an
+  /// annotation.
   String? cold(int line) => _above(_cold, line);
 
-  /// The reason a declaration starting on [line] is setup: it runs once,
-  /// and only the closures it makes run per frame.
+  /// Returns the reason that a declaration starting on [line] is setup. It runs
+  /// once. Only the closures that it makes run per frame.
   String? setup(int line) => _above(_setup, line);
 
   String? _above(RegExp marker, int line) {

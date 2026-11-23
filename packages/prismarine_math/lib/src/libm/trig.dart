@@ -36,7 +36,6 @@ double _kCos(double x, double y) {
   return w + (((1.0 - w) - hz) + (z * r - x * y));
 }
 
-/// libm's sin.
 double sin(double x) {
   final ix = _hi(x) & 0x7fffffff;
   if (ix <= 0x3fe921fb) {
@@ -57,7 +56,6 @@ double sin(double x) {
   }
 }
 
-/// libm's cos.
 double cos(double x) {
   final ix = _hi(x) & 0x7fffffff;
   if (ix <= 0x3fe921fb) {
@@ -102,7 +100,6 @@ const _pio4Lo = 3.06161699786838301793e-17;
 @pragma('vm:prefer-inline')
 double _zeroLow(double x) => _withLo(x, 0);
 
-/// libm's k_tan.
 double _kTan(double x, double y, int odd) {
   final hx = _hi(x);
   final big = (hx & 0x7fffffff) >= 0x3FE59428;
@@ -145,7 +142,6 @@ double _kTan(double x, double y, int odd) {
   return a0 + a * (1.0 + a0 * w0 + a0 * v);
 }
 
-/// libm's tan.
 double tan(double x) {
   final ix = _hi(x) & 0x7fffffff;
   if (ix <= 0x3fe921fb) {

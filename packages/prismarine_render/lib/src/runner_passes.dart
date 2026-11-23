@@ -1,11 +1,10 @@
-// What the runner keeps with a render pass from frame to frame: a pass the
-// codec keeps is the same object, so its attachments are made once.
+// The state that the runner keeps with a render pass from frame to frame. A
+// pass that the codec keeps is the same object. Its attachments are made once.
 part of 'frame_runner.dart';
 
 extension _RunnerPasses on FrameRunner {
-  /// Range [r] of its frame buffer, as a view.
-  /// One object per buffer, offset and length (perf: a view per binding
-  /// a frame).
+  /// Returns the range [r] of its frame buffer as a view, one object per
+  /// buffer, offset and length.
   gpu.BufferView _bufferView(BufferRef r) {
     final b = _current[r.buffer] ?? (throw StateError('no buffer ${r.buffer}'));
     if (_viewsGen != _bufferGen) {
@@ -17,13 +16,14 @@ extension _RunnerPasses on FrameRunner {
         gpu.BufferView(b, offsetInBytes: r.offset, lengthInBytes: length);
   }
 
-  /// What this runner keeps with pass [r] (RenderPassPlan.runnerState).
+  /// Returns the state that this runner keeps with the pass [r]
+  /// (RenderPassPlan.runnerState).
   _PassCache _passOf(RenderPassPlan r) {
     final c = r.runnerState;
     if (c is _PassCache && identical(c.runner, this)) {
       if (c.version != r.version) {
-        // The codec edited its draws: their loads and the depth choice
-        // again (the target only when that changes).
+        // The codec edited the draws. Their loads and the depth choice are
+        // made again, the target only when the choice changes.
         c
           ..version = r.version
           ..loaded = false;
@@ -41,11 +41,11 @@ extension _RunnerPasses on FrameRunner {
     return made;
   }
 
-  /// A plan may keep its depth target bound through passes that do not
-  /// test it while post passes read it as a texture. Metal's tiles make a
-  /// texture read while it is also an attachment undefined, so such a
-  /// pass gets no depth attachment. A pass that clears its depth keeps it:
-  /// a shadow map's face with no casters is only that clear.
+  /// A plan may keep its depth target bound through passes that do not test it
+  /// while post passes read it as a texture. Metal's tiles make a texture read
+  /// while it is also an attachment undefined. Such a pass therefore gets no
+  /// depth attachment. A pass that clears its depth keeps it, since a shadow
+  /// map's face with no casters is only that clear.
   Attachment? _depthOf(RenderPassPlan r) {
     var depthUsed =
         r.depth?.clearDepth != null || r.depth?.clearStencil != null;
@@ -57,8 +57,9 @@ extension _RunnerPasses on FrameRunner {
     return depthUsed ? r.depth : null;
   }
 
-  /// [p]'s render target, made again only when a target is made since
-  /// (_texGen) or the depth store changes.
+  /// Returns the render target of [p] for [r] with the depth [store]. It is
+  /// made again only after a new target (_texGen) or a change of the depth
+  /// store.
   gpu.RenderTarget _renderTarget(_PassCache p, RenderPassPlan r, bool store) {
     final had = p.target;
     if (had != null && p.gen == _texGen && p.store == store) return had;
@@ -107,22 +108,24 @@ extension _RunnerPasses on FrameRunner {
   }
 }
 
-/// What a runner keeps with a render pass: whether it binds its depth
-/// target, and its render target as made in texture generation [gen].
+/// The state that a runner keeps with a render pass. It holds whether the
+/// pass binds its depth target and the render target as made in the texture
+/// generation [gen].
 final class _PassCache {
   _PassCache(this.runner, this.depth);
   final FrameRunner runner;
   Attachment? depth;
 
-  /// The pass's version this was made for (RenderPassPlan.version).
+  /// The version of the pass for this state (RenderPassPlan.version).
   int version = 0;
   gpu.RenderTarget? target;
   int gen = -1;
   bool store = true;
 
-  /// Whether a run loaded what its draws need (FrameRunner._newLoads).
+  /// True when a run loaded the needs of its draws (FrameRunner._newLoads).
   bool loaded = false;
 
-  /// Its attachments' formats, as made with [target] (runner_warm.dart).
+  /// The formats of the attachments, as made with [target]
+  /// (runner_warm.dart).
   _PassShape? shape;
 }

@@ -32,7 +32,7 @@ class _Bytes {
   void setUint32(int at, int v) => _data.setUint32(at, v, Endian.little);
 
   /// Appends [n] floats of [src] from [from], then zeros up to [total]
-  /// floats and a 16-byte boundary ([add] of a list of them, without it).
+  /// floats and a 16-byte boundary, as [add] does without a list.
   void addFloats(Float32List src, int from, int n, int total) {
     _room(total * 4 + 16);
     final d = _data;
@@ -57,8 +57,8 @@ class _Bytes {
   }
 }
 
-/// A list compared by the identity of its items (a draw's frame blocks:
-/// the builder's roles and kept objects), its strings by value.
+/// A list compared by the identity of its items and its strings by value,
+/// such as the frame blocks of a draw.
 class _IdentityKey {
   _IdentityKey(this.items)
     : hashCode = Object.hashAll([
@@ -80,8 +80,8 @@ class _IdentityKey {
   }
 }
 
-/// `PRISMARINE_PULLED_STATS=1`: every 120 prepares, their time (p50, p90)
-/// and how many draws' pulled forms were made new.
+/// Logs with `PRISMARINE_PULLED_STATS=1` every 120 prepares their p50 and
+/// p90 time and the number of new pulled forms of draws.
 class _PulledStats {
   static final on = envVar('PULLED_STATS') == '1';
   final _us = <int>[];
@@ -103,11 +103,11 @@ class _PulledStats {
 
 final _pulledStats = _PulledStats();
 
-/// A pulled prepare's adding of draws ([_RunnerPulled._pulledPrepareTimed]):
-/// methods over the frame's state, not a closure per prepare.
+/// Adds the draws of a pulled prepare ([_RunnerPulled._pulledPrepareTimed])
+/// through methods over the state of the frame.
 extension _RunnerPulledAdd on FrameRunner {
-  /// [block]'s material row in [f] (its role's bytes this frame), added
-  /// when new.
+  /// Returns the material row of [block] in [f], added when new. A role
+  /// takes its bytes for this frame.
   int _pulledMaterial(_PulledFrame f, Uint8List? block) {
     if (block == null) return 0;
     final bytes = block.isEmpty ? _frameBlocks[block] ?? block : block;
@@ -118,17 +118,17 @@ extension _RunnerPulledAdd on FrameRunner {
     return f.materialAt[bytes] = at;
   }
 
-  /// [d]'s [name] block, either stage's; a role's in a row makes the rows
-  /// not keepable.
+  /// Returns the [name] block of [d] from either stage. With [row] a role
+  /// makes the rows of [f] not keepable.
   Uint8List? _pulledBlock(_PulledFrame f, DrawPlan d, String name, bool row) {
     final b = d.pixelResources.blocks[name] ?? d.vertexResources.blocks[name];
     if (b != null && b.isEmpty && row) f.keepable = false;
     return b;
   }
 
-  /// Adds draw [i] of [draws] to [f]'s buckets, or to its rest when it has
-  /// no pulled form ([rowCount]: the rows come first; [bounds]: a cascade
-  /// pass's rows).
+  /// Adds the draw [i] of [draws] to the buckets of [f], or to its rest when
+  /// it has no pulled form. The first [rowCount] draws are rows. [bounds]
+  /// holds the bounds of the rows of a cascade pass.
   void _pulledAdd(
     _PulledFrame f,
     List<DrawPlan> draws,
@@ -140,8 +140,8 @@ extension _RunnerPulledAdd on FrameRunner {
     final c = _pulledOf(d);
     if (c.reason case final r?) {
       f.why[r] = (f.why[r] ?? 0) + 1;
-      // A cascade row has no record form (no caster cull of its own):
-      // loud, for the cook to take it.
+      // A cascade row has no record form without a caster cull of its own.
+      // The failure is loud, for the cook to take the row.
       if (bounds != null && i < rowCount) {
         if (_failedDraws.add('${d.label}: cascade row not pulled: $r')) {
           warn?.call('renderer: cascade row not pulled: ${d.label}: $r');
@@ -157,9 +157,8 @@ extension _RunnerPulledAdd on FrameRunner {
     final key = c.key!;
     var bucket = buckets[key];
     if (bucket == null) {
-      // Last frame's bucket of the key while it is made of the same, its
-      // views kept with it (perf: a bucket and its two views per bucket a
-      // frame).
+      // The bucket of the key from the last frame while it holds the same
+      // draws, with its views kept.
       final had = f.bucketPool[key];
       if (had != null &&
           identical(had.first, d) &&
@@ -204,8 +203,8 @@ extension _RunnerPulledAdd on FrameRunner {
       }
       f.objectAt[ob] = object;
     }
-    // A role-bound BufferInstance changes per frame; a kept one is in the
-    // cached row already.
+    // An instance block bound by role changes per frame. A kept block is in
+    // the cached row already.
     final at = f.instances.length;
     f.instances.add(c.row);
     if (bounds != null && i < rowCount) {
@@ -215,8 +214,8 @@ extension _RunnerPulledAdd on FrameRunner {
     if (ib != null && ib.isEmpty) {
       if (i < rowCount) f.keepable = false;
       final bytes = _frameBlocks[ib] ?? ib;
-      // All of BufferInstance but its texcoord transforms (kept at identity
-      // in the cached row).
+      // All of the instance block but its texcoord transforms, which stay at
+      // identity in the cached row.
       final uv = instanceRow[layout.uvTransforms.first];
       final past = instanceRow[layout.uvTransforms.last] + 16;
       final end = instanceRow['object'];

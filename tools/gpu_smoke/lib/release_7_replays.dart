@@ -1,10 +1,10 @@
 part of 'release_7.dart';
 
 extension _Replays on _Smoke {
-  // 2d. Replays into an MRT pass (RGBA8 + R32F + depth, as the merged
-  // occlusion pass): draws recorded in one pass, with their uniforms at
-  // different offsets of one buffer, replayed into a fresh pass, must give
-  // the bytes the recorded pass drew, in every target.
+  // 2d. Replays into an MRT pass of RGBA8 + R32F + depth. Draws recorded in
+  // one pass with their uniforms at different offsets of one buffer and
+  // replayed into a fresh pass must give the bytes of the recorded pass in
+  // every target.
   Future<void> replays() async {
     if (fs.mcsmRetainedDraws) {
       final mixed = fs.mcsmMixedColorAttachmentFormats;
@@ -213,8 +213,9 @@ extension _Replays on _Smoke {
     }
   }
 
-  // 4. Viewport arrays (feature 256): one instanced draw into four tiles
-  // must give the same bytes as four draws with one tile's viewport each.
+  // 4. Viewport arrays (feature 256). One instanced draw into four tiles
+  // must give the same bytes as four draws with the viewport of one tile
+  // each.
   Future<void> viewportArrays() async {
     allOk &= await _viewportArrays(log, ctx, rt);
   }
@@ -265,7 +266,8 @@ Future<bool> _viewportArrays(
     ],
   );
   final pipeline = ctx.createRenderPipeline(v, f, vertexLayout: layout);
-  // A thin slanted triangle: edges that cross pixel centres at odd places.
+  // A thin slanted triangle with edges that cross pixel centres at odd
+  // places.
   final tri = gpu.BufferView(
     ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(
@@ -286,9 +288,9 @@ Future<bool> _viewportArrays(
     inst.setAll(7 * i, [0.03 * i, -0.02 * i, ...colors[i], i.toDouble()]);
   }
   final instances = ctx.createDeviceBufferWithCopy(ByteData.sublistView(inst));
-  // The per-tile draws' instances name viewport 0 (each draw has one
-  // viewport): an index past a pipeline's viewport count is undefined on
-  // Vulkan, where the shader writes gl_ViewportIndex itself.
+  // The instances of the per-tile draws use viewport 0, since each draw has
+  // one viewport. An index past the viewport count of a pipeline is
+  // undefined on Vulkan, where the shader writes gl_ViewportIndex itself.
   final instOne = Float32List.fromList(inst);
   for (var i = 0; i < 4; i++) {
     instOne[7 * i + 6] = 0;
@@ -324,7 +326,7 @@ Future<bool> _viewportArrays(
           v.getUniformSlot('FrameInfo'),
           gpu.BufferView(scale, offsetInBytes: 0, lengthInBytes: 16),
         );
-  // A: one draw per tile, each with its own viewport and scissor.
+  // A has one draw per tile, each with its own viewport and scissor.
   final a = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
   var cb = ctx.createCommandBuffer();
   final pa = begin(cb, a);
@@ -340,7 +342,7 @@ Future<bool> _viewportArrays(
   }
   await _done(cb);
   if (!supported) {
-    // The per-tile path casters take on this backend still has to work.
+    // The per-tile path of this backend must still work.
     final ra = await _readRgba8(a);
     var n = [0, 0, 0, 0];
     for (var y = 0; y < 64; y++) {
@@ -358,7 +360,7 @@ Future<bool> _viewportArrays(
     );
     return ok;
   }
-  // B: one instanced draw, four instances, each into its tile.
+  // B has one instanced draw of four instances, each into its tile.
   final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
   cb = ctx.createCommandBuffer();
   final pb = begin(cb, b);
@@ -369,8 +371,8 @@ Future<bool> _viewportArrays(
       slot: 1,
     )
     ..draw(3, instanceCount: 4);
-  // A later draw without them goes back to one viewport (the whole target):
-  // nothing here, but it must not fail.
+  // A later draw without them goes back to one viewport over the whole
+  // target. It draws nothing here and must not fail.
   fs.mcsmSetViewports(pb, const []);
   await _done(cb);
   final ra = await _readRgba8(a), rb = await _readRgba8(b);
@@ -385,7 +387,7 @@ Future<bool> _viewportArrays(
     }
   }
   final ok = set && differ == 0 && covered > 400;
-  // Coverage per tile (quadrant) of each, to see which draws landed where.
+  // The coverage of each per tile, a quadrant, to see the tiles of the draws.
   String perTile(Uint8List px) {
     final n = [0, 0, 0, 0];
     for (var y = 0; y < 64; y++) {

@@ -1,14 +1,14 @@
-// Checks lib/libm.dart against the Rust libm crate 0.2.16. A Rust test over
-// the same crate computes the same sweeps and checksums.
+// Checks lib/libm.dart against the Rust libm crate 0.2.16. The checksums are
+// those of the same sweeps over the Rust crate.
 import 'dart:typed_data';
 
 import 'package:prismarine_math/libm.dart' as libm;
 import 'package:test/test.dart';
 
-/// native/mixer/src/dmath.rs LIBM_SWEEP.
+/// The checksum of the sweep over sin, cos, exp, log, pow, dpow and atan2.
 const libmSweep = 0x06f90047c6d9745b;
 
-/// native/mixer/src/dmath.rs SIM_SWEEP (tan, asin, acos, atan).
+/// The checksum of the sweep over tan, asin, acos and atan.
 const simSweep = 0xaa1dd63e80aaa7f4;
 
 final _b = ByteData(8);
@@ -29,7 +29,7 @@ void _fnv(double v) {
   }
 }
 
-/// xorshift64*, as the Rust test's.
+/// xorshift64*, the generator of the sweeps over the Rust crate.
 class _Rng {
   int s;
   _Rng(this.s);

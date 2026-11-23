@@ -1,4 +1,3 @@
-// atan, atan2, asin and acos.
 part of '../../libm.dart';
 
 // ------------------------------------------------------------ atan / atan2
@@ -29,7 +28,6 @@ const _at = [
   1.62858201153657823623e-02,
 ];
 
-/// libm's atan.
 double atan(double x) {
   var ix = _hi(x);
   final sign = ix >> 31;
@@ -79,7 +77,6 @@ double atan(double x) {
 const _pi = 3.1415926535897931160E+00;
 const _piLo = 1.2246467991473531772E-16;
 
-/// libm's atan2.
 double atan2(double y, double x) {
   if (x.isNaN || y.isNaN) return x + y;
   var ix = _hi(x);
@@ -169,7 +166,6 @@ double _asinR(double z) {
   return p / q;
 }
 
-/// libm's asin.
 double asin(double x) {
   final hx = _hi(x);
   final ix = hx & 0x7fffffff;
@@ -196,7 +192,6 @@ double asin(double x) {
   return hx >> 31 != 0 ? -x : x;
 }
 
-/// libm's acos.
 double acos(double x) {
   final hx = _hi(x);
   final ix = hx & 0x7fffffff;

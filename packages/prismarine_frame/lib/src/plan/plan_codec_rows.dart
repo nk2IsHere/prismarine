@@ -1,17 +1,16 @@
 part of 'plan_codec.dart';
 
-/// [b]'s bytes hashed (FNV-1a over 64-bit words, then the tail bytes): a
-/// block's change in place is told by its hash and length, where a copy of
-/// every block sent was kept on the heap. Each step is a bijection of the
-/// hash, so one changed word always changes it; several changes cancel
-/// only by a 64-bit collision.
+/// Returns the hash of the bytes of [b], FNV-1a over 64-bit words and then
+/// the tail bytes. The hash and length of a block reveal its change in
+/// place. Each step is a bijection of the hash and one changed word always
+/// changes it. Several changes cancel only by a 64-bit collision.
 int _hash(Uint8List b) {
   var h = 0xcbf29ce484222325;
   final n = b.length;
   var i = 0;
   if (b.offsetInBytes % 8 == 0) {
-    // Each little-endian word from its bytes: the bits an Int64 view reads,
-    // without the buffer object and view per hash (perf).
+    // Each little-endian word from its bytes, the bits that an Int64 view
+    // reads, without a buffer object and a view per hash.
     final words = n ~/ 8;
     for (var k = 0; k < words; k++) {
       final o = k * 8;
@@ -27,16 +26,16 @@ int _hash(Uint8List b) {
   return h;
 }
 
-/// A pass's row as last sent: its draw and the pass's sending that named
-/// it.
+/// The row of a pass as last sent, with its draw and the sending of the pass
+/// that held it.
 final class _SentRow {
   _SentRow(this.plan, this.stamp);
   DrawPlan plan;
   int stamp;
 }
 
-/// A pass's rows as sent: by row id, the id and plan lists sent last, and
-/// the count of sendings that changed them.
+/// The rows of a pass as sent, by row id, with the id and plan lists sent
+/// last and the count of the sendings that changed them.
 final class _SentRows {
   final rows = <int, _SentRow>{};
   List<int>? ids;
@@ -44,11 +43,12 @@ final class _SentRows {
   int stamp = 0;
 }
 
-/// A kept pass changed in place on the reader: a few draws (an edit), its
-/// draws whole (a reshape), its draws and rows (a rows reshape).
+/// A kept pass changed in place on the reader. An edit changes a few draws,
+/// a reshape all draws and a rows reshape the draws and the rows.
 extension _PassEdits on PlanWriter {
   /// Writes the edit of the kept pass at [at] from [last] to [r] when only
-  /// a few of its draws changed (the reader's pass holds [last]'s draws).
+  /// a few of its draws changed. The pass of the reader holds the draws of
+  /// [last]. Returns true when it wrote the edit.
   bool _passEdit(int at, RenderPassPlan last, RenderPassPlan r) {
     final id = _passIds[at];
     if (id < 0 || !identical(_objects[id], _keptPass[at])) return false;
@@ -74,8 +74,9 @@ extension _PassEdits on PlanWriter {
     return true;
   }
 
-  /// Writes [r] as a reshape of the kept pass at [at] (the reader's pass
-  /// holds [last]'s attachments): every draw again, most by id.
+  /// Writes [r] as a reshape of the kept pass at [at], with every draw again
+  /// and most of them by id. The pass of the reader holds the attachments of
+  /// [last]. Returns true when it wrote the reshape.
   bool _passReshape(int at, RenderPassPlan last, RenderPassPlan r) {
     final id = _passIds[at];
     if (id < 0 || !identical(_objects[id], _keptPass[at])) return false;
@@ -94,9 +95,10 @@ extension _PassEdits on PlanWriter {
     return true;
   }
 
-  /// Writes [r], a pass with rows, into the kept pass at [at] (the reader's
-  /// pass holds [last]'s attachments): every draw again, most by id, then
-  /// the rows' changes.
+  /// Writes [r], a pass with rows, into the kept pass at [at]. It writes every
+  /// draw again, most of them by id. The changes of the rows follow. The pass
+  /// of the reader holds the attachments of [last]. Returns true when it wrote
+  /// the pass.
   bool _passRows(int at, RenderPassPlan last, RenderPassPlan r) {
     final id = _passIds[at];
     if (id < 0 || !identical(_objects[id], _keptPass[at])) return false;

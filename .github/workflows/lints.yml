@@ -1,0 +1,60 @@
+# The lints of tools/lint on Linux. The results do not depend on the OS.
+# The privacy check runs its generic patterns only. The patterns of the
+# private repo run in the landing gate.
+name: lints
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lints-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # The Dart of Flutter 3.47.7. The format check depends on the version.
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: "3.13.5"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          components: rustfmt
+      - uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: pub-lints-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-lints-${{ runner.os }}-
+
+      - run: dart pub get
+      # The pending paths fail the check only with --strict. The flag is
+      # added once tools/lint/privacy_pending.txt lists no path.
+      - name: privacy, generic patterns
+        run: |
+          if awk '!/^[[:space:]]*(#|$)/ { n++ } END { exit n == 0 }' tools/lint/privacy_pending.txt; then
+            dart tools/lint/privacy_check.dart --generic-only
+          else
+            dart tools/lint/privacy_check.dart --generic-only --strict
+          fi
+      - name: links
+        run: dart tools/lint/check_links.dart
+      - name: docs index
+        run: dart tools/lint/docs_index.dart --check
+      - name: code shape
+        run: dart tools/lint/code_shape.dart
+      - name: alloc
+        run: dart tools/lint/alloc.dart
+      # analyze.dart skips a check without its toolchain and passes. Here
+      # a skipped check fails the step.
+      - name: analyze and format
+        run: |
+          dart tools/lint/analyze.dart --only=dart,format | tee "$RUNNER_TEMP/analyze.txt"
+          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt"

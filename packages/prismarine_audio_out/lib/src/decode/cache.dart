@@ -10,27 +10,28 @@ import '../native.dart';
 /// The process-wide decoded-audio cache (native/src/decode/cache.rs). It
 /// holds whole-file decodes in native memory, decoded on low-priority native
 /// threads and keyed by path. Every isolate sees the same cache. One isolate
-/// asks for what is coming ([want]) and another plays it
-/// ([CachedPcmSource]).
+/// asks for the coming files with [want] and another plays them with
+/// [CachedPcmSource].
 abstract final class PcmCache {
-  /// Asks for [path] ahead of need. Returns its state: 0 queued, 1 ready,
-  /// 2 decoding, −1 failed.
+  /// Asks for [path] ahead of need. Returns its state, 0 for queued, 1 for
+  /// ready, 2 for decoding and −1 for failed.
   static int want(String path) =>
       using((a) => pcmWant(path.toNativeUtf8(allocator: a).cast()));
 
-  /// A scene change: what nobody holds and nobody wanted since the change
-  /// before this one is dropped.
+  /// Marks a scene change. Entries that nobody holds and nobody wanted since
+  /// the change before this one are dropped.
   static void sceneChanged() => pcmSceneChanged();
 
-  /// Decoded bytes kept before the oldest unheld entries are dropped.
+  /// Sets the decoded bytes kept before the oldest unheld entries are
+  /// dropped.
   static set budget(int bytes) => pcmSetBudget(bytes);
 
-  /// The default budget: 512 MB of float32 (about 45 min of mono 48 kHz).
+  /// The default budget, 512 MB of float32 or about 45 min of mono 48 kHz.
   static const defaultBudget = 512 << 20;
 
-  /// The budget in bytes that `PRISMARINE_PCM_BUDGET=<MB>` sets, else
-  /// [fallback]. The old name `MCSM_PCM_BUDGET` is read when the new one is
-  /// not set.
+  /// Returns the budget in bytes that `PRISMARINE_PCM_BUDGET=<MB>` sets,
+  /// else [fallback]. `MCSM_PCM_BUDGET` is read when
+  /// `PRISMARINE_PCM_BUDGET` is not set.
   static int budgetFromEnvironment(int fallback) {
     final mb = int.tryParse(
       Platform.environment['PRISMARINE_PCM_BUDGET'] ??
@@ -50,9 +51,9 @@ abstract final class PcmCache {
   });
 }
 
-/// [PcmCache.stats]: entries, decoded bytes, queued, decodes done, decode
-/// time, dropped, acquires that were ready / not ready, waits and their
-/// time, wants, failed decodes.
+/// The [PcmCache.stats] with the entries, decoded bytes, queued entries,
+/// decodes done, decode time, dropped entries, ready and not ready
+/// acquires, waits and their time, wants and failed decodes.
 class PcmCacheStats {
   PcmCacheStats(List<int> v)
     : entries = v[0],
@@ -87,12 +88,12 @@ class PcmCacheStats {
   };
 }
 
-/// A whole file from [PcmCache], held while this object lives (a native
-/// finalizer gives the reference back): the samples stay in native memory
-/// and reads copy only the frames asked for. Until the decode lands it is a
-/// [LoadingPcmSource] with the format given ([channels], [sampleRate],
-/// [frames] as given); [wait] blocks until it is there. [ffi.Finalizable]
-/// keeps it alive to the end of every method that reads its view.
+/// A whole file from [PcmCache], held while this object is alive. A native
+/// finalizer gives the reference back. The samples stay in native memory and
+/// reads copy only the requested frames. Until the decode is done it is a
+/// [LoadingPcmSource] with the given [channels], [sampleRate] and [frames].
+/// [wait] blocks until the data is there. [ffi.Finalizable] keeps it alive to
+/// the end of every method that reads its view.
 class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {
   CachedPcmSource.acquire(
     this.path, {
@@ -112,8 +113,8 @@ class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {
 
   final _since = Stopwatch();
 
-  /// Called once when a source that wasn't ready at acquire becomes ready:
-  /// ms since the acquire (the render isolate's audio trace).
+  /// Receives once the ms since the acquire when a source that was not
+  /// ready at acquire becomes ready.
   void Function(double waitMs)? onReady;
 
   static final _finalizer = ffi.NativeFinalizer(pcmReleasePtr.cast());
@@ -125,10 +126,10 @@ class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {
   bool _failed = false;
   late final bool _readyAtAcquire;
 
-  /// The data was decoded before it was asked for (a preload hit).
+  /// True when the data was decoded before it was asked for, a preload hit.
   bool get wasPreloaded => _readyAtAcquire;
 
-  /// The decode failed: the source plays silence.
+  /// True when the decode failed. The source then plays silence.
   bool get failed => _failed;
 
   @override
@@ -142,8 +143,8 @@ class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {
     return false;
   }
 
-  /// Blocks until decoded (on this thread when no worker has started it).
-  /// False when the file failed.
+  /// Blocks until the file is decoded, on this thread when no worker has
+  /// started it. Returns false when the file failed.
   bool wait() {
     if (_view != null) return true;
     if (_failed) return false;
@@ -163,8 +164,8 @@ class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {
       _frames = f.value;
       _channels = c.value;
       _rate = r.value;
-      // A view on native memory: valid while this source holds its reference
-      // (it never escapes this object).
+      // A view on native memory, valid while this source holds its
+      // reference. The view does not escape this object.
       _view = p.asTypedList(_frames * _channels);
     });
   }

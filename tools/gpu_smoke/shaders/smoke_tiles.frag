@@ -1,7 +1,7 @@
 #version 460 core
 
-// The interpolated colour and position, so coverage and interpolation both
-// show in the bytes.
+// The interpolated colour and position. Coverage and interpolation both show
+// in the bytes.
 
 precision highp float;
 

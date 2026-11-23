@@ -3,9 +3,9 @@
 //! and the ring that feeds the device PCM rendered elsewhere ([push]). A
 //! crate that links it uses the cache, streams and device directly.
 //!
-//! `unsafe` lives only at the FFI edge (the `extern "C"` functions here and
-//! in decode/ffi.rs, the decoders' calls, the thread role calls in
-//! decode/os.rs).
+//! `unsafe` is only at the FFI edge, in the `extern "C"` functions here and
+//! in decode/ffi.rs, the calls of the decoders and the thread role calls in
+//! decode/os.rs.
 
 pub mod decode;
 pub mod device;
@@ -13,8 +13,9 @@ pub mod push;
 
 use std::panic::catch_unwind;
 
-/// Opens the default output device fed from a new PCM ring ([push]). Null when no device opens; [err] (when not null)
-/// gets the code of the [device::StartError], or −7 when the start panicked.
+/// Opens the default output device fed from a new PCM ring ([push]).
+/// Returns null when no device opens. [err], when not null, gets the code
+/// of the [device::StartError], or −7 when the start panicked.
 ///
 /// # Safety
 /// [err] is null or writable.
@@ -44,10 +45,11 @@ pub unsafe extern "C" fn prismarine_push_destroy(s: *mut push::PushStream) {
     }
 }
 
-/// Queues [frames] interleaved stereo frames from [pcm]; the frames taken.
+/// Queues [frames] interleaved stereo frames from [pcm]. Returns the frames
+/// taken.
 ///
 /// # Safety
-/// [s] is a live stream; [pcm] holds 2 × [frames] floats.
+/// [s] is a live stream. [pcm] holds 2 × [frames] floats.
 #[no_mangle]
 pub unsafe extern "C" fn prismarine_push_pcm(
     s: *const push::PushStream,
@@ -62,7 +64,8 @@ pub unsafe extern "C" fn prismarine_push_pcm(
     s.push(pcm) as i64
 }
 
-/// Frames the device has taken from the stream so far (the audio clock).
+/// Returns the frames that the device has taken from the stream so far,
+/// the audio clock.
 ///
 /// # Safety
 /// [s] is a live stream.
@@ -88,7 +91,7 @@ pub unsafe extern "C" fn prismarine_push_set_muted(s: *const push::PushStream, m
     unsafe { &*s }.set_muted(muted != 0);
 }
 
-/// Underruns (the ring ran dry) since the last call.
+/// Returns the underruns, the times the ring ran dry, since the last call.
 ///
 /// # Safety
 /// [s] is a live stream.

@@ -1,11 +1,11 @@
-// The OS's memory readings behind MemoryRoom: macOS through sysctl and
-// proc_pid_rusage, Linux through /proc and the cgroup v2 files, Windows
-// through kernel32 (GlobalMemoryStatusEx, K32GetProcessMemoryInfo and a
-// low-memory resource notification).
+// The memory readings of the OS for MemoryRoom. macOS reads sysctl and
+// proc_pid_rusage. Linux reads /proc and the cgroup v2 files. Windows calls
+// GlobalMemoryStatusEx and K32GetProcessMemoryInfo of kernel32 and uses a
+// low-memory resource notification.
 import 'dart:ffi';
 import 'dart:io';
 
-/// One look at the machine's memory, in MB.
+/// One reading of the memory of the machine, in MB.
 class MemoryReadings {
   const MemoryReadings({
     required this.physicalMb,
@@ -17,31 +17,34 @@ class MemoryReadings {
     this.pressure = false,
   });
 
-  /// The machine's physical memory.
+  /// The physical memory of the machine.
   final int physicalMb;
 
-  /// The process's own: macOS its footprint, Linux its resident set,
-  /// Windows its private bytes.
+  /// The memory of the process. It is the footprint on macOS, the resident
+  /// set on Linux and the private bytes on Windows.
   final int processMb;
 
-  /// Available to the system without paging (Linux `MemAvailable`,
-  /// Windows `ullAvailPhys`); null where the OS gives no such figure
-  /// (macOS: free pages say little next to its file cache).
+  /// The memory available to the system without paging, `MemAvailable` on
+  /// Linux and `ullAvailPhys` on Windows. Null on macOS, whose free pages say
+  /// little next to its file cache.
   final int? availableMb;
 
-  /// Room under the process's cgroup v2 memory limit (Linux; null without
-  /// one): the limit less what it holds, reclaimable file pages not counted.
+  /// The room under the cgroup v2 memory limit of the process on Linux, or
+  /// null without a limit. It is the limit less the memory that the cgroup
+  /// holds, without the reclaimable file pages.
   final int? cgroupRoomMb;
 
-  /// Room under the commit limit (Windows `ullAvailPageFile`).
+  /// The room under the commit limit, `ullAvailPageFile` on Windows.
   final int? commitRoomMb;
 
-  /// Paged out so far, a running total compared between looks (Linux
-  /// `pswpout`, macOS the swap file's use; 0 where unknown).
+  /// The memory paged out so far, a running total that is compared between
+  /// readings. It is `pswpout` on Linux, the use of the swap file on macOS
+  /// and 0 where it is unknown.
   final int pagedOutMb;
 
-  /// The OS says memory is short: macOS's pressure level above normal,
-  /// Windows' low-memory resource notification or a memory load of 90 %.
+  /// True when the OS reports that memory is short. It is a pressure level
+  /// above normal on macOS. On Windows it is the low-memory resource
+  /// notification or a memory load of 90 %.
   final bool pressure;
 
   @override
@@ -53,7 +56,8 @@ class MemoryReadings {
       ', paged out $pagedOutMb${pressure ? ', pressure' : ''}';
 }
 
-/// This machine's readings now (throws where the OS gives none).
+/// Returns the readings of this machine now. Throws on an OS without
+/// readings.
 MemoryReadings readMemory() {
   if (Platform.isMacOS) return _mac();
   if (Platform.isLinux) return _linux();
@@ -70,7 +74,7 @@ MemoryReadings _linux() {
     processMb: ProcessInfo.currentRss >> 20,
     availableMb: (m['MemAvailable'] ?? 0) >> 10,
     cgroupRoomMb: _cgroupRoomMb(),
-    // pswpout counts pages (4 KB).
+    // pswpout counts pages of 4 KB.
     pagedOutMb: _vmstat('pswpout') >> 8,
   );
 }
@@ -93,8 +97,8 @@ int _vmstat(String key) {
   return 0;
 }
 
-/// The tightest room under a cgroup v2 memory limit along the process's
-/// cgroup path; null without a limit.
+/// Returns the tightest room under a cgroup v2 memory limit along the cgroup
+/// path of the process, or null without a limit.
 int? _cgroupRoomMb() {
   final self = File('/proc/self/cgroup');
   if (!self.existsSync()) return null;
@@ -132,12 +136,13 @@ int? _cgroupRoomMb() {
 // --- macOS -----------------------------------------------------------------
 
 MemoryReadings _mac() {
-  // kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical.
+  // kern.memorystatus_vm_pressure_level is 1 for normal, 2 for warning and 4
+  // for critical.
   final level = _sysctl('kern.memorystatus_vm_pressure_level') ?? 4;
   return MemoryReadings(
     physicalMb: (_sysctl('hw.memsize') ?? 0) >> 20,
     processMb: (_footprint() ?? 0) >> 20,
-    // vm.swapusage is an xsw_usage: total, avail, used (u64 each).
+    // vm.swapusage is an xsw_usage of the u64 fields total, avail and used.
     pagedOutMb: (_sysctl('vm.swapusage', at: 16, size: 32) ?? 0) >> 20,
     pressure: level != 1,
   );
@@ -167,7 +172,7 @@ final _rusage = _libc
       int Function(int, int, Pointer<Void>)
     >('proc_pid_rusage');
 
-/// 1 KB of scratch for the calls, kept for the isolate's life.
+/// 1 KB of scratch for the calls, kept for the life of the isolate.
 Pointer<Uint8> get _scratch => _buf ??= _alloc(1024);
 Pointer<Uint8>? _buf;
 
@@ -178,7 +183,7 @@ Pointer<Uint8> _alloc(int bytes) {
           Pointer<Void> Function(Uint32, IntPtr),
           Pointer<Void> Function(int, int)
         >('LocalAlloc');
-    return localAlloc(0x40, bytes).cast(); // LPTR: fixed, zeroed
+    return localAlloc(0x40, bytes).cast(); // LPTR, fixed and zeroed
   }
   final malloc = DynamicLibrary.process()
       .lookupFunction<
@@ -188,8 +193,8 @@ Pointer<Uint8> _alloc(int bytes) {
   return malloc(bytes).cast();
 }
 
-/// A numeric sysctl (4 or 8 bytes; [at] an 8-byte field of a struct of
-/// [size] bytes), null when unreadable.
+/// Returns the numeric sysctl [name] of 4 or 8 bytes, or null when it is
+/// unreadable. [at] selects an 8-byte field of a struct of [size] bytes.
 int? _sysctl(String name, {int at = 0, int size = 8}) {
   final f = _sysctlbyname;
   if (f == null) return null;
@@ -211,15 +216,16 @@ int? _sysctl(String name, {int at = 0, int size = 8}) {
   return Pointer<Uint64>.fromAddress(b.address + at).value;
 }
 
-/// `ri_phys_footprint` of `proc_pid_rusage` (what Activity Monitor shows).
+/// Returns the `ri_phys_footprint` of `proc_pid_rusage`, the figure that
+/// Activity Monitor shows.
 int? _footprint() {
   final f = _rusage;
   if (f == null) return null;
   final b = _scratch;
   if (f(pid, 2, b.cast()) != 0) return null;
-  // rusage_info_v2: uuid[16], then u64 user_time, system_time,
-  // pkg_idle_wkups, interrupt_wkups, pageins, wired_size, resident_size,
-  // phys_footprint.
+  // rusage_info_v2 has uuid[16] and then the u64 fields user_time,
+  // system_time, pkg_idle_wkups, interrupt_wkups, pageins, wired_size,
+  // resident_size and phys_footprint.
   return Pointer<Uint64>.fromAddress(b.address + 16 + 7 * 8).value;
 }
 
@@ -229,8 +235,7 @@ final _kernel32 = Platform.isWindows
     ? DynamicLibrary.open('kernel32.dll')
     : null;
 
-/// The low-memory resource notification's handle, made once (the
-/// counterpart of macOS's pressure level).
+/// The handle of the low-memory resource notification, made once.
 final int _lowMemory = () {
   final create = _kernel32!
       .lookupFunction<IntPtr Function(Int32), int Function(int)>(
@@ -260,16 +265,17 @@ MemoryReadings _windows() {
         int Function(int, Pointer<Void>, int)
       >('K32GetProcessMemoryInfo');
   final b = _scratch;
-  // MEMORYSTATUSEX: dwLength, dwMemoryLoad (u32), then u64 ullTotalPhys,
-  // ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual,
-  // ullAvailVirtual, ullAvailExtendedVirtual (64 bytes).
+  // MEMORYSTATUSEX has 64 bytes. It holds the u32 fields dwLength and
+  // dwMemoryLoad and then the u64 fields ullTotalPhys, ullAvailPhys,
+  // ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual and
+  // ullAvailExtendedVirtual.
   Pointer<Uint32>.fromAddress(b.address).value = 64;
   if (status(b.cast()) == 0) throw StateError('GlobalMemoryStatusEx failed');
   int u64(int at) => Pointer<Uint64>.fromAddress(b.address + at).value;
   final load = Pointer<Uint32>.fromAddress(b.address + 4).value;
   final total = u64(8), avail = u64(16), commitAvail = u64(32);
-  // PROCESS_MEMORY_COUNTERS_EX (80 bytes on 64-bit): cb, PageFaultCount,
-  // then SIZE_T fields; PrivateUsage at 72.
+  // PROCESS_MEMORY_COUNTERS_EX has 80 bytes on 64-bit. It holds cb and
+  // PageFaultCount and then SIZE_T fields, with PrivateUsage at 72.
   final pc = b.address + 128;
   Pointer<Uint32>.fromAddress(pc).value = 80;
   final private = counters(process(), Pointer<Void>.fromAddress(pc), 80) != 0

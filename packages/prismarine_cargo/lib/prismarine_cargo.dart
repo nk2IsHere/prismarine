@@ -1,19 +1,20 @@
-/// Builds a package's Rust crate from its Dart build hook (native code is
-/// Rust). A hook's `build` callback calls [buildCargoLibrary] with the crate's
-/// directory (`crate: 'native/mixer', library: 'mixer', assetName:
-/// 'src/mixer/native.dart'`); cargo builds the crate's `cdylib` for the
-/// hook's target, and the library ships as a bundled code asset that
-/// `@Native` declarations with [assetName] resolve against.
+/// Builds the Rust crate of a package from its Dart build hook.
 ///
-/// Cargo is found through `$CARGO`, `PATH`, then `~/.cargo/bin` (rustup's
-/// default). Each target needs its Rust standard library installed
-/// (`rustup target add <triple>`; macOS app builds are universal, so both
-/// `aarch64-apple-darwin` and `x86_64-apple-darwin`). Windows builds use
-/// the MSVC toolchain (Visual Studio's C++ build tools); Linux builds need
-/// a C compiler and, for the audio library, ALSA's headers
-/// (`libasound2-dev`). Crates that build C with CMake (the pad library's
-/// SDL) need CMake: found through `$CMAKE`, `PATH` or, on macOS, Homebrew
-/// and the CMake app; on Windows Visual Studio's bundled one is enough.
+/// The `build` callback of a hook calls [buildCargoLibrary] with the
+/// directory of the crate, as in `crate: 'native', library: 'example',
+/// assetName: 'src/native.dart'`. Cargo builds the `cdylib` of the crate for
+/// the target of the hook. The library ships as a bundled code asset.
+/// `@Native` declarations for [assetName] resolve to it.
+///
+/// Cargo is found through `$CARGO`, `PATH` and then `~/.cargo/bin`. Each
+/// target needs its Rust standard library, installed with
+/// `rustup target add <triple>`. A macOS app build is universal and needs both
+/// `aarch64-apple-darwin` and `x86_64-apple-darwin`. Windows builds use the
+/// MSVC toolchain from the C++ build tools of Visual Studio. Linux builds
+/// need a C compiler. A crate that links ALSA needs its headers from
+/// `libasound2-dev`. A crate that builds C with CMake needs CMake. It is
+/// found through `$CMAKE` and `PATH`, then through Homebrew and the CMake app
+/// on macOS or as the CMake bundled with Visual Studio on Windows.
 library;
 
 import 'dart:io';
@@ -21,14 +22,17 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
-/// Builds [crate] in release mode. [crate] is the directory that holds
-/// `Cargo.toml`, as a path relative to the hook's package or as an absolute
-/// URI path. The build adds its dynamic library [library] (the crate's
-/// `[lib] name`) as the code asset `package:<package>/<assetName>`.
+/// Builds [crate] in release mode for the hook with [input] and [output].
 ///
-/// [extraSources]: package-relative files or directories outside the crate
-/// that its build reads (vendored C its `build.rs` compiles); a change to
-/// any reruns the hook, as a change to the crate's own sources does.
+/// [crate] is the directory that holds `Cargo.toml`, as a path relative to
+/// the package of the hook or as an absolute URI path. The build adds the
+/// dynamic library [library], the `[lib] name` of the crate, as the code
+/// asset `package:<package>/<assetName>`.
+///
+/// [extraSources] lists the files or directories outside the crate that its
+/// build reads, such as vendored C that its `build.rs` compiles, relative to
+/// the package. A change to one of them runs the hook again, as a change to
+/// the sources of the crate does.
 Future<void> buildCargoLibrary(
   BuildInput input,
   BuildOutputBuilder output, {
@@ -43,15 +47,16 @@ Future<void> buildCargoLibrary(
   final crateDir = input.packageRoot.resolve(
     crate.endsWith('/') ? crate : '$crate/',
   );
-  // One cargo target dir for every config of this package: cargo keeps the
-  // targets apart and rebuilds incrementally.
+  // Every config of this package shares one cargo target directory. Cargo
+  // keeps the targets apart in it.
   final targetDir = input.outputDirectoryShared.resolve('cargo/');
   final cargo = _findCargo();
-  // A clean environment: an Xcode build's own variables (SDKROOT, LD,
-  // ARCHS, deployment targets…) broke rustc's link; rustup needs HOME (or
-  // its own homes) and the linker /usr/bin. Windows keeps what rustc and
-  // the cc crate use to find Visual Studio's linker and compiler; Linux
-  // keeps the caller's PATH (its C compiler) and pkg-config's paths.
+  // The build runs in a clean environment. The variables of an Xcode build,
+  // such as SDKROOT, LD, ARCHS and the deployment targets, break the link of
+  // rustc. rustup needs HOME or its own home variables. The linker needs
+  // /usr/bin. Windows keeps the variables that rustc and the cc crate use to
+  // find the linker and compiler of Visual Studio. Linux keeps the PATH of
+  // the caller for its C compiler and the paths of pkg-config.
   final parent = Platform.environment;
   final cargoDir = File(cargo).parent.path;
   final env = <String, String>{
@@ -88,16 +93,14 @@ Future<void> buildCargoLibrary(
       if (Platform.isLinux) ...['PKG_CONFIG_PATH', 'PKG_CONFIG_SYSROOT_DIR'],
     ])
       if (parent[k] case final v?) k: v,
-    // CMake for crates that build C libraries with it (the `cmake` crate:
-    // prismarine_pad builds SDL). It reads `CMAKE`; on macOS the PATH above
-    // leaves out Homebrew's; on Windows Visual Studio's own.
+    // The `cmake` crate reads `CMAKE`. The PATH above leaves out the CMake of
+    // Homebrew on macOS. Windows uses the CMake of Visual Studio.
     'CMAKE': ?_findCmake(),
-    // Its generator: the caller's `CMAKE_GENERATOR`, else Ninja on a Linux
-    // box with Ninja and no make (Flutter's Linux builds need Ninja, not
-    // make: the player's build image has no make), else on Windows the
-    // newest Visual Studio's (the cmake crate finds Visual Studio through
-    // devenv.exe, which the Build Tools edition lacks, and then falls back to
-    // NMake, which finds no compiler outside a developer prompt).
+    // The generator is the `CMAKE_GENERATOR` of the caller, else Ninja on
+    // Linux with Ninja and without make, else the generator of the newest
+    // Visual Studio on Windows. The cmake crate finds Visual Studio through
+    // devenv.exe, which the Build Tools edition lacks. It then falls back to
+    // NMake, which finds no compiler outside a developer prompt.
     'CMAKE_GENERATOR':
         ?(parent['CMAKE_GENERATOR'] ??
         (Platform.isLinux && !_onPath('make') && _onPath('ninja')
@@ -108,14 +111,14 @@ Future<void> buildCargoLibrary(
     // Git dependencies are fetched with the git command line. It reads the
     // machine's git config, with its URL mappings and credentials.
     'CARGO_NET_GIT_FETCH_WITH_CLI': 'true',
-    // The app's minimum for rustc and for the C a crate's build.rs
-    // compiles (the cc crate reads it; without it cc targeted the SDK's
-    // own version).
+    // The minimum macOS version of the app, for rustc and for the C code that
+    // the build.rs of a crate compiles. Without it the cc crate targets the
+    // version of the SDK.
     if (code.targetOS == OS.macOS) ...{
       'MACOSX_DEPLOYMENT_TARGET': '${code.macOS.targetVersion}.0',
-      // Host-side dylibs (proc-macros: rlsf's rustversion) unstripped too:
-      // Xcode 27's strip broke them the same way (see `strip=none` below),
-      // and rustc couldn't load them ("can't find crate for `rustversion`").
+      // Host-side dylibs, such as proc-macros, are not stripped either. The
+      // strip of Xcode 27 breaks them as it breaks the library below. rustc
+      // then fails to load them.
       'CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP': 'none',
     },
   };
@@ -138,16 +141,16 @@ Future<void> buildCargoLibrary(
       targetDir.toFilePath(),
       if (code.targetOS == OS.macOS) ...[
         '--',
-        // No strip pass: Xcode 27's strip (which the release profile's
-        // default strip=debuginfo runs) leaves the LINKEDIT string pool
-        // 4-byte aligned whenever the indirect symbol table has an odd
-        // count, and dyld refuses the dylib ("mis-aligned LINKEDIT string
-        // pool"). There is no debug info to strip (debug =
-        // false).
+        // The library is not stripped. The strip of Xcode 27, which the
+        // default strip=debuginfo of the release profile runs, leaves the
+        // LINKEDIT string pool 4-byte aligned when the indirect symbol table
+        // has an odd count. dyld then refuses the dylib with "mis-aligned
+        // LINKEDIT string pool". The profile has debug = false and leaves no
+        // debug info to strip.
         '-C',
         'strip=none',
-        // Loaded from the app's frameworks, not from cargo's target dir; room
-        // for Flutter to rewrite the install name.
+        // The app loads the library from its frameworks. The header pad
+        // leaves room for Flutter to rewrite the install name.
         '-C',
         'link-arg=-Wl,-install_name,@rpath/$fileName',
         '-C',
@@ -168,7 +171,8 @@ Future<void> buildCargoLibrary(
     );
   }
   final built = File.fromUri(targetDir.resolve('$triple/release/$fileName'));
-  // A per-config copy: assets of different configs never share a file.
+  // Each config gets its own copy. Assets of different configs must not
+  // share a file.
   final shipped = File.fromUri(input.outputDirectory.resolve(fileName));
   built.copySync(shipped.path);
   output.assets.code.add(
@@ -194,7 +198,7 @@ Future<void> buildCargoLibrary(
   }
 }
 
-/// Rust's target triple for a code asset target.
+/// Returns the Rust target triple of [os] and [arch].
 String rustTriple(OS os, Architecture arch) => switch ((os, arch)) {
   (OS.macOS, Architecture.arm64) => 'aarch64-apple-darwin',
   (OS.macOS, Architecture.x64) => 'x86_64-apple-darwin',
@@ -224,9 +228,8 @@ String _findCargo() {
   throw StateError('cargo not found (set CARGO, or install rustup)');
 }
 
-/// The bin directory of the CMake bundled with the newest Visual Studio
-/// (found with vswhere, as Flutter does). The cmake crate looks for it
-/// through `devenv.exe`, which the Build Tools edition doesn't have.
+/// Returns the bin directory of the CMake bundled with the newest Visual
+/// Studio, found with vswhere.
 String? _visualStudioCmakeDir() {
   final pf =
       Platform.environment['ProgramFiles(x86)'] ?? r'C:\Program Files (x86)';
@@ -248,8 +251,8 @@ String? _visualStudioCmakeDir() {
   }
 }
 
-/// The CMake generator of the newest Visual Studio (e.g. "Visual Studio 17
-/// 2022"), found with vswhere; null without one.
+/// Returns the CMake generator of the newest Visual Studio, such as "Visual
+/// Studio 17 2022", found with vswhere. Returns null without Visual Studio.
 String? _visualStudioGenerator() {
   final pf =
       Platform.environment['ProgramFiles(x86)'] ?? r'C:\Program Files (x86)';
@@ -277,7 +280,6 @@ String? _visualStudioGenerator() {
   }
 }
 
-/// Whether [exe] is on `PATH`.
 bool _onPath(String exe) {
   final sep = Platform.isWindows ? ';' : ':';
   return (Platform.environment['PATH'] ?? '')
@@ -289,10 +291,9 @@ bool _onPath(String exe) {
       );
 }
 
-/// CMake: `$CMAKE`, then `PATH`, then where macOS installs put it
-/// (Homebrew on Apple silicon and Intel, the CMake app) or, on Windows,
-/// Visual Studio's own (the one Flutter's Windows builds use). Null when
-/// none is found (only crates that build C with CMake need it).
+/// Returns the path of CMake from `$CMAKE` or `PATH`, then from Homebrew and
+/// the CMake app on macOS or from Visual Studio on Windows. Returns null when
+/// none is found.
 String? _findCmake() {
   final env = Platform.environment['CMAKE'];
   if (env != null && File(env).existsSync()) return env;
@@ -314,8 +315,8 @@ String? _findCmake() {
   return null;
 }
 
-/// The crate's manifest, lock file, build script and sources: a change to any
-/// reruns the hook.
+/// Returns the manifest, lock file, build script and sources of the crate. A
+/// change to one of them runs the hook again.
 List<Uri> _sources(Uri crateDir) => [
   for (final name in ['Cargo.toml', 'Cargo.lock', 'build.rs'])
     if (File.fromUri(crateDir.resolve(name)).existsSync())

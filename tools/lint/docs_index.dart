@@ -1,23 +1,24 @@
-// docs_index: writes (or checks) the generated indexes of the one-file-per-entry
-// doc folders in the `docs_index` list of tools/lint/config.yaml. An empty
-// list leaves nothing to do.
+// docs_index writes or checks the generated indexes of the doc folders with
+// one file per entry in the `docs_index` list of tools/lint/config.yaml. An
+// empty list leaves nothing to do.
 //
 //   dart tools/lint/docs_index.dart [--root=<tree>] [--check]
 //
-// Each entry is a Markdown file named <id>.md (<prefix>-<area>-<slug>.md)
-// that starts with a frontmatter block of `key: value` lines between `---`
-// lines. The index lists every
-// entry, grouped by area (the id's second part), sorted by id, so the output
-// depends only on the entries: running it twice gives the same bytes, and two
-// branches that add different entries never touch the same line of an entry.
-// The indexes are regenerated at landing. Branches do not edit them.
+// Each entry is a Markdown file <id>.md, which has the form
+// <prefix>-<area>-<slug>.md. It starts with a frontmatter block of `key: value`
+// lines between `---` lines. The index lists every entry, grouped by area, the
+// second part of the id, then sorted by id. The output depends only on the
+// entries. Two runs give the same bytes. Two branches that add different
+// entries do not touch the same line of an entry. The indexes are regenerated
+// at landing. Branches do not edit them.
 //
-// --check writes nothing. It fails (exit 1) when an index is not what the
-// entries generate, an id is not its file name or is not unique, a required
-// frontmatter field is missing or empty, or a field holds a value outside its
-// set. Entries over the size limit are reported as warnings.
+// --check writes nothing. It fails with exit code 1 when an index differs
+// from the generated one, an id differs from its file name or is not unique,
+// a required frontmatter field is missing or empty or a field holds a value
+// outside its set. Entries over the size limit are reported as warnings.
 //
-// Exit codes: 0 clean (or written), 1 check failed, 64 usage.
+// The exit code is 0 when clean or written, 1 when the check failed and 64
+// for a usage error.
 import 'dart:io';
 
 import 'src/config.dart';
@@ -34,7 +35,7 @@ class Folder {
     this.areaFirst,
   });
 
-  /// Relative to the tree root.
+  /// The folder relative to the tree root.
   final String dir;
 
   /// The id prefix. The prefix `Q` gives ids of the form `Q-<area>-<slug>`.
@@ -42,13 +43,14 @@ class Folder {
   final String title;
   final List<String> intro;
 
-  /// Frontmatter fields every entry must have.
+  /// The frontmatter fields that every entry must have.
   final List<String> required;
 
-  /// Index table columns after the id: (header, frontmatter field).
+  /// The columns of the index table after the id, each a header and a
+  /// frontmatter field.
   final List<(String, String)> columns;
 
-  /// Allowed values of `kind`, when the folder has one.
+  /// The allowed values of `kind`, when the folder has the field.
   final List<String>? kinds;
 
   /// The pattern of the areas that sort before the rest.
@@ -212,7 +214,8 @@ List<Entry> readEntries(
   return out;
 }
 
-/// The `key: value` lines between the first two `---` lines, or null.
+/// Returns the `key: value` lines between the first two `---` lines, or
+/// null.
 Map<String, String>? frontmatter(List<String> lines) {
   if (lines.isEmpty || lines.first.trim() != '---') return null;
   final m = <String, String>{};

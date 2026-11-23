@@ -1,4 +1,5 @@
-// The writer's value switch: an object written once, then by reference.
+// The value switch of the writer. An object is written once and then by
+// reference.
 part of 'snap.dart';
 
 extension _SnapWriterGraph on SnapWriter {
@@ -28,7 +29,8 @@ extension _SnapWriterGraph on SnapWriter {
         byte(_tOrigin);
         str(origin.$1);
         values(origin.$2);
-        // Changed in place: its content, for the reader's copy.
+        // An origin changed in place also writes its content for the copy of
+        // the reader.
         final changed = registry.originChanged?.call(o) ?? false;
         boolean(changed);
         if (changed) {
@@ -63,7 +65,7 @@ extension _SnapWriterGraph on SnapWriter {
       case final List l:
         var k = _kinds.listKinds[l.runtimeType];
         if (k == null) {
-          // A list type no kind names: read back as List<Object?>.
+          // A list type without a kind is read back as List<Object?>.
           unknownKinds.add('${l.runtimeType}');
           k = _kinds.listKinds[<Object?>[].runtimeType]!;
         }
@@ -136,8 +138,4 @@ extension _SnapWriterGraph on SnapWriter {
         throw SnapError('no codec for ${o.runtimeType} (${_where()})');
     }
   }
-
-  /// Starts an object written by the caller (a typed collection kept by
-  /// identity, an object of a class without a codec): true when [o] is new
-  /// (the caller writes it now), false when a reference was written.
 }

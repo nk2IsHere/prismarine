@@ -1,4 +1,5 @@
-// GC pacing's idle point: when it lets the VM collect and the time it gives.
+// Tests the idle point of GC pacing, the cases in which it lets the VM
+// collect and the time it gives.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_loop/prismarine_loop.dart';
 
@@ -23,7 +24,7 @@ void main() {
     gc.beginFrame();
     gc.endFrame();
     expect(calls, hasLength(1));
-    // The time left of the frame's interval, the bounds as given.
+    // The time left of the interval of the frame, with the bounds as given.
     expect(calls.single.$1, inInclusiveRange(900000, 1000000));
     expect((calls.single.$2, calls.single.$3), (8, 32));
 
@@ -84,7 +85,7 @@ void main() {
         capacity -= 100;
         return 2;
       },
-      // Use is no measure of what is free: never read.
+      // The used size does not measure free memory and is not read.
       heap: (which) => which == 1 ? capacity : throw StateError('$which'),
       compactGrowthBytes: 200,
       onCompact: (ms, before, after) => reported.add((before, after)),
@@ -96,7 +97,7 @@ void main() {
     expect(asked, [2]);
     expect(reported, [(1000, 900)]);
     expect(gc.compactions, 1);
-    // Counted from what the compaction left (900).
+    // The growth counts from the size after the compaction, 900.
     capacity = 1050;
     gc.switchHold();
     expect(asked, [2]);

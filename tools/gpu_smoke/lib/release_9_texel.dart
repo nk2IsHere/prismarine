@@ -1,9 +1,9 @@
 part of 'release_9.dart';
 
-// Texel buffers, storage texel buffers with atomics,
-// storage image formats, Metal's IEEE and invariance options, compute-written
-// vertex and indirect buffers, draw parameters, clip distances, textures and
-// samplers declared apart, a BC3 array.
+// Texel buffers, storage texel buffers with atomics, storage image formats,
+// the IEEE and invariance options of Metal, compute-written vertex and
+// indirect buffers, draw parameters, clip distances, textures and samplers
+// declared apart and a BC3 array.
 
 gpu.BufferView _u32(_Kit kit, List<int> values) {
   final b = kit.ctx.createDeviceBufferWithCopy(
@@ -177,10 +177,10 @@ Future<String?> _metalOptions(_Kit kit) async {
     p.bindUniform(f.getUniformSlot('Zero'), kit.floats([0, 0, 0, 0]));
   });
   final c = await centre(out);
-  // Red NaN, green Inf: what shaders may rely on. Blue: -0 + 0
-  // came out +0; a driver that drops the addition (Intel's UHD 620 on
-  // Vulkan) does what spirv-opt does in optimized bundles, so it is said,
-  // not failed.
+  // Red is NaN and green is Inf, which shaders may expect. Blue shows if -0 + 0
+  // came out +0. A driver that drops the addition, such as the UHD 620 of Intel
+  // on Vulkan, does what spirv-opt does in optimized bundles. The check reports
+  // it and does not fail.
   if (c[0] < 128 || c[1] < 128) return 'NaN or Inf folded away: got $c';
   if (c[2] < 128) {
     kit.log('SMOKE release 9 -0 + 0 stays -0 on this driver: got $c');
@@ -290,8 +290,8 @@ Future<String?> _separateSamplers(_Kit kit) async {
 }
 
 Future<String?> _bc3Array(_Kit kit) async {
-  // 1392 x 1288 (not a power of two), three layers, one mip, uploaded one
-  // layer at a time as Enlighten's and the lightmaps' are.
+  // 1392 x 1288, not a power of two, three layers and one mip, uploaded one
+  // layer at a time as lightmaps are.
   final ctx = kit.ctx;
   const w = 1392, h = 1288;
   final array = ctx.createTexture(
@@ -310,7 +310,7 @@ Future<String?> _bc3Array(_Kit kit) async {
     for (var b = 0; b < blocks; b++) {
       final o = b * 16;
       bytes[o] = 255; // alpha0
-      bytes[o + 1] = 255; // alpha1; indices 0
+      bytes[o + 1] = 255; // alpha1, then indices 0
       bytes[o + 8] = colours[layer] & 0xff;
       bytes[o + 9] = colours[layer] >> 8;
       bytes[o + 10] = colours[layer] & 0xff;

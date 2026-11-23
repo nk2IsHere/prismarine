@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:prismarine_assets/prismarine_assets.dart';
 import 'package:test/test.dart';
 
-/// The key-value data of a KTX2 file, with the NUL ends removed.
+/// Returns the key-value data of a KTX2 file without the NUL ends.
 Map<String, String> keyValues(Uint8List ktx) {
   final d = ByteData.sublistView(ktx);
   final at = d.getUint32(56, Endian.little);

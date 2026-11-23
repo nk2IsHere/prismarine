@@ -1,18 +1,18 @@
-// check_links: reports Markdown links that point at files which don't exist.
+// check_links reports Markdown links that point at missing files.
 //
 //   dart tools/lint/check_links.dart [<file or dir>...]
 //
-// With no arguments it checks the `links` list of tools/lint/config.yaml,
-// which is CLAUDE.md, docs/memory and docs/areas by default. For each
-// Markdown file it checks relative `[text](path)` and `[text](path#anchor)`
-// links (the anchor itself is not checked) and `[[name]]` wikilinks, which
-// must name a file in the same directory. Links with a scheme (https:, mailto:)
-// and pure anchors are skipped, as is anything inside backticks. A fenced
-// `dart` block whose line before it ends in a link to a `.dart` file must hold
-// the text of that file (src/example_copies.dart). A directory is read without
-// its `.dart_tool`, `build`, `target` and `third_party` directories.
+// With no arguments it checks the `links` list of tools/lint/config.yaml, which
+// is CLAUDE.md, docs/memory and docs/areas by default. In each Markdown file it
+// checks relative `[text](path)` and `[text](path#anchor)` links without the
+// anchor itself. It also checks `[[name]]` wikilinks, which must point at a
+// file in the same directory. Pure anchors and links with a scheme, such as
+// https or mailto, are skipped, as is anything inside backticks. A fenced
+// `dart` block whose previous line ends in a link to a `.dart` file must hold
+// the text of that file. A directory is read without its `.dart_tool`, `build`,
+// `target` and `third_party` directories.
 //
-// Exit codes: 0 clean, 1 dangling links found.
+// The exit code is 0 when clean and 1 for dangling links.
 import 'dart:io';
 
 import 'src/config.dart';

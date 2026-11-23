@@ -2,15 +2,14 @@ import 'dart:collection';
 
 import 'kept_map.dart';
 
-/// A hash set that keeps its storage when cleared, in insertion order like
-/// the default set ([KeptMap]'s keys).
+/// A hash set in insertion order that keeps its storage when it is cleared.
 final class KeptSet<E extends Object> extends SetBase<E> {
   KeptSet() : _map = KeptMap<E, bool>();
   KeptSet.identity() : _map = KeptMap<E, bool>.identity();
 
   final KeptMap<E, bool> _map;
 
-  /// Elements the set has room for before it grows (tests).
+  /// The number of elements the set holds before it grows.
   int get capacity => _map.capacity;
 
   @override
@@ -39,7 +38,7 @@ final class KeptSet<E extends Object> extends SetBase<E> {
     return _map.length != had;
   }
 
-  /// Empties the set, its storage kept.
+  /// Empties the set and keeps its storage.
   @override
   void clear() => _map.clear();
 

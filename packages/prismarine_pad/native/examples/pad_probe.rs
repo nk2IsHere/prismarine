@@ -1,7 +1,7 @@
-//! Prints what the player would read from the host's pads, through the same
-//! functions it calls: the connected pads, then every change of the pad in
-//! use (Auto) as the game's buttons, sticks and triggers. For checking a
-//! real pad: `cargo run --release --example pad_probe [seconds]`.
+//! Prints the readings of the pads of the host through the functions that an
+//! app calls. It prints the connected pads and then every change of the pad
+//! in use (Auto) as buttons, sticks and triggers. Run it to check a real pad
+//! with `cargo run --release --example pad_probe [seconds]`.
 
 use std::time::{Duration, Instant};
 
@@ -20,8 +20,8 @@ fn hex(b: &[u8; 16]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// A reading as a line; sticks and triggers rounded to tenths so rest jitter
-/// doesn't print.
+/// Returns a reading as one line. Sticks and triggers are rounded to tenths
+/// to hide the jitter of a pad at rest.
 fn line(r: &PadReading) -> String {
     if r.unavailable != 0 {
         return "SDL could not start".into();

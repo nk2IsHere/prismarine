@@ -1,52 +1,51 @@
-/// Frame pacing: the game steps on every [divisor]-th display frame, so a
-/// scene the machine can't draw at the display's rate plays at an even
-/// half, third or quarter of it rather than at an uneven rate in between
-/// (a display without variable refresh shows a picture for whole frames
-/// only: 70 pictures a second on 120 Hz is a mix of one- and two-frame
-/// pictures, the game's steps as uneven as their pictures).
+/// Frame pacing. The game steps on every [divisor]-th display frame. A scene
+/// that the machine cannot draw at the rate of the display then plays at an
+/// even half, third or quarter of it, not at an uneven rate in between. A
+/// display without variable refresh shows each picture for whole frames
+/// only.
 ///
-/// It decides once a [window] from what happened in it: down a rate when
-/// steps came late or too few of them got a picture, up a rate when every
-/// stage's time fits the faster one. A rate that didn't hold is tried again
-/// after a longer wait each time, so a scene on the edge settles on the
-/// slower rate. A replay of recorded frames steps one recorded frame each
+/// The pace decides once per [window] from the steps in it. It goes down a rate
+/// when steps came late or too few of them got a picture. It goes up a rate
+/// when the time of every stage fits the faster rate. A rate that did not hold
+/// is tried again after a longer wait each time. A scene on the edge settles on
+/// the slower rate. A replay of recorded frames steps one recorded frame each
 /// tick and leaves pacing off.
 class FramePace {
   FramePace({this.enabled = true, int? fixed, this.maxDivisor = 4})
     : _fixed = fixed,
       divisor = fixed ?? 1;
 
-  /// Off: every display frame steps.
+  /// False when every display frame steps.
   final bool enabled;
 
-  /// `--pace=<n>`: this divisor, never changed.
+  /// The fixed divisor of `--pace=<n>`, which does not change.
   final int? _fixed;
   final int maxDivisor;
 
-  /// The game steps every this many display frames.
+  /// The number of display frames per game step.
   int divisor;
 
-  /// The display's frame interval in microseconds.
+  /// The frame interval of the display in microseconds.
   int intervalUs = 16667;
 
-  /// The display's frame interval in seconds, unrounded (1 / refresh rate):
-  /// a step's game time ([stepSeconds]).
+  /// The frame interval of the display in seconds, 1 / refresh rate without
+  /// rounding. [stepSeconds] counts in it.
   double intervalSeconds = 1 / 60;
 
-  /// The last [begin]'s step in seconds: its display frames times
-  /// [intervalSeconds]. Whole microseconds fall short of a 60 Hz frame
-  /// (16,666 µs at 120 Hz, two frames), so a clock that sums them runs
-  /// 0.67 µs a step behind a fixed 1/60 s step and a key on a frame's time
-  /// comes a frame late.
+  /// The step of the last [begin] in seconds, its display frames times
+  /// [intervalSeconds]. A clock must sum this value and not whole
+  /// microseconds. Two 120 Hz frames are 16,666 µs and fall 0.67 µs short of
+  /// a 60 Hz frame, which makes a key on the time of a frame come a frame
+  /// late.
   double stepSeconds = 0;
 
-  /// A decision's span.
+  /// The span of one decision in microseconds.
   static const window = 1000000;
 
-  /// A gap this long is a load or a pause, not the rate's doing.
+  /// A gap this long is a load or a pause and not an effect of the rate.
   static const _hitchUs = 100000;
 
-  /// Rate changes so far (the run log).
+  /// The rate changes so far.
   int downs = 0, ups = 0;
 
   int _windowStartUs = -1;
@@ -54,24 +53,25 @@ class FramePace {
   int _simOver = 0, _uiOver = 0, _buildOver = 0, _gpuOver = 0, _chainOver = 0;
   int _badWindows = 0, _fitWindows = 0;
 
-  /// Fitting windows a step up waits for; doubles when the faster rate
-  /// didn't hold.
+  /// The number of fitting windows before a step up. It doubles when the
+  /// faster rate did not hold.
   int _upHold = _firstHold;
   int _upAtUs = -1;
   static const _firstHold = 2, _maxHold = 32;
 
-  /// A faster rate that held this long is no failed try.
+  /// A faster rate that held this long does not count as a failed try.
   static const _heldUs = 30000000;
 
-  /// The display frame at [nowUs] (a tick's start): the game time it steps
-  /// in microseconds, or -1 when it steps nothing at this pace.
+  /// Begins the display frame of the tick that starts at [nowUs]. Returns
+  /// the game time that it steps in microseconds, or -1 when it steps nothing
+  /// at this pace.
   ///
-  /// A tick starts some milliseconds after its display frame does, later
-  /// when the UI isolate was busy, so ticks' own distances are uneven where
-  /// the pictures' are not. Steps are counted in display frames instead: a
-  /// grid of frame starts follows the earliest ticks, a tick belongs to the
-  /// frame it started in, and a step is as long as the frames since the
-  /// last one. The steps add up to the clock's time.
+  /// A tick starts some milliseconds after its display frame and later when the
+  /// UI isolate was busy. The distances of ticks are therefore uneven where
+  /// those of the pictures are not. Steps are counted in display frames
+  /// instead. A grid of frame starts follows the earliest ticks. A tick belongs
+  /// to the frame of its start. A step is as long as the frames since the last
+  /// step. The steps add up to the time of the clock.
   int begin(int nowUs) {
     final grid = _gridUs;
     if (grid < 0) {
@@ -86,9 +86,10 @@ class FramePace {
       _steps++;
       if (frames > divisor) _late++;
     }
-    // The frame's start: this tick's, when it came earlier than the grid
-    // had it; else the grid moves a little toward it, so a display that
-    // runs slower than [intervalUs] says does not leave the grid behind.
+    // The start of the frame is the start of this tick when it came earlier
+    // than the grid. Otherwise the grid moves a little toward the tick. A
+    // display that runs slower than [intervalUs] then does not leave the grid
+    // behind.
     final at = grid + stepUs, ahead = nowUs - at;
     _gridUs = ahead < 0 ? nowUs : at + (ahead < _leakUs ? ahead : _leakUs);
     return stepUs;
@@ -97,11 +98,12 @@ class FramePace {
   int _gridUs = -1;
   static const _leakUs = 20;
 
-  /// A step's end: whether it was [presented] (a held frame shows no new
-  /// picture), the pictures [shown] so far, and the step's stage times in
-  /// ms (the sim's tick, the UI isolate's own work with the record, the
-  /// plan's build, the frame's own time on the GPU). Decides at a window's
-  /// end; true when the divisor changed.
+  /// Ends a step. [presented] is false for a held frame, which shows no new
+  /// picture. [shown] counts the pictures so far. The stage times of the step
+  /// in ms are the tick of the simulation, the work of the UI isolate with
+  /// the record, the build of the plan and the time of the frame on the GPU.
+  /// Decides at the end of a window and returns true when the divisor
+  /// changed.
   bool end(
     int nowUs, {
     required bool presented,
@@ -114,12 +116,12 @@ class FramePace {
     if (!enabled || _fixed != null) return false;
     if (_windowStartUs < 0) _open(nowUs, shown);
     if (presented) _presented++;
-    // What the next faster rate allows: the stages a tick waits for must
-    // fit its interval; the build and the GPU only bound the pictures, and
-    // a rate holds while about four in five steps get theirs. A step's
-    // plan is built after its sim tick and recorded on the UI isolate
-    // while the next tick waits for the sim, so that tick is late unless
-    // the three together fit two intervals.
+    // The limits of the next faster rate. The stages that a tick waits for
+    // must fit its interval. The build and the GPU only bound the pictures.
+    // A rate holds while about four in five steps get their picture. The plan
+    // of a step is built after its simulation tick and recorded on the UI
+    // isolate while the next tick waits for the simulation. That tick is late
+    // unless the three stages together fit two intervals.
     final faster = (divisor > 1 ? divisor - 1 : 1) * intervalUs / 1000;
     if (simMs > 0.95 * faster) _simOver++;
     if (uiMs > 0.95 * faster) _uiOver++;
@@ -140,7 +142,7 @@ class FramePace {
   }
 
   bool _decide(int nowUs, int pictures) {
-    // A window of loads, holds or a pause says nothing about the rate.
+    // A window of loads, holds or a pause does not measure the rate.
     if (_steps < 20) return false;
     if (_upAtUs >= 0 && nowUs - _upAtUs > _heldUs) {
       _upAtUs = -1;
@@ -187,7 +189,7 @@ class FramePace {
     return true;
   }
 
-  /// The run's summary line.
+  /// The summary line of the run.
   String get summary => !enabled
       ? 'frame pacing: off'
       : 'frame pacing: every ${divisor == 1 ? '' : '$divisor. '}display '

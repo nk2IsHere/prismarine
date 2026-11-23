@@ -1,5 +1,6 @@
 // code_shape checks file size, history in comments and the rule sets of the
-// repository and ratchets the hits against its baseline. Usage --help.
+// repository and ratchets the hits against its baseline. Run it with --help
+// for the usage.
 import 'dart:convert';
 import 'dart:io';
 
@@ -106,7 +107,8 @@ void main(List<String> args) {
     files = files.where((f) => paths.any((p) => f.startsWith(p))).toList();
   }
   final reports = <FileReport>[];
-  // Hash-shaped words in comments, resolved against git in one call below.
+  // The hash-shaped words in comments, resolved against git in one call
+  // below.
   final hashes = <(FileReport, int, String, String)>[];
   for (final path in files) {
     final text = File('$root/$path').readAsStringSync();
@@ -122,7 +124,7 @@ void main(List<String> args) {
         r.hits.addAll(s.codeHits(path, toks));
       }
     }
-    // A test file's main only registers its tests.
+    // The main of a test file only registers its tests.
     final isTest =
         path.contains('/test/') || path.contains('/integration_test/');
     r.functions.addAll(
@@ -240,11 +242,12 @@ void main(List<String> args) {
   );
 }
 
-/// The words of [candidates] that name commits in the repository.
+/// Returns the words of [candidates] that are commits in the repository at
+/// [root].
 Set<String> knownCommits(String root, Set<String> candidates) {
   if (candidates.isEmpty) return {};
   final list = candidates.toList();
-  // Process.runSync takes no stdin, so the list goes through a temp file.
+  // Process.runSync takes no stdin. The list goes through a temp file.
   final tmp = File(
     '${Directory.systemTemp.createTempSync('code_shape').path}/in',
   )..writeAsStringSync(list.map((h) => '$h^{commit}').join('\n'));
@@ -263,7 +266,8 @@ Set<String> knownCommits(String root, Set<String> candidates) {
   return out;
 }
 
-/// Lines as `wc -l` counts them, plus an unterminated last line.
+/// Returns the lines of [text] as `wc -l` counts them, plus an unterminated
+/// last line.
 int lineCount(String text) {
   if (text.isEmpty) return 0;
   final n = '\n'.allMatches(text).length;
@@ -273,10 +277,10 @@ int lineCount(String text) {
 class Counts {
   Counts(this.size, this.packages);
 
-  /// Files over the hard limit and their line counts.
+  /// The files over the hard limit and their line counts.
   final Map<String, int> size;
 
-  /// Package → check → hits.
+  /// The hits by package and check.
   final Map<String, Map<String, int>> packages;
 
   Map<String, int> get totals {

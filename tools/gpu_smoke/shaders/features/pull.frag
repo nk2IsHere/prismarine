@@ -1,6 +1,6 @@
 #version 460
-// A pulled pixel stage: the same storage buffer as the vertex stage (bound
-// in both), a second one of its own, and a uniform block beside them.
+// A pulled pixel stage with the same storage buffer as the vertex stage,
+// bound in both, a second one of its own and a uniform block beside them.
 layout(std430) readonly buffer RawPullRows {
   vec4 rows[];
 } pullRows;

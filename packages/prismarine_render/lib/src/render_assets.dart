@@ -28,21 +28,21 @@ class RunnerShaders {
 /// A load slower than this many ms goes to [RenderAssets.onSlow].
 const slowLoadMs = 4.0;
 
-/// The files that a frame runner uses: shaders by id, textures by stem and
+/// The files that a frame runner uses, with shaders by id, textures by stem and
 /// mesh streams by stem, loaded on first use and kept until a release. The
 /// runner asks for each one by the name that a frame plan gives.
 abstract interface class RenderAssets {
   /// Returns true when shader [id] exists.
   bool hasShader(String id);
 
-  /// Shader [id]'s interface: its blocks, textures, samplers and inputs.
-  /// Null when there is no such shader.
+  /// Returns the interface of the shader [id] with its blocks, textures,
+  /// samplers and inputs. Null when there is no such shader.
   ShaderRecord? shaderRecord(String id);
 
   /// Loads the shader libraries that hold [ids].
   Future<void> loadShaders(Iterable<String> ids);
 
-  /// Shader [id], its library loaded by [loadShaders].
+  /// Returns the shader [id], whose library [loadShaders] loaded.
   gpu.Shader shader(String id);
 
   /// Loads the textures among [stems] that [texture] cannot read on demand.
@@ -51,11 +51,11 @@ abstract interface class RenderAssets {
   /// Returns true when texture [stem] exists.
   bool hasTexture(String stem);
 
-  /// Texture [stem] with every mip and layer, through an sRGB view when
-  /// [srgb] is set.
+  /// Returns the texture [stem] with every mip and layer, through an sRGB
+  /// view when [srgb] is set.
   gpu.Texture texture(String stem, {bool srgb = false});
 
-  /// Mesh [stem]'s vertex and index buffers.
+  /// Returns the vertex and index buffers of the mesh [stem].
   RenderMesh mesh(String stem);
 
   /// The vertex inputs that the compiled stage of each shader lacks, by
@@ -66,21 +66,21 @@ abstract interface class RenderAssets {
   /// when it was known.
   bool dropInput(String shaderId, String name);
 
-  /// The assets of directory [dir], with the same shaders.
+  /// Returns the assets of the directory [dir], with the same shaders.
   RenderAssets atDirectory(String dir);
 
-  /// CPU time spent on loads so far, in ms.
+  /// The CPU time spent on loads so far, in ms.
   double get loadMs;
 
-  /// The current phase of the loads: `record`, `prepare` or `warm`.
+  /// The current phase of the loads, `record`, `prepare` or `warm`.
   String get phase;
   set phase(String p);
 
   /// Every load and pipeline made, counted by kind and phase.
   LoadTally get tally;
 
-  /// Receives each load slower than a few ms: what, its ms, its bytes and
-  /// the [phase].
+  /// Receives each load slower than [slowLoadMs] with its name, its ms, its
+  /// bytes and the [phase].
   void Function(String what, double ms, int bytes, String phase)? get onSlow;
 
   /// The scene of the draws that are made ready now. Its loads can be
@@ -98,12 +98,12 @@ abstract interface class RenderAssets {
   /// Receives the owners whenever they change.
   set onOwners(void Function(int owners)? f);
 
-  /// A scene closed. Returns the epoch to give [release].
+  /// Marks the close of a scene. Returns the epoch for [release].
   int closed();
 
-  /// Lets go of what nothing asked for since the close that returned
-  /// [since], keeping what a scene in [keepOwners] asked for and the loads
-  /// of the [held] scene. Returns how many were let go.
+  /// Lets go of the loads that nothing asked for since the close that
+  /// returned [since]. Keeps the loads that a scene in [keepOwners] asked for
+  /// and the loads of the [held] scene. Returns the number let go.
   int release(int since, {String? held, int keepOwners = 0});
 
   /// A line on what is held, for the memory census.
@@ -114,9 +114,9 @@ abstract interface class RenderAssets {
 abstract interface class RenderMesh {
   List<gpu.DeviceBuffer> get indexBuffers;
 
-  /// The layout that feeds the inputs of shader [shaderId] with interface
-  /// [shader] from this mesh, and the buffer of each layout slot. Inputs
-  /// whose register is in [skip] come from other buffers.
+  /// Returns the layout that feeds the inputs of the shader [shaderId] with the
+  /// interface [shader] from this mesh with the buffer of each layout slot.
+  /// Inputs whose register is in [skip] come from other buffers.
   (gpu.VertexLayout, List<gpu.DeviceBuffer>) layoutFor(
     String shaderId,
     ShaderRecord shader, {

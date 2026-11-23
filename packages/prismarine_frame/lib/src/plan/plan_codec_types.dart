@@ -1,12 +1,12 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
-/// One frame's plan (and draws to make ready) as it crosses to another
-/// isolate: integer, double, string and byte tapes ([PlanWriter] writes
-/// them, [PlanReader] reads them in the same order). Plain typed data and
-/// strings, so a SendPort copies it as a few blocks; the integer tape, the
-/// largest, crosses as transferable bytes outside the Dart heap (one copy,
-/// where a list and its send copy were two on the heap a frame).
+/// The plan of one frame and the draws to make ready as they cross to
+/// another isolate. The message holds integer, double, string and byte
+/// tapes. [PlanWriter] writes them and [PlanReader] reads them in the same
+/// order. A SendPort copies the plain typed data and strings as a few
+/// blocks. The integer tape, the largest, crosses as transferable bytes
+/// outside the Dart heap.
 final class PlanMessage {
   PlanMessage(
     this._ints,
@@ -19,30 +19,32 @@ final class PlanMessage {
   ]);
   final TransferableTypedData _ints;
 
-  /// The writer's count of messages at this one (PlanWriter.release).
+  /// The count of messages of the writer at this one, for
+  /// PlanWriter.release.
   final int index;
   final int intCount;
 
-  /// The integer tape, taken over on first read (on the reading isolate;
-  /// a message is read once).
+  /// The integer tape, taken over on the first read by the reading isolate.
+  /// A message is read once.
   late final Int64List ints = _ints.materialize().asInt64List(0, intCount);
   final Float64List doubles;
 
-  /// The strings new to the reader's string table, in id order.
+  /// The strings new to the string table of the reader, in id order.
   final List<String> strings;
 
-  /// The byte blocks new to the reader. They stay on the Dart heap: kept
-  /// draws bind a block for many frames, and as transferable (external)
-  /// bytes every block promoted waited for an old-space collection, which
-  /// grew external memory to 240 MB and a 128 ms finalize (perf).
+  /// The byte blocks new to the reader. They stay on the Dart heap. Kept
+  /// draws bind a block for many frames. A block as transferable bytes would
+  /// wait for an old-space collection once promoted.
   final List<Uint8List> bytes;
 
-  /// Ids freed after this message, in order (both sides reuse them alike).
+  /// The ids freed after this message, in order. Both sides reuse them
+  /// alike.
   final Int32List dropped;
 }
 
-// What the integer tape holds before each value: no value, an object sent
-// before (its id follows), or an object of one of the shared kinds.
+// The tags that the integer tape holds before each value. A tag marks no
+// value, an object sent before with its id after the tag or an object of one
+// of the shared kinds.
 const tagNull = 0, tagRef = 1;
 const tagBytes = 2, tagSampler = 3, tagBlend = 4, tagStencil = 5;
 const tagState = 6, tagMesh = 7, tagInline = 8, tagScreen = 9;
@@ -52,7 +54,7 @@ const tagInlineBuffer = 16, tagImage = 17, tagTargetSpec = 18;
 const tagRole = 19, tagAttachment = 20, tagRegisters = 21;
 const tagRender = 22, tagDispatch = 23;
 
-/// A draw by value, and a draw by value that both sides keep by id.
+/// A draw by value and a draw by value that both sides keep by id.
 const tagDraw = 24, tagDrawKept = 25;
 
 /// A dispatch by value that both sides keep by id.
@@ -61,57 +63,58 @@ const tagDispatchKept = 26;
 /// A render pass by value that both sides keep by id.
 const tagRenderKept = 27;
 
-/// A block in the writer's [PlanBlockStore]: its address and length.
+/// A block in the [PlanBlockStore] of the writer, with its address and
+/// length.
 const tagNative = 28;
 
-/// A kept render pass with some of its draws replaced: its id, then each
-/// changed draw's place and the draw.
+/// A kept render pass with some of its draws replaced. Its id follows, then
+/// the place of each changed draw and the draw.
 const tagRenderEdit = 29;
 
-/// A kept render pass with its draws sent again whole (the same attachments,
-/// another count, or too many changed for an edit): its id, the count, then
-/// each draw, most by id.
+/// A kept render pass with its draws sent again whole, for the same
+/// attachments with another count or too many changes for an edit. Its id
+/// follows, then the count and each draw, most of them by id.
 const tagRenderReshape = 30;
 
-/// A kept render pass with rows, its draws and rows sent again: its id, the
-/// draw count and each draw (most by id), then its rows as a new pass's
-/// (their changes since last sent).
+/// A kept render pass with rows, its draws and rows sent again. Its id
+/// follows, then the draw count and each draw, most of them by id. The rows
+/// follow as for a new pass, as their changes since they were last sent.
 const tagRenderRows = 31;
 
-/// Memory outside the Dart heap that a writer puts frame roles' bytes in,
-/// read in place by the reader on another isolate of the process: a role's
-/// bytes are new most frames (palettes, the rows of moved objects, the camera),
-/// and as message bytes each was copied by the send (perf: the build
-/// isolate's largest allocation). Only plans name a role's block, so it
-/// stays until both tables dropped it and the reader's side ran every plan
-/// that could name it ([release]).
+/// Memory outside the Dart heap that holds the bytes of frame roles of a
+/// writer. The reader on another isolate of the process reads it in place.
+/// Only plans refer to the block of a role. The block stays until both
+/// tables dropped it and the reader has run every plan that could refer to
+/// it ([release]).
 abstract interface class PlanBlockStore {
-  /// A copy of [b]'s bytes: its address.
+  /// Copies the bytes of [b] and returns the address of the copy.
   int put(Uint8List b);
 
-  /// The block at [address] is no longer named from message [message] on.
+  /// Drops the block at [address]. No message from [message] onward uses it.
   void drop(int address, int message);
 
-  /// No plan before message [message] is read any more: blocks dropped by
-  /// then are freed.
+  /// Frees the blocks dropped before [message], since no plan before
+  /// [message] is read any more.
   void release(int message);
 }
 
-/// How many messages an object may go unused before both sides drop it.
+/// The number of messages that an object may go unused before both sides
+/// drop it.
 const planKeep = 30;
 
-/// The same for a byte block, swept every message: a block no draw names
-/// any more (the object block of a moving object in a frame before) is dropped
-/// before a collection can promote its copies on both sides (perf: they
-/// were most of what each young collection promoted).
+/// The number of messages for a byte block, swept every message. A block
+/// that no draw binds any more, such as the object block of a moving object
+/// in an earlier frame, is dropped before a collection can promote its copies
+/// on both sides.
 const planKeepBlocks = 4;
 
-/// How many strings both sides' string tables hold before the writer
-/// starts them again (a message says so first).
+/// The number of strings that the string tables of both sides hold before
+/// the writer starts them again. A message marks the restart first.
 const planMaxStrings = 1 << 16;
 
-/// The ids both sides give objects: a dropped id is reused, last dropped
-/// first, so the reader's table follows the writer's without being told.
+/// The ids that both sides give objects. A dropped id is reused, the last
+/// dropped first. The table of the reader then follows the table of the
+/// writer without a message.
 final class PlanIds {
   final _free = <int>[];
   int _next = 0;

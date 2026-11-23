@@ -1,6 +1,6 @@
-// The frame history: the last few seconds of shown frames, each the 3D image with the UI
-// scenes drawn over it, downscaled on the GPU into a ring the review
-// scrubs. Nothing is read back while playing.
+// The frame history keeps the last few seconds of shown frames in a ring for
+// the review. Each frame is the 3D image with the UI scenes drawn over it,
+// downscaled on the GPU. Nothing is read back while the game runs.
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -17,9 +17,9 @@ abstract interface class FrameCopy {
 }
 
 class FrameHistory {
-  /// [seconds] of frames at up to 120 a second (a new frame per display
-  /// refresh, 120 Hz on ProMotion screens); textures are made as the ring
-  /// fills.
+  /// Keeps [seconds] of frames at up to 120 frames a second, one frame per
+  /// display refresh, in frames of [width] by [height]. [copy] draws each
+  /// frame into the ring. The textures are made as the ring fills.
   FrameHistory({
     double seconds = 3,
     this.width = 640,
@@ -29,10 +29,10 @@ class FrameHistory {
 
   final FrameCopy copy;
 
-  /// How many frames the ring holds (0: off).
+  /// The number of frames that the ring holds, 0 when it is off.
   final int capacity;
 
-  /// The ring's frame size (16:9 by default).
+  /// The frame size of the ring, 16:9 by default.
   final int width, height;
 
   bool get enabled => capacity > 0;
@@ -41,26 +41,27 @@ class FrameHistory {
   late final List<gpu.Texture?> _textures = List.filled(capacity, null);
   late final List<HistoryMeta?> _meta = List.filled(capacity, null);
 
-  /// While true (the review is open) no frame is added.
+  /// No frame is added while this is true, such as while the review is open.
   bool frozen = false;
 
-  /// The slot the current paint writes into (its UI layers blend over it),
-  /// or null between paints and for a frame that isn't kept.
+  /// The slot of the current paint, which its UI layers blend over. Null
+  /// between paints and for a frame that is not kept.
   int? _open;
 
-  /// How many frames the ring holds now.
+  /// The number of frames in the ring now.
   int get length => enabled ? _ring.length : 0;
 
-  /// The frame [back] frames before the newest (0 = newest).
+  /// Returns the frame [back] frames before the newest, where 0 is the
+  /// newest.
   HistoryMeta metaAt(int back) => _meta[_ring.slotAt(back)]!;
 
-  /// The frame [back] frames before the newest as an image (a new handle:
-  /// the caller disposes it).
+  /// Returns the frame [back] frames before the newest as an image. The
+  /// image is a new handle that the caller disposes.
   ui.Image imageAt(int back) => _textures[_ring.slotAt(back)]!.asImage();
 
-  /// Called once a kept frame is whole (its UI layers blended): when the
-  /// next paint starts. [seq] counts the kept frames, so two consecutive
-  /// [seq]s were shown one after the other (the glitch catcher's input).
+  /// Receives each kept frame once it is whole with its UI layers blended,
+  /// when the next paint starts. [seq] counts the kept frames. Two frames
+  /// with consecutive [seq] values were shown one after the other.
   void Function(int seq, gpu.Texture frame, HistoryMeta meta)? onFrameDone;
   int _seq = 0;
 
@@ -72,8 +73,8 @@ class FrameHistory {
     if (_open case final open? when onFrameDone != null) {
       onFrameDone!(_seq++, _textures[open]!, _meta[open]!);
     }
-    // While the review is open the shown frames aren't kept: the next kept
-    // one doesn't follow the last.
+    // While the review is open the shown frames are not kept. The next kept
+    // frame does not follow the last one.
     if (frozen) _seq++;
     _open = null;
     return enabled && !frozen && meta != null;
@@ -106,7 +107,7 @@ class FrameHistory {
     _blit(src, _textures[slot]!, blend: true);
   }
 
-  /// Frees the ring's textures.
+  /// Frees the textures of the ring.
   void clear() {
     _ring.clear();
     _textures.fillRange(0, capacity, null);
@@ -133,8 +134,8 @@ class FrameHistory {
     heightAddressMode: gpu.SamplerAddressMode.clampToEdge,
   );
 
-  /// [src] scaled into [dst]: replacing it, or (UI layers, premultiplied)
-  /// blended over it.
+  /// Draws [src] scaled into [dst]. With [blend] it is blended over [dst] as
+  /// a premultiplied UI layer, else it replaces [dst].
   void _blit(gpu.Texture src, gpu.Texture dst, {required bool blend}) {
     final cb = gpu.gpuContext.createCommandBuffer();
     final pass = cb.createRenderPass(
