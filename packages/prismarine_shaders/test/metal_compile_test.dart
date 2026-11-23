@@ -12,6 +12,26 @@ const _options = {
 };
 
 void main() {
+  test('a viewport index output becomes the viewport of Metal', () {
+    const msl = '''
+struct main0_out {
+    float4 v_color [[user(locn0)]];
+    uint viewport_index [[user(locn2)]];
+    float4 gl_Position [[position]];
+};
+''';
+    final out = metalViewportIndex(Uint8List.fromList(utf8.encode(msl)));
+    expect(
+      utf8.decode(out!),
+      contains('uint viewport_index [[viewport_array_index]];'),
+    );
+    expect(utf8.decode(out), contains('v_color [[user(locn0)]]'));
+    expect(
+      metalViewportIndex(Uint8List.fromList(utf8.encode('float4 x;'))),
+      isNull,
+    );
+  });
+
   test('only blocks with a buffer binding count', () {
     const msl = '''
 struct BufferCamera { uint4 data[2]; };

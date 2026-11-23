@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -125,3 +126,23 @@ Map<String, Uint8List> metalSources(Uint8List bundle) {
   }
   return out;
 }
+
+/// Returns [msl] with each vertex output whose name ends in
+/// `viewport_index` bound to the viewport index of Metal, or null when the
+/// source has none. A draw then goes to that viewport of the viewport array
+/// of the pass. The GLSL declares the output as `flat out uint
+/// viewport_index`, which impellerc writes as a user output.
+Uint8List? metalViewportIndex(Uint8List msl) {
+  final text = utf8.decode(msl, allowMalformed: true);
+  if (!_userViewportIndex.hasMatch(text)) return null;
+  return utf8.encode(
+    text.replaceAllMapped(
+      _userViewportIndex,
+      (m) => 'uint ${m[1]} [[viewport_array_index]]',
+    ),
+  );
+}
+
+final _userViewportIndex = RegExp(
+  r'\b(?:uint|int)\s+(\w*viewport_index)\s*\[\[user\([^\]]*\)\]\]',
+);
