@@ -10,9 +10,9 @@ import 'package:test/test.dart';
 void main() {
   String show(Object? v) => switch (v) {
     null => 'nil',
-    bool b => '$b',
-    double d => const LuaCRuntime().numberToString(d),
-    String s => s,
+    final bool b => '$b',
+    final double d => const LuaCRuntime().numberToString(d),
+    final String s => s,
     _ => '?',
   };
 
@@ -87,62 +87,65 @@ void main() {
     expect(out, golden('tbl_len'));
   });
 
-  test('next order matches the reference build with the fixed seed (tbl_next.lua)', () {
-    final out = <String>[];
-    var t = LuaTable();
-    for (final k in ['alpha', 'beta', 'gamma', 'delta', 'x', 'y', 'z']) {
-      t.set(k, 1.0);
-    }
-    out.addAll(keys(t).map(show));
-    out.add('--');
+  test(
+    'next order matches the reference build with the fixed seed (tbl_next.lua)',
+    () {
+      final out = <String>[];
+      var t = LuaTable();
+      for (final k in ['alpha', 'beta', 'gamma', 'delta', 'x', 'y', 'z']) {
+        t.set(k, 1.0);
+      }
+      out.addAll(keys(t).map(show));
+      out.add('--');
 
-    t = LuaTable();
-    for (final k in <Object>[
-      3.5,
-      -1.0,
-      100.0,
-      1099511627776.0,
-      1.0,
-      0.0,
-      true,
-      false,
-    ]) {
-      t.set(k, 1.0);
-    }
-    out.addAll(keys(t).map(show));
-    out.add('--');
+      t = LuaTable();
+      for (final k in <Object>[
+        3.5,
+        -1.0,
+        100.0,
+        1099511627776.0,
+        1.0,
+        0.0,
+        true,
+        false,
+      ]) {
+        t.set(k, 1.0);
+      }
+      out.addAll(keys(t).map(show));
+      out.add('--');
 
-    t = LuaTable();
-    for (var i = 1; i <= 10; i++) {
-      t.set(i.toDouble(), i.toDouble());
-    }
-    for (var i = 1; i <= 10; i += 2) {
-      t.set(i.toDouble(), null);
-    }
-    t
-      ..set('a', 1.0)
-      ..set('b', 2.0)
-      ..set(20.0, 20.0);
-    for (final k in keys(t)) {
-      out.add('${show(k)}\t${show(t.get(k))}');
-    }
-    out.add('--');
+      t = LuaTable();
+      for (var i = 1; i <= 10; i++) {
+        t.set(i.toDouble(), i.toDouble());
+      }
+      for (var i = 1; i <= 10; i += 2) {
+        t.set(i.toDouble(), null);
+      }
+      t
+        ..set('a', 1.0)
+        ..set('b', 2.0)
+        ..set(20.0, 20.0);
+      for (final k in keys(t)) {
+        out.add('${show(k)}\t${show(t.get(k))}');
+      }
+      out.add('--');
 
-    t = LuaTable();
-    for (var i = 1; i <= 40; i++) {
-      t.set('k$i', i.toDouble());
-    }
-    for (var i = 1; i <= 40; i += 3) {
-      t.set('k$i', null);
-    }
-    out.addAll(keys(t).map(show));
-    out.add('--');
+      t = LuaTable();
+      for (var i = 1; i <= 40; i++) {
+        t.set('k$i', i.toDouble());
+      }
+      for (var i = 1; i <= 40; i += 3) {
+        t.set('k$i', null);
+      }
+      out.addAll(keys(t).map(show));
+      out.add('--');
 
-    t = LuaTable()..set(f32(16777217), 'a');
-    out.add(show(t.get(16777216.0)));
+      t = LuaTable()..set(f32(16777217), 'a');
+      out.add(show(t.get(16777216.0)));
 
-    expect(out, golden('tbl_next'));
-  });
+      expect(out, golden('tbl_next'));
+    },
+  );
 
   test('the fixed-seed order recorded with the reference build', () {
     final t = LuaTable();

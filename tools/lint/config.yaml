@@ -1,6 +1,10 @@
 # The settings of the lints for this repository, read by src/config.dart.
 # Paths are relative to the repository root.
 code_roots: [packages/, apps/, tools/]
+vendored_files:
+  # The luaconf.h of stock Lua 5.2.3 in the double and the float32 build.
+  - packages/prismarine_lua_native/native/f64/luaconf.h
+  - packages/prismarine_lua_native/native/f32/luaconf.h
 loose_dirs: [tools/lint]
 comment_check_exempt: [tools/lint/]
 baselines:

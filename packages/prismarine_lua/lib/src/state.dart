@@ -8,12 +8,12 @@ import 'dart:typed_data';
 
 import 'codec.dart';
 import 'compiler.dart';
+import 'config.dart';
 import 'debug.dart';
 import 'host.dart';
 import 'libs.dart';
 import 'number.dart';
 import 'opcodes.dart';
-import 'config.dart';
 import 'proto.dart';
 import 'rng.dart';
 import 'runtime.dart';
@@ -58,8 +58,8 @@ class LuaError implements Exception {
   String? traceback;
 
   String get message => switch (value) {
-    String s => s,
-    double d => const LuaCRuntime().numberToString(d),
+    final String s => s,
+    final double d => const LuaCRuntime().numberToString(d),
     null => 'nil',
     _ => '(error object is a ${luaTypeName(value)} value)',
   };
@@ -177,8 +177,8 @@ class LuaVm {
   bool captureTracebacks = true;
 
   LuaTable? metatableOf(Object? v) => switch (v) {
-    LuaTable t => t.metatable,
-    LuaUserdata u => u.metatable,
+    final LuaTable t => t.metatable,
+    final LuaUserdata u => u.metatable,
     _ => typeMetatables[luaTypeName(v)],
   };
 
@@ -917,7 +917,7 @@ class LuaThread extends LuaThreadBase {
       final v = arg(idx);
       push(switch (v) {
         null => 'nil',
-        bool b => b ? 'true' : 'false',
+        final bool b => b ? 'true' : 'false',
         double() || String() => v,
         _ => '${luaTypeName(v)}: ${pointerText(v)}',
       });

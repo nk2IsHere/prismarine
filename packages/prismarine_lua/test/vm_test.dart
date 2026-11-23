@@ -1,8 +1,9 @@
-import "dart:typed_data";
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:prismarine_lua/prismarine_lua.dart';
 import 'package:test/test.dart';
+
 import 'support/float_config.dart';
 
 void main() {

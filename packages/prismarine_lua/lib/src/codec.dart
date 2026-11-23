@@ -245,13 +245,13 @@ class _Dumper {
       switch (k) {
         case null:
           byte(0);
-        case bool b:
+        case final bool b:
           byte(1);
           byte(b ? 1 : 0);
-        case double d:
+        case final double d:
           byte(3);
           number(d);
-        case String s:
+        case final String s:
           byte(4);
           string(s);
         default:
