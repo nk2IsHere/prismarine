@@ -1,29 +1,31 @@
-// The calling thread's role through the system's own calls (thread_roles.dart
-// has the mapping): the frame's work up with the UI's threads, background
-// work below them (perf, thread ownership). Each isolate looks the calls up
-// once; the calls are leaf calls and allocate nothing.
+// The role of the calling thread through the calls of the system. The
+// mapping is in thread_roles.dart. Frame work runs with the threads of the
+// UI and background work below them. Each isolate looks the calls up once.
+// The calls are leaf calls and allocate nothing.
 import 'dart:ffi';
 import 'dart:io' show Platform;
 
 import 'thread_linux.dart';
 import 'thread_roles.dart';
 
-/// Gives the calling thread the frame's role (the sim's tick, the plan's
-/// build: work the UI's frame waits on). Cheap when it already has it.
+/// Gives the calling thread the frame role, for work that the frame of the
+/// UI waits on. Cheap when the thread already has the role.
 void raiseThreadQos() => _roles?.raise();
 
-/// Gives the calling thread the background role; returns what to restore
-/// (null: nothing changed). Not in a niced process ([processNiced]).
+/// Gives the calling thread the background role. Returns the value to
+/// restore, or null when nothing changed. A niced process ([processNiced])
+/// keeps its roles.
 int? lowerThreadQos() => _roles?.lower();
 
 /// Restores [prev] from [lowerThreadQos].
 void restoreThreadQos(int? prev) => _roles?.restore(prev);
 
-/// Whether the calling thread has the frame's role (null: unknown here).
+/// Returns true when the calling thread has the frame role, or null when it
+/// is unknown on this system.
 bool? threadHasFrameRole() => _roles?.inFrameRole();
 
-/// Whether this process runs below normal priority: `nice` above 0 (macOS,
-/// Linux) or a priority class below normal (Windows); see
+/// True when this process runs below normal priority, with a `nice` above 0
+/// on macOS and Linux or a priority class below normal on Windows. See
 /// [ThreadRoles.niced].
 bool get processNiced => _roles?.niced ?? false;
 
@@ -41,8 +43,8 @@ final ThreadRoles? _roles = () {
 typedef _Get = int Function();
 typedef _Set = void Function(int);
 
-// macOS and Windows: a level and (Windows) EcoQoS; the Linux calls are
-// never made there.
+// The calls of macOS and Windows set a level and, on Windows, EcoQoS. The
+// Linux calls are not made there.
 class _Calls implements ThreadCalls {
   _Calls(this._level, this._setLevel, {this.eco});
 
@@ -93,10 +95,10 @@ ThreadRoles _macRoles() {
   );
 }
 
-// THREAD_POWER_THROTTLING_STATE {Version, ControlMask, StateMask} three
-// times (ULONGs, 12 bytes each, winnt.h; version 1, the execution speed
-// bit 1): left to the system, EcoQoS, opted out. One block per isolate,
-// freed with it (one-shot job isolates come and go).
+// Three THREAD_POWER_THROTTLING_STATE structs {Version, ControlMask,
+// StateMask} of ULONGs, 12 bytes each, from winnt.h with version 1 and the
+// execution speed bit 1. They are left to the system, EcoQoS and opted out.
+// Each isolate has one block, freed with the isolate.
 final Pointer<Uint8> _structs = () {
   final p = nativeBlock(36);
   final u32 = p.cast<Uint32>();
@@ -109,7 +111,7 @@ final Pointer<Uint8> _structs = () {
 
 ThreadRoles _windowsRoles() {
   final k = DynamicLibrary.open('kernel32.dll');
-  // Pseudo-handles: always "the calling thread" / "this process".
+  // Pseudo-handles for the calling thread and this process.
   final thread = k.lookupFunction<IntPtr Function(), int Function()>(
     'GetCurrentThread',
   )();
@@ -126,8 +128,8 @@ ThreadRoles _windowsRoles() {
         'SetThreadPriority',
         isLeaf: true,
       );
-  // Windows 8 and later; the power throttling class since Windows 10 1709
-  // (refused quietly before).
+  // Windows 8 and later have the call. Windows 10 1709 and later have the
+  // power throttling class. Older versions refuse it quietly.
   final setInfo = k
       .lookupFunction<
         Int32 Function(IntPtr, Int32, Pointer<Uint32>, Uint32),
@@ -153,7 +155,7 @@ ThreadRoles _windowsRoles() {
         12,
       ),
     ),
-    // IDLE_PRIORITY_CLASS, BELOW_NORMAL_PRIORITY_CLASS
+    // IDLE_PRIORITY_CLASS or BELOW_NORMAL_PRIORITY_CLASS
     niced: priorityClass == 0x40 || priorityClass == 0x4000,
   );
 }

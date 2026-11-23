@@ -1,18 +1,18 @@
-// The job system: a bounded pool of one-shot worker isolates. Each job runs in
-// its own Isolate.run, whose result returns through Isolate.exit, so a parsed
-// object graph (an animation, a clip) reaches the caller without a copy. Queued jobs
-// start by priority, then in order.
+// The job system is a bounded pool of one-shot worker isolates. Each job runs
+// in its own Isolate.run. Its result returns through Isolate.exit and reaches
+// the caller without a copy. Queued jobs start by priority, then in order.
 import 'dart:async';
 import 'dart:collection';
 import 'dart:isolate';
 
 import 'thread_qos.dart';
 
-/// Who waits on a job: a frame needs it now, a preload soon, a background
-/// warm-up eventually.
+/// The urgency of a job. A frame needs its job now, a preload soon and a
+/// background warm-up eventually.
 enum JobPriority { frame, preload, background }
 
-/// A queued job that was cancelled (its token, or [JobPool.cancelAll]).
+/// The error of a queued job that its token or [JobPool.cancelAll]
+/// cancelled.
 class JobCancelled implements Exception {
   const JobCancelled(this.label);
   final String label;
@@ -21,14 +21,14 @@ class JobCancelled implements Exception {
   String toString() => 'JobCancelled($label)';
 }
 
-/// Cancels a job that hasn't started yet.
+/// Cancels a job that has not started yet.
 class JobToken {
   bool _cancelled = false;
   bool get cancelled => _cancelled;
   void cancel() => _cancelled = true;
 }
 
-/// One finished job: its time in the queue and on its worker.
+/// The time of one finished job in the queue and on its worker.
 class JobStats {
   const JobStats(
     this.label,
@@ -95,11 +95,12 @@ class JobPool {
   JobPool({this.workers = 6, int? backgroundWorkers, this.onStats})
     : backgroundWorkers = backgroundWorkers ?? workers;
 
-  /// Jobs running at once (the default: the M2 Pro's performance cores − 2).
+  /// The number of jobs that run at once, 6 by default.
   final int workers;
 
-  /// At most this many of them background jobs: a warm-up's garbage stops
-  /// every isolate of the group at its collections, the UI's included.
+  /// The number of background jobs that run at once, at most. The garbage
+  /// of a background job stops every isolate of the group at its
+  /// collections, the UI isolate included.
   final int backgroundWorkers;
   final void Function(JobStats)? onStats;
 
@@ -114,8 +115,9 @@ class JobPool {
   int get running => _running;
   int get runningBackground => _runningBackground;
 
-  /// Runs [job] on a worker isolate. [job] and what it captures must be
-  /// sendable (strings, numbers, lists; no open files or ports).
+  /// Runs [job] on a worker isolate. [job] and the values that it captures
+  /// must be sendable, such as strings, numbers and lists, and not open files
+  /// or ports.
   Future<T> run<T>(
     FutureOr<T> Function() job, {
     JobPriority priority = JobPriority.background,
@@ -131,18 +133,17 @@ class JobPool {
 
   bool _closed = false;
 
-  /// Whether [close] was called.
+  /// True after [close] was called.
   bool get closed => _closed;
 
-  /// Cancels the queue and refuses every later job (its owner is gone);
-  /// running jobs finish.
+  /// Cancels the queue and refuses every later job. Running jobs finish.
   void close() {
     _closed = true;
     _holdTimer?.cancel();
     cancelAll();
   }
 
-  /// Fails every queued job with [JobCancelled]; running jobs finish.
+  /// Fails every queued job with [JobCancelled]. Running jobs finish.
   void cancelAll() {
     final q = [..._queue];
     _queue.clear();
@@ -152,8 +153,8 @@ class JobPool {
     _checkIdle();
   }
 
-  /// Completes when nothing is queued or running, and stays so for one turn
-  /// of the event loop (a finished job's callbacks may enqueue more).
+  /// Completes when no job is queued or running for one turn of the event
+  /// loop. The callbacks of a finished job may queue more jobs.
   Future<void> idle() async {
     do {
       if (_queue.isNotEmpty || _running > 0) {
@@ -164,9 +165,9 @@ class JobPool {
   }
 
   // alloc-cold: once per scene switch
-  /// Starts no background job for [d] from now (a scene switch's first
-  /// frames: a warm-up's parse garbage stops every isolate of the group at
-  /// its collections); queued ones start after it.
+  /// Starts no background job for [d] from now. Queued background jobs start
+  /// after it. Use it for the first frames of a new scene, which the garbage
+  /// of background jobs would stop.
   void holdBackground(Duration d) {
     final until = DateTime.now().add(d);
     if (_heldUntil case final h? when h.isAfter(until)) return;
@@ -186,8 +187,8 @@ class JobPool {
     while (_running < workers && _queue.isNotEmpty) {
       final j = _queue.first;
       final bg = j.priority == JobPriority.background;
-      // Background jobs queue last: when they are at their limit or held,
-      // so is everything left.
+      // Background jobs queue last. When they are at their limit or held,
+      // every job left in the queue waits too.
       if (bg &&
           (_runningBackground >= backgroundWorkers || _heldUntil != null)) {
         break;
@@ -218,11 +219,9 @@ class JobPool {
   }
 }
 
-/// [fn] on a worker in the background role (thread_roles.dart: the
-/// efficiency cores and their own cache, away from the frame's threads;
-/// perf, thread ownership), the thread's role restored after its
-/// synchronous part (pool threads serve other isolates next). A frame job
-/// keeps the caller's.
+/// Returns [fn] wrapped to run in the background role of thread_roles.dart.
+/// The role of the thread is restored after the synchronous part of [fn],
+/// since the threads of the pool serve other isolates next.
 FutureOr<T> Function() _background<T>(FutureOr<T> Function() fn) => () {
   final prev = lowerThreadQos();
   try {

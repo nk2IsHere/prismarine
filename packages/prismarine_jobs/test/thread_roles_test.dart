@@ -11,7 +11,7 @@ class _Thread implements ThreadCalls {
   bool? eco;
   int io = 0, slc = 0;
 
-  /// The kernel keeps a requested slice (6.12 on).
+  /// True when the kernel keeps a requested slice, from 6.12 on.
   final bool slices;
   final calls = <String>[];
 
@@ -134,7 +134,7 @@ void main() {
     test('frame before 6.12: the slice is tried once, then nice and I/O', () {
       final t = _Thread(0, slices: false);
       final r = ThreadRoles(ThreadOs.linux, t, rlimitNice: 25)..raise();
-      t.lvl = 0; // the attr call's nice: as a refused one leaves it
+      t.lvl = 0; // the nice that a refused attr call leaves
       t.calls.clear();
       r.raise();
       r.raise();
@@ -158,7 +158,7 @@ void main() {
       expect(r.lower(), isNull, reason: 'already batch and low');
       r.restore(prev);
       expect((t.lvl, t.pol, t.io), (0, linuxSchedOther, linuxIoFrame));
-      // The batch policy dropped the slice: the next frame asks again.
+      // The batch policy dropped the slice. The next frame requests it again.
       t.calls.clear();
       r.raise();
       expect(t.calls, ['attr 0 $linuxFrameSliceNs']);
@@ -227,8 +227,8 @@ void main() {
     }
     restoreThreadQos(prev);
     raiseThreadQos();
-    // Linux: whether a thread can go above the process depends on RLIMIT_NICE;
-    // at the process nice it has the role either way.
+    // On Linux RLIMIT_NICE decides if a thread can go above the process. At
+    // the nice of the process the thread has the role either way.
     expect(threadHasFrameRole(), known ? isTrue : isNull);
   });
 }
