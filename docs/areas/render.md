@@ -6,6 +6,9 @@ buffers bound by name. It keeps what stays the same from frame to frame: a draw'
 that do not change and the passes whose retained stamp is unchanged. It needs the engine fork's flutter_gpu, which the
 package's pubspec takes from `third_party/flutter_gpu`.
 
+A draw's `frontCounterClockwise` counts the winding on the render target with y down, as Direct3D does. The
+counter-clockwise front faces of glTF and OpenGL in clip space are clockwise there and need `false`, the default.
+
 ## Assets
 
 The runner asks a `RenderAssets` of your application for everything that a plan names by string: shaders by id with
