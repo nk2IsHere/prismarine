@@ -33,8 +33,8 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
 ```
 
 `tools/toolchain/env.sh` sets up a shell for prismarine. It looks for the Flutter SDK at `~/.prismarine/flutter`, keeps
-the pub cache in `~/.prismarine/pub-cache` and the engine in `~/.prismarine/engine`, so every repository on the machine
-shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link. Then source
+the pub cache in `~/.prismarine/pub-cache` and the engine in `~/.prismarine/engine`, which all your prismarine
+checkouts share. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link. Then source
 `env.sh` in every bash or zsh shell that builds, tests or fetches; it puts that Flutter first on your `PATH`.
 
 ```sh
@@ -60,7 +60,7 @@ dart pub get
 (cd packages/prismarine_render && flutter pub get)
 ```
 
-## Engine releases
+## Using the prebuilt engine
 
 The patched engine is released as archives on the GitHub releases of the prismarine repository. Each version of
 prismarine works with one engine release. The file `third_party/flutter_engine/RELEASE` holds its name, for example
@@ -70,7 +70,7 @@ A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha25
 `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`, `windows-x64` and `windows-arm64`. It also holds
 `SHA256SUMS` with the checksums of all archives.
 
-`third_party/flutter_engine/fetch.sh` downloads the archive of your machine with the GitHub CLI `gh`, checks its
+`third_party/flutter_engine/fetch.sh` downloads the archive for your computer with the GitHub CLI `gh`, checks its
 SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. `gh` must be logged in, with
 `gh auth login` or a token in `GH_TOKEN`. Run the commands from the root of your checkout.
 
@@ -80,7 +80,7 @@ export PRISMARINE_ENGINE_REPO=<owner>/prismarine
 third_party/flutter_engine/fetch.sh
 ```
 
-`fetch.sh` picks the target of the machine it runs on. To fetch the engine for another target, give the target as its
+`fetch.sh` picks the target of your computer. To fetch the engine for another target, give the target as its
 argument, for example `fetch.sh macos-x64`.
 
 On Windows, run `powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1`. It fetches into
@@ -96,15 +96,13 @@ shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
 After a fetch, source `tools/toolchain/env.sh` again to build with the new engine. It sets `prismarine_engine_args`,
-which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched
-engine, `flutter build` uses Flutter's own engine, which is slower.
+which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched engine, `flutter build` uses Flutter's own engine, which is slower.
 
-## The engine from its patches
+## Patching and building the engine from stratch
 
 You can build the engine yourself from the patches in `third_party/flutter_engine/patches`. A build checks out
-Flutter at the engine revision, applies the patches and fetches the dependencies of the engine with `gclient` of
-Chromium's depot_tools. It then builds only the release targets that the Flutter tool reads. The first build takes
-about an hour and several GB of disk on each machine.
+Flutter at the engine revision, applies the patches and fetches the dependencies of the engine. The first build takes
+about an hour and several GB of disk.
 
 | Platform | Script | Out dirs |
 |---|---|---|
