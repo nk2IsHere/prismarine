@@ -9,16 +9,16 @@ type: project
 The decisions are in [decisions](decisions.md). The design of the split is in
 [the split design](../specs/2026-11-23-prismarine-split-design.md).
 
-Migration steps 1 to 4 are done. The workspace, the lints with their config, the sample app and the gate in the
+Migration steps 1 to 5 are done. The workspace, the lints with their config, the sample app and the gate in the
 private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`, `prismarine_math`,
-`prismarine_jobs`, `prismarine_cargo`, `prismarine_pad` and `prismarine_frame`, each with a page in `docs/areas/`.
-mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout with its own
-config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both repositories
-use. The first half of step 9 and step 10 are done. `prismarine_loop` and `prismarine_scene` are Flutter packages
-outside the pub workspace, each with a page in `docs/areas/`. Step 8 adds `prismarine_audio` and
+`prismarine_jobs`, `prismarine_cargo`, `prismarine_pad`, `prismarine_frame` and `prismarine_render`, each with a page
+in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
+with its own config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both
+repositories use. The first half of step 9 and step 10 are done. `prismarine_loop`, `prismarine_scene` and
+`prismarine_render` are Flutter packages outside the pub workspace. Step 8 adds `prismarine_audio` and
 `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of `prismarine_audio_out` and links it.
 Step 11 brings the patched engine with its git history from mcsm: `third_party/flutter_engine` at release mcsm11,
 `third_party/flutter_gpu` and `tools/gpu_smoke`, described in [engine](../areas/engine.md). mcsm reads the release and
 flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bundle build with its shard cache, the
-precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5, the runner
-behind a `RenderAssets` interface, follows.
+precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5 adds
+`prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface.
