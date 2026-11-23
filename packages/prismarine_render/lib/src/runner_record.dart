@@ -158,7 +158,7 @@ final class _FixedBlend {
 /// a pass keeps the factors the last draw set, so without them a draw's
 /// state would follow the draws before it in its pass, and the states made
 /// ahead on passes of their own (runner_warm.dart) would miss. The GPU
-/// reads no factor of a blend that is off. MCSM_FIRST_FRAME=off leaves
+/// reads no factor of a blend that is off. PRISMARINE_FIRST_FRAME=off leaves
 /// them unset (the before).
 final _unblended = gpu.ColorBlendEquation();
 

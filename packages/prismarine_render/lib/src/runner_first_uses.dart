@@ -1,4 +1,4 @@
-// MCSM_FRAME_LOG runs: what a run did for the first time in any run, and
+// PRISMARINE_FRAME_LOG runs: what a run did for the first time in any run, and
 // where a slow run's record went, as log lines on the frame log's clock.
 part of 'frame_runner.dart';
 

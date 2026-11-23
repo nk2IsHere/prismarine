@@ -246,7 +246,7 @@ Object _textureKey(TextureRef ref) => switch (ref) {
     'r:${r.ref.buffer}:${r.ref.offset}:${r.ref.size}:${r.ref.format}',
 };
 
-final _pulledOnly = Platform.environment['MCSM_PULLED_ONLY']?.split(',');
+final _pulledOnly = envVar('PULLED_ONLY')?.split(',');
 
 String _samplerKey(SamplerState s) =>
     '${s.minLinear}${s.magLinear}${s.mipLinear}${s.address.join()}'

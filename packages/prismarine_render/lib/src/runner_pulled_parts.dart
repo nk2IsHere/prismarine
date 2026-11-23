@@ -80,10 +80,10 @@ class _IdentityKey {
   }
 }
 
-/// `MCSM_PULLED_STATS=1`: every 120 prepares, their time (p50, p90)
+/// `PRISMARINE_PULLED_STATS=1`: every 120 prepares, their time (p50, p90)
 /// and how many draws' pulled forms were made new.
 class _PulledStats {
-  static final on = Platform.environment['MCSM_PULLED_STATS'] == '1';
+  static final on = envVar('PULLED_STATS') == '1';
   final _us = <int>[];
   int made = 0;
 

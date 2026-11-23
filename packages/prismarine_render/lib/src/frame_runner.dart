@@ -11,6 +11,7 @@ import 'package:prismarine_frame/prismarine_frame.dart';
 import 'package:prismarine_kept/prismarine_kept.dart';
 import 'package:vector_math/vector_math.dart';
 
+import 'env.dart';
 import 'gpu_state.dart';
 import 'load_tally.dart';
 import 'loose_map.dart';
@@ -75,8 +76,8 @@ class FrameRunner {
   /// Each pulled pass's frame (runner_pulled.dart).
   final _pulledFrames = <String, _PulledFrame>{};
 
-  /// Prints each draw as it is recorded (`MCSM_RENDER_TRACE=1`).
-  static final trace = Platform.environment['MCSM_RENDER_TRACE'] == '1';
+  /// Prints each draw as it is recorded (`PRISMARINE_RENDER_TRACE=1`).
+  static final trace = envVar('RENDER_TRACE') == '1';
   final targets = <String, gpu.Texture>{};
   final _specs = <String, TargetSpec>{};
 
@@ -427,9 +428,10 @@ class FrameRunner {
   double _layoutMs = 0, _failedPipelineMs = 0;
   final _clock = Stopwatch()..start();
 
-  /// MCSM_RENDER_PASS_LOG: the last frame's GPU work in order, an encoder a
-  /// line, to name a Metal System Trace's encoders.
-  static final _passLogPath = Platform.environment['MCSM_RENDER_PASS_LOG'];
+  /// With `PRISMARINE_RENDER_PASS_LOG` set to a file, the last frame's GPU
+  /// work in order, an encoder a line, to name the encoders of a Metal
+  /// System Trace.
+  static final _passLogPath = envVar('RENDER_PASS_LOG');
   List<String>? _passLog;
 
   /// Records [plan] and submits it; completes when the GPU is done. With
@@ -940,8 +942,9 @@ class FrameRunner {
   final _inlineSlots = <String, Map<String, _InlineSlot>>{};
   int _runs = 0;
 
-  /// MCSM_FRAME_LOG runs: what each run first did (runner_first_uses.dart).
-  static final firstUses = Platform.environment['MCSM_FRAME_LOG'] != null;
+  /// With `PRISMARINE_FRAME_LOG` set, what each run did for the first time
+  /// (runner_first_uses.dart).
+  static final firstUses = envVar('FRAME_LOG') != null;
   final _uses = firstUses ? _FirstUses() : null;
 
   /// What draws listed ahead make before their first frame

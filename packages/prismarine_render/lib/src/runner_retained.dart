@@ -4,13 +4,13 @@ part of 'frame_runner.dart';
 /// with, by pass name. A pass whose stamp is the one it ran with, on
 /// targets not made again since, is left out: its targets hold what it
 /// would write. A plan never run (a newer one took its place) leaves its
-/// stamps unrun, so the next plan's passes run; `MCSM_RETAIN=off` runs
+/// stamps unrun, so the next plan's passes run; `PRISMARINE_RETAIN=off` runs
 /// every pass.
 final class _Retained {
   final _ran = <String, int>{};
   int _gen = -1;
   Map<String, int> _now = const {};
-  static final _off = Platform.environment['MCSM_RETAIN'] == 'off';
+  static final _off = envVar('RETAIN') == 'off';
 
   /// Passes the last run left out.
   int left = 0;

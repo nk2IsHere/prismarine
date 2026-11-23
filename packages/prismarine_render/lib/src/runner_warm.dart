@@ -34,10 +34,10 @@ typedef _WarmItem = (DrawPlan, _DrawSetup, bool);
 /// learned from the frames it records, and the draws waiting to have
 /// their states made.
 final class _Warm {
-  /// MCSM_FIRST_FRAME: `off` gives listed draws no pulled form or
+  /// PRISMARINE_FIRST_FRAME: `off` gives listed draws no pulled form or
   /// pipeline states ahead (the before, to compare); `pulled` or `states`
   /// only the one.
-  static final _mode = Platform.environment['MCSM_FIRST_FRAME'] ?? 'on';
+  static final _mode = envVar('FIRST_FRAME') ?? 'on';
   static final on = _mode != 'off';
   static final pulledOn = on && _mode != 'states';
 
@@ -108,11 +108,11 @@ final class _Warm {
   Set<_PassShape>? shapesOf(String vertex, {required bool pulled}) =>
       (pulled ? _pulledShapes : _shapes)[effectOf(vertex)];
 
-  /// MCSM_FRAME_LOG runs: by a draw's shaders, the pass shapes and states
+  /// PRISMARINE_FRAME_LOG runs: by a draw's shaders, the pass shapes and states
   /// made for them ahead.
   final _madeFor = <String, Set<String>>{};
 
-  // alloc-cold: MCSM_FRAME_LOG runs, a draw that made a pipeline state.
+  // alloc-cold: PRISMARINE_FRAME_LOG runs, a draw that made a pipeline state.
   /// Why the states made ahead missed [d]'s, recorded in the pass being
   /// recorded: `unlisted` (none made for its shaders, none waiting),
   /// `waiting` (its listing's not made yet), `shape` (none in this pass's
@@ -327,7 +327,7 @@ extension RunnerWarm on FrameRunner {
               (sw.elapsedMicroseconds - from) / 1000,
             );
             if (FrameRunner.firstUses) {
-              // alloc: MCSM_FRAME_LOG runs only.
+              // alloc: PRISMARINE_FRAME_LOG runs only.
               (w._madeFor['${d.vertex}|${d.pixel}'] ??= {}).add(
                 '${shape.key}|${_stateKey(d.state)}',
               );

@@ -16,11 +16,10 @@ class Pulled {
   final PulledLayout layout;
 
   /// The render passes drawn in pulled form: the layout's, and its main
-  /// pass with `MCSM_PULLED_MAIN=1`, which does not pay until one effect of
-  /// our own replaces the shipped programs' many variants.
+  /// pass with `PRISMARINE_PULLED_MAIN=1`.
   late final Set<String> passes = {
     ...layout.passes,
-    if (Platform.environment['MCSM_PULLED_MAIN'] == '1') layout.mainPass,
+    if (envVar('PULLED_MAIN') == '1') layout.mainPass,
   };
 
   /// The pulled programs (`<root>/shaders`).
