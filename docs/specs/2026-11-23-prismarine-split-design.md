@@ -104,6 +104,10 @@ After the last move:
 - A README for each package, with its purpose, its use, a short example and its platforms.
 - The root README gets workspace setup and building for each platform.
 - GitHub workflows for the lints, the tests, clippy and `cargo test` on Linux, macOS and Windows.
+- The sample app becomes a real example, through its own spec: Crytek Sponza from the Khronos glTF sample assets
+  (CC BY 3.0, fetched by a script, not committed), drawn by a small generic plan builder with glTF metallic-roughness
+  shaders, a directional light with shadows, moving coloured point lights, a fly camera with gamepad support and the
+  debug panel. It doubles as the gate's smoke test and a performance scene on all three platforms.
 
 Then prismarine's first engine release:
 
