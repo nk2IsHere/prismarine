@@ -1,0 +1,26 @@
+name: prismarine_debug
+description: Debug tools for a real-time game on Flutter. A ring of the shown frames with a review that marks and saves issues, a glitch catcher, a per-frame profiler, a GPU pass log, heap snapshots, frame plan replay and a debug panel with a frame graph.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_gpu:
+    sdk: flutter
+  prismarine_frame:
+    path: ../prismarine_frame
+  prismarine_kept:
+    path: ../prismarine_kept
+  prismarine_loop:
+    path: ../prismarine_loop
+  prismarine_render:
+    path: ../prismarine_render
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+dependency_overrides:
+  # Flutter GPU with the patches of the engine fork.
+  flutter_gpu:
+    path: ../../third_party/flutter_gpu
