@@ -18,79 +18,154 @@ class NativeMixerPort {
   /// A start's sound is the file `<soundDir>/<sound>`.
   final String soundDir;
 
+  // alloc: a Pointer passed straight to a native call is not boxed
   ffi.Pointer<NativeMixer> get _e => ffi.Pointer.fromAddress(address);
 
   /// Applies [c] at frame [at], or before the next frame when [at] is below
   /// 0. Returns false when the command ring was full and dropped it.
-  bool post(AudioCommand c, int at) => using((a) {
-    ffi.Pointer<ffi.Char> s(String? v) =>
-        v == null ? ffi.nullptr : v.toNativeUtf8(allocator: a).cast();
-    int send(
-      int op, {
-      double value = 0,
-      double seek = 0,
-      double? late,
-      bool flag = false,
-      double? keepTail,
-      String? name,
-      String? sound,
-      String? via,
-    }) => mixPost(
-      _e,
-      op,
-      c.id,
-      at,
-      value,
-      seek,
-      late == null ? 0 : 1,
-      late ?? 0,
-      flag ? 1 : 0,
-      keepTail ?? -1,
-      s(name),
-      s(sound),
-      s(via),
-    );
+  bool post(AudioCommand c, int at) {
     final r = switch (c) {
-      StartEvent(:final path, :final seek, :final sound, :final late) => send(
+      StartEvent(:final path, :final seek, :final sound, :final late) => _send(
+        c,
+        at,
         1,
         seek: seek,
-        late: late,
-        name: path,
-        sound: sound == null ? null : '$soundDir/$sound',
+        late: late ?? 0,
+        hasLate: late != null,
+        name: _text(0, path, null, false),
+        sound: sound == null ? ffi.nullptr : _text(1, soundDir, sound, false),
       ),
-      SetParameter(:final name, :final value) => send(
+      SetParameter(:final name, :final value) => _send(
+        c,
+        at,
         2,
         value: value,
-        name: name.toLowerCase(),
+        name: _text(0, name, null, true),
       ),
-      SetVolume(:final volume, :final keepTail) => send(
+      SetVolume(:final volume, :final keepTail) => _send(
+        c,
+        at,
         3,
         value: volume,
-        keepTail: keepTail,
+        keepTail: keepTail ?? -1,
       ),
-      StopEvent(:final fade, :final keepTail, :final viaParameter) => send(
+      StopEvent(:final fade, :final keepTail, :final viaParameter) => _send(
+        c,
+        at,
         4,
         flag: !fade,
-        keepTail: keepTail,
-        via: viaParameter?.toLowerCase(),
+        keepTail: keepTail ?? -1,
+        via: viaParameter == null
+            ? ffi.nullptr
+            : _text(2, viaParameter, null, true),
       ),
-      SetPaused(:final paused) => send(5, flag: paused),
-      StartMixState(:final path) => send(7, name: path),
-      SetMixStateParameter(:final name, :final value) => send(
+      SetPaused(:final paused) => _send(c, at, 5, flag: paused),
+      StartMixState(:final path) => _send(
+        c,
+        at,
+        7,
+        name: _text(0, path, null, false),
+      ),
+      SetMixStateParameter(:final name, :final value) => _send(
+        c,
+        at,
         8,
         value: value,
-        name: name.toLowerCase(),
+        name: _text(0, name, null, true),
       ),
-      StopMixState() => send(9),
-      SetSpatial(:final azimuth, :final distance, :final cone) => send(
+      StopMixState() => _send(c, at, 9),
+      SetSpatial(:final azimuth, :final distance, :final cone) => _send(
+        c,
+        at,
         12,
         value: azimuth,
         seek: distance,
         late: cone,
+        hasLate: true,
       ),
     };
     return r == 0;
-  });
+  }
+
+  int _send(
+    AudioCommand c,
+    int at,
+    int op, {
+    double value = 0,
+    double seek = 0,
+    double late = 0,
+    bool hasLate = false,
+    bool flag = false,
+    double keepTail = -1,
+    ffi.Pointer<ffi.Char>? name,
+    ffi.Pointer<ffi.Char>? sound,
+    ffi.Pointer<ffi.Char>? via,
+  }) => mixPost(
+    _e,
+    op,
+    c.id,
+    at,
+    value,
+    seek,
+    hasLate ? 1 : 0,
+    late,
+    flag ? 1 : 0,
+    keepTail,
+    name ?? ffi.nullptr,
+    sound ?? ffi.nullptr,
+    via ?? ffi.nullptr,
+  );
+
+  /// The UTF-8 buffers of the texts of a post, kept by the isolate.
+  static final _texts = [
+    for (var i = 0; i < 3; i++) malloc<ffi.Uint8>(_textCap),
+  ];
+  static final _chars = [for (final t in _texts) t.cast<ffi.Char>()];
+  static const _textCap = 4096;
+
+  /// Writes [a], then `/` and [b] when [b] is given, into text buffer [k] as
+  /// NUL-terminated UTF-8, with ASCII letters lower-cased when [lower].
+  /// Returns the buffer.
+  static ffi.Pointer<ffi.Char> _text(int k, String a, String? b, bool lower) {
+    final p = _texts[k];
+    var n = _utf8(p, 0, a, lower);
+    if (b != null) {
+      if (n < _textCap - 1) p[n++] = 0x2f;
+      n = _utf8(p, n, b, lower);
+    }
+    p[n] = 0;
+    return _chars[k];
+  }
+
+  static int _utf8(ffi.Pointer<ffi.Uint8> p, int n, String s, bool lower) {
+    const end = _textCap - 5;
+    for (var i = 0; i < s.length && n < end; i++) {
+      var u = s.codeUnitAt(i);
+      if (u >= 0xd800 && u < 0xdc00 && i + 1 < s.length) {
+        final l = s.codeUnitAt(i + 1);
+        if (l >= 0xdc00 && l < 0xe000) {
+          u = 0x10000 + ((u - 0xd800) << 10) + (l - 0xdc00);
+          i++;
+        }
+      }
+      if (u < 0x80) {
+        p[n++] = lower && u >= 0x41 && u <= 0x5a ? u + 0x20 : u;
+      } else if (u < 0x800) {
+        p[n++] = 0xc0 | (u >> 6);
+        p[n++] = 0x80 | (u & 0x3f);
+      } else if (u < 0x10000) {
+        p[n++] = 0xe0 | (u >> 12);
+        p[n++] = 0x80 | ((u >> 6) & 0x3f);
+        p[n++] = 0x80 | (u & 0x3f);
+      } else {
+        p[n++] = 0xf0 | (u >> 18);
+        p[n++] = 0x80 | ((u >> 12) & 0x3f);
+        p[n++] = 0x80 | ((u >> 6) & 0x3f);
+        p[n++] = 0x80 | (u & 0x3f);
+      }
+    }
+    return n;
+  }
 
   /// Starts a new generation of sample bindings and lets the older ones go.
   void sceneChanged() => mixScene(_e);

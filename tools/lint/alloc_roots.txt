@@ -36,3 +36,12 @@ packages/prismarine_frame/lib/src/plan/frame_plan.dart#FrameRole.new  a builder,
 packages/prismarine_frame/lib/src/plan/frame_plan.dart#StageResources.new  a builder, a draw's resources
 packages/prismarine_frame/lib/src/plan/float_bits.dart#sameFloat32Bits  a builder, comparing a draw's floats
 packages/prismarine_frame/lib/src/plan/float_bits.dart#scratchFloats  a builder, reading floats
+#
+# The audio engine is reached from an app's frame: the Dart render on a
+# render isolate or in lockstep, a command applied at its frame, and a post
+# to the native engine.
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.render  a render isolate or the lockstep step, once a block
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.apply  the render, a command at its frame
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.schedule  an app's frame, a command
+packages/prismarine_audio/lib/src/engine/lockstep.dart#LockstepAudio.advanceTo  an app's frame in lockstep
+packages/prismarine_audio_out/lib/src/mix/native_engine.dart#NativeMixerPort.post  an app's frame, a command to the native engine
