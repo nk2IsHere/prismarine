@@ -55,10 +55,11 @@ sample app and gpu_smoke are outside the workspace. Run `flutter pub get` in the
 ## Engine releases
 
 The patched engine is released as archives on the GitHub releases of the prismarine repository. Each version of
-prismarine works with one engine release, and the file `third_party/flutter_engine/RELEASE` holds its name, for example
-`engine-deb287481e3c-prismarine1`. The fetch scripts read it, so you only look at it to know which release you have. A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha256`
-file for each of the targets `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`, `windows-x64` and
-`windows-arm64`. It also holds `SHA256SUMS` with the checksums of all archives.
+prismarine works with one engine release. The file `third_party/flutter_engine/RELEASE` holds its name, for example
+`engine-deb287481e3c-prismarine1`. The fetch scripts read that file themselves.
+
+A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha256` file for each of the targets
+`macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`, `windows-x64` and `windows-arm64`. It also holds `SHA256SUMS` with the checksums of all archives.
 
 `third_party/flutter_engine/fetch.sh` downloads the archive of your machine with the GitHub CLI `gh`, checks its
 SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. The repository is private. You need `gh` logged in with
