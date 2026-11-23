@@ -19,6 +19,7 @@ import 'release_10.dart';
 import 'release_11.dart';
 import 'release_7.dart';
 import 'release_9.dart';
+import 'release_prismarine1.dart';
 
 // Each SMOKE line goes to stdout and also to the file of GPU_SMOKE_OUT, since a
 // Windows GUI app has no console. Lines are ASCII and the file reads the same
@@ -178,6 +179,7 @@ Future<int> _smoke() async {
   final release9 = await release9Checks(_log);
   final release10 = await release10Checks(_log);
   final release11 = await release11Checks(_log);
+  final releasePrismarine1 = releasePrismarine1Checks(_log);
   if (firstEmpty) {
     // ANGLE on Windows gives an empty first readback on the stock engine too,
     // while later readbacks work. The same target is read again without
@@ -219,5 +221,12 @@ Future<int> _smoke() async {
       '(the first readback came back empty; this is a second render and readback)',
     );
   }
-  return ok && release7 && release9 && release10 && release11 ? 0 : 2;
+  return ok &&
+          release7 &&
+          release9 &&
+          release10 &&
+          release11 &&
+          releasePrismarine1
+      ? 0
+      : 2;
 }
