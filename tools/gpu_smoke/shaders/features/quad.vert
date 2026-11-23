@@ -1,5 +1,5 @@
 #version 460
-// A quad from two triangles; v_uv is the position mapped to [0, 1].
+// A quad from two triangles. v_uv is the position mapped to [0, 1].
 in vec2 position;
 out vec2 v_uv;
 

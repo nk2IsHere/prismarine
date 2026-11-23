@@ -1,12 +1,13 @@
 part of 'frame_runner.dart';
 
-/// The runner's resources: inline vertices repacked for an input's width,
-/// target views typed as shaders declare them, constant textures, buffers
-/// and target read-back.
+/// The resources of the runner. They are inline vertices repacked for the
+/// width of an input, target views typed as shaders declare them, constant
+/// textures, buffers and target read-back.
 extension RunnerResources on FrameRunner {
-  /// [g]'s vertices repacked for [shader]: each input it reads gets as
-  /// many floats as it declares, the missing ones filled with Direct3D's
-  /// (0, 0, 0, 1), since the engine fetches the declared width.
+  /// Returns the vertices of [g] repacked for [shader]. Each input that it
+  /// reads gets as many floats as it declares, the missing ones filled with
+  /// the (0, 0, 0, 1) of Direct3D, since the engine fetches the declared
+  /// width.
   (gpu.VertexLayout, Uint8List) _inlinePacked(
     ShaderRecord shader,
     InlineGeometry g,
@@ -31,7 +32,7 @@ extension RunnerResources on FrameRunner {
     final attrs = <gpu.VertexAttribute>[];
     var at = 0;
     for (final (a, f, offset) in inputs) {
-      // Floats, or unsigned normalized bytes (the UI texts' colours).
+      // Floats or unsigned normalized bytes.
       final (have, bytes) = switch (f) {
         'R32_FLOAT' => (1, false),
         'R32G32_FLOAT' => (2, false),
@@ -74,12 +75,11 @@ extension RunnerResources on FrameRunner {
     );
   }
 
-  /// Fills the plan's targets that take texels from the CPU
-  /// (TargetSpec.initial, such as a lightmap solved on the CPU) from this
-  /// frame's bytes, layer by layer, through [host], before the frame's
-  /// passes; a
-  /// target whose bytes are the object it took last (the codec gives an
-  /// unchanged role's bytes again) into the same texture is left as it is.
+  /// Fills the targets of the plan that take texels from the CPU
+  /// (TargetSpec.initial), such as a lightmap solved on the CPU, from the
+  /// bytes of this frame. It fills them layer by layer through [host] into
+  /// [cb] before the passes of the frame. A target whose bytes are the object
+  /// that it took last into the same texture is left as it is.
   void _uploadTargets(gpu.CommandBuffer cb, FramePlan plan, UniformRing host) {
     if (!identical(_uploadsOf, plan.targets)) {
       _uploadsOf = plan.targets;
@@ -127,9 +127,9 @@ extension RunnerResources on FrameRunner {
     }
   }
 
-  /// Copies the plan's read-back buffers (BufferSpec.readBack) as this
+  /// Copies the read-back buffers of the plan (BufferSpec.readBack) as this
   /// frame leaves them into RGBA8 textures of their bytes, at the end of the
-  /// frame's commands; null when it has none.
+  /// commands of the frame. Returns null when the plan has none.
   List<(String, gpu.Texture)>? _readBacks(
     gpu.CommandBuffer cb,
     FramePlan plan,
@@ -161,7 +161,8 @@ extension RunnerResources on FrameRunner {
     return out;
   }
 
-  /// [reads]' bytes to [onReadBack], through each texture's image.
+  /// Passes the bytes of [reads] to [onReadBack] through the image of each
+  /// texture.
   Future<void> _deliverReads(List<(String, gpu.Texture)> reads) async {
     for (final (name, t) in reads) {
       final img = t.asImage();
@@ -175,8 +176,9 @@ extension RunnerResources on FrameRunner {
     }
   }
 
-  /// A texture file; one that the assets lack reads zeros, as an unbound
-  /// Direct3D 11 view does, and is named once, so the frame still draws.
+  /// Returns the texture file [f] for the shader type [type]. A file that the
+  /// assets lack reads zeros, as an unbound Direct3D 11 view does. It is
+  /// reported once. The frame still draws.
   gpu.Texture _file(FileTexture f, String type) {
     if (assets.hasTexture(f.stem)) return assets.texture(f.stem, srgb: f.srgb);
     if (_failedDraws.add('texture ${f.stem}')) {
@@ -192,13 +194,12 @@ extension RunnerResources on FrameRunner {
   }
 
   gpu.Texture _texture(TextureRef? ref, String type) => switch (ref) {
-    // A plan's file textures are often the same objects frame to frame
-    // (the frame builder keeps a draw's textures), so the lookup by name
-    // runs once per object.
+    // The file textures of a plan are often the same objects from frame to
+    // frame. The lookup by name runs once per object.
     final FileTexture f => _fileTextures[f] ??= _file(f, type),
-    // A depth target's stencil through a uint view, which the engine cannot
-    // make: the runner's copy of it (runner_stencil.dart), or, from assets
-    // without the copy's shaders, a stand-in that reads 0 in .y.
+    // The stencil of a depth target through a uint view, which the engine
+    // cannot make, reads the copy of the runner (runner_stencil.dart). With
+    // assets without the shaders of the copy it reads a stand-in with 0 in .y.
     final TargetTexture t
         when type.startsWith('u') &&
             isDepth(pixelFormat(_specs[t.target]!.format)) =>
@@ -212,7 +213,8 @@ extension RunnerResources on FrameRunner {
       t.target,
     ),
     final TargetTexture t => _view(t, array: type.contains('Array')),
-    // Per texel object and type: the plans reuse their constant textures.
+    // Per texel object and type, since the plans reuse their constant
+    // textures.
     final ConstantTexture c => (_constantObjects[c] ??= {})[type] ??= switch ((
       c.width,
       c.height,
@@ -227,8 +229,9 @@ extension RunnerResources on FrameRunner {
     ),
   };
 
-  /// A view of a target's mips and layers, typed as the shader declares
-  /// it ([array]: a 2D array, else a 2D texture of one layer).
+  /// Returns a view of the mips and layers of [t], typed as the shader
+  /// declares it. With [array] it is a 2D array, else a 2D texture of one
+  /// layer.
   gpu.Texture _view(TargetTexture t, {required bool array}) {
     final base =
         targets[t.target] ?? (throw StateError('no target ${t.target}'));
@@ -279,8 +282,8 @@ extension RunnerResources on FrameRunner {
     }();
   }
 
-  /// A [w] × [h] 2D texture of [texels] (a property map made from data),
-  /// one per texel object (the plans keep each map's object).
+  /// Returns a [w] × [h] 2D texture of [texels] in [format], one per texel
+  /// object, such as a property map made from data.
   gpu.Texture _image(String format, Uint8List texels, int w, int h) {
     final t = gpu.gpuContext.createTexture(
       gpu.StorageMode.devicePrivate,
@@ -293,8 +296,8 @@ extension RunnerResources on FrameRunner {
     return t;
   }
 
-  /// A device buffer with [bytes], for a written buffer the plan never
-  /// reads back (the host buffer is not for shader writes).
+  /// Returns a device buffer with [bytes] for a written buffer that the plan
+  /// does not read back. The host buffer is not for shader writes.
   gpu.BufferView _inline(Uint8List bytes) {
     final had = _inlineBuffers[bytes];
     if (had != null) {
@@ -316,7 +319,8 @@ extension RunnerResources on FrameRunner {
   }
 
   // alloc-cold: a bytes object's first use as an inline buffer.
-  /// A device buffer with [bytes], counted under [tag] (the census).
+  /// Returns a device buffer with [bytes], counted under [tag] for the
+  /// census.
   static gpu.BufferView _newBuffer(Uint8List bytes, String tag) {
     gpu.GpuMemory.tag = tag;
     final b = gpu.gpuContext.createDeviceBufferWithCopy(
@@ -329,8 +333,7 @@ extension RunnerResources on FrameRunner {
   static gpu.BufferView _whole(gpu.DeviceBuffer b) =>
       gpu.BufferView(b, offsetInBytes: 0, lengthInBytes: b.sizeInBytes);
 
-  /// A vertex buffer with [bytes], one per bytes object (the repacked
-  /// screen quad is the same object every frame).
+  /// Returns a vertex buffer with [bytes], one per bytes object.
   gpu.BufferView _inlineVertex(Uint8List bytes) {
     final had = _vertexBuffers[bytes];
     if (had != null) {
@@ -340,11 +343,10 @@ extension RunnerResources on FrameRunner {
     return _newInline(_vertexBuffers, bytes, 'buffer.inlineVertex');
   }
 
-  /// [bytes] as a draw's vertices or indices: their own device buffer once
-  /// the same object comes again in a later frame (the repacked screen
-  /// quad), else a view in this frame's uniform ring, so bytes a plan makes
-  /// anew each frame (an atlas mip's or a text's quads) take no buffer made
-  /// for one frame.
+  /// Returns [bytes] as the vertices or indices of a draw. Bytes get their own
+  /// device buffer once the same object comes again in a later frame. Otherwise
+  /// they get a view in the uniform ring of this frame. Bytes that a plan makes
+  /// anew each frame take no buffer made for one frame.
   gpu.BufferView _drawBytes(
     Uint8List bytes,
     UniformRing host, {
@@ -359,18 +361,16 @@ extension RunnerResources on FrameRunner {
     return _uniform(host, bytes, bytes.length);
   }
 
-  /// [bytes] for input [input] of dispatch [dispatch]:
-  /// [_inline]'s buffer once the same object comes again, else the next of
-  /// three buffers kept for that input, overwritten, so an input the plan
-  /// makes anew each frame (a skinning palette) reuses its buffers instead
-  /// of making one a frame. Three, as for the plan's buffers: two frames on
-  /// the GPU at most and one recording. A name that comes twice in a frame
-  /// (an object's casters share their cull's name) keeps the buffer to its
-  /// first: an overwrite would change what the first dispatch reads.
+  /// Returns [bytes] for the input [input] of the dispatch [dispatch]. The
+  /// bytes get the buffer of [_inline] once the same object comes again.
+  /// Otherwise they overwrite the next of three buffers kept for that input. An
+  /// input that the plan makes anew each frame reuses its buffers. Three
+  /// buffers cover two frames on the GPU and one recording, as for the buffers
+  /// of the plan. A name that comes twice in a frame keeps the buffer of its
+  /// first use, since an overwrite would change what the first dispatch reads.
   gpu.BufferView _frameInline(String dispatch, String input, Uint8List bytes) {
     if (_inlineBuffers[bytes] != null) return _inline(bytes);
-    // By dispatch then input name (the same strings each frame): the
-    // skinning's hundreds of palettes a frame each looked up a pair.
+    // By dispatch and then input name, the same strings each frame.
     final at = (_inlineSlots[dispatch] ??= {})[input] ??= _InlineSlot();
     if (at.usedIn == _runs) return _inline(bytes);
     at.usedIn = _runs;
@@ -380,7 +380,7 @@ extension RunnerResources on FrameRunner {
     final data = bytes.isEmpty ? Uint8List(16) : bytes;
     var v = at.ring[_frame];
     if (v == null || v.lengthInBytes != data.length) {
-      // This frame slot's last buffer, three runs old, goes now (G17).
+      // The last buffer of this frame slot, three runs old, goes now (G17).
       v?.buffer.mcsmRelease();
       gpu.GpuMemory.tag = 'buffer.perInput';
       v = at.ring[_frame] = _whole(
@@ -396,11 +396,11 @@ extension RunnerResources on FrameRunner {
   }
 
   // alloc-cold: every 64 runs.
-  /// Lets go of the plan buffers and inline texel slots no run named in the
-  /// last [_unnamedRuns] runs: a name a plan stops using (a closed scene's
-  /// light's duster pass) would keep its three host-visible buffers and its
-  /// texel slot for good. A plan buffer's copies take turns frame by frame,
-  /// so none carries anything a later run reads.
+  /// Lets go of the plan buffers and inline texel slots that no run used in the
+  /// last [_unnamedRuns] runs. A name that a plan stops using would otherwise
+  /// keep its three host-visible buffers and its texel slot for good. The
+  /// copies of a plan buffer take turns frame by frame. None carries anything
+  /// that a later run reads.
   void _dropUnnamed() {
     final before = _runs - _unnamedRuns;
     var dropped = false;
@@ -412,17 +412,15 @@ extension RunnerResources on FrameRunner {
       dropped = true;
       return true;
     });
-    // Views kept of the buffers let go of them too.
+    // The kept views of the buffers let go of them too.
     if (dropped) _bufferGen++;
     _inlineSlots.removeWhere((_, slots) {
       slots.removeWhere((_, s) => s.usedIn < before);
       return slots.isEmpty;
     });
-    // Inline buffers of bytes no run bound since: their buffers go now,
-    // not when a collection finds the bytes gone (each new skinning
-    // sources block, MBs, made one; they waited for the next old-space
-    // mark-sweep). A pass replayed natively keeps what it bound, and bytes
-    // bound again later make a buffer again.
+    // The buffers of inline bytes that no run bound since go now, not when
+    // a collection finds the bytes gone. A pass replayed natively keeps what
+    // it bound. Bytes bound again later make a buffer again.
     _inlineBuffers.removeWhere(_unbound);
     _vertexBuffers.removeWhere(_unbound);
   }
@@ -443,8 +441,8 @@ extension RunnerResources on FrameRunner {
             !array)) {
       return targets[i.target]!;
     }
-    // An array UAV covers the layers from its first one on: the shader
-    // picks the layer (the moment blurs write cascade and light layers).
+    // An array UAV covers the layers from its first one onward. The shader
+    // selects the layer.
     return _view(
       TargetTexture(
         i.target,
@@ -456,9 +454,9 @@ extension RunnerResources on FrameRunner {
     );
   }
 
-  /// Target [name]'s texels as stored (mip [mip], layer [layer]): copied
-  /// to a buffer and back into an RGBA8 texture of the same bytes, whose
-  /// image Flutter reads without conversion.
+  /// Returns the texels of the target [name] at [mip] and [layer] as
+  /// stored. They are copied to a buffer and back into an RGBA8 texture of
+  /// the same bytes, whose image Flutter reads without conversion.
   Future<Uint8List> readTarget(
     String name, {
     int mip = 0,
@@ -472,7 +470,7 @@ extension RunnerResources on FrameRunner {
       gpu.StorageMode.devicePrivate,
       bytes,
     );
-    // An RGBA8 texture as wide as the row's bytes / 4.
+    // An RGBA8 texture as wide as the bytes of the row / 4.
     final rw = w * bpp ~/ 4;
     final rgba = gpu.gpuContext.createTexture(
       gpu.StorageMode.devicePrivate,
@@ -505,17 +503,14 @@ extension RunnerResources on FrameRunner {
   }
 }
 
-/// A dispatch input's per-frame buffers ([RunnerResources._frameInline]):
-/// the bytes it bound last, the run that bound it, three buffers in turn.
-/// How long a plan buffer or inline texel slot may go unnamed before the
-/// runner lets it go (RunnerResources._dropUnnamed).
+/// The number of runs that a plan buffer or inline texel slot may go unused
+/// before the runner lets it go (RunnerResources._dropUnnamed).
 const _unnamedRuns = 8;
 
-/// A plan buffer's copy let go at once (G17): FrameRunner._ensureBuffers,
-/// _dropUnnamed.
+/// Lets go of the copy [b] of a plan buffer at once (G17).
 void _release(gpu.DeviceBuffer b) => b.mcsmRelease();
 
-/// An inline buffer's view and the run that bound it last.
+/// The view of an inline buffer and the run that bound it last.
 final class _InlineBuffer {
   _InlineBuffer(this.view, this.run);
   final gpu.BufferView view;

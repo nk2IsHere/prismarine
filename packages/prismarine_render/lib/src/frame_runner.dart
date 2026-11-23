@@ -37,10 +37,10 @@ part 'runner_stencil.dart';
 part 'runner_stores.dart';
 part 'runner_warm.dart';
 
-/// Runs a [FramePlan] on the GPU: creates its targets, then records each
-/// pass in order on one command buffer, with each shader's constant
-/// buffers bound by block and its textures, samplers and texel buffers
-/// apart, as Direct3D 11 binds them.
+/// Runs a [FramePlan] on the GPU. Creates its targets, then records each
+/// pass in order on one command buffer. The constant buffers of each shader
+/// are bound by block and its textures, samplers and texel buffers apart, as
+/// Direct3D 11 binds them.
 class FrameRunner {
   FrameRunner(this.assets, this.shaders) {
     assets.onOwners = _pipelinesOwned;
@@ -49,31 +49,31 @@ class FrameRunner {
   final RenderAssets assets;
   final RunnerShaders shaders;
 
-  /// The stencil copy's shaders when the assets have them, else none (a
-  /// read of a stencil then gets a stand-in, runner_resources.dart).
+  /// The shaders of the stencil copy when the assets have them, else none.
+  /// A read of a stencil then gets a stand-in (runner_resources.dart).
   late final List<String> _stencilCopyShaders =
       assets.hasShader(shaders.stencilCopyVertex) &&
           assets.hasShader(shaders.stencilCopyPixel)
       ? List.unmodifiable([shaders.stencilCopyVertex, shaders.stencilCopyPixel])
       : const <String>[];
 
-  /// Problems worth a log line.
+  /// Receives the problems worth a log line.
   void Function(String)? warn;
 
-  /// Draws skipped so far, each named once.
+  /// The draws skipped so far, each reported once.
   final _failedDraws = <String>{};
   final _failed = <String>{};
 
-  /// Whether every attachment is written back, for reading targets after
-  /// a frame (the replay bench's `ours`); else a frame's last use of its
-  /// scene and back-buffer depth stores nothing (runner_stores.dart).
+  /// True when every attachment is written back, for reading targets after
+  /// a frame. Otherwise the last use of a depth target that no later pass
+  /// reads stores nothing (runner_stores.dart).
   bool keepStores = false;
 
-  /// Our renderer's cooked data: when set, the G-buffer pass draws what it
-  /// can in pulled form (runner_pulled.dart).
+  /// The cooked data. With it set, the pulled passes draw what they can in
+  /// pulled form (runner_pulled.dart).
   Pulled? pulled;
 
-  /// Each pulled pass's frame (runner_pulled.dart).
+  /// The frame of each pulled pass (runner_pulled.dart).
   final _pulledFrames = <String, _PulledFrame>{};
 
   /// Prints each draw as it is recorded (`PRISMARINE_RENDER_TRACE=1`).
@@ -81,20 +81,20 @@ class FrameRunner {
   final targets = <String, gpu.Texture>{};
   final _specs = <String, TargetSpec>{};
 
-  /// The pipelines by shaders and vertex feed (a mesh's own: one per mesh
-  /// and shader pair), let go with the scenes that asked for them as the
-  /// textures and meshes are (RunnerRelease.release).
+  /// The pipelines by shaders and vertex feed, one per mesh and shader pair
+  /// for the own feed of a mesh. They are let go with the scenes that asked
+  /// for them, as the textures and meshes are (RunnerRelease.release).
   final _pipelines = LooseMap<Object, gpu.RenderPipeline>();
   void _pipelinesOwned(int owners) => _pipelines.owners = owners;
   final _tagged = _PipelineTags();
 
-  /// An inline geometry's register map as its pipeline key names it, per
-  /// map object (the post draws share a few).
+  /// The register map of an inline geometry in the form of its pipeline key,
+  /// per map object.
   final _registersKey = Expando<String>('inline registers');
   final _constants = <String, gpu.Texture>{};
   final _views = <String, gpu.Texture>{};
 
-  /// Each sRGB-viewed target's view, with the texture it was made of
+  /// The sRGB view of each target, with the texture that it was made of
   /// (runner_srgb.dart).
   final _srgbViews = <String, (gpu.Texture, gpu.Texture)>{};
   final _slots = Expando<_SlotMaps>('shader slots');
@@ -108,19 +108,19 @@ class FrameRunner {
     'constant textures by texel object',
   );
 
-  /// Each depth target's stencil copy, what its stencil can hold, and the
-  /// copy's draws by value (runner_stencil.dart).
+  /// The stencil copy of each depth target, the values that its stencil can
+  /// hold and the draws of the copy by value (runner_stencil.dart).
   final _stencilCopies = <String, gpu.Texture>{};
   final _stencilValues = <String, StencilValues>{};
   final _stencilDraws = <int, DrawPlan>{};
 
-  /// The retained passes' stamps as run (runner_retained.dart) and how
-  /// many passes the last run left out.
+  /// The stamps of the retained passes as run (runner_retained.dart) and
+  /// the number of passes that the last run left out.
   final _retained = _Retained();
   int get lastRetained => _retained.left;
 
-  /// Per pixel shader id, the uint textures it declares (the stencil views
-  /// a one-draw pass may read, runner_stencil.dart).
+  /// The uint textures that each pixel shader declares, by id. These are the
+  /// stencil views that a one-draw pass may read (runner_stencil.dart).
   final _stencilReaders = <String, List<String>>{};
 
   /// The constant textures standing in for an unreadable or missing input,
@@ -128,28 +128,24 @@ class FrameRunner {
   final _standIns = <String, gpu.Texture>{};
   final _shaderSlots = Expando<_ShaderSlots>('shader slots by interface');
 
-  /// Bumped whenever a texture a draw's input resolves to may change (a
-  /// target made again, a twin or stencil copy made): the stages' resolved
-  /// textures (_StageInputs.resolved) hold until then.
+  /// Raised when a new target, twin or stencil copy may change the textures
+  /// of draw inputs, which _StageInputs.resolved holds until then.
   int _texGen = 0;
 
-  /// The constant blocks bound in recent runs with their place in the
-  /// uniform ring of the run that last wrote them, by block identity and
-  /// size.
+  /// The constant blocks bound in recent runs, by identity and size, with
+  /// their place in the uniform ring of the run that last wrote them.
   final _uniformViews = HashMap<Uint8List, _UniformView>.identity();
 
-  /// The frame being recorded's role blocks (FramePlan.frameBlocks).
+  /// The role blocks of the frame being recorded (FramePlan.frameBlocks).
   Map<Uint8List, Uint8List> _frameBlocks = const {};
 
-  /// Each frame role's view in the run that last bound it, by its block.
+  /// The view of each frame role in the run that last bound it, by block.
   final _roleViews = HashMap<Uint8List, _RoleView>.identity();
 
-  /// Whether the plans' byte blocks never change once made (plans read
-  /// through the plan codec, whose blocks are its own copies): a block
-  /// bound in two runs in a row is then written once into the block store
-  /// and bound from there after (runner_slots.dart _uniform). A plan the
-  /// builder hands over directly may change a block in place between
-  /// frames, so its blocks are written to the ring each frame.
+  /// True when the byte blocks of the plans do not change once made, as in
+  /// plans read through the plan codec. A block bound in two runs in a row
+  /// then goes once into the block store (runner_slots.dart _uniform). Plans
+  /// that change blocks in place between frames must leave this false.
   bool get keepBlocks => _store != null;
   set keepBlocks(bool on) {
     if (on == keepBlocks) return;
@@ -159,11 +155,10 @@ class FrameRunner {
   BlockStore? _store;
   UniformRing? _host;
 
-  /// The loads [plan] needs that no run made before: the shaders and PNG
-  /// textures of the draws not recorded yet (shards and textures stay
-  /// loaded), in passes this runner hasn't loaded for, and the dispatches'
-  /// shaders; null when there are none (perf: a set over every draw and
-  /// three awaits each frame).
+  /// Returns the loads that [plan] needs and that no run made before, or null
+  /// when there are none. These are the shaders and PNG textures of the draws
+  /// not recorded yet in passes that this runner has not loaded for and the
+  /// shaders of the dispatches. Shards and textures stay loaded.
   Future<void>? _newLoads(FramePlan plan) {
     final shaders = _loadShaders..clear(), pngs = _loadPngs..clear();
     final passes = _loadPasses..clear();
@@ -178,8 +173,8 @@ class FrameRunner {
           for (var i = 0; i < draws.length; i++) {
             final d = draws[i];
             final c = _cacheOf(d);
-            // Recorded, or loaded for before (a pulled row is never
-            // recorded: its textures were walked every frame).
+            // A draw recorded or loaded for before is skipped. A pulled row
+            // is not recorded and relies on the loaded flag.
             if (c.setup != null || c.loaded) continue;
             loaded.add(c);
             shaders
@@ -224,7 +219,7 @@ class FrameRunner {
     }
   }
 
-  /// _depthUnstored's walk (runner_stores.dart), kept from run to run.
+  /// The walk of _depthUnstored (runner_stores.dart), kept from run to run.
   final _unstored = KeptSet<RenderPassPlan>.identity();
   final _later = KeptSet<String>(),
       _lastSeen = KeptSet<String>(),
@@ -237,13 +232,14 @@ class FrameRunner {
   final _loadPasses = <_PassCache>[];
   final _loadDraws = <_DrawCache>[];
 
-  /// The shaders loaded by a run (the dispatches' are looked up here).
+  /// The shaders loaded by a run. The shaders of dispatches are looked up
+  /// here.
   final _shadersLoaded = <String>{};
   bool _stencilShadersLoaded = false;
 
   void _ensureTargets(FramePlan plan) {
-    // The same map as last run (the codec gives it again while the targets
-    // hold): nothing to make.
+    // The same map as in the last run has nothing to make. The codec gives it
+    // again while the targets hold.
     if (identical(plan.targets, _ensured)) return;
     _ensured = plan.targets;
     for (final name in plan.targets.keys) {
@@ -285,8 +281,8 @@ class FrameRunner {
 
   Map<String, TargetSpec>? _ensured;
 
-  /// The scene-close epoch (RunnerRelease.closed) in which a plan last
-  /// named each target.
+  /// The scene-close epoch (RunnerRelease.closed) in which a plan last used
+  /// each target.
   final _namedAt = <String, int>{};
   int _targetEpoch = 0;
 
@@ -306,37 +302,39 @@ class FrameRunner {
         depth: s.volume ? s.layers : 1,
         mipLevelCount: s.mips,
         enableShaderWriteUsage: s.storage,
-        // A 3D texture is only written by compute (the light grid).
+        // Only compute writes a 3D texture.
         enableRenderTargetUsage: !s.volume,
       );
 
   final _buffers = <String, List<gpu.DeviceBuffer>>{};
 
-  /// The targets filled from the CPU (TargetSpec.initial) of the plan's
-  /// target map [_uploadsOf], and the bytes and target each last took
+  /// The targets filled from the CPU (TargetSpec.initial) of the target map
+  /// [_uploadsOf] of the plan, with the bytes and target that each last took
   /// (runner_resources.dart _uploadTargets).
   final _uploadNames = <String>[];
   Map<String, TargetSpec>? _uploadsOf;
   final _uploaded = <String, (Uint8List, gpu.Texture)>{};
 
-  /// Each read-back buffer's bytes once its frame is done on the GPU
-  /// (BufferSpec.readBack), and the plan buffers that read back.
+  /// Receives the bytes of each read-back buffer (BufferSpec.readBack) once
+  /// its frame is done on the GPU.
   void Function(String name, Uint8List bytes)? onReadBack;
   final _readNames = <String>[];
   Map<String, BufferSpec>? _readsOf;
 
-  /// Bumped whenever a plan buffer is made again: views of the buffers
-  /// kept with a draw (_DrawFixed.streamViews) hold until then.
+  /// Raised whenever a plan buffer is made again. Views of the buffers kept
+  /// with a draw (_DrawFixed.streamViews) hold until then.
   int _bufferGen = 0;
   final _bufferSizes = <String, int>{}, _bufferRun = <String, int>{};
   var _frame = 0;
 
-  /// This frame's copy of each plan buffer: three in turn, so the CPU fills
-  /// one while earlier frames' GPU work may still read the others.
+  /// The copy of each plan buffer for this frame. Three copies take turns. The
+  /// CPU fills one while the GPU work of earlier frames may still read the
+  /// others.
   final _current = <String, gpu.DeviceBuffer>{};
 
-  /// Views into the frame buffers by buffer, offset and length ([_bufferView];
-  /// immutable), dropped when buffers are made again ([_viewsGen]).
+  /// The views into the frame buffers by buffer, offset and length from
+  /// [_bufferView]. They do not change and are dropped when buffers are made
+  /// again ([_viewsGen]).
   final _bufferViews =
       HashMap<gpu.DeviceBuffer, Map<int, gpu.BufferView>>.identity();
   int _viewsGen = -1;
@@ -347,8 +345,8 @@ class FrameRunner {
       final spec = plan.buffers[name]!;
       if (_bufferSizes[name] != spec.size) {
         _bufferGen++;
-        // The copies of the old size go now (G17): kept views see the
-        // generation move on, and the batched skinning's output grows.
+        // The copies of the old size go now (G17). Kept views see the new
+        // generation.
         _buffers[name]?.forEach(_release);
         gpu.GpuMemory.tag = 'buffer.plan';
         _buffers[name] = [
@@ -389,62 +387,61 @@ class FrameRunner {
     ],
   );
 
-  /// The presentation copies [run] made of its `present` target, in turn,
-  /// so a picture on screen is never the one the next frame draws into.
+  /// The presentation copies that [run] made of its `present` target, in
+  /// turn. A picture on screen is then not the one that the next frame draws
+  /// into.
   final _presented = <gpu.Texture>[];
   int _presentTurn = 0;
 
-  /// The last finished frame's copy of its `present` target.
+  /// The copy of the `present` target of the last finished frame.
   gpu.Texture? presented;
 
-  /// The last frame's CPU time recording its commands, and the time from
-  /// its submission to the GPU's completion (ms; profiles).
+  /// The CPU time in ms of the last frame to record its commands and the
+  /// time from its submission to the completion on the GPU.
   double lastRecordMs = 0, lastGpuMs = 0;
 
-  /// The last frame's GPU time of its own (ms; profiles): from its
-  /// submission or the previous frame's completion, whichever is later, to
-  /// its completion. Submission to completion counts the wait behind the
-  /// frame before it too, which with two frames on the GPU is most of it.
+  /// The own GPU time in ms of the last frame, from its submission or the
+  /// completion of the previous frame, whichever is later, to its completion.
   double lastGpuOwnMs = 0;
   final _gpuClock = Stopwatch()..start();
   int _lastDoneUs = 0;
 
-  /// The last frame's CPU time loading assets (shards included) and
-  /// creating pipelines (ms; profiles): the first-use work in its record.
+  /// The CPU time in ms of the last frame to load assets with their shards and
+  /// to create pipelines. It is the first-use work in its record.
   double lastLoadMs = 0, lastPipelineMs = 0;
 
-  /// The last frame's record split: targets and buffers (of it, targets
-  /// made anew, buffers made or written), render passes, dispatches (ms).
+  /// The record of the last frame in ms, split into targets and buffers,
+  /// render passes and dispatches.
   double lastSetupMs = 0, lastRenderMs = 0, lastComputeMs = 0;
 
-  /// The last run's submit, on the timeline clock (diagnostics).
+  /// The submit of the last run on the timeline clock.
   int lastSubmitAt = 0;
   double lastTargetsMs = 0, lastBuffersMs = 0;
   int lastDraws = 0, lastDispatches = 0;
   double _pipelineMs = 0;
 
-  /// CPU time making vertex layouts (padded stream copies included), and
-  /// in pipeline creations that failed and were retried (ms; profiles).
+  /// The CPU time in ms to make vertex layouts with padded stream copies and
+  /// the time in pipeline creations that failed and were retried.
   double _layoutMs = 0, _failedPipelineMs = 0;
   final _clock = Stopwatch()..start();
 
-  /// With `PRISMARINE_RENDER_PASS_LOG` set to a file, the last frame's GPU
-  /// work in order, an encoder a line, to name the encoders of a Metal
-  /// System Trace.
+  /// The file of `PRISMARINE_RENDER_PASS_LOG`, which receives the GPU work
+  /// of the last frame in order, one encoder per line. It matches the
+  /// encoders of a Metal System Trace.
   static final _passLogPath = envVar('RENDER_PASS_LOG');
   List<String>? _passLog;
 
-  /// Records [plan] and submits it; completes when the GPU is done. With
-  /// [present], the frame ends by copying that target into the next of
-  /// three presentation textures, [presented] once the GPU is done.
+  /// Records [plan] and submits it. Completes when the GPU is done. With
+  /// [present] the frame ends by copying that target into the next of three
+  /// presentation textures, which is [presented] once the GPU is done.
   Future<bool> run(FramePlan plan, {String? present}) async {
     final loadsBefore = assets.loadMs;
     _pipelineMs = 0;
-    // A prepare for this frame, if any, runs after this point and sets it.
+    // A prepare for this frame runs after this point and sets it.
     lastPrepareMs = 0;
-    // Only draws not recorded before: a recorded draw is the same object
-    // with the same textures, loaded when it was new, and the textures are
-    // never dropped.
+    // Only draws not recorded before load. A recorded draw is the same
+    // object with the same textures, which were loaded when it was new and
+    // stay loaded.
     if (_newLoads(plan) case final loads?) await loads;
     if (pulled case final p?) {
       await p.shaders.loadShaders({
@@ -466,8 +463,8 @@ class FrameRunner {
     _ensureBuffers(plan);
     final host = _host ??= UniformRing();
     host.reset();
-    // Blocks the last runs bound and this one has not are forgotten now
-    // and then (the map keeps each block's views from run to run).
+    // Blocks that the last runs bound and this run has not are forgotten
+    // now and then. The map keeps the views of each block from run to run.
     if (_runs % 64 == 0) {
       _uniformViews.removeWhere((_, v) => v.run < _runs - 2);
       _dropUnnamed();
@@ -480,8 +477,8 @@ class FrameRunner {
     _passLog = _passLogPath == null ? null : [];
     final setup = record.elapsedMicroseconds;
     var computeUs = 0;
-    // Consecutive dispatches share one compute pass (an encoder each cost
-    // more than the dispatch), until anything else is recorded.
+    // Consecutive dispatches share one compute pass until anything else is
+    // recorded. An encoder per dispatch would cost more than the dispatch.
     gpu.ComputePass? compute;
     var draws = 0, dispatches = 0;
     final unstored = _depthUnstored(plan);
@@ -556,19 +553,19 @@ class FrameRunner {
     return done.future;
   }
 
-  /// The CPU time of the [prepare] that came with the last frame (ms;
-  /// profiles), and of its asset loads (shards, meshes, textures) and
-  /// pipeline creation.
+  /// The CPU time in ms of the [prepare] that came with the last frame, of
+  /// its asset loads of shards, meshes and textures and of its pipeline
+  /// creation.
   double lastPrepareMs = 0, lastPrepareLoadMs = 0, lastPreparePipelineMs = 0;
 
-  /// The last [prepare]'s vertex layouts, failed pipeline creations and
-  /// texture creation (ms; profiles).
+  /// The time in ms of the vertex layouts, failed pipeline creations and
+  /// texture creation of the last [prepare].
   double lastPrepareLayoutMs = 0,
       lastPrepareFailedMs = 0,
       lastPrepareTextureMs = 0;
 
-  /// The last [prepare]'s draws left to their frame (a draw that the
-  /// assets cannot feed).
+  /// The draws of the last [prepare] that the assets cannot feed, left to
+  /// their frame.
   int lastPrepareErrors = 0;
 
   gpu.Texture _presentCopy(gpu.Texture t) {
@@ -603,10 +600,10 @@ class FrameRunner {
     _uses?.passName = r.name;
     final p = _passOf(r);
     final d = p.depth;
-    // Nothing to bind (no colour, no depth to clear or test): the engine
-    // can't begin such a pass, and it would draw nothing.
+    // A pass without colour and without depth to clear or test draws
+    // nothing. The engine cannot begin it.
     if (r.colors.isEmpty && d == null) return;
-    // A pulled pass's rows and culling go before the pass begins.
+    // The rows and culling of a pulled pass go before the pass begins.
     final prepared = pulled?.passes.contains(r.name) ?? false
         ? _pulledPrepare(cb, r.name, r.allDraws, host, r.rows)
         : null;
@@ -626,11 +623,11 @@ class FrameRunner {
       }
       _pulledRecord(pass, prepared, host);
       draws = prepared.rest;
-      // The pulled draws left the pass's bindings and state unknown.
+      // The pulled draws left the bindings and state of the pass unknown.
       pass.clearBindings();
       state.reset();
     }
-    // By index (perf: an iterator per pass).
+    // By index, without an iterator.
     for (var i = 0; i < draws.length; i++) {
       final draw = draws[i];
       if (!pulledPass) stencil?.write(draw);
@@ -640,8 +637,8 @@ class FrameRunner {
       try {
         _draw(pass, draw, host, state);
       } on StateError catch (e) {
-        // A draw that the assets cannot feed, for a missing shader input
-        // or resource, drops out, named once, and the rest of the frame
+        // A draw that the assets cannot feed, for a missing shader input or
+        // resource, drops out and is reported once. The rest of the frame
         // still draws.
         if (_failedDraws.add('${draw.label}: ${e.message}')) {
           warn?.call('renderer: draw skipped: ${draw.label}: ${e.message}');
@@ -650,11 +647,12 @@ class FrameRunner {
     }
   }
 
-  /// The one pass state, reset for each pass (_PassState).
+  /// The one pass state (_PassState), reset for each pass.
   final _passState = _PassState();
 
-  /// The pixel stage of depth-only draw [d]: the depth-clamp one when its
-  /// vertex stage asks for it and the assets have it, else the empty one.
+  /// Returns the pixel stage of the depth-only draw [d]. It is the
+  /// depth-clamp stage when the vertex stage of [d] asks for it and the
+  /// assets have it, else the empty stage.
   String _depthOnly(DrawPlan d) =>
       (assets.shaderRecord(d.vertex)?.depthClamp ?? false) &&
           assets.hasShader(shaders.depthClampPixel)
@@ -682,9 +680,9 @@ class FrameRunner {
     UniformRing host,
     _PassState state,
   ) {
-    // A draw recorded before (the builder keeps a still batch's draw, and
-    // the codec reads it back as the same object) keeps its shaders,
-    // pipeline and vertex buffers.
+    // A draw recorded before keeps its shaders, pipeline and vertex buffers.
+    // The builder keeps the draw of a still batch and the codec reads it back
+    // as the same object.
     if (_cacheOf(d).setup case final s?) {
       return _record(pass, d, host, s, state);
     }
@@ -694,8 +692,8 @@ class FrameRunner {
     _drawWith(pass, d, host, vs, fs, g, state);
   }
 
-  /// Records [d] into [pass]; with no pass, only makes its pipeline and
-  /// vertex buffers ([prepare]). Its setup.
+  /// Records [d] into [pass] and returns its setup. Without a pass it only
+  /// makes the pipeline and vertex buffers of [d] for [prepare].
   _DrawSetup _drawWith(
     gpu.RenderPass? pass,
     DrawPlan d,
@@ -709,8 +707,9 @@ class FrameRunner {
     List<gpu.DeviceBuffer> slots = const [];
     RenderMesh? mesh;
     Uint8List? inlineVertices;
-    // The pipeline's key: the shaders and what feeds the vertex stage (the
-    // mesh and the registers fed from frame buffers, or the inline layout).
+    // The key of the pipeline is the shaders and the feed of the vertex
+    // stage, the mesh and the registers fed from frame buffers or the inline
+    // layout.
     final Object key;
     if (g is DrawMeshGeometry) {
       mesh = assets.mesh(g.mesh);
@@ -728,8 +727,8 @@ class FrameRunner {
       final registers = _registersKey[g.registers] ??= g.registers.entries
           .map((e) => '${e.key}=${e.value}')
           .join(',');
-      // The same vertices (the screen quad) repack once per shader, so their
-      // device buffer is made once too.
+      // The same vertices, such as the screen quad, repack once per shader.
+      // Their device buffer is then made once too.
       final Uint8List packed;
       (layout, packed) =
           (_packed[g.bytes] ??= {})[(
@@ -768,8 +767,8 @@ class FrameRunner {
       if (_tagged.any) _tagged.used(this, key);
     } on Exception catch (e) {
       _failedPipelineMs += (_clock.elapsedMicroseconds - tried) / 1000;
-      // An input the translation declares but the compiled stage dropped
-      // (unread, so spirv-opt removed it): leave it out of the layout.
+      // An input that the source declares but the compiled stage dropped,
+      // since spirv-opt removed it as unread, stays out of the layout.
       final m = RegExp(
         r"VertexAttribute name '(\w+)' does not match",
       ).firstMatch('$e');
@@ -790,9 +789,9 @@ class FrameRunner {
     return setup;
   }
 
-  /// Binds [res] to [shader]'s interface; [bound] holds what this pass
-  /// bound last to each of its blocks, textures and samplers (in that
-  /// order), which is not sent again.
+  /// Binds [res] to the interface of [shader]. [bound] holds what this pass
+  /// bound last to each of its blocks, textures and samplers, in that order.
+  /// A binding that is the same is not sent again.
   void _bind(
     gpu.RenderPass pass,
     gpu.Shader shader,
@@ -813,14 +812,14 @@ class FrameRunner {
     if (slots == null || !identical(slots.shader, shader)) {
       slots = c.slots = _slotsOf(shader, info);
     }
-    // The stage's textures as this runner resolves them, again only when
-    // a target, twin or stencil copy is made since (_texGen).
+    // The textures of the stage as this runner resolves them. They resolve
+    // again only after a new target, twin or stencil copy (_texGen).
     final resolved = c.resolved;
     final fresh = c.gen == _texGen;
     final last = bound.of(info);
     final blocks = c.blocks.length, textures = c.textures.length;
     for (var i = 0; i < blocks; i++) {
-      // The declared rows only: a plan's blocks may be longer.
+      // Only the declared rows are bound. The blocks of a plan may be longer.
       final view = _stageUniform(host, c, i);
       if (identical(last[i], view)) continue;
       pass.bindUniform(
@@ -833,7 +832,7 @@ class FrameRunner {
       final t = info.textures[i];
       final ref = c.textures[i];
       if (c.texel[i]) {
-        // Two locals, not a record (one per texel bind; perf).
+        // Two locals, not a record per texel bind.
         final gpu.BufferView view;
         final String format;
         if (ref is BufferTexture) {
@@ -841,8 +840,8 @@ class FrameRunner {
           view = _inline(b.isEmpty ? _frameBlocks[b] ?? b : b);
           format = ref.format;
         } else if (ref is BufferTextureRef) {
-          // The slot's record checked before a view is made (perf: a view
-          // per texel bind a frame, most binding what they bound).
+          // The record of the slot is checked before a view is made. Most
+          // texel binds bind what they bound before.
           final r = ref.ref;
           format = r.format ?? 'R32G32B32A32_FLOAT';
           final had = last[blocks + i];
@@ -873,7 +872,7 @@ class FrameRunner {
           view,
           _formatOf(format),
         );
-        // The slot's own record changed in place (perf: one per bind).
+        // The record of the slot changes in place.
         if (had is _TexelBound) {
           had
             ..buffer = view.buffer
@@ -916,11 +915,12 @@ class FrameRunner {
   final _computePipelines = <String, gpu.ComputePipeline>{};
   final _computeSetups = <String, _ComputeSetup>{};
 
-  /// What the open compute pass's dispatches read and wrote since its last
-  /// barrier (runner_compute.dart).
+  /// The reads and writes of the dispatches of the open compute pass since
+  /// its last barrier (runner_compute.dart).
   final _sinceBarrier = _Access();
 
-  /// What this runner keeps with draw [d] (DrawPlan.runnerState).
+  /// Returns the state that this runner keeps with the draw [d]
+  /// (DrawPlan.runnerState).
   _DrawCache _cacheOf(DrawPlan d) {
     final c = d.runnerState;
     if (c is _DrawCache && identical(c.runner, this)) return c;
@@ -929,58 +929,59 @@ class FrameRunner {
     return made;
   }
 
-  // Whole-buffer views by bytes object, each holding its buffer (perf: a
-  // view per binding a frame), let go once unbound for a while.
+  // Whole-buffer views by bytes object, each holding its buffer. They are let
+  // go once unbound for a while.
   final _inlineBuffers = Map<Uint8List, _InlineBuffer>.identity();
   final _vertexBuffers = Map<Uint8List, _InlineBuffer>.identity();
 
-  /// The run in which a draw's inline bytes were first bound
+  /// The run in which the inline bytes of a draw were first bound
   /// (runner_resources.dart _drawBytes).
   final _firstRun = Expando<int>('inline bytes first run');
 
-  /// Each dispatch input's per-frame buffers (_frameInline), and the runs
-  /// recorded so far (which run bound one last).
+  /// The per-frame buffers of each dispatch input (_frameInline) and the
+  /// runs recorded so far, which tell the run that last bound one.
   final _inlineSlots = <String, Map<String, _InlineSlot>>{};
   int _runs = 0;
 
-  /// With `PRISMARINE_FRAME_LOG` set, what each run did for the first time
+  /// True with `PRISMARINE_FRAME_LOG` set. Each run then logs its first uses
   /// (runner_first_uses.dart).
   static final firstUses = envVar('FRAME_LOG') != null;
   final _uses = firstUses ? _FirstUses() : null;
 
-  /// What draws listed ahead make before their first frame
+  /// The work that draws listed ahead do before their first frame
   /// (runner_warm.dart).
   final _warm = _Warm();
 
-  /// Copies recorded so far (runner_stencil.dart): a dispatch after one
-  /// opens a compute pass of its own.
+  /// The copies recorded so far (runner_stencil.dart). A dispatch after a
+  /// copy opens a compute pass of its own.
   int _copies = 0;
 }
 
-/// What a runner keeps with a draw: its setup once recorded and the
-/// targets it reads.
+/// The state that a runner keeps with a draw, its setup once recorded and
+/// the targets that it reads.
 final class _DrawCache {
   _DrawCache(this.runner);
   final FrameRunner runner;
   _DrawSetup? setup;
 
-  /// The targets it samples, by name (runner_stores.dart).
+  /// The targets that it samples, by name (runner_stores.dart).
   List<String>? reads;
 
-  /// Its state and geometry as the engine binds them (runner_record.dart).
+  /// The state and geometry of the draw as the engine binds them
+  /// (runner_record.dart).
   _DrawFixed? fixed;
 
-  /// Whether a run loaded its shaders and textures (FrameRunner._newLoads).
+  /// True when a run loaded its shaders and textures (FrameRunner._newLoads).
   bool loaded = false;
 
-  /// As the first draw of a pulled bucket: its setup and fixed state
-  /// (runner_pulled.dart).
+  /// The setup and fixed state of the draw as the first draw of a pulled
+  /// bucket (runner_pulled.dart).
   _DrawSetup? pulled;
   _DrawFixed? pulledFixed;
 }
 
-/// A recorded draw's shaders, pipeline and vertex sources: functions of
-/// its shaders and geometry alone once its pipeline is made.
+/// The shaders, pipeline and vertex sources of a recorded draw. Once its
+/// pipeline is made they depend on its shaders and geometry alone.
 typedef _DrawSetup = ({
   gpu.Shader vs,
   gpu.Shader? fs,
@@ -990,5 +991,5 @@ typedef _DrawSetup = ({
   Uint8List? inlineVertices,
 });
 
-/// The texel buffer an input the plan leaves out reads (zeros).
+/// The texel buffer of zeros for an input that the plan leaves out.
 final _zeroTexel = Uint8List(16);

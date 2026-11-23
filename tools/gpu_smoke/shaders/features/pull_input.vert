@@ -1,6 +1,6 @@
 #version 460
-// As pull.vert, with one vertex input (the 0-191 index the renderer feeds
-// while a stage without inputs can't load).
+// As pull.vert, with one vertex input, the index 0 to 191 that a renderer
+// feeds while a stage without inputs cannot load.
 layout(location = 0) in float pull_index;
 layout(std430) readonly buffer RawPullRows {
   vec4 rows[];

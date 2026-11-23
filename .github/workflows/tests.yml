@@ -1,0 +1,147 @@
+# The tests of the lints, the profiler, the machine locks, the workspace
+# packages and the Flutter packages, with clippy and cargo test for every
+# crate. Pull requests run on Linux and Windows. A run by hand picks the runners, macOS included.
+# The landing gate runs the same steps on the Mac.
+#
+# The Flutter packages run their tests on the stock Flutter SDK with the
+# patched flutter_gpu of third_party. The patched engine is not needed.
+name: tests
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/tests.yml
+      - packages/**
+      - third_party/flutter_gpu/**
+      - tools/lint/**
+      - tools/machine/**
+      - tools/profiler/**
+      - pubspec.yaml
+      - pubspec.lock
+  workflow_dispatch:
+    inputs:
+      runners:
+        description: The runners of the run. The default is all three.
+        type: choice
+        default: all
+        options: [all, linux, macos, windows, linux-windows]
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  FLUTTER_VERSION: "3.47.7"
+  RUST_VERSION: "1.88.0"
+
+jobs:
+  tests:
+    name: tests ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: >-
+          ${{ fromJSON(
+            github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' ||
+            inputs.runners == 'linux' && '["ubuntu-latest"]' ||
+            inputs.runners == 'macos' && '["macos-latest"]' ||
+            inputs.runners == 'windows' && '["windows-latest"]' ||
+            inputs.runners == 'linux-windows' && '["ubuntu-latest","windows-latest"]' ||
+            '["ubuntu-latest","macos-latest","windows-latest"]'
+          ) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The decoder tests compare checksums of files in the tree.
+      - if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      # ALSA for cpal. SDL of prismarine_pad builds with CMake, which the
+      # runner has.
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends libasound2-dev libudev-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+      # Clippy and cargo test share one target dir per crate. The build hooks
+      # keep their release builds in .dart_tool of the workspace.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            packages/prismarine_audio_out/native -> ../../../build/cargo/packages_prismarine_audio_out_native
+            packages/prismarine_pad/native -> ../../../build/cargo/packages_prismarine_pad_native
+          cache-directories: .dart_tool/hooks_runner/shared
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          pub-cache: true
+      - run: flutter config --no-analytics --no-cli-animations
+
+      - run: dart pub get
+      - name: lint tests
+        working-directory: tools/lint
+        run: dart test
+      - name: profiler tests
+        working-directory: tools/profiler
+        run: dart test
+      - name: machine locks test
+        run: tools/machine/test/locks_test.sh
+
+      # The impellerc of the SDK for the shader bundle test.
+      - name: impellerc of the Flutter SDK
+        run: |
+          flutter precache --universal
+          case $RUNNER_OS in
+            macOS) imp=$FLUTTER_ROOT/bin/cache/artifacts/engine/darwin-x64/impellerc ;;
+            Linux) imp=$FLUTTER_ROOT/bin/cache/artifacts/engine/linux-x64/impellerc ;;
+            Windows) imp=$FLUTTER_ROOT/bin/cache/artifacts/engine/windows-x64/impellerc.exe ;;
+          esac
+          [[ -x $imp ]] || { echo "No impellerc at $imp. Check the host artifacts of the Flutter SDK."; exit 1; }
+          echo "PRISMARINE_IMPELLERC=$imp" >> "$GITHUB_ENV"
+      - name: workspace package tests
+        run: |
+          sed -n 's/^  - \(packages\/.*\)$/\1/p' pubspec.yaml | while read -r p; do
+            [[ -d $p/test ]] || continue
+            echo "== $p"
+            (cd "$p" && dart test --timeout=120s) || exit 1
+          done
+      - name: Flutter package tests
+        run: |
+          for f in $(git ls-files 'packages/*/pubspec.yaml'); do
+            p=$(dirname "$f")
+            grep -q '^  flutter:$' "$f" && [[ -d $p/test ]] || continue
+            echo "== $p"
+            (cd "$p" && flutter pub get && flutter test --timeout=120s) || exit 1
+          done
+      # analyze.dart skips a check without its toolchain and passes. Here
+      # a skipped check fails the step. The sample app and gpu_smoke are not
+      # resolved and are analyzed by the landing gate.
+      - name: analyze the Flutter packages
+        if: runner.os == 'Linux'
+        run: |
+          dart tools/lint/analyze.dart --only=flutter | tee "$RUNNER_TEMP/analyze.txt"
+          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt" | grep -v -e ' apps/' -e ' tools/gpu_smoke '
+
+      - name: clippy
+        # The Windows form of the path for the Dart process.
+        run: |
+          dart tools/lint/analyze.dart --only=clippy --target-dir="$(pwd -W 2>/dev/null || pwd)/build/cargo" | tee "$RUNNER_TEMP/analyze.txt"
+          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt"
+      - name: cargo test
+        run: |
+          for c in $(git ls-files '*Cargo.toml' | grep -v third_party); do
+            d=$(dirname "$c")
+            echo "== $d"
+            cargo test -q --manifest-path "$c" --target-dir "build/cargo/${d//\//_}" || exit 1
+          done

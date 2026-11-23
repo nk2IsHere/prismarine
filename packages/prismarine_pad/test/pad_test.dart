@@ -5,14 +5,14 @@ void main() {
   test('reads the host (no pad on a build machine reads as none)', () {
     final pads = HostPads();
     final r = pads.read();
-    // The real library loads and SDL starts with our settings (a fake
-    // would hide a library that never starts).
+    // The real library loads and SDL starts with these hints. A fake would
+    // hide a library that does not start.
     expect(pads.unavailable, isFalse, reason: 'the pad library or SDL failed');
     if (!r.connected) {
       expect(r.buttons, 0);
       expect(r.leftStick, (0.0, 0.0));
     } else {
-      // A pad is plugged in: its reading is in range.
+      // With a pad plugged in, its reading is in range.
       expect(r.leftStick.$1.abs(), lessThanOrEqualTo(1));
       expect(r.leftTrigger, inInclusiveRange(0, 1));
     }

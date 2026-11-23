@@ -33,8 +33,8 @@ final _nearest = gpu.SamplerOptions(
   magFilter: gpu.MinMagFilter.nearest,
 );
 
-/// Binds every sampler of LayersFragment (unused ones get placeholders:
-/// Metal and Vulkan want every declared texture bound).
+/// Binds every sampler of LayersFragment. Unused samplers get placeholders,
+/// since Metal and Vulkan need every declared texture bound.
 void _bindLayers(
   gpu.RenderPass p,
   gpu.Shader f, {
@@ -167,7 +167,7 @@ Future<String?> _volume(_Kit kit) async {
   return null;
 }
 
-/// Renders a colour into a texture of [format], samples it into RGBA8.
+/// Renders a colour into a texture of [format] and samples it into RGBA8.
 Future<List<int>> _throughFormat(
   _Kit kit,
   gpu.PixelFormat format,
@@ -189,7 +189,7 @@ Future<List<int>> _throughFormat(
   return centre(out);
 }
 
-/// A depth-only pass at depth [z] into [depth], then [read] samples it.
+/// Runs a depth-only pass at depth [z] into [depth].
 Future<void> _depthPass(_Kit kit, gpu.Texture depth, double z) async {
   final v = kit.shader('DepthVertex');
   final f = kit.shader('DepthOnlyFragment');
@@ -261,7 +261,8 @@ Future<String?> _formats(_Kit kit) async {
       p.bindTexture(f.getUniformSlot('source'), depth, sampler: _nearest);
     });
     final c = await centre(out);
-    // The depth sampled as red (0.25 → 64); the other channels vary by API.
+    // The depth is sampled as red, 0.25 → 64. The other channels vary by
+    // API.
     if ((c[0] - 64).abs() > 2) return '$format depth: got $c, want red 64';
   }
   return null;

@@ -1,5 +1,5 @@
-/// A constant buffer a shader declares: its uniform block name, the id of
-/// its parameter, its `cb#` register and its size in 16-byte rows.
+/// A constant buffer that a shader declares, with its uniform block name,
+/// the id of its parameter, its `cb#` register and its size in 16-byte rows.
 class ShaderBlock {
   ShaderBlock(this.name, this.parameter, this.slot, this.rows);
   final String name;
@@ -10,7 +10,7 @@ class ShaderBlock {
   final int slot, rows;
 }
 
-/// A texture object (or texel buffer) a shader declares.
+/// A texture object or texel buffer that a shader declares.
 class TextureSlot {
   TextureSlot(this.name, this.type, this.parameter, this.slot);
   final String name, type;
@@ -18,7 +18,7 @@ class TextureSlot {
   final int slot;
 }
 
-/// A vertex input: GLSL location, semantic name and index.
+/// A vertex input with its GLSL location, semantic name and index.
 class Attribute {
   Attribute(
     this.location,
@@ -31,7 +31,7 @@ class Attribute {
   final int location, index, register;
   final String semantic, type;
 
-  /// Its GLSL name: `vsi<register>`, or with its semantic in a native shader.
+  /// The GLSL name, `vsi<register>` or the semantic in a native shader.
   final String name;
 }
 
@@ -82,16 +82,17 @@ class ShaderRecord {
   final List<ShaderBlock> blocks;
   final List<TextureSlot> textures;
 
-  /// (`s#` register, comparison) per sampler object.
+  /// The `s#` register and comparison flag of each sampler object.
   final List<(int, bool)> samplers;
   final List<Attribute> attributes;
 
-  /// A vertex stage that clamps depth per vertex and leaves the clamp per
-  /// pixel to a depth-clamp pixel shader, as Direct3D's depth clamp does.
+  /// True for a vertex stage that clamps depth per vertex and leaves the
+  /// clamp per pixel to a depth-clamp pixel shader, as the depth clamp of
+  /// Direct3D does.
   bool get depthClamp => json['depthClamp'] == true;
 
-  /// Storage resources by name → `buffer` or the image type (`image2D`,
-  /// `image2DArray`, `uimage3D`, `imageBuffer`, …).
+  /// The storage resources by name, each `buffer` or an image type such as
+  /// `image2D`, `image2DArray`, `uimage3D` or `imageBuffer`.
   late final Map<String, String> storage = {
     for (final MapEntry(:key, :value)
         in ((json['storage'] as Map?) ?? const {}).entries)
@@ -103,8 +104,8 @@ class ShaderRecord {
     for (final n in (json['readonly'] as List?) ?? const []) n as String,
   };
 
-  /// The entry in its shader library and the library, when it was built
-  /// into one.
+  /// The entry of the shader in its shader library, when it was built into
+  /// one. [shard] is the library.
   String? get entry =>
       build?['state'] == 'bundled' ? build!['entry'] as String : null;
   String? get shard =>

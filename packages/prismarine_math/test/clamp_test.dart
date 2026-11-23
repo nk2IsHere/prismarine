@@ -2,7 +2,7 @@ import 'package:prismarine_math/clamp.dart';
 import 'package:test/test.dart';
 
 void main() {
-  // A NaN limit makes num.clamp throw: no caller has one.
+  // A NaN limit is not tested, since num.clamp throws for it.
   test('clampDouble gives num.clamp\'s answers, bit for bit', () {
     const values = [
       -2.0, -1.0, -0.0, 0.0, 0.5, 1.0, 2.0, //

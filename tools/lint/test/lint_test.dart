@@ -2,12 +2,13 @@ import 'package:test/test.dart';
 
 import '../same_code.dart' show firstCodeDifference;
 import '../src/config.dart';
+import '../src/example_copies.dart';
 import '../src/lexer.dart';
 import '../src/rule_sets.dart';
 import '../src/rules.dart';
 
 // A config with both rule sets. It has the addresses of a 32-bit binary, a
-// 64-bit binary and a DLL and the season words of code names.
+// 64-bit binary and a DLL and a set of name words.
 const _config = r'''
 code_shape:
   history:
@@ -360,6 +361,45 @@ code_shape:
         firstCodeDifference('if a { b }', 'if a { b; }', Lang.rust),
         isNotNull,
       );
+    });
+  });
+
+  group('example copies', () {
+    const file = 'void main() {\n  print(1);\n}\n';
+    String? read(String path) => path == 'p/example/example.dart' ? file : null;
+    List<String> check(String md) =>
+        exampleMismatches('README.md', 'p', md.split('\n'), read: read);
+
+    test('a block equal to the linked file passes', () {
+      expect(
+        check(
+          '[`example/example.dart`](example/example.dart):\n\n'
+          '```dart\nvoid main() {\n  print(1);\n}\n```',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a changed block and a missing file are reported', () {
+      expect(
+        check(
+          'See [the example](example/example.dart)\n'
+          '```dart\nvoid main() {}\n```\n'
+          '[gone](example/gone.dart)\n```dart\nint x = 1;\n```',
+        ),
+        [
+          'README.md:2: the example differs from example/example.dart',
+          'README.md:6: no file example/gone.dart for the example',
+        ],
+      );
+    });
+
+    test('a block without a link before it is not checked', () {
+      expect(
+        check('[file](example/example.dart) and more text\n```dart\nx\n```'),
+        isEmpty,
+      );
+      expect(check('Text.\n\n```dart\nint x = 1;\n```'), isEmpty);
     });
   });
 }

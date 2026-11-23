@@ -1,6 +1,6 @@
 #version 460 core
 
-// A material-like fragment for the draw benchmark: a uniform block and
+// A material-like fragment for the draw benchmark with a uniform block and
 // three textures.
 
 precision highp float;

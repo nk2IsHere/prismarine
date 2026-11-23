@@ -1,41 +1,44 @@
-// What each system is asked so a thread runs as the frame's work or as
-// background work: the two roles macOS calls user-interactive and utility
-// QoS (perf, thread ownership). Pure: the system calls come in through
-// [ThreadCalls], so the mapping is tested on every platform; thread_qos.dart
-// gives it the real ones.
+// Maps the two thread roles, frame work and background work, to the calls of
+// each system. The roles are user-interactive and utility QoS on macOS. The
+// system calls come in through [ThreadCalls], which keeps the mapping
+// testable on every platform. thread_qos.dart gives it the real calls.
 
 /// The systems with a mapping.
 enum ThreadOs { macos, windows, linux, none }
 
-/// The raw calls about the calling thread. Its "level" is the system's own
-/// number for where the thread runs: the QoS class (macOS
-/// `qos_class_self`), the priority (Windows `GetThreadPriority`) or the nice
-/// value (Linux `getpriority(PRIO_PROCESS, 0)`, which is per thread there).
+/// The raw calls about the calling thread. Its level is the number of the
+/// system for the rank of the thread. The level is the QoS class
+/// (`qos_class_self`) on macOS, the priority (`GetThreadPriority`) on
+/// Windows and the nice value (`getpriority(PRIO_PROCESS, 0)`, per thread)
+/// on Linux.
 abstract interface class ThreadCalls {
   int level();
   void setLevel(int level);
 
-  /// Windows `SetThreadInformation(ThreadPowerThrottling)`, the execution
-  /// speed bit: true EcoQoS (the efficiency cores, a lower clock), false
-  /// opted out, null left to the system.
+  /// Sets the execution speed bit of `SetThreadInformation
+  /// (ThreadPowerThrottling)` on Windows. True selects EcoQoS, with the
+  /// efficiency cores and a lower clock. False opts out. Null leaves it to
+  /// the system.
   void setEcoQos(bool? on);
 
-  /// Linux `sched_getscheduler`/`sched_setscheduler` for the calling thread.
+  /// Linux `sched_getscheduler` and `sched_setscheduler` for the calling
+  /// thread.
   int policy();
   void setPolicy(int policy);
 
-  /// Linux `ioprio_get`/`ioprio_set` (IOPRIO_WHO_PROCESS, 0: the calling
-  /// thread); -1 where it can't be read.
+  /// Linux `ioprio_get` and `ioprio_set` with IOPRIO_WHO_PROCESS and 0 for
+  /// the calling thread. The getter returns -1 when it cannot be read.
   int ioPriority();
   void setIoPriority(int ioprio);
 
-  /// Linux: the slice the calling thread asked for, in ns (`sched_getattr`'s
-  /// sched_runtime; 0 on kernels before 6.12, which keep none for
-  /// SCHED_OTHER).
+  /// Returns the slice in ns that the calling thread requested on Linux, the
+  /// sched_runtime of `sched_getattr`. Kernels before 6.12 keep no slice for
+  /// SCHED_OTHER and return 0.
   int slice();
 
-  /// Linux `sched_setattr`: SCHED_OTHER at [nice], asking for [sliceNs]
-  /// (EEVDF's custom slice, 6.12 on); false where refused.
+  /// Calls `sched_setattr` on Linux with SCHED_OTHER at [nice] and the
+  /// custom EEVDF slice [sliceNs] of Linux 6.12 and later. Returns false when
+  /// the call is refused.
   bool setFrameAttr(int nice, int sliceNs);
 }
 
@@ -48,24 +51,25 @@ const winAboveNormal = 1, winBelowNormal = -1;
 /// Linux scheduling policies (`sched.h`).
 const linuxSchedOther = 0, linuxSchedBatch = 3;
 
-/// How far the frame's threads sit above the process's nice on Linux, where
-/// RLIMIT_NICE allows it (the engine's raster thread on Android is at -5),
-/// and background threads below it (`nice`'s own default step).
+/// The steps of the nice of frame threads above the nice of the process on
+/// Linux, where RLIMIT_NICE allows it, with the step of background threads
+/// below it. The raster thread of the engine on Android is at -5. The
+/// background step is the default step of `nice`.
 const linuxFrameStep = 5, linuxBackgroundStep = 10;
 
-/// Linux I/O priorities (`linux/ioprio.h`): best-effort class (2 << 13) at
-/// its highest level for the frame's reads and its lowest for background
-/// ones; both allowed without privileges. Not the idle class: a load a
-/// frame waits on would wait behind every other reader.
+/// Linux I/O priorities from `linux/ioprio.h`. Frame reads use the highest
+/// level of the best-effort class (2 << 13) and background reads its lowest
+/// level. Both are allowed without privileges. The idle class is not used.
+/// A load that a frame waits on would wait behind every other reader.
 const linuxIoFrame = 0x4000, linuxIoBackground = 0x4007;
 
-/// The slice a frame thread asks for on Linux 6.12 and later: shorter than
-/// the default (0.75 ms × (1 + log2 CPUs), 3 ms from 8 CPUs), so EEVDF lets
-/// it preempt on wakeup and gives its deadline sooner. Any thread may ask
-/// (0.1–100 ms).
+/// The slice that a frame thread requests on Linux 6.12 and later. The
+/// default slice is 0.75 ms × (1 + log2 CPUs), 3 ms from 8 CPUs. EEVDF lets
+/// a thread with a shorter slice preempt on wakeup and gives it an earlier
+/// deadline. Any thread may request a slice of 0.1 ms to 100 ms.
 const linuxFrameSliceNs = 1000000;
 
-/// The two roles on one system, given its raw calls and the facts read once
+/// The two roles on one system, from its raw calls and the facts read once
 /// per process.
 class ThreadRoles {
   ThreadRoles(
@@ -79,38 +83,38 @@ class ThreadRoles {
   final ThreadOs os;
   final ThreadCalls calls;
 
-  /// The process runs below normal priority (`nice` above 0; a Windows
-  /// priority class below normal). Unattended runs (heavy jobs, the land
-  /// gate) run so: there a lowered thread ranks below every other such
-  /// job's normal threads, and on a busy machine a scene load's workers
-  /// starved for minutes. Such a process is already below interactive
-  /// work, so its threads keep their place.
+  /// True when the process runs below normal priority, with a `nice` above
+  /// 0 or a Windows priority class below normal. The threads of such a
+  /// process keep their place. A lowered thread would rank below the normal
+  /// threads of every other niced process and could starve on a busy
+  /// machine.
   final bool niced;
 
-  /// Linux: the process's nice and RLIMIT_NICE's soft limit (an
-  /// unprivileged thread may lower its nice only down to 20 - limit).
+  /// The nice of the process and the soft limit of RLIMIT_NICE on Linux. A
+  /// thread without privileges may lower its nice only down to 20 - limit.
   final int processNice, rlimitNice;
 
-  // Linux: whether the kernel keeps a requested slice (null: not tried).
+  // True when the Linux kernel keeps a requested slice, null before a try.
   bool? _slices;
 
   int get _lowestNice => (20 - rlimitNice).clamp(-20, 20);
 
-  /// Linux: the nice the frame's threads run at; above the process's only
-  /// where RLIMIT_NICE allows it.
+  /// The nice of frame threads on Linux. It is above the nice of the process
+  /// only where RLIMIT_NICE allows it.
   int get frameNice => (processNice - linuxFrameStep)
       .clamp(_lowestNice, 20)
       .clamp(-20, processNice);
 
-  /// Linux: the nice background work runs at.
+  /// The nice of background work on Linux.
   int get backgroundNice => (processNice + linuxBackgroundStep).clamp(-20, 19);
 
-  /// Gives the calling thread the frame's role: macOS user-interactive;
-  /// Windows above normal and out of EcoQoS (the engine's raster thread's
-  /// priority); Linux a short slice (6.12 on), [frameNice] where RLIMIT_NICE
-  /// allows it and the best-effort I/O class's highest level. Called per
-  /// frame (Dart may run an isolate on any pool thread), so it reads first
-  /// and sets only what differs.
+  /// Gives the calling thread the frame role. The role is user-interactive
+  /// on macOS. On Windows it is above normal and out of EcoQoS, the priority
+  /// of the raster thread of the engine. On Linux it is a short slice from
+  /// 6.12 on, [frameNice] where RLIMIT_NICE allows it and the highest level
+  /// of the best-effort I/O class. Call it every frame, since Dart may run an
+  /// isolate on any thread of its pool. It reads first and sets only the
+  /// values that differ.
   void raise() {
     switch (os) {
       case ThreadOs.macos:
@@ -129,8 +133,9 @@ class ThreadRoles {
   }
 
   void _raiseLinux() {
-    // The slice is set with the rest and a restore puts back all of it, so
-    // a thread that kept it has the role: one read per frame.
+    // The slice is set with the rest of the role and a restore puts back all
+    // of it. A thread that kept the slice has the role, which costs one read
+    // per frame.
     if (_slices != false && calls.slice() == linuxFrameSliceNs) return;
     final now = calls.level();
     final f = frameNice;
@@ -147,14 +152,14 @@ class ThreadRoles {
     if (calls.ioPriority() != linuxIoFrame) calls.setIoPriority(linuxIoFrame);
   }
 
-  /// Gives the calling thread the background role for a while; returns
-  /// what [restore] puts back (null: nothing changed). macOS utility;
-  /// Windows below normal in EcoQoS (not background mode, whose very low
-  /// I/O and memory priority would stall a load a frame waits on); Linux
-  /// [backgroundNice] where the thread may come back from it, else
-  /// SCHED_BATCH (pool threads serve other isolates next, and without
-  /// RLIMIT_NICE a raised nice can't be lowered again), and the best-effort
-  /// I/O class's lowest level.
+  /// Gives the calling thread the background role for a while. Returns the
+  /// value that [restore] puts back, or null when nothing changed. The role is
+  /// utility on macOS. On Windows it is below normal in EcoQoS. Background mode
+  /// is not used, since its very low I/O and memory priority would stall a load
+  /// that a frame needs. On Linux it is [backgroundNice] where the thread may
+  /// return from it, else SCHED_BATCH, with the lowest level of the best-effort
+  /// I/O class. A raised nice cannot be lowered again without RLIMIT_NICE. A
+  /// pool thread must return to its role for the next isolate.
   int? lower() {
     if (niced) return null;
     switch (os) {
@@ -162,12 +167,11 @@ class ThreadRoles {
         final prev = calls.level();
         if (prev == macUtility) return null;
         calls.setLevel(macUtility);
-        // Unspecified can't be set back; default is what such a thread
-        // runs at.
+        // Unspecified cannot be set back. Such a thread runs at default.
         return prev == 0 ? macDefault : prev;
       case ThreadOs.windows:
         final prev = calls.level();
-        // Above 15: GetThreadPriority's error value.
+        // A value above 15 is the error value of GetThreadPriority.
         if (prev <= winBelowNormal || prev > 15) return null;
         calls.setLevel(winBelowNormal);
         calls.setEcoQos(true);
@@ -201,7 +205,8 @@ class ThreadRoles {
         calls.setLevel(prev);
       case ThreadOs.windows:
         calls.setLevel(prev);
-        // A frame thread was opted out; any other goes back to the system.
+        // A frame thread was opted out. Any other thread goes back to the
+        // system.
         calls.setEcoQos(prev >= winAboveNormal ? false : null);
       case ThreadOs.linux:
         final cpu = prev & _cpuMask;
@@ -215,7 +220,8 @@ class ThreadRoles {
     }
   }
 
-  /// Whether the calling thread runs in the frame's role (null: unknown).
+  /// Returns true when the calling thread runs in the frame role, or null
+  /// when it is unknown.
   bool? inFrameRole() => switch (os) {
     ThreadOs.macos => calls.level() == macUserInteractive,
     ThreadOs.windows => calls.level() >= winAboveNormal,
@@ -225,7 +231,8 @@ class ThreadRoles {
   };
 }
 
-// Linux restore tokens: the CPU part in the low byte (kept, back to
-// SCHED_OTHER, or the nice to set back), the I/O priority to set back above.
+// A Linux restore token holds the CPU part in the low byte and the I/O
+// priority to set back above it. The CPU part is kept, back to SCHED_OTHER or
+// the nice to set back.
 const _cpuKept = 0, _cpuBatch = 1, _cpuNice = 2, _cpuMask = 0xff;
 const _ioSaved = 1 << 8, _ioShift = 12;

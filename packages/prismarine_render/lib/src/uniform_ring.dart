@@ -2,32 +2,30 @@ import 'dart:typed_data';
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
 
-/// A frame's constant-buffer data: a bump allocator over host-visible
-/// blocks, four frames in turn (two frames on the GPU, one recording, one
-/// spare). It stands in for flutter_gpu's HostBuffer, which writes past a
-/// block's end when an emplacement doesn't fit its remainder (it checks the
-/// start, not the end) and grows a frame's block list on every overflow.
-/// A frame may emplace 12 KB blocks thousands of times.
+/// The constant-buffer data of a frame in a bump allocator over host-visible
+/// blocks, four frames in turn. Two frames are on the GPU, one records and
+/// one is spare. It stands in for the HostBuffer of flutter_gpu, which
+/// writes past the end of a block when an emplacement does not fit its
+/// remainder and grows the block list of a frame on every overflow. A frame
+/// may emplace 12 KB blocks thousands of times.
 ///
-/// An emplacement copies into a CPU copy of its block, and [flush] writes
-/// each block's used bytes to the GPU once, before the frame is submitted:
-/// a heavy shot's thousands of emplacements each crossed into the engine
-/// (a non-leaf call) to write their own few hundred bytes.
+/// An emplacement copies into a CPU copy of its block. [flush] writes the
+/// used bytes of each block to the GPU once, before the frame is submitted.
 class UniformRing {
   static const _blockBytes = 4 << 20;
   static const _frames = 4;
 
   final _blocks = List.generate(_frames, (_) => <gpu.DeviceBuffer>[]);
 
-  /// Each block's bytes as this frame writes them, and how far.
+  /// The bytes of each block as this frame writes them, with their extent.
   final _staging = <Uint8List>[];
   final _used = <int>[];
   int _frame = 0, _block = 0, _offset = 0;
 
-  /// The context's uniform alignment, asked once (a call into the engine).
+  /// The uniform alignment of the context, asked once from the engine.
   late final int _align = gpu.gpuContext.minimumUniformByteAlignment;
 
-  /// Starts the next frame's blocks.
+  /// Starts the blocks of the next frame.
   void reset() {
     _frame = (_frame + 1) % _frames;
     _block = 0;
@@ -35,8 +33,8 @@ class UniformRing {
     _used.fillRange(0, _used.length, 0);
   }
 
-  /// [bytes] placed in this frame's blocks, aligned for a uniform binding;
-  /// on the GPU once [flush]ed.
+  /// Places [bytes] in the blocks of this frame, aligned for a uniform binding.
+  /// Returns their view. They are on the GPU after [flush].
   gpu.BufferView emplace(Uint8List bytes) {
     final n = bytes.length;
     final align = _align;
@@ -75,8 +73,8 @@ class UniformRing {
     return gpu.BufferView(list[_block], offsetInBytes: at, lengthInBytes: n);
   }
 
-  /// Writes this frame's blocks to the GPU: before the frame that binds
-  /// them is submitted.
+  /// Writes the blocks of this frame to the GPU. Call it before the frame
+  /// that binds them is submitted.
   void flush() {
     final list = _blocks[_frame];
     for (var b = 0; b < list.length && b < _used.length; b++) {
@@ -89,43 +87,40 @@ class UniformRing {
   }
 }
 
-/// Constant blocks that stay the same from frame to frame, written once
-/// into host-visible arenas that later frames bind again: a still shot's
-/// thousands of material, instance and batch blocks were copied into each
-/// frame's ring anew. A placement appends to the newest arena, so what a
-/// frame on the GPU reads is never written again; [flush] writes each
-/// arena's new bytes once a frame. Past [_limit] bytes placed the arenas
-/// start over at the next run's start ([begin]: [epoch] moves on, and a
-/// view of an older epoch is placed again on its next use): blocks no
-/// frame binds any more are dropped with them, their arenas let go at
-/// once. Left to the collector, the dropped arenas would live until an
-/// old-space mark-sweep.
+/// Constant blocks that stay the same from frame to frame, written once into
+/// host-visible arenas that later frames bind again. A placement appends to the
+/// newest arena. The bytes that a frame on the GPU reads are not written again.
+/// [flush] writes the new bytes of each arena once a frame. Past [_limit]
+/// placed bytes the arenas start over at the start of the next run in [begin].
+/// [epoch] then advances. A view of an older epoch is placed again on its next
+/// use. Blocks that no frame binds any more are dropped with the arenas, which
+/// are let go at once and not left to an old-space collection.
 class BlockStore {
   static const _arenaBytes = 4 << 20;
   static const _limit = 48 << 20;
 
-  /// Bumped whenever the arenas start over: views placed before are not
+  /// Raised whenever the arenas start over. Views placed before are not
   /// bound again.
   int epoch = 0;
 
   final _arenas = <gpu.DeviceBuffer>[];
 
-  /// Each arena's bytes on the CPU, until it is full and written.
+  /// The bytes of each arena on the CPU, until it is full and written.
   final _staging = <Uint8List?>[];
 
-  /// Each arena's bytes placed and not yet written.
+  /// The range of the bytes of each arena placed and not yet written.
   final _from = <int>[], _to = <int>[];
   int _offset = 0, _placed = 0;
   late final int _align = gpu.gpuContext.minimumUniformByteAlignment;
 
-  /// A run's start, before it binds anything: past [_limit], the arenas
-  /// start over. Not in [place]: a run's views placed before a start-over
-  /// in [place] were still bound by that run, and their bytes, not yet
-  /// [flush]ed, never reached the GPU.
+  /// Starts a run before it binds anything. Past [_limit] the arenas start
+  /// over here and not in [place]. A start-over in [place] would drop views
+  /// that the run placed before and still binds, whose bytes have not
+  /// reached the GPU through [flush].
   void begin() {
     if (_placed <= _limit) return;
-    // The runs submitted keep what they bound; no later run binds a view
-    // of an older epoch.
+    // The submitted runs keep what they bound. No later run binds a view of
+    // an older epoch.
     for (final a in _arenas) {
       a.mcsmRelease();
     }
@@ -137,8 +132,8 @@ class BlockStore {
     epoch++;
   }
 
-  /// [bytes] placed for good (until the arenas start over); null when it
-  /// is larger than an arena.
+  /// Places [bytes] for good, until the arenas start over. Returns their view.
+  /// Returns null when [bytes] is larger than an arena.
   gpu.BufferView? place(Uint8List bytes) {
     final n = bytes.length;
     if (n > _arenaBytes) return null;
@@ -166,8 +161,8 @@ class BlockStore {
     return gpu.BufferView(_arenas[k], offsetInBytes: at, lengthInBytes: n);
   }
 
-  /// Writes the bytes placed since the last flush: before the frame that
-  /// binds them is submitted.
+  /// Writes the bytes placed since the last flush. Call it before the frame
+  /// that binds them is submitted.
   void flush() {
     for (var k = 0; k < _arenas.length; k++) {
       final from = _from[k], to = _to[k];
@@ -180,7 +175,7 @@ class BlockStore {
         throw StateError('block store: writing ${to - from} bytes failed');
       }
       _from[k] = _to[k] = 0;
-      // A full arena takes no more: its CPU copy goes.
+      // A full arena takes no more bytes and its CPU copy goes.
       if (k < _arenas.length - 1) _staging[k] = null;
     }
   }

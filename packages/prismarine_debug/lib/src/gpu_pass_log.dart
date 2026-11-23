@@ -1,11 +1,11 @@
-// The GPU pass log, a debug tool: one line per renderer command buffer as
-// it is submitted — its submission id, the time (Timeline.now, µs) and the
-// pass that submitted it (the first stack frame outside the submission
-// tracker) — and an `F` line at each display frame. A renderer that submits
-// each render pass in a command buffer of its own, in order, lets a Metal
-// System Trace's command buffers (ids in creation order) be named pass by
-// pass. Where several passes share one command buffer, its line names the
-// code that submitted them all; the trace shows them as encoders inside it.
+// The GPU pass log writes one line per command buffer of the renderer as it
+// is submitted, with its submission id, the time from Timeline.now in µs and
+// the pass that submitted it. The pass is the first stack frame outside the
+// submission tracker. An `F` line marks each display frame. A renderer that
+// submits each render pass in a command buffer of its own, in order, lets
+// the command buffers of a Metal System Trace be matched pass by pass. A
+// command buffer shared by several passes gets the code that submitted them
+// all. The trace shows the passes as encoders inside it.
 import 'dart:developer';
 import 'dart:io';
 
@@ -19,7 +19,8 @@ void Function(int id) installGpuPassLog(
   String path, {
   List<String> skip = const [],
 }) {
-  // Written line by line (a capture exits without a last frame callback).
+  // The log is written line by line, since a capture exits without a last
+  // frame callback.
   final out = File(path).openSync(mode: FileMode.write);
   SchedulerBinding.instance.addPersistentFrameCallback((_) {
     out.writeStringSync('F ${Timeline.now}\n');
@@ -33,7 +34,7 @@ void Function(int id) installGpuPassLog(
 
 final _frame = RegExp(r'#\d+\s+(\S+)\s+\((\S+?)(?::\d+(?::\d+)?)?\)');
 
-/// The first frame outside [skip], this file and the SDK.
+/// Returns the first frame of [st] outside [skip], this file and the SDK.
 String _pass(StackTrace st, List<String> skip) {
   for (final m in _frame.allMatches(st.toString())) {
     final fn = m.group(1)!, file = m.group(2)!;

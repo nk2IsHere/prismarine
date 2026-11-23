@@ -1,15 +1,16 @@
-//! The output device: the system's default output through `cpal`
-//! (CoreAudio on macOS, WASAPI on Windows, ALSA on Linux), 48 kHz float32
-//! stereo, rendering inside its callback.
+//! The output device. It is the default output of the system through
+//! `cpal`, CoreAudio on macOS, WASAPI on Windows and ALSA on Linux, at
+//! 48 kHz float32 stereo, rendering inside its callback.
 //!
-//! The device owns what renders ([Render]) while it runs; the stream's
-//! callback is the only place that reaches it.
+//! The device owns the [Render] while it runs. The callback of the stream
+//! is the only place that reaches it.
 //!
 //! The output fades in over [RAMP_FRAMES] when the stream starts and fades
-//! out to silence before it stops (dropping the [Device], or the process
-//! exiting: an `atexit` hook fades every live device), so the speakers
-//! don't click on the step from or to silence. The fade is applied after
-//! the render, at the device only. What the [Render] renders is unchanged.
+//! out to silence before it stops. It stops when the [Device] is dropped or
+//! when the process exits, where an `atexit` hook fades every live device.
+//! The speakers then do not click on the step from or to silence. The fade
+//! is applied after the render, at the device only. The output of the
+//! [Render] is unchanged.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Once};
@@ -18,13 +19,15 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, StreamConfig, SupportedBufferSize};
 
-/// What fills the device's buffers, on the device's thread.
+/// The source that fills the buffers of the device, on the thread of the
+/// device.
 pub trait Render: Send + 'static {
     /// Fills [out] with interleaved stereo frames.
     fn render(&mut self, out: &mut [f32]);
 }
 
-/// Why the device didn't start. A negative code and the platform's message.
+/// The reason that the device did not start, a negative code and the
+/// message of the platform.
 pub struct StartError {
     pub code: i32,
     pub message: String,
@@ -37,23 +40,24 @@ fn fail(code: i32, message: impl std::fmt::Display) -> StartError {
     }
 }
 
-/// The declick fade's length: 10 ms at 48 kHz.
+/// The length of the declick fade, 10 ms at 48 kHz.
 pub const RAMP_FRAMES: u32 = 480;
 
-/// How long a stop waits for the fade-out before it lets the stream go
-/// anyway (a device that stopped calling back never finishes it).
+/// The time that a stop waits for the fade-out before it lets the stream go
+/// anyway. A device that stopped calling back does not finish the fade.
 const FADE_WAIT: Duration = Duration::from_millis(100);
 
-/// A device's fade state shared between its callback and whoever stops it.
+/// The fade state of a device, shared between its callback and the code
+/// that stops it.
 struct Gate {
-    /// Set to fade out; the callback then renders down to silence.
+    /// Set to fade out. The callback then renders down to silence.
     closing: AtomicBool,
     /// Set by the callback once the output is silent after [closing].
     silent: AtomicBool,
 }
 
 impl Gate {
-    /// Asks for the fade-out and waits (bounded) until it is done.
+    /// Asks for the fade-out and waits, bounded, until it is done.
     fn fade_out(&self) {
         self.closing.store(true, Ordering::Release);
         let t = Instant::now();
@@ -74,13 +78,14 @@ impl Declick {
         Declick { gain: 0.0 }
     }
 
-    /// Whether the output is silent for good (closing and fully faded).
+    /// Returns true when the output is silent for good, closing and fully
+    /// faded.
     pub fn silent(&self, closing: bool) -> bool {
         closing && self.gain == 0.0
     }
 
-    /// Scales the interleaved stereo [out] by the fade. Returns true once
-    /// [closing] and the gain has reached 0.
+    /// Scales the interleaved stereo [out] by the fade. Returns true once it
+    /// is [closing] and the gain has reached 0.
     pub fn apply(&mut self, out: &mut [f32], closing: bool) -> bool {
         let target = if closing { 0.0 } else { 1.0 };
         if self.gain == target {
@@ -109,7 +114,7 @@ impl Default for Declick {
     }
 }
 
-/// Every running device's gate, for the exit hook.
+/// The gate of every running device, for the exit hook.
 static LIVE: Mutex<Vec<Arc<Gate>>> = Mutex::new(Vec::new());
 static EXIT_HOOK: Once = Once::new();
 
@@ -118,8 +123,7 @@ extern "C" {
 }
 
 /// Fades every live device to silence at process exit, where no device is
-/// dropped. The streams are left to
-/// the process's end, playing silence.
+/// dropped. The streams play silence until the end of the process.
 extern "C" fn fade_all_at_exit() {
     let live: Vec<Arc<Gate>> = LIVE.lock().unwrap_or_else(|e| e.into_inner()).clone();
     for g in &live {
@@ -131,22 +135,22 @@ extern "C" fn fade_all_at_exit() {
 }
 
 pub struct Device {
-    /// Plays while it lives; dropping it fades out, then stops the callback
+    /// Plays while it exists. Dropping it fades out, then stops the callback
     /// and frees the renderer.
     stream: Option<cpal::Stream>,
     gate: Arc<Gate>,
 }
 
 impl Device {
-    /// Starts the default output with [render], asking for [period]-frame
-    /// buffers when the device allows it.
+    /// Starts the default output with [render] and asks for buffers of
+    /// [period] frames when the device allows it.
     pub fn start<R: Render>(mut render: Box<R>, period: u32) -> Result<Device, StartError> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
             .ok_or_else(|| fail(-1, "no default output device"))?;
-        // The buffer as asked when the device's range holds it; else the
-        // device's own (the render takes any length).
+        // The buffer as asked when the range of the device holds it, else the
+        // own buffer of the device. The render takes any length.
         let fits = device.supported_output_configs().is_ok_and(|mut cs| {
             cs.any(|c| {
                 c.channels() == 2
@@ -173,7 +177,8 @@ impl Device {
                 config,
                 move |out: &mut [f32], _| {
                     let closing = cb_gate.closing.load(Ordering::Acquire);
-                    // Faded out: silence, and the renderer is left alone.
+                    // Faded out. The output is silence and the renderer is
+                    // left alone.
                     if declick.silent(closing) {
                         out.fill(0.0);
                         return;
@@ -183,17 +188,17 @@ impl Device {
                         cb_gate.silent.store(true, Ordering::Release);
                     }
                 },
-                // A device lost while playing: silence until the engine is
-                // made again (nothing to recover from on this thread).
+                // A device lost while playing gives silence until the device
+                // is made again. This thread cannot recover it.
                 |_| {},
                 None,
             )
             .map_err(|e| fail(-5, e))?;
         stream.play().map_err(|e| fail(-6, e))?;
         EXIT_HOOK.call_once(|| {
-            // SAFETY: atexit is the C library's; it only records the
-            // function pointer, a plain extern "C" fn with no arguments
-            // that lives for the whole program.
+            // SAFETY: atexit of the C library only records the function
+            // pointer, a plain extern "C" fn without arguments that exists
+            // for the whole program.
             unsafe { atexit(fade_all_at_exit) };
         });
         LIVE.lock()
@@ -230,7 +235,7 @@ mod tests {
         let last_ramp = 2 * (RAMP_FRAMES as usize - 1);
         assert_eq!(out[last_ramp], 1.0);
         assert!(out[2 * 600..].iter().all(|&s| s == 1.0));
-        // Fully open: the next buffer is untouched.
+        // Fully open, the next buffer is untouched.
         let mut next = vec![0.25f32; 64];
         assert!(!d.apply(&mut next, false));
         assert!(next.iter().all(|&s| s == 0.25));
@@ -253,7 +258,7 @@ mod tests {
         assert!(d.apply(&mut rest, true));
         assert!(rest[2 * 230..].iter().all(|&s| s == 0.0));
         assert!(d.silent(true));
-        // Silent for good: later buffers are zeroed.
+        // Silent for good, later buffers are zeroed.
         let mut after = vec![0.5f32; 16];
         assert!(d.apply(&mut after, true));
         assert!(after.iter().all(|&s| s == 0.0));

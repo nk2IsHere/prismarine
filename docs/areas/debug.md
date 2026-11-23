@@ -48,9 +48,9 @@ shell goes into the open frame as `panel.build`.
 
 `installGpuPassLog` writes a line per submitted command buffer with the pass that submitted it, which gives the command
 buffers of a Metal System Trace their passes. Set the function that it returns as the submission hook of your
-renderer. `HeapSnapshots` writes the heap of the isolate group at chosen game times in profile and debug builds.
-`replayPlan` runs a frame plan from its JSON form on a `FrameRunner` of `prismarine_render` and writes the bytes of each
-target. `encodePng` encodes RGBA rows as a PNG at zlib level 1.
+renderer. `HeapSnapshots` writes the heap of the isolate group at chosen game times in profile and debug builds. The
+[profiler](profiler.md) compares these snapshots. `replayPlan` runs a frame plan from its JSON form on a `FrameRunner`
+of `prismarine_render` and writes the bytes of each target. `encodePng` encodes RGBA rows as a PNG at zlib level 1.
 
 | Variable | Effect |
 |---|---|

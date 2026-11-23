@@ -1,6 +1,6 @@
 #version 460 core
 
-// Two targets in one pass: the colour in the first (RGBA8), its green
+// Two targets in one pass, the colour in the first (RGBA8) and its green
 // channel times 4 as a float in the second (R32F), as a G-buffer writes a
 // colour and a depth.
 

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_loop/prismarine_loop.dart';
 
-// A 200x100-point render area: 400x200 device pixels at a backing scale of 2.
+// A 200x100-point render area, 400x200 device pixels at a backing scale of 2.
 const area = (left: 0.0, top: 0.0, width: 200.0, height: 100.0);
 
 class FakeHost implements MouseLookHost {
@@ -63,7 +63,7 @@ void main() {
       c.take(10, 0, area, 2);
       expect(c.sample(), isTrue);
       expect(c.x, 0.5 + 20 / 400);
-      // An event while the frame runs, before the game re-centres.
+      // An event arrives while the frame runs, before the game re-centres.
       c.take(13, 0, area, 2, event: true);
       c.set(0.5, 0.5);
       expect(c.x, 0.5 + 6 / 400);

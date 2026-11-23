@@ -16,12 +16,16 @@ dir=$("$(dirname "${BASH_SOURCE[0]}")/lockdir.sh") || exit 1
 poll=${PRISMARINE_LOCK_POLL:-5}
 lock=$dir/measure-lock
 
-# Frees the lock directory $1 when its owner process has ended.
+# Frees the lock directory $1 when its owner process has ended or it never got an owner.
 free_stale() {
   local owner
   owner=$(cut -d' ' -f1 "$1/owner" 2>/dev/null)
   if [[ -n $owner ]] && ! kill -0 "$owner" 2>/dev/null; then
     rm -f "$1/owner"
+    rmdir "$1" 2>/dev/null
+  fi
+  # A lock without an owner file a minute after it was made belongs to a job that ended between the two steps.
+  if [[ -z $owner && -d $1 && -n $(find "$1" -maxdepth 0 -mmin +1 2>/dev/null) ]]; then
     rmdir "$1" 2>/dev/null
   fi
   return 0

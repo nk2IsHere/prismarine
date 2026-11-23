@@ -6,7 +6,12 @@ mouse and keyboard or with a gamepad. [prismarine_pbr](../../docs/areas/pbr.md) 
 [prismarine_render](../../docs/areas/render.md) records them on Flutter GPU, on Metal on macOS and on Vulkan on Linux
 and Windows. The same app is the smoke test of the gate and a performance scene.
 
-## The model
+## Usage
+
+The app is a Flutter desktop app with runners for macOS, Linux and Windows that turn on Impeller and Flutter GPU. It
+needs the patched engine and the model.
+
+### The model
 
 The model is not part of the repository. `tool/fetch.dart` downloads it from Intel into `data/sample` of the
 repository, or into the directory in `PRISMARINE_SAMPLE_DATA`, and prepares it for the GPU with `prepareGltf` of
@@ -26,19 +31,14 @@ dart tool/fetch.dart [--ivy] [--texture-size=1024] [--keep-source]
 The prepare step takes about a minute. Textures are scaled to 1024 texels by default. `--texture-size=2048` gives
 more detail for about four times the memory.
 
-## Building
+### Building
 
-The app needs the patched engine. `tool/shaders.sh` builds the shaders of prismarine_pbr with the impellerc of the
-engine into `shaders_generated/`, which the build carries as assets. Then build for your platform with the flags of
-the engine, as [the engine page](../../docs/areas/engine.md) describes.
+`tool/shaders.sh` builds the shaders of prismarine_pbr with the impellerc of the engine into `shaders_generated/`,
+which the build carries as assets. Then build the app in release mode with the flags of the patched engine, which
+`fetch.sh` prints after it fetched the engine. The [root README](../../README.md#building) has the steps for each
+platform.
 
-```
-tool/shaders.sh <engine>/out/<build>/impellerc
-flutter build macos --release --local-engine-src-path=<engine> \
-  --local-engine=<build> --local-engine-host=<build>
-```
-
-## Running
+### Running
 
 The app starts at the first camera of the scene. W, A, S and D move, Q and E move down and up, Shift moves faster, a
 mouse drag turns the view and the wheel sets the speed. A gamepad moves with the left stick, turns with the right
@@ -61,6 +61,28 @@ camera.
 At 1920 by 1080 the scene holds 120 Hz on a Mac with an Apple GPU, with about 6.1 ms on the GPU, and 60 Hz on Linux
 with an RTX 4060 Ti, with about 5.4 ms on the GPU. A frame has 904 draws and records the shadow pass only when the sun
 moves.
+
+## Example
+
+A release build on an Apple silicon Mac and the smoke test, with the engine fetched into `$PRISMARINE_ENGINE_DIR` and
+the model fetched as above:
+
+    cd apps/prismarine_sample
+    flutter pub get
+    E=$PRISMARINE_ENGINE_DIR/macos-arm64/src
+    tool/shaders.sh $E/out/host_release_arm64/impellerc
+    flutter build macos --release --local-engine-src-path=$E \
+      --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
+    B=build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
+    $B --background --smoke --record
+    $B --background --smoke
+
+The code of the app is in [`lib/`](lib/main.dart) and its tools in [`tool/`](tool/fetch.dart).
+
+## Platforms
+
+The app runs on macOS with Metal and on Linux with Vulkan. Both are checked with the smoke test and the performance
+run. The Windows build stops in the build of SDL for prismarine_pad, whose file paths are longer than MSBuild accepts.
 
 ## Credits
 

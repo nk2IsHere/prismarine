@@ -1,15 +1,15 @@
-// JSON lines written into kept bytes and to a file by synchronous writes,
-// without a string, a map or a sink buffer per line (perf: the profiler's
-// and the run trace's line each frame were the UI isolate's own garbage).
+// Writes JSON lines into kept bytes and to a file by synchronous writes,
+// without a string, a map or a sink buffer per line.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// One JSON object per line, built by calls: [begin], then [key] and a
-/// value each ([number], [integer], [boolean], [string], [nil], [value], or
-/// [beginList] … [endList] with values between), then [end].
-/// [buffer]: bytes kept before a write (0: every line is written at its
-/// [end], for a record that must survive a crash).
+/// Writes one JSON object per line. A line is [begin], then [key] with one
+/// value for each key and then [end]. A value is [number], [integer],
+/// [boolean], [string], [nil], [value] or [beginList] and [endList] with
+/// values between them. [buffer] is the number of bytes kept before a
+/// write. With 0 every line is written at its [end], for a record that must
+/// survive a crash.
 final class JsonLineWriter {
   JsonLineWriter(String path, {this.buffer = 0})
     : _file = File(path).openSync(mode: FileMode.write);
@@ -20,7 +20,8 @@ final class JsonLineWriter {
   int _n = 0;
   bool _closed = false;
 
-  /// Whether the next value at each depth is its first (no comma before).
+  /// 1 at each depth whose next value is its first, which has no comma
+  /// before it.
   final _first = Uint8List(32);
   int _depth = 0;
 
@@ -56,7 +57,8 @@ final class JsonLineWriter {
     _byte(0x7b);
   }
 
-  /// The next value's key (in the line's object or a nested one).
+  /// Writes the key of the next value, in the object of the line or in a
+  /// nested object.
   void key(String k) {
     _sep();
     final bytes = _keys[k] ??= Uint8List.fromList(
@@ -106,8 +108,9 @@ final class JsonLineWriter {
     _int(v);
   }
 
-  /// [v] with up to [decimals] decimals (trailing zeros dropped, one kept:
-  /// a double reads back as a double); null when it is not finite.
+  /// Writes [v] with up to [decimals] decimals, or null when it is not
+  /// finite. Trailing zeros are dropped except one, which keeps a double a
+  /// double when it is read back.
   void number(double v, [int decimals = 6]) {
     _sep();
     if (!v.isFinite) {
@@ -120,7 +123,7 @@ final class JsonLineWriter {
     }
     final a = v.abs() * scale;
     if (a >= 9e15) {
-      // Past exact integers at this scale (rare): the VM's own digits.
+      // Past the exact integers at this scale the VM writes the digits.
       _ascii(v.toString());
       return;
     }
@@ -129,7 +132,7 @@ final class JsonLineWriter {
     _int(scaled ~/ scale);
     _byte(0x2e);
     var frac = scaled % scale;
-    // The fraction's digits from the top, zeros at the end dropped.
+    // The digits of the fraction from the top, without the zeros at the end.
     var div = scale ~/ 10;
     if (frac == 0 || div == 0) {
       _byte(0x30);
@@ -150,7 +153,7 @@ final class JsonLineWriter {
       if (c >= 0x20 && c < 0x7f && c != 0x22 && c != 0x5c) {
         _byte(c);
       } else {
-        // An escape or a character past ASCII (rare): the encoder's form.
+        // An escape or a character past ASCII takes the form of the encoder.
         final e = utf8.encode(jsonEncode(String.fromCharCode(c)));
         for (var k = 1; k < e.length - 1; k++) {
           _byte(e[k]);
@@ -160,8 +163,9 @@ final class JsonLineWriter {
     _byte(0x22);
   }
 
-  /// Any JSON value: numbers, strings, bools, null, lists and maps with
-  /// string keys of them; anything else by its string.
+  /// Writes any JSON value, such as numbers, strings, bools, null and lists
+  /// and maps of them with string keys. Any other value is written as its
+  /// string.
   void value(Object? v) {
     switch (v) {
       case null:
@@ -219,7 +223,7 @@ final class JsonLineWriter {
     }
   }
 
-  /// Ends the line; written now, or once [buffer] bytes are kept.
+  /// Ends the line. The line is written now or once [buffer] bytes are kept.
   void end() {
     _byte(0x7d);
     _byte(0x0a);

@@ -1,6 +1,6 @@
 #version 460
-// Storage images in these formats: RGBA16 unorm (2D, an array layer, a mip
-// level), RGBA32UI 3D, RGBA16F 2D.
+// Storage images in the formats RGBA16 unorm as 2D, an array layer and a mip
+// level, RGBA32UI 3D and RGBA16F 2D.
 layout(local_size_x = 4, local_size_y = 4) in;
 
 layout(rgba16) uniform writeonly image2D moments;

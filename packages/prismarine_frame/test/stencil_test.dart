@@ -14,7 +14,7 @@ DrawPlan _draw(int ref, Stencil? stencil) => DrawPlan(
   stencilRef: ref,
 );
 
-/// A G-buffer pass's stencil test.
+/// The stencil test of a G-buffer pass.
 const _gbuffer = Stencil(passOp: 'replace', readMask: 0, writeMask: 0x7f);
 
 List<int> _held(StencilValues v) => [

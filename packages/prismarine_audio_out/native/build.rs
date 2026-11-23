@@ -1,31 +1,31 @@
-//! Compiles the vendored decoders (third_party/minimp3, third_party/stb:
-//! unmodified, public domain) into the library; Rust calls them through
-//! src/decode/codec.rs.
+//! Compiles the vendored decoders of third_party/minimp3 and third_party/stb,
+//! unmodified and in the public domain, into the library. Rust calls them
+//! through src/decode/codec.rs.
 //!
-//! Decoded PCM is the same on every target:
-//! - no fused multiply-adds (`-ffp-contract=off`; MSVC: `/fp:precise`):
-//!   Apple's clang fuses them on arm64 by default and x86-64 has none, so
-//!   the two Mac builds would decode every file differently;
-//! - stb_vorbis's tables (window, twiddle factors, codebook sizes) come from
-//!   `sin`, `cos`, `exp`, `log` and `pow`, which the build renames to the
-//!   libm crate's (decode/codec.rs) instead of the platform's C maths;
-//! - `M_PI` is math.h's double everywhere (MSVC hides it without
-//!   `_USE_MATH_DEFINES`, and stb_vorbis's fallback is a float);
-//! - Windows on arm64 compiles with clang-cl: MSVC can't build minimp3's
-//!   NEON code, and its plain C path computes different bits.
+//! Decoded PCM is the same on every target with these settings.
+//! - No fused multiply-adds, with `-ffp-contract=off` or `/fp:precise` on
+//!   MSVC. Apple's clang fuses them on arm64 by default and x86-64 has none.
+//! - The tables of stb_vorbis, such as the window, twiddle factors and
+//!   codebook sizes, come from `sin`, `cos`, `exp`, `log` and `pow`. The
+//!   build renames these to the functions of the libm crate in
+//!   decode/codec.rs.
+//! - `M_PI` is the double of math.h everywhere. MSVC hides it without
+//!   `_USE_MATH_DEFINES`. The fallback of stb_vorbis is a float.
+//! - Windows on arm64 compiles with clang-cl. MSVC cannot build the NEON code
+//!   of minimp3. Its plain C path computes different bits.
 //!
 //! minimp3 calls no maths functions.
 
 fn main() {
     let third = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../third_party");
     println!("cargo:rerun-if-changed={}", third.display());
-    // Miri runs no foreign code: the tests that would call the decoders
-    // don't run under it.
+    // Miri runs no foreign code. The tests that would call the decoders do
+    // not run under it.
     if std::env::var_os("CARGO_CFG_MIRI").is_some() {
         return;
     }
     let mut mp3 = build();
-    // A header: compiled as C, with its implementation switched on.
+    // A header, compiled as C with its implementation enabled.
     let as_c = if mp3.get_compiler().is_like_msvc() {
         "/TC"
     } else {
@@ -37,10 +37,9 @@ fn main() {
         .define("MINIMP3_FLOAT_OUTPUT", None)
         .compile("prismarine_minimp3");
     let mut ogg = build();
-    // MSVC's cl takes no function-like macros on its command line; its
-    // headers declare these functions plainly, so the names alone do. glibc's
-    // math.h builds other names from them, so elsewhere only calls are
-    // renamed.
+    // The cl of MSVC takes no function-like macros on its command line. Its headers declare these
+    // functions plainly. The names alone work there. The math.h of glibc builds other names from
+    // them. Elsewhere only calls are renamed.
     let cl = ogg.get_compiler().is_like_msvc() && !ogg.get_compiler().is_like_clang_cl();
     for (f, args) in [
         ("sin", "x"),
@@ -64,9 +63,9 @@ fn main() {
         .compile("prismarine_stb_vorbis");
 }
 
-/// The common setup: -O3, no warnings, no fused multiply-adds (each
-/// multiply and add rounds on its own, as on x86-64 without FMA), math.h's
-/// `M_PI`, clang-cl on Windows arm64.
+/// Returns the common setup with -O3, no warnings and no fused multiply-adds,
+/// the `M_PI` of math.h and clang-cl on Windows arm64. Each multiply and add
+/// rounds on its own, as on x86-64 without FMA.
 fn build() -> cc::Build {
     let mut b = cc::Build::new();
     let target = std::env::var("TARGET").unwrap_or_default();

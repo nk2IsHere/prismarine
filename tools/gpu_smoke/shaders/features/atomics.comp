@@ -1,8 +1,8 @@
 #version 460
-// Storage texel buffers: every invocation adds one to a counter and
-// exchanges another; an RGBA32F buffer is written. A uniform block and a
-// storage buffer take Metal buffer indices too (the counters' atomic buffer
-// must not land on one of them).
+// Storage texel buffers. Every invocation adds one to a counter and exchanges
+// another. An RGBA32F buffer is written. A uniform block and a storage buffer
+// take Metal buffer indices too. The atomic buffer of the counters must not get
+// one of them.
 layout(local_size_x = 64) in;
 
 uniform Params {

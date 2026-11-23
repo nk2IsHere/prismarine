@@ -75,7 +75,7 @@ String? findImpellerc({List<String> engineRoots = const []}) {
 /// bytes read for one scene low.
 const shardEntries = 25;
 
-/// What [buildShaderBundles] built.
+/// The result of [buildShaderBundles].
 class ShaderBundleReport {
   ShaderBundleReport(this.bundled, this.failed, this.bytes, {this.cached = 0});
   final int bundled;

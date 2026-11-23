@@ -1,5 +1,6 @@
 // alloc counts the places where per-frame code allocates and ratchets them
-// against the alloc baseline of the repository. Usage --help.
+// against the alloc baseline of the repository. Run it with --help for the
+// usage.
 import 'dart:convert';
 import 'dart:io';
 
@@ -202,10 +203,11 @@ int _byPlace(Hit a, Hit b) {
   return a.line != b.line ? a.line - b.line : a.column - b.column;
 }
 
-/// `packages/<name>`, `apps/<name>` or `tools/<name>`.
+/// Returns the package of [path] as `packages/<name>`, `apps/<name>` or
+/// `tools/<name>`.
 String _packageOf(String path) => path.split('/').take(2).join('/');
 
-/// The workspace members of the root pubspec.
+/// Returns the workspace members of the root pubspec.
 List<String> _workspacePackages(String root) {
   final out = <String>[];
   var inList = false;
@@ -221,9 +223,10 @@ List<String> _workspacePackages(String root) {
   return out;
 }
 
-/// The roots file's entries as function ids: `<file>[#<Member>] <words>` a
-/// line, the file relative to the repository and `*` for any run of
-/// characters within a name; without a member, every function in the file.
+/// Returns the entries of the roots file as function ids. Each line has the
+/// form `<file>[#<Member>] <words>`, with the file relative to the
+/// repository and `*` for any run of characters within a name. An entry
+/// without a member covers every function in the file.
 List<String> _roots(String root, Program program) {
   final out = <String>{};
   for (final raw in File('$root/$rootsPath').readAsLinesSync()) {

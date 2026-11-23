@@ -7,7 +7,7 @@ checkout of prismarine with its own config.
 | Lint | Check |
 |---|---|
 | `privacy_check.dart` | Private material in the tree, from the patterns of the private repo |
-| `check_links.dart` | Markdown links to files that do not exist |
+| `check_links.dart` | Markdown links to files that do not exist and examples that differ from the Dart file that they copy |
 | `docs_index.dart` | The generated indexes of doc folders with one file per entry |
 | `code_shape.dart` | File size, history in comments, long comments and functions and the rule sets of the config |
 | `analyze.dart` | The analyzer, clippy, `dart format` and `cargo fmt` |
@@ -36,6 +36,13 @@ baselines. Run a lint from the root of that repository with its package config, 
 `dart --packages=.dart_tool/package_config.json <checkout>/tools/lint/code_shape.dart`. The `rootUri` of
 `prismarine_lint` in the package config gives the checkout. A small launcher in the repository can find it and set
 `PRISMARINE_LINT_CONFIG`.
+
+## Examples in READMEs
+
+A README shows the example of its package as a copy of a Dart file that the analyzer checks. The line before the
+fenced `dart` block ends in a link to that file, such as `[example/example.dart](example/example.dart):`.
+`check_links` reports a block that differs from the file. A directory in the `links` list of the config is read
+without its `.dart_tool`, `build`, `target` and `third_party` directories.
 
 ## Private patterns
 

@@ -1,14 +1,15 @@
 import 'dart:io';
 
-/// `PRISMARINE_MEM_LOG=<seconds>`: each isolate's memory census line that
-/// often (what its caches hold by count), with the wall clock in ms so the
-/// isolates' lines line up (diagnostics).
+/// Writes the memory census line of each isolate every
+/// `PRISMARINE_MEM_LOG=<seconds>`. The line counts the entries in the caches
+/// of the isolate and carries the wall clock in ms. The lines of the
+/// isolates then line up.
 final class MemLog {
   MemLog(this.who, {this.figures});
 
   final String who;
 
-  /// The caller's own figures for the process line, appended after the
+  /// The figures of the caller for the process line, appended after the
   /// resident set. Null adds nothing.
   final String Function()? figures;
   static final _period = int.tryParse(
@@ -19,7 +20,7 @@ final class MemLog {
   final _clock = Stopwatch()..start();
   int _next = 0;
 
-  /// Whether a line is due now.
+  /// True when a line is due now.
   bool get due {
     final p = _period;
     if (p == null) return false;
@@ -30,7 +31,7 @@ final class MemLog {
   }
 
   // alloc-cold: a diagnostics line now and then.
-  /// The process's resident set and the caller's [figures].
+  /// The resident set of the process and the [figures] of the caller.
   String get process {
     final rss = 'rss ${ProcessInfo.currentRss >> 20} MB';
     final f = figures;
@@ -38,7 +39,7 @@ final class MemLog {
   }
 
   // alloc-cold: a diagnostics line now and then.
-  /// The census line for [census].
+  /// Returns the census line for [census].
   String line(String census) =>
       'mem $who ${DateTime.now().millisecondsSinceEpoch} $census';
 }

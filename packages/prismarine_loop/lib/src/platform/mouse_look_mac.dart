@@ -1,7 +1,7 @@
-// The mouse-look class of the macOS runner through the Objective-C runtime:
-// synchronous calls on the UI isolate, which runs on the main thread with
-// Flutter's merged platform and UI threads, so a read costs two message
-// sends and waits for no answer.
+// The mouse-look class of the macOS runner through the Objective-C runtime.
+// The calls are synchronous on the UI isolate, which runs on the main thread
+// with the merged platform and UI threads of Flutter. A read costs two
+// message sends and waits for no answer.
 import 'dart:ffi';
 
 import 'mouse_look.dart';
@@ -26,7 +26,8 @@ final _msgSendLetGo = objcLib
 class MacMouseLookHost implements MouseLookHost {
   MacMouseLookHost._(this._class);
 
-  /// The runner's class [className], or null (a runner built before it).
+  /// Returns the host for the class [className] of the runner, or null for a
+  /// runner without the class.
   static MacMouseLookHost? find(String className) {
     final c = objcClass(cString(className));
     return c == nullptr ? null : MacMouseLookHost._(c);

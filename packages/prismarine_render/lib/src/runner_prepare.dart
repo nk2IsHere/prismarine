@@ -1,14 +1,14 @@
-// Making a frame's new draws ready ahead of their record: a frame's
-// potential draws ([prepare]) and a background warm-up's, a few at a time
-// ([prepareSome]).
+// Makes the new draws of a frame ready ahead of their record. [prepare]
+// takes the potential draws of a frame. [prepareSome] takes the draws of a
+// background warm-up a few at a time.
 part of 'frame_runner.dart';
 
 extension RunnerPrepare on FrameRunner {
-  /// Makes ready what [draws] need before a frame records them: their
-  /// shaders' libraries, pipelines, meshes and textures (a builder's
-  /// potential draws), so the frame that first records one (a cut) does
-  /// not stall on them. A draw that the assets cannot feed is left to the
-  /// frame, which names the problem.
+  /// Makes the needs of [draws] ready before a frame records them, with the
+  /// libraries of their shaders, pipelines, meshes and textures. The frame
+  /// that first records one, such as a cut, then does not stall on them. A
+  /// draw that the assets cannot feed is left to the frame, which reports
+  /// the problem.
   Future<void> prepare(List<DrawPlan> draws) async {
     if (draws.isEmpty) {
       lastPrepareMs = lastPrepareLoadMs = lastPreparePipelineMs = 0;
@@ -46,9 +46,9 @@ extension RunnerPrepare on FrameRunner {
     return bundled(d.vertex) && bundled(d.pixel ?? _depthOnly(d));
   }
 
-  /// Makes [d]'s pipeline, mesh and textures ready (its shader libraries
-  /// loaded); the texture time ([sw]'s microseconds), whether the assets
-  /// could feed it, and its setup when made.
+  /// Makes the pipeline, mesh and textures of [d] ready once its shader
+  /// libraries are loaded. Returns the texture time in microseconds of [sw],
+  /// true when the assets could feed it and its setup when made.
   (int, bool, _DrawSetup?) _prepareOne(DrawPlan d, Stopwatch sw) {
     if (!_bundled(d)) return (0, true, null);
     final from = sw.elapsedMicroseconds;
@@ -92,13 +92,14 @@ extension RunnerPrepare on FrameRunner {
     }
   }
 
-  /// [prepare] of the first of [draws] until [budgetMs] has passed (at
-  /// least one): a scene added in the background is made ready a little
-  /// each frame. Returns how many it took.
-  /// [tag]: the scene that is not open yet that [draws] are for
-  /// (RenderAssets.tag), whose loads alone can be forgotten; [owner]: the
-  /// open scene they are for (RenderAssets.warmFor), whose loads they are
-  /// too.
+  /// Runs [prepare] on the first of [draws] until [budgetMs] has passed, at
+  /// least on one. A scene added in the background is made ready a little
+  /// each frame. Returns the number of draws taken.
+  ///
+  /// [tag] is the scene, not open yet, that [draws] are for
+  /// (RenderAssets.tag). Its loads alone can be forgotten. [owner] is the
+  /// open scene that the draws are for (RenderAssets.warmFor). Their loads
+  /// belong to that scene too.
   Future<int> prepareSome(
     List<DrawPlan> draws,
     double budgetMs, {
@@ -112,7 +113,7 @@ extension RunnerPrepare on FrameRunner {
       if (_bundled(d)) {
         await assets.loadShaders([d.vertex, d.pixel ?? _depthOnly(d)]);
       }
-      // Set around the synchronous part only: a frame's record runs
+      // Set around the synchronous part only. The record of a frame runs
       // between the awaits.
       assets
         ..tag = tag
@@ -121,8 +122,8 @@ extension RunnerPrepare on FrameRunner {
       _warm.pulledScene = tag ?? owner;
       try {
         final (_, _, setup) = _prepareOne(d, sw);
-        // Its first-frame work after the warm-up's (warmSome), newest
-        // first: the scene listed last is the one coming.
+        // The first-frame work of the draw follows the warm-up (warmSome),
+        // newest first. The scene listed last is the one coming.
         if (_Warm.on) _warm.queue.addFirst((d, setup, tag ?? owner));
       } finally {
         assets

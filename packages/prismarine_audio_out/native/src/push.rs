@@ -1,16 +1,16 @@
-//! Output of PCM rendered elsewhere. PCM rendered on a
-//! Dart isolate is pushed into a ring the output device ([device], cpal)
-//! drains in its callback. The audio clock is the frames the device has
-//! taken from the ring ([PushStream::consumed]).
+//! Output of PCM rendered elsewhere. PCM rendered on a Dart isolate is
+//! pushed into a ring that the output device ([device], cpal) drains in its
+//! callback. The audio clock counts the frames that the device has taken
+//! from the ring ([PushStream::consumed]).
 //!
-//! The ring is `rtrb`'s wait-free single-producer single-consumer buffer:
-//! the producer (one Dart isolate at a time, under a lock) pushes, the
-//! device's callback pops and never allocates or locks.
+//! The ring is the wait-free single-producer single-consumer buffer of
+//! `rtrb`. The producer, one Dart isolate at a time under a lock, pushes.
+//! The callback of the device pops and does not allocate or lock.
 //!
-//! A paused stream takes nothing (the clock stops); a muted one takes and
-//! plays silence (the clock runs); a ring that runs dry plays silence
+//! A paused stream takes nothing and the clock stops. A muted stream takes
+//! and plays silence and the clock runs. A ring that runs dry plays silence
 //! without advancing the clock and waits until [REFILL] frames are queued
-//! again, counting an underrun.
+//! again, which counts as an underrun.
 
 use crossbeam_utils::CachePadded;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -21,14 +21,16 @@ use crate::device::{self, Device, Render, StartError};
 /// Interleaved stereo.
 const CHANNELS: usize = 2;
 
-/// Frames queued again before a dry ring plays on (50 ms at 48 kHz).
+/// The frames queued again before a dry ring plays on, 50 ms at 48 kHz.
 pub const REFILL: usize = 2400;
 
-/// The ring's room: two seconds, far beyond the render-ahead (~65 ms).
+/// The room of the ring, two seconds, far beyond the render-ahead of about
+/// 65 ms.
 const CAPACITY_FRAMES: usize = 96000;
 
-/// The reader (device callback) writes consumed and underruns, the Dart
-/// side paused and muted: each writer's on its own cache line.
+/// The counters of the stream. The reader in the device callback writes
+/// consumed and underruns. The Dart side writes paused and muted. Each
+/// writer has its own cache line.
 #[derive(Default)]
 struct Shared {
     consumed: CachePadded<AtomicI64>,
@@ -37,12 +39,12 @@ struct Shared {
     muted: AtomicBool,
 }
 
-/// The device's side.
+/// The side of the device.
 struct Reader {
     ring: rtrb::Consumer<f32>,
     sh: Arc<Shared>,
-    /// Dry: silent until [REFILL] frames are queued. A new stream starts
-    /// dry.
+    /// True while dry and silent until [REFILL] frames are queued. A new
+    /// stream starts dry.
     dry: bool,
 }
 
@@ -60,7 +62,7 @@ impl Render for Reader {
             }
             self.dry = false;
         }
-        // Whole frames only.
+        // Only whole frames.
         let n = queued.min(out.len()) / CHANNELS * CHANNELS;
         if let Ok(chunk) = self.ring.read_chunk(n) {
             let (a, b) = chunk.as_slices();
@@ -89,8 +91,8 @@ pub struct PushStream {
 }
 
 impl PushStream {
-    /// Opens the default output (48 kHz f32 stereo, [period]-frame buffers
-    /// when the device allows) fed from a new ring.
+    /// Opens the default output at 48 kHz f32 stereo, with buffers of
+    /// [period] frames when the device allows it, fed from a new ring.
     pub fn start(period: u32) -> Result<PushStream, StartError> {
         let (tx, rx) = rtrb::RingBuffer::new(CAPACITY_FRAMES * CHANNELS);
         let sh = Arc::new(Shared::default());
@@ -107,8 +109,8 @@ impl PushStream {
         })
     }
 
-    /// Queues the interleaved stereo [pcm]; the frames taken (fewer only
-    /// when the ring is full).
+    /// Queues the interleaved stereo [pcm]. Returns the frames taken, fewer
+    /// only when the ring is full.
     pub fn push(&self, pcm: &[f32]) -> usize {
         let mut tx = self.ring.lock().unwrap_or_else(|e| e.into_inner());
         let n = tx.slots().min(pcm.len()) / CHANNELS * CHANNELS;
@@ -118,7 +120,7 @@ impl PushStream {
         n / CHANNELS
     }
 
-    /// Frames the device has taken so far.
+    /// Returns the frames that the device has taken so far.
     pub fn consumed(&self) -> i64 {
         self.sh.consumed.load(Ordering::Acquire)
     }
@@ -131,7 +133,7 @@ impl PushStream {
         self.sh.muted.store(v, Ordering::Release);
     }
 
-    /// Underruns since the last call.
+    /// Returns the underruns since the last call.
     pub fn take_underruns(&self) -> i64 {
         self.sh.underruns.swap(0, Ordering::AcqRel)
     }

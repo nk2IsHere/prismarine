@@ -5,6 +5,9 @@ through the base `FullscreenVertex` and `CopyFragment` shaders of flutter_scene 
 and reads a pixel back. It times 2,000 draws with and without a texture bind per draw, prints `SMOKE` lines and exits
 with 0 when the pixel matched.
 
+Run it on each platform after a change to the engine. The engine, flutter_gpu and gpu_smoke are described on [the
+area page of the engine](../../docs/areas/engine.md).
+
 The app uses `third_party/flutter_gpu`. On the patched engine it runs the slot binds and leaf draws and on the prebuilt
 engine of Flutter it runs the stock calls. The runners turn Flutter GPU on, with `FLTEnableFlutterGPU` on macOS,
 `fl_dart_project_set_enable_flutter_gpu` and Impeller on Linux and `set_enable_flutter_gpu` on Windows.
@@ -30,4 +33,8 @@ checkout of it once, then build it for the platform with the flags of the engine
 On Windows, `windows_smoke.ps1 -EngineSrc <engine\src>` builds and runs the app on the stock engine and then on the
 patched one. `Dockerfile.linux` is an image for a Linux build and a headless run under Xvfb and Mesa.
 
-The results per platform are in [the engine README](../../third_party/flutter_engine/README.md).
+## Platforms
+
+The app has runners for macOS, Linux and Windows. On the patched engine it draws with Metal on macOS and with Vulkan
+on Linux and Windows. The results per platform are in [the engine
+README](../../third_party/flutter_engine/README.md).

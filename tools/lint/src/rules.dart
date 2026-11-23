@@ -13,11 +13,11 @@ const functionLimit = 150;
 class Hit {
   Hit(this.check, this.rule, this.line, this.text);
 
-  /// The ratcheted category, history or long-comment or the check of a rule
-  /// set.
+  /// The ratcheted category, which is history, long-comment or the check of
+  /// a rule set.
   final String check;
 
-  /// The rule within it (for the listing).
+  /// The rule within the category, for the listing.
   final String rule;
   final int line;
   final String text;
@@ -75,14 +75,14 @@ class HistoryRules {
   }
 }
 
-// Commit hashes: 7 to 12 hex digits with a letter and a digit, counted only
-// when git knows them as commits (see [hashCandidates]), so CRCs and type
+// Commit hashes have 7 to 12 hex digits with a letter and a digit. They count
+// only when git knows them as commits ([hashCandidates]). CRCs and type
 // version hashes in comments are left alone.
 final _hashCandidate = RegExp(
   r'(?<![0-9A-Za-z_#])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,12}(?![0-9A-Za-z_])',
 );
 
-/// Hash-shaped words in comment line [text].
+/// Returns the hash-shaped words in the comment line [text].
 Iterable<String> hashCandidates(String text) =>
     _hashCandidate.allMatches(text).map((m) => m.group(0)!);
 
@@ -123,10 +123,10 @@ List<Hit> commentHits(
   return hits;
 }
 
-/// Runs of consecutive comment lines longer than the limit (the file's
-/// leading header has the larger limit).
+/// Returns the runs of consecutive comment lines longer than the limit. The
+/// leading header of a file has the larger limit.
 List<Hit> longCommentHits(List<Tok> toks) {
-  // Lines that hold code, and lines that hold comments.
+  // The lines that hold code and the lines that hold comments.
   final code = <int>{};
   final comment = <int>{};
   for (final t in toks) {
@@ -169,8 +169,9 @@ class FunctionSpan {
   int get lines => end - start + 1;
 }
 
-/// Function bodies longer than [functionLimit] lines (an approximation by
-/// brace matching over the code tokens; warnings only).
+/// Returns the function bodies longer than [functionLimit] lines. It
+/// approximates them by brace matching over the code tokens and gives
+/// warnings only.
 List<FunctionSpan> longFunctions(List<Tok> toks, Lang lang) {
   final code = toks.where((t) => t.isCode).toList();
   final spans = lang == Lang.rust
@@ -219,8 +220,8 @@ List<FunctionSpan> _rustFunctions(List<Tok> code) {
   return out;
 }
 
-// Dart: at top level or in a class-like body, a `{` that opens neither a
-// class-like body nor a variable's literal is a function body.
+// In Dart a `{` at top level or in a class-like body that opens neither a
+// class-like body nor the literal of a variable is a function body.
 List<FunctionSpan> _dartFunctions(List<Tok> code) {
   final out = <FunctionSpan>[];
   const classy = {'class', 'mixin', 'enum', 'extension'};

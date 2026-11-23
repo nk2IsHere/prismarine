@@ -1,9 +1,10 @@
 import 'row_layout.dart';
 
-/// The row of one drawn object: the [members] of an application's object
-/// block, which the shaders read as `Object.<member>`, then the fields that
-/// the renderer fills. These are the object's light set, its flags and the
-/// box around its meshes, which are culled as a whole.
+/// Returns the row of one drawn object. It holds the [members] of the object
+/// block of an application, which the shaders read as `Object.<member>`,
+/// then the fields that the renderer fills. These are the light set of the
+/// object, its flags and the box around its meshes, which are culled as a
+/// whole.
 RowLayout objectRowOf(List<RowField> members) =>
     RowLayout('ObjectRow', [...members, ...objectRowFields]);
 
@@ -15,35 +16,36 @@ const objectRowFields = [
   RowField('boundsMax', FieldType.vec3),
 ];
 
-/// Object flags ([objectRowOf] `flags`).
+/// The flags of an object, the `flags` field of [objectRowOf].
 abstract final class ObjectFlags {
-  /// Never culled.
+  /// The object is not culled.
   static const noCull = 1 << 0;
 
-  /// Deformable (skinned): its batches skip the batch-sphere test.
+  /// The object is deformable, such as a skinned object. Its batches skip
+  /// the batch-sphere test.
   static const deformable = 1 << 1;
 
-  /// Shown this frame (visible itself and its scene shown).
+  /// The object is shown this frame. It is visible and its scene is shown.
   static const visible = 1 << 2;
 
-  /// Casts shadows.
+  /// The object casts shadows.
   static const castsShadow = 1 << 3;
 }
 
-/// The row of one mesh batch of an object: the [members] of an
-/// application's instance block, which the shaders read as
+/// Returns the row of one mesh batch of an object. It holds the [members] of
+/// the instance block of an application, which the shaders read as
 /// `Instance.<member>`, then the fields that the renderer fills. These are
-/// the object's row, the material's words, the pipeline bucket, the place of
-/// the batch's triangles in its cooked pool, its skinning output and its
-/// bounding sphere.
+/// the row of the object, the words of the material, the pipeline bucket,
+/// the place of the triangles of the batch in its cooked pool, its skinning
+/// output and its bounding sphere.
 RowLayout instanceRowOf(List<RowField> members) =>
     RowLayout('InstanceRow', [...members, ...instanceRowFields]);
 
 /// The fields of [instanceRowOf] that the renderer fills.
 const instanceRowFields = [
   RowField('object', FieldType.uint),
-  // Word offsets in the material table: the material's two blocks and the
-  // array layers of its texture inputs.
+  // Word offsets in the material table of the two blocks of the material and
+  // the array layers of its texture inputs.
   RowField('materialBase', FieldType.uint),
   RowField('materialMain', FieldType.uint),
   RowField('materialTextures', FieldType.uint),
@@ -56,12 +58,14 @@ const instanceRowFields = [
   RowField('sphere', FieldType.vec4),
 ];
 
-/// Instance flags ([instanceRowOf] `flags`): which pass kinds draw it.
+/// The flags of an instance, the `flags` field of [instanceRowOf], with the
+/// pass kinds that draw it.
 abstract final class InstanceFlags {
   static const gBuffer = 1 << 0;
   static const main = 1 << 1;
   static const shadow = 1 << 2;
 
-  /// Alpha-blended: drawn in its own sorted run, not a bucket's.
+  /// The instance is alpha-blended and drawn in its own sorted run, not in
+  /// the run of a bucket.
   static const blended = 1 << 3;
 }

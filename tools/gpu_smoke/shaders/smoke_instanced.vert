@@ -1,10 +1,10 @@
 #version 460 core
 
-// A quad per instance: the vertex buffer holds the corners (per vertex),
-// the instance buffer each instance's offset and colour (per instance).
+// A quad per instance. The vertex buffer holds the corners per vertex. The
+// instance buffer holds the offset and colour of each instance.
 
 uniform FrameInfo {
-  vec4 scale;  // x: the quad's half size in clip space
+  vec4 scale;  // x is the half size of the quad in clip space
 }
 frame_info;
 

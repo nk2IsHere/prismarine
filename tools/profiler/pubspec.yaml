@@ -1,0 +1,11 @@
+name: prismarine_profiler
+description: Heap snapshot diffs, allocation sites with a flame graph and a VM-service profiler for Dart apps.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+dependencies:
+  vm_service: ^15.3.0
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

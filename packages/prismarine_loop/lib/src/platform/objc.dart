@@ -1,8 +1,6 @@
-// The Objective-C runtime and a few CoreFoundation and IOSurface calls,
-// through plain dart:ffi (macOS): the platform glue the window-surface reader
-// and the Metal frame limiter need. Call only on the main thread (the UI
-// isolate with Flutter's merged platform/UI threads) where AppKit is
-// involved.
+// The Objective-C runtime and a few CoreFoundation and IOSurface calls of
+// macOS through dart:ffi. A call that involves AppKit must run on the main
+// thread, the UI isolate with the merged platform and UI threads of Flutter.
 import 'dart:ffi';
 
 typedef ObjcId = Pointer<Void>;
@@ -60,7 +58,8 @@ final ioSurfaceUseInc = ioSurfaceLib
       'IOSurfaceIncrementUseCount',
     );
 
-/// A C string that lives for the process (selectors and class names).
+/// Returns a C string that is kept for the life of the process, for
+/// selectors and class names.
 Pointer<Uint8> cString(String s) {
   final units = s.codeUnits;
   final p = _malloc(units.length + 1).cast<Uint8>();

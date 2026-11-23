@@ -1,5 +1,5 @@
 #version 460
-// Texel buffers: an RGBA32F one indexed by an R32UI one.
+// Texel buffers, an RGBA32F one indexed by an R32UI one.
 uniform samplerBuffer lights;
 uniform usamplerBuffer indices;
 

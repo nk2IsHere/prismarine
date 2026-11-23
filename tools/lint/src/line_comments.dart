@@ -64,8 +64,8 @@ List<Tok> lineComments(String src, Lang lang) {
   return out;
 }
 
-// The column where a comment starts on [l], or -1. Quotes are tracked within
-// the line only.
+// Returns the column of the start of a comment on [l], or -1. Quotes are
+// tracked within the line only.
 int _commentStart(String l, Lang lang, bool firstLine) {
   if (lang == Lang.cdb) {
     final t = l.trimLeft();

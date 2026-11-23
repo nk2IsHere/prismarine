@@ -1,7 +1,7 @@
 part of 'release_9.dart';
 
-// Texture views: a mip level built from the level above in a render pass
-// and one layer of an array rendered as a 2D target.
+// Texture views with a mip level built from the level above in a render
+// pass and one layer of an array rendered as a 2D target.
 
 Future<String?> _views(_Kit kit) async {
   final ctx = kit.ctx;
@@ -45,9 +45,8 @@ Future<String?> _views(_Kit kit) async {
   return null;
 }
 
-/// Both layers of a two-layer RGBA8 array rewritten from one buffer in one
-/// command buffer, as Enlighten's output is uploaded every frame, then
-/// sampled.
+/// Rewrites both layers of a two-layer RGBA8 array from one buffer in one
+/// command buffer, as a lightmap is uploaded every frame, then samples them.
 Future<String?> _arrayUpload(_Kit kit) async {
   final ctx = kit.ctx;
   final array = ctx.createTexture(

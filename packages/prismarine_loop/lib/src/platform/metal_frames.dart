@@ -1,21 +1,23 @@
-// Frames in flight on macOS: the app's frames wait for the GPU.
+// Limits the frames in flight on macOS. The frames of the app wait for the
+// GPU.
 //
-// The raster thread writes each composite's vertices and uniforms into a
-// ring of four arenas (Impeller's HostBuffer) and reuses an arena four
-// frames later without waiting for the GPU. On iOS the CAMetalLayer's few
-// drawables hold it back; on macOS nothing does, so when the 3D scene's GPU
-// work falls behind, composites queue more than four deep and one reads a
-// later one's arena: streaked triangles, garbled text, a wrong-coloured
-// panel for a frame or a run of frames.
+// The raster thread writes the vertices and uniforms of each composite into a
+// ring of four arenas, the HostBuffer of Impeller. It reuses an arena four
+// frames later without waiting for the GPU. On iOS the few drawables of the
+// CAMetalLayer hold it back. On macOS nothing does. Composites queue more than
+// four deep while the GPU work of the 3D scene falls behind. One then reads the
+// arena of a later one. The result is streaked triangles, garbled text or a
+// panel of the wrong colour for one or more frames.
 //
-// The limiter bounds that queue as the drawables do on iOS: each frame it
-// commits an empty marker command buffer on the engine's own Metal queue
-// and waits (polling, at most 250 ms) until the marker of two frames before
-// has completed. With Flutter's two-frame pipeline that is composite k − 4,
-// whose arena frame k reuses; the wait is only the GPU backlog beyond it.
+// The limiter bounds that queue as the drawables do on iOS. Each frame it
+// commits an empty marker command buffer on the Metal queue of the engine.
+// It polls for at most 250 ms until the marker of two frames before has
+// completed. With the two-frame pipeline of Flutter that marker is composite
+// k − 4, whose arena frame k reuses. The wait is only the GPU backlog beyond
+// it.
 //
-// Plain dart:ffi on the Objective-C runtime (objc.dart): no engine change.
-// `PRISMARINE_GPU_FRAME_GATE=off`: no limiter (to show the race).
+// It calls the Objective-C runtime of objc.dart through dart:ffi.
+// `PRISMARINE_GPU_FRAME_GATE=off` turns the limiter off to show the race.
 import 'dart:ffi';
 import 'dart:io';
 
@@ -42,8 +44,9 @@ final _msgResponds = objcLib
 class MetalFrameLimiter {
   MetalFrameLimiter._(this._queue);
 
-  /// The limiter, or null where it doesn't apply (not macOS, switched off,
-  /// not on the main thread, or no Flutter view controller found yet).
+  /// Returns the limiter, or null where it does not apply. It does not apply
+  /// on a system other than macOS, when it is switched off, off the main
+  /// thread or before a Flutter view controller exists.
   static MetalFrameLimiter? create() {
     if (!Platform.isMacOS) return null;
     final gate =
@@ -60,8 +63,8 @@ class MetalFrameLimiter {
   final ObjcId _queue;
   final List<ObjcId> _markers = [];
 
-  /// Frames that waited, the time they waited, and waits cut off at
-  /// [maxWaitUs] (the run log).
+  /// The number of frames that waited, the time they waited and the number
+  /// of waits cut off at [maxWaitUs].
   int waits = 0;
   int waitedUs = 0;
   int timeouts = 0;
@@ -78,10 +81,11 @@ class MetalFrameLimiter {
     _markers.add(marker);
     if (_markers.length <= 2) return;
     final oldest = _markers.removeAt(0);
-    // MTLCommandBufferStatusCompleted = 4, Error = 5. A bounded wait, never
-    // waitUntilCompleted: should the queue not drain (a window the OS
-    // stopped presenting, a stuck command buffer), the frame goes on after
-    // [maxWaitUs] rather than hang the main thread.
+    // MTLCommandBufferStatusCompleted is 4 and Error is 5. The wait is
+    // bounded and does not use waitUntilCompleted. A queue that does not
+    // drain, such as for a window that the OS stopped presenting or a stuck
+    // command buffer, must not hang the main thread. The frame goes on after
+    // [maxWaitUs].
     if (_msgStatus(oldest, sel('status')) < 4) {
       final sw = Stopwatch()..start();
       while (_msgStatus(oldest, sel('status')) < 4 &&
@@ -95,7 +99,7 @@ class MetalFrameLimiter {
     cfRelease(oldest);
   }
 
-  /// The run's summary line.
+  /// The summary line of the run.
   String get summary =>
       'frames waited for the GPU (macOS frame limiter): $waits, '
       '${(waitedUs / 1000).toStringAsFixed(0)} ms, $timeouts cut off at '

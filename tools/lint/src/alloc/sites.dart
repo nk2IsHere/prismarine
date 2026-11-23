@@ -1,5 +1,5 @@
-// One function's allocation places and the calls it makes, read from its
-// resolved syntax tree.
+// The allocation places of one function and the calls that it makes, read
+// from its resolved syntax tree.
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
@@ -20,12 +20,12 @@ class Site {
 class Call {
   Call(this.target, this.offset, {this.onClass, this.name});
 
-  /// The member the call resolves to.
+  /// The resolved member of the call.
   final String target;
   final int offset;
 
-  /// For an instance call: the receiver's class and the member's name, so
-  /// the walk can add the overrides in its subtypes.
+  /// The class of the receiver of an instance call. The walk adds the
+  /// overrides of the member in its subtypes.
   final String? onClass;
   final String? name;
 }
@@ -34,13 +34,13 @@ class Found {
   final sites = <Site>[];
   final calls = <Call>[];
 
-  /// Functions torn off here (reachable from wherever they are called).
+  /// The functions torn off here, reachable from wherever they are called.
   final tearOffs = <String>{};
 }
 
-/// Reads [node] (a declaration, or a field initializer). [setup]: the
-/// function itself runs once and only the closures it makes run per frame,
-/// so only what is inside them counts.
+/// Reads the declaration or field initializer [node] with the verdicts
+/// [sdk]. With [setup] the function itself runs once and only the closures
+/// that it makes run per frame. Only the code inside them then counts.
 Found sitesOf(AstNode node, SdkVerdicts sdk, {bool setup = false}) {
   final found = Found();
   node.accept(_Sites(found, sdk, setup));
@@ -53,7 +53,7 @@ class _Sites extends RecursiveAstVisitor<void> {
   final SdkVerdicts sdk;
   final bool setup;
 
-  /// How many closures deep the visit is.
+  /// The depth of the visit in closures.
   int _depth = 0;
   bool get _counts => !setup || _depth > 0;
 
@@ -86,7 +86,7 @@ class _Sites extends RecursiveAstVisitor<void> {
     if (!node.isConst) {
       _site('new', node, 'a new ${node.constructorName.type.name.lexeme}');
     }
-    // An SDK constructor is the `new` already counted.
+    // An SDK constructor is the `new` that is already counted.
     if (ctor != null && !inSdk(ctor)) _call(ctor, node);
     _arguments(node.argumentList);
     super.visitInstanceCreationExpression(node);
@@ -146,9 +146,10 @@ class _Sites extends RecursiveAstVisitor<void> {
     }
     final captured = _Captures.of(node);
     if (!_counts) {
-      // A setup function's closure: made once, its body per frame.
+      // The closure of a setup function is made once and its body runs per
+      // frame.
     } else if (parent is FunctionDeclaration) {
-      // A local function: a closure when it captures.
+      // A local function is a closure when it captures.
       if (captured != null) {
         _site('closure', parent, 'a local function capturing $captured');
       }
@@ -184,7 +185,7 @@ class _Sites extends RecursiveAstVisitor<void> {
   }
 
   void _accessor(PropertyAccessorElement e, AstNode at, {DartType? receiver}) {
-    // A field's own getter or setter is a load or a store.
+    // The own getter or setter of a field is a load or a store.
     if (e.isOriginVariable) return;
     _call(e, at, receiver: receiver);
   }
@@ -212,7 +213,7 @@ class _Sites extends RecursiveAstVisitor<void> {
     } else if (target != null && target.staticType is DynamicType) {
       _site('dynamic', node, 'a dynamic call of ${node.methodName.name}');
     } else {
-      // A field, variable or getter of a function type, called.
+      // A called field, variable or getter of a function type.
       if (e is GetterElement) _accessor(e, node.methodName);
       _functionValueCall(node.argumentList, node.staticType, node);
     }
@@ -226,7 +227,7 @@ class _Sites extends RecursiveAstVisitor<void> {
   void visitFunctionExpressionInvocation(FunctionExpressionInvocation node) {
     final e = node.element;
     if (e != null) {
-      // `call` on an object.
+      // A `call` on an object.
       _call(e, node, receiver: node.function.staticType);
     } else {
       _functionValueCall(node.argumentList, node.staticType, node);
@@ -306,7 +307,8 @@ class _Sites extends RecursiveAstVisitor<void> {
         from != null &&
         to != null &&
         _boxes(from, to) &&
-        // A local's box may never be made; a field's or an element's is.
+        // The box of a local may not be made. The box of a field or an
+        // element is.
         write is! LocalVariableElement &&
         write is! FormalParameterElement) {
       _site('box', node.rightHandSide, 'a double stored as ${_show(to)}');
@@ -393,10 +395,11 @@ class _Sites extends RecursiveAstVisitor<void> {
     }
   }
 
-  /// A double passed where the parameter is not a double is boxed: by the
-  /// parameter's declared type in our code (a generic class's `T` holds a
-  /// box), by its type at the call for the SDK's (min and max of doubles
-  /// stay unboxed).
+  /// Finds the doubles in [list] passed where the parameter is not a double.
+  /// They are boxed. The declared type of the parameter decides in the code
+  /// of the repository, where the `T` of a generic class holds a box. The
+  /// type at the call decides for the SDK, where min and max of doubles stay
+  /// unboxed.
   void _arguments(ArgumentList list) {
     for (final a in list.arguments) {
       final value = a.argumentExpression;
@@ -418,7 +421,7 @@ class _Sites extends RecursiveAstVisitor<void> {
     if (collection is! InterfaceType) return;
     final lib = collection.element.library.uri.toString();
     if (lib == 'dart:typed_data') return;
-    if (!lib.startsWith('dart:')) return; // Our own: its parameter says.
+    if (!lib.startsWith('dart:')) return; // the parameter of the code decides
     _site('box', value, 'a double stored in ${_show(collection)}');
   }
 
@@ -514,7 +517,8 @@ bool _isCallee(SimpleIdentifier node) {
   return parent is MethodInvocation && identical(parent.methodName, node);
 }
 
-/// What a closure captures: a local of an enclosing function, or `this`.
+/// Finds the captures of a closure, a local of an enclosing function or
+/// `this`.
 class _Captures extends RecursiveAstVisitor<void> {
   _Captures(this.closure);
   final FunctionExpression closure;
@@ -546,7 +550,7 @@ class _Captures extends RecursiveAstVisitor<void> {
     } else if (e is LocalFunctionElement) {
       if (!_inside(e)) found = node.name;
     } else if (e is ExecutableElement || e is FieldElement) {
-      // An instance member named without a receiver reads `this`.
+      // An instance member used without a receiver reads `this`.
       final parent = node.parent;
       final qualified =
           parent is PropertyAccess && identical(parent.propertyName, node) ||

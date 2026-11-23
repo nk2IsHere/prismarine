@@ -10,7 +10,7 @@ const _pio2_2t = 2.02226624879595063154e-21;
 const _pio2_3 = 2.02226624871116645580e-21;
 const _pio2_3t = 8.47842766036889956997e-32;
 
-// rem_pio2's result: n, y0, y1.
+// The result of rem_pio2 is n, y0 and y1.
 int _n = 0;
 double _y0 = 0, _y1 = 0;
 
@@ -105,7 +105,7 @@ void _remPio2(double x) {
     final y0 = x - x;
     return _set(0, y0, y0);
   }
-  // Large arguments: z = scalbn(|x|, -ilogb(x) + 23).
+  // A large argument gives z = scalbn(|x|, -ilogb(x) + 23).
   var z = _fromWords((_hi(x) & 0x000fffff) | ((0x3ff + 23) << 20), _lo(x));
   // alloc: arguments of 2^20 times pi/2 and more only.
   final tx = Float64List(3);
@@ -127,7 +127,7 @@ void _remPio2(double x) {
 
 const _initJk = [3, 4, 4, 6];
 
-// The first 66 words of 2/pi: all a double's reduction reads.
+// The first 66 words of 2/pi, which cover the reduction of every double.
 const _ipio2 = [
   0xA2F983, 0x6E4E44, 0x1529FC, 0x2757D1, 0xF534DD, 0xC0DB62, 0x95993C, //
   0x439041, 0xFE5163, 0xABDEBB, 0xC561B7, 0x246E3A, 0x424DD2, 0xE00649,
@@ -288,7 +288,7 @@ int _remPio2Large(Float64List x, int nx, Float64List y, int e0, int prec) {
     }
     fq[jz - i] = fw;
   }
-  // prec 1 (the only one sin and cos use).
+  // Precision 1 is the only precision that sin and cos use.
   fw = 0.0;
   for (var i = jz; i >= 0; i--) {
     fw += fq[i];

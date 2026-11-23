@@ -1,10 +1,7 @@
-// A double's 32-bit words and scalbn, shared by the functions below.
 part of '../../libm.dart';
 
-// A double's two 32-bit words through views of one 8-byte buffer, as the
-// ByteData accessors with an explicit endianness cost a call each in AOT
-// code. Every target is little-endian: word 0 is the low half; a
-// big-endian host would read the words swapped, so it is refused.
+// Two views of one 8-byte buffer give the two 32-bit words of a double. Word
+// 0 is the low half on a little-endian host. A big-endian host is refused.
 final _f64 = Float64List(1);
 final _w32 = () {
   if (Endian.host != Endian.little) {
@@ -44,14 +41,13 @@ int _i32(int v) => v.toSigned(32);
 @pragma('vm:prefer-inline')
 int _u32(int v) => v.toUnsigned(32);
 
-/// 2^e for a biased exponent e in 1..2046.
+/// Returns 2^(biased - 1023) for [biased] in 1..2046.
 @pragma('vm:prefer-inline')
 double _pow2(int biased) => _fromWords(biased << 20, 0);
 
 // ------------------------------------------------------------------ scalbn
 
 double scalbn(double x, int n) {
-  // libm's generic scalbn for f64.
   const expMax = 1023, expMin = -1022;
   final fExpMax = _pow2(2046); // 0x1p1023
   final mul = _pow2(1) * _pow2(53 + 1023); // 0x1p-1022 * 0x1p53
