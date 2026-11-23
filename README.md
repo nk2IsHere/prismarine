@@ -128,7 +128,9 @@ about a minute.
     dart test
 
 The sample app in `apps/prismarine_sample` is the example of an app build. It needs the patched engine and the model,
-which its `tool/fetch.dart` downloads, as [its README](apps/prismarine_sample/README.md) describes. `tool/shaders.sh`
+which `dart tool/fetch.dart` in `apps/prismarine_sample` downloads into `~/.prismarine/sample`, or
+`%LOCALAPPDATA%\prismarine\sample` on Windows, as [its README](apps/prismarine_sample/README.md) describes. Set
+`PRISMARINE_SAMPLE_DATA` or pass `--data=<dir>` to the app for another folder. `tool/shaders.sh`
 builds its shaders with the impellerc of the engine before the app is built. The steps below for macOS
 ran on macOS 27.2 on an Apple M2 Pro and the steps for Linux on Ubuntu 26.04 on x86-64. The steps for Windows follow the
 scripts of the engine and are not checked on a Windows machine.

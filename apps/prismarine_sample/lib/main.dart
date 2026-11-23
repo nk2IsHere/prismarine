@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'src/perf.dart';
+import 'src/sample_data.dart';
 import 'src/sample_options.dart';
 import 'src/sample_renderer.dart';
 import 'src/sample_view.dart';
@@ -27,7 +28,7 @@ void main(List<String> args) {
     return null;
   }
 
-  final data = opt('data') ?? defaultDataDir();
+  final data = sampleDataDir(opt('data'));
   final perf = double.tryParse(opt('perf') ?? '');
   runApp(
     SampleApp(
@@ -52,21 +53,6 @@ void main(List<String> args) {
       )?.split(',').map((v) => double.parse(v) * math.pi / 180).toList(),
     ),
   );
-}
-
-/// The data directory: `PRISMARINE_SAMPLE_DATA`, else `data/sample` of the
-/// repository when the app runs from its tree.
-String defaultDataDir() {
-  final env = Platform.environment['PRISMARINE_SAMPLE_DATA'];
-  if (env != null && env.isNotEmpty) return env;
-  var dir = Directory.current;
-  for (var i = 0; i < 6; i++) {
-    if (File('${dir.path}/apps/prismarine_sample/pubspec.yaml').existsSync()) {
-      return '${dir.path}/data/sample';
-    }
-    dir = dir.parent;
-  }
-  return '${Directory.current.path}/data/sample';
 }
 
 class SampleApp extends StatefulWidget {
@@ -167,6 +153,10 @@ class _SampleAppState extends State<SampleApp> {
           () => _takeShot(path),
         );
       }
+    } on SampleDataMissing catch (e) {
+      stderr.writeln('sample: $e');
+      if (widget.smoke || widget.perf != null) exit(1);
+      setState(() => _error = e);
     } on Object catch (e, st) {
       stderr.writeln('sample: $e\n$st');
       if (widget.smoke || widget.perf != null) exit(1);

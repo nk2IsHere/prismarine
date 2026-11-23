@@ -18,8 +18,8 @@ package. Both designs share the HDR target, the depth target, the pass order bel
 - Shadows for the point lights with a budget of lights that cast them.
 - Light shafts and fog from the sun and the point lights, shadowed by both shadow maps.
 - The GPU time of each effect in the frame graph, from timed parts of the frame.
-- The sample keeps 60 Hz at 1920 by 1080 on the workstation's RTX 4060 Ti and 120 Hz on the Mac with an M2 Pro with
-  the default quality.
+- The sample keeps 60 Hz at 1920 by 1080 on the workstation's RTX 4060 Ti with the default quality. The Mac with an M2
+  Pro keeps 120 Hz with every effect but the point light shadows.
 
 ## Not in scope
 
@@ -69,9 +69,9 @@ offset from the Halton sequence in bases 2 and 3, with 8 offsets at low and medi
 temporal noise of other passes.
 
 The resolve finds the nearest depth of each pixel and its four diagonal neighbours and reprojects that point into the
-last frame with the matrices without jitter. A static camera then reads the history at the same pixel. The history is read with a
-five-tap Catmull-Rom filter at high quality and bilinear filtering below it. The 3 by 3 neighbourhood of the current
-frame in YCoCg gives the mean and the deviation and the history is clipped towards the mean into the box of 1.25
+last frame with the matrices without jitter. A static camera then reads the history at the same pixel. The history is
+read with a five-tap Catmull-Rom filter at high quality and bilinear filtering below it. The 3 by 3 neighbourhood of the
+current frame in YCoCg gives the mean and the deviation and the history is clipped towards the mean into the box of 1.25
 deviations. Colours are weighted by the inverse of their luminance before the blend, which keeps a single bright pixel
 from flickering. A colour that is not a finite number counts as black and does not enter the history. The blend takes
 1/12 of the current frame. A history outside the view or a reset takes the current frame alone. Low quality uses a clamp
@@ -116,11 +116,11 @@ The tone map pass reads the exposure, adds the bloom, applies the tone map of `s
 
 ## Point light shadows
 
-A budget, 2 by default, sets the most point lights that cast shadows. The sample starts with none on macOS, where
-each shadowed light costs about 1.5 ms of the GPU of an M2 Pro. Each frame the builder scores the lights whose
-sphere of range touches the view by intensity over the squared distance to the camera and gives the shadow slots to
-the best. A light that holds a slot keeps it while it stays in the budget. `lightColor[i].w` of the `Frame` block holds
-the slot of light i plus one, 0 for none.
+A budget, 2 by default, sets the most point lights that cast shadows. Each shadowed light costs about 1.2 to 1.5 ms of
+the GPU of an M2 Pro. The sample keeps the same default on every platform and the Mac runs a little below 120 Hz. Each
+frame the builder scores the lights whose sphere of range touches the view by intensity over the squared distance to the
+camera and gives the shadow slots to the best. A light that holds a slot keeps it while it stays in the budget.
+`lightColor[i].w` of the `Frame` block holds the slot of light i plus one, 0 for none.
 
 The atlas has a row for each slot and six tiles in each row, one per face of a cube. A tile is 256, 512 or 1024 texels
 at low, medium and high quality. A face draws with the shadow shaders of the sun and a perspective projection of 90

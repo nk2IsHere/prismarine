@@ -65,8 +65,11 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
 
 - **AgX by default (2026-11-23).** The sample and `prismarine_pbr` tone map with AgX by default. ACES, the ACES fit
   of Narkowicz and PBR Neutral stay selectable.
-- **No point light shadows on the Mac by default (2026-11-23).** Each shadowed point light costs about 1.5 ms of the
-  GPU of an M2 Pro at 1920 by 1080. The sample starts with none on macOS and with two elsewhere.
+- **The same defaults on every platform (2026-11-23).** The sample starts with two shadowed point lights on every
+  platform. The Mac then runs a little below 120 Hz.
+- **The data directory of the sample (2026-11-23).** The app and the fetch script take `--data` or `--out`, else
+  `PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on Windows. Neither
+  looks for the repository.
 
 ## Logo
 
