@@ -1,95 +1,159 @@
-# flutter_gpu (Dart side), vendored
+# flutter_gpu, the Dart side, vendored
 
-Flutter GPU's Dart package (`engine/src/flutter/lib/gpu/lib` + `pubspec.yaml`, BSD, © The Flutter Authors, `LICENSE`) at our engine's revision `deb287481e` (identical to `data/flutter/bin/cache/pkg/flutter_gpu`), patched for perf E. `apps/mcsm_player` uses it through `dependency_overrides`; flutter_scene and the rest resolve to it from there. Its `@Native` functions resolve by symbol through the process (Flutter GPU sets no native resolver), so the copy binds to the running engine's exports.
+This is the Dart package of Flutter GPU, `engine/src/flutter/lib/gpu/lib` with its `pubspec.yaml`, at the engine
+revision `deb287481e` of the patched engine. It is BSD licensed, © The Flutter Authors, see `LICENSE`. An app uses it
+through `dependency_overrides`, and every package of the app then resolves to it. Its `@Native` functions resolve by
+symbol through the process, since Flutter GPU sets no native resolver. The copy therefore binds to the exports of the
+running engine, and on the prebuilt engine of Flutter every patched call takes the stock path.
 
-To see every change: `diff -ru $MCSM_FLUTTER/bin/cache/pkg/flutter_gpu/lib third_party/flutter_gpu/lib`. Each patch is marked `mcsm G<n>`.
+`diff -ru <Flutter SDK>/bin/cache/pkg/flutter_gpu/lib third_party/flutter_gpu/lib` shows every change. Each patch is
+marked `mcsm G<n>` in the code. The engine patches are in [the engine README](../flutter_engine/README.md).
 
 ## G1: engine detection
 
-`natives.dart`: `_mcsmEngineE3` is whether the process exports `InternalFlutterGpu_RenderPass_BindUniformIndexed` (third_party/flutter_engine patch 0003). With Flutter's prebuilt engine it's false and every call below takes the stock path, so the app runs on either engine.
+`natives.dart` has `_mcsmEngineE3`, which is true when the process exports
+`InternalFlutterGpu_RenderPass_BindUniformIndexed` of engine patch 0003. On the prebuilt engine of Flutter it is false
+and every call below takes the stock path.
 
 ## G2: binds by resolved slot index
 
-- `shader.dart`: a `UniformSlot` resolves its name once per use as a struct and as a texture (`Shader._resolveUniformStruct/_resolveUniformTexture`, one Handle call each). flutter_scene caches slots per shader and name (`cachedUniformSlot`), so a draw's binds no longer send a Dart string.
-- `buffer.dart` (`_bindAsUniform`) and `render_pass.dart` (`bindTexture`) call `_bindUniformIndexed` / `_bindTextureIndexed` as leaf calls. They fail exactly where the name lookup failed: an unknown name resolves to -1 and throws the same exception.
+- `shader.dart` resolves the name of a `UniformSlot` once per use as a struct and as a texture, with one Handle call
+  each. A caller that keeps the slots per shader and name sends no Dart string per bind.
+- `_bindAsUniform` of `buffer.dart` and `bindTexture` of `render_pass.dart` call `_bindUniformIndexed` and
+  `_bindTextureIndexed` as leaf calls. They fail exactly where the name lookup failed. An unknown name resolves to -1
+  and throws the same exception.
 
 ## G3: leaf calls
 
-- `drawIndexed`/`draw` first try `_drawCached` (leaf): it draws when the pass already has the pipeline. If not, it returns 2 and does nothing, and the stock non-leaf draw runs, which may wait for a Metal pipeline compile. A leaf call never blocks, so the sim and audio isolates' safepoints never wait on it.
-- `_bindVertexBufferDevice`, `_bindIndexBufferDevice` and `_clearBindings` are leaf calls: no Dart handles and nothing that blocks (also on the stock engine).
+- `drawIndexed` and `draw` first try the leaf call `_drawCached`, which draws when the pass already has the pipeline.
+  It returns 2 and does nothing otherwise, and the stock draw runs, which may wait for a Metal pipeline compile. A leaf
+  call does not block, so the safepoints of other isolates do not wait on it.
+- `_bindVertexBufferDevice`, `_bindIndexBufferDevice` and `_clearBindings` are leaf calls on every engine.
 
-## G4: live GPU memory (accounting only)
+## G4: live GPU memory
 
-- `memory.dart` (new, `GpuMemory`): every texture and device buffer made through the package adds its bytes to a tally by kind (`buffer`; `rt`, `rt.msaa`, `rt.transient`; `tex.shared` / `tex.private`, `.compressed` when block-compressed); a `Finalizer` takes a collected one off. `texture.dart` computes a texture's bytes from its format's blocks, mip levels and sample count (the driver's padding isn't counted). The player's `--profile` writes it every 30 frames as `mem.gpu.<kind>` (MB) with `mem.footprint`. It excludes what the engine allocates itself (the Flutter surface, Impeller's host buffers). `GpuMemory.tag` names the kind buffers made meanwhile count under (`buffer.<owner>`), so the census splits buffers by what holds them.
+`memory.dart` has `GpuMemory`. Every texture and device buffer made through the package adds its bytes to a tally by
+kind: `buffer`, `rt`, `rt.msaa`, `rt.transient`, `tex.shared` and `tex.private`, with `.compressed` for block
+compression. A `Finalizer` takes a collected one off. `texture.dart` computes the bytes of a texture from the blocks of
+its format, its mip levels and its sample count, without the padding of the driver. The tally leaves out what the
+engine allocates itself, such as the Flutter surface and the host buffers of Impeller. `GpuMemory.tag` gives the kind
+that buffers made meanwhile count under, as `buffer.<owner>`.
 
 ## G5: repeated texture binds skipped
 
-`render_pass.dart`: a pass remembers, per shader and resolved texture slot, the texture and sampler object it bound since the last `clearBindings` (bindings persist across draws until then, on every backend). Binding the same pair again returns before the native call: flutter_scene and mcsm's encoders rebind every slot per draw, and consecutive draws mostly share the shadow atlas, the occlusion buffer, placeholders and the block atlas. Only with the perf E engine (the indexed bind); the stock path is unchanged.
+`render_pass.dart` remembers, per shader and resolved texture slot, the texture and sampler that a pass bound since the
+last `clearBindings`. Bindings persist across draws until then on every backend. Binding the same pair again returns
+before the native call. This applies on the patched engine only, with the indexed bind.
 
-## G6: cheaper calls per draw (mcsm7)
+## G6: cheaper calls per draw
 
-- `render_pass.dart`: the pipeline-state setters (`bindPipeline`, blend, depth, stencil, scissor, viewport, cull, winding, primitive, polygon mode) are leaf calls: they only store state natively (also on the stock engine).
-- A pass remembers the pipeline, cull mode, winding, primitive type and polygon mode it set last; setting the same again doesn't cross into the engine (flutter_scene sets winding and primitive type before every draw).
-- G5's memo lives on the `Shader` (the pass and its clear number it holds bindings for, then the texture and sampler per index) instead of a per-pass identity map: no hash lookup per texture bind.
+- The pipeline-state setters of `render_pass.dart` are leaf calls on every engine: `bindPipeline`, blend, depth,
+  stencil, scissor, viewport, cull, winding, primitive and polygon mode. They only store state natively.
+- A pass remembers the pipeline, cull mode, winding, primitive type and polygon mode that it set last. Setting the same
+  again does not cross into the engine.
+- The memo of G5 is on the `Shader`, with the pass and its clear number and then the texture and sampler per index, in
+  place of a map per pass.
 
-## G7: draws from a first instance (mcsm7)
+## G7: draws from a first instance
 
-- `render_pass.dart`: `draw` and `drawIndexed` take `firstInstance` (default 0): every instance-rate vertex buffer starts at that instance, as if its view were bound `firstInstance` elements further on; the shader's instance index still counts from 0. On the mcsm7 engine (`InternalFlutterGpu_RenderPass_McsmDrawInstanced`, patch 0012) it is one leaf call; on other engines, or before the pass has built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored (the pass remembers each slot's view; the pipeline its `VertexLayout`).
-- `render_pipeline.dart`: a `RenderPipeline` keeps the `VertexLayout` it was made with.
-- gpu_smoke checks it against offset bindings (plain and indexed: 0 px differ) on the stock, mcsm6 and mcsm7 engines.
+- `draw` and `drawIndexed` of `render_pass.dart` take `firstInstance`, 0 by default. Every instance-rate vertex buffer
+  starts at that instance, and the instance index of the shader still counts from 0. Engine patch 0012
+  (`InternalFlutterGpu_RenderPass_McsmDrawInstanced`) makes it one leaf call. On other engines, or before the pass has
+  built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored.
+- A `RenderPipeline` of `render_pipeline.dart` keeps the `VertexLayout` it was made with.
+- gpu_smoke checks it against offset bindings, plain and indexed.
 
-## G8: GpuMemory.totalBytes (perf4)
+## G8: GpuMemory.totalBytes
 
-- `memory.dart`: the sum of G4's bytes, kept as objects are made and finalized (no map per read): the player's GC pacing reads it once a frame.
+`memory.dart` keeps the sum of the bytes of G4 up to date as objects are made and finalized.
 
-## G9: S2's additions (mcsm9)
+## G9: formats, layered textures and compute
 
-- `formats.dart`: `PixelFormat` gains the formats Metal and Vulkan share (R11G11B10 float, RGB9E5, RGBA16 unorm and snorm, D16, D32 float, 8/16/32-bit integer and signed-normalized formats, RGB10A2, R16/RG16/RG32 float, BC2, BC4, BC5 signed, BC6H), after the stock values as the engine's enum, with their block sizes; `TextureType` gains `texture2DArray` and `texture3D`.
-- `texture.dart`, `context.dart`: `createTexture(…, layers:, depth:)`; a layered texture, an added format or a sample count of 2 goes through `InternalFlutterGpu_Texture_McsmInitializeLayered` (throws on an engine without it); `sliceCount` is an array's layers and a 3D texture's depth, so `overwrite(slice:)` and `CommandBuffer.copyBufferToTexture` upload one layer or depth slice; `Texture.makeView(baseMipLevel:, mipLevelCount:, baseLayer:, layers:)` (`InternalFlutterGpu_Texture_McsmInitializeView`) is a view sharing the texture's memory, to render into one level while sampling another or treat one layer as a 2D target; G4 counts layers and depth, not views.
-- `compute.dart` (new): `mcsmEngineSupportsS2` (engine bit 2048); `Shader.getStorageBufferSlot` / `getStorageImageSlot` (a storage buffer by its block's type name, an image by its variable name); `RenderPass.bindStorageBuffer` (sent at each draw, not recorded into draw lists) and `RenderPass.drawIndirect`; `GpuContext.createComputePipeline`, `CommandBuffer.createComputePass` and `ComputePass` (`bindPipeline`, `bindUniform`, `bindStorageBuffer`, `bindTexture`, `bindStorageImage`, `dispatch(x, y, z)`, `dispatchIndirect`, `barrier`; resources are bound again after each dispatch).
-- `natives.dart`: `_mcsmEngineS2`, whether the engine exports `InternalFlutterGpu_ComputePass_McsmDispatch`.
-- gpu_smoke's mcsm9 checks use all of it on Metal and Vulkan.
+- `PixelFormat` of `formats.dart` gains the formats that Metal and Vulkan share, after the stock values as in the enum
+  of the engine, with their block sizes: R11G11B10 float, RGB9E5, RGBA16 unorm and snorm, D16, D32 float, 8, 16 and
+  32-bit integer and signed-normalized formats, RGB10A2, R16, RG16 and RG32 float, BC2, BC4, BC5 signed and BC6H.
+  `TextureType` gains `texture2DArray` and `texture3D`.
+- `createTexture` of `texture.dart` and `context.dart` takes `layers` and `depth`. A layered texture, an added format or
+  a sample count of 2 goes through `InternalFlutterGpu_Texture_McsmInitializeLayered` and throws on an engine without
+  it. `sliceCount` is the layer count of an array and the depth of a 3D texture, so `overwrite(slice:)` and
+  `CommandBuffer.copyBufferToTexture` upload one layer or depth slice. `Texture.makeView` makes a view that shares the
+  memory of the texture, to render into one level while another is sampled or to use one layer as a 2D target. G4
+  counts layers and depth and does not count views.
+- `compute.dart` has `mcsmEngineSupportsS2`, engine bit 2048. `Shader.getStorageBufferSlot` finds a storage buffer by
+  the type name of its block and `getStorageImageSlot` an image by its variable name. `RenderPass.bindStorageBuffer` is
+  sent at each draw and is not recorded into draw lists. It also has `RenderPass.drawIndirect`,
+  `GpuContext.createComputePipeline`, `CommandBuffer.createComputePass` and `ComputePass` with `bindPipeline`,
+  `bindUniform`, `bindStorageBuffer`, `bindTexture`, `bindStorageImage`, `dispatch`, `dispatchIndirect` and `barrier`.
+  Resources are bound again after each dispatch.
+- `natives.dart` has `_mcsmEngineS2`, true when the engine exports `InternalFlutterGpu_ComputePass_McsmDispatch`.
+- The release 9 checks of gpu_smoke use all of it on Metal and Vulkan.
 
-## G10: S2's binds and dispatches as leaf calls
+## G10: binds and dispatches as leaf calls
 
-- `compute.dart`: every `ComputePass` bind, `dispatch`, `dispatchIndirect` and `barrier`, and the render pass's separate texture, separate sampler, texel buffer, storage buffer and texture-with-sampler binds are leaf calls: the engine's halves only store or encode state (no Dart handles, nothing that waits), as G3's and G6's do. S2's heavy shots make thousands of them a frame (BeaconTown's title shot: ~855 dispatches with about six binds each).
-- `drawIndirect` stays a non-leaf call: like the stock draw, it may wait for a pipeline the pass has not built yet.
+- Every bind, `dispatch`, `dispatchIndirect` and `barrier` of a `ComputePass` in `compute.dart` is a leaf call. The
+  same holds for the separate texture, separate sampler, texel buffer, storage buffer and texture-with-sampler binds of
+  a render pass. The native halves only store or encode state. A frame with many compute passes makes thousands of
+  these calls, such as about 855 dispatches with about six binds each.
+- `drawIndirect` stays a non-leaf call, since it may wait for a pipeline that the pass has not built yet.
 
-## G11: wrapper objects' native pointers read once
+## G11: native pointers of wrapper objects read once
 
-- `natives.dart`: `_mcsmPointerOf(o)`, an object's native field as a `Pointer<Void>` (libc `memmove(p, p, 0)` returns p). `RenderPass`, `ComputePass`, `DeviceBuffer`, `Shader`, `Texture`, `RenderPipeline` and `ComputePipeline` keep theirs (`_mcsmSelf`, read on first use).
-- `render_pass.dart`, `compute.dart`, `compute_natives.dart` (split from `compute.dart`): every leaf native that took a wrapper object (`this` included) is a static native taking `Pointer<Void>`s, called with the kept pointers by a method of the old name. A wrapper passed to a native call becomes a new `Pointer` object each call unless the generated call is inlined, which the player's AOT build doesn't do (~27,000 a frame in S2's heavy shots, the UI isolate's largest allocation). Non-leaf natives keep the wrappers: their generated calls hold the objects alive through the call (a GC can run in it).
+- `_mcsmPointerOf(o)` of `natives.dart` returns the native field of an object as a `Pointer<Void>`, through libc
+  `memmove(p, p, 0)`. `RenderPass`, `ComputePass`, `DeviceBuffer`, `Shader`, `Texture`, `RenderPipeline` and
+  `ComputePipeline` keep theirs in `_mcsmSelf`, read on first use.
+- In `render_pass.dart`, `compute.dart` and `compute_natives.dart`, every leaf native that took a wrapper object is a
+  static native that takes `Pointer<Void>`s. A method of the old name calls it with the kept pointers. A wrapper passed
+  to a native call becomes a new `Pointer` object on each call unless the generated call is inlined, which an AOT build
+  does not do. Non-leaf natives keep the wrappers, since their generated calls hold the objects alive through a
+  collection inside the call.
 
-## G12: a render pass's set-up by kept pointers
+## G12: the set-up of a render pass by kept pointers
 
-- `render_pass.dart`: the non-leaf natives a `RenderPass` is made with (`SetColorAttachment`, `SetDepthStencilAttachment`, `Begin`) are static natives taking `Pointer<Void>`s for the pass, the context, the attachments' textures and the command buffer (about six `Pointer` objects a pass, a hundred passes a frame). `GpuContext` and `CommandBuffer` keep their `_mcsmSelf` too. The constructor holds every wrapper through each call (itself, its render target, the command buffer), so none can be collected inside one.
+The non-leaf natives that make a `RenderPass` in `render_pass.dart`, `SetColorAttachment`, `SetDepthStencilAttachment`
+and `Begin`, are static natives that take `Pointer<Void>`s for the pass, the context, the textures of the attachments
+and the command buffer. `GpuContext` and `CommandBuffer` keep their `_mcsmSelf` too. The constructor holds every
+wrapper through each call, so none can be collected inside one.
 
 ## G13: vertex views made on first bind
 
-- `render_pass.dart`: G7's per-slot vertex views are a list made on a pass's first `bindVertexBuffer` (a full-screen pass binds none; a list of sixteen per pass was).
-
-## Measured
-
-See `third_party/flutter_engine/README.md` and status-perf ("E").
+The per-slot vertex views of G7 in `render_pass.dart` are a list made on the first `bindVertexBuffer` of a pass.
 
 ## G14: one vertex view list for every pass
 
-- `render_pass.dart`: G13's per-pass list of vertex views is one static list, held by the pass that bound a vertex buffer last (a pass binds and draws before the next one binds). A draw from a first instance on the fallback path asks its views only while its pass holds the list, and throws otherwise (perf: a list per pass a frame, the UI isolate's largest site).
+The list of vertex views of G13 is one static list, held by the pass that bound a vertex buffer last. A pass binds and
+draws before the next one binds. A draw from a first instance on the fallback path reads its views only while its pass
+holds the list and throws otherwise.
 
-## G15: passes and command buffers made again; collections at an idle point (mcsm11)
+## G15: passes and command buffers made again, collections at an idle point
 
-- `natives.dart`: `_mcsmEngine11` (the process exports `InternalFlutterGpu_McsmDetach`, third_party/flutter_engine patch 0028). `mcsmGcIdleSupported` and `mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes)`: the Dart VM's collections at the caller's idle point (0 and nothing on other engines).
-- `command_buffer.dart`, `render_pass.dart`, `compute.dart`, `context.dart`: at `submit` a command buffer detaches its render and compute passes and itself from their native objects (`_mcsmDetach`: released there, no weak handle left for a collection to finalize) and links the Dart objects into the context's free lists; `createCommandBuffer`, `createRenderPass` and `createComputePass` take one from there and initialize it again (`_mcsmAgain`, `_mcsmSetup`; `_mcsmSelf` is read again, so it is no longer final). A pass made again counts its clear number on, so a shader's bound-texture memo (G5) of the pass before never matches. Without the export nothing is linked or reused.
-  Why: ~100 passes a frame died young, and a young collection destroyed their native objects one by one inside its pause (about 80 % of the pause on the playtest route).
-  A command buffer or pass must not be used after its submit (the object is another pass by then).
+- `natives.dart` has `_mcsmEngine11`, true when the process exports `InternalFlutterGpu_McsmDetach` of engine patch
+  0028. `mcsmGcIdleSupported` and `mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes)` run the collections of the Dart
+  VM at the idle point of the caller. On other engines they return 0 and do nothing.
+- At `submit` a command buffer of `command_buffer.dart` detaches its render and compute passes and itself from their
+  native objects with `_mcsmDetach`. The native objects are released there, and no weak handle is left for a
+  collection to finalize. The Dart objects go into the free lists of the context. `createCommandBuffer`,
+  `createRenderPass` and `createComputePass` take one from there and initialize it again with `_mcsmAgain` and
+  `_mcsmSetup`. `_mcsmSelf` is read again and is not final. A pass made again counts its clear number on, so the
+  bound-texture memo of G5 from the pass before does not match. Without the export nothing is reused.
+- A command buffer or a pass must not be used after its submit, since the object is another pass by then.
 
-## G16: compaction when asked; the heap's figures (mcsm12)
+## G16: compaction on request, the figures of the heap
 
-- `natives.dart`: `_mcsmEngine12` (the process exports `InternalFlutterGpu_McsmOldSpace`, third_party/flutter_engine patch 0029 with the Dart patch `dart/0003`). `mcsmOldSpaceSupported`, `mcsmOldSpace(request)` (1 starts an old-space mark now, 2 a young collection and a mark-compact, the VM's page cache emptied) and `mcsmHeap(which)` (old space used, capacity and external, new space used and capacity, in bytes); 0 and -1 on other engines.
-  Why: the VM's old space never shrinks without compaction (the incremental compactor moves at most a quarter of new space per mark, from pages at most half full), and the release engine has no call that compacts or reads the heap: over Ep205's playtest route the old space's capacity grew 1.6 → 3.4 GB for 1.25 → 1.95 GB live.
+- `natives.dart` has `_mcsmEngine12`, true when the process exports `InternalFlutterGpu_McsmOldSpace` of engine patch
+  0029 with the Dart patch `dart/0003`. `mcsmOldSpace(request)` with 1 starts an old-space mark now and with 2 runs a
+  young collection and a mark-compact with the page cache of the VM emptied. `mcsmHeap(which)` returns the old space
+  used, its capacity and its external size, and the new space used and its capacity, in bytes. On other engines they
+  return 0 and -1, and `mcsmOldSpaceSupported` is false.
+- The old space of the VM does not shrink without compaction. The incremental compactor moves at most a quarter of new
+  space per mark, from pages that are at most half full, and a release engine has no call that compacts or reads the
+  heap.
 
-## G17: a device buffer let go when its owner drops it (mcsm11)
+## G17: a device buffer released when its owner drops it
 
-- `buffer.dart`: `DeviceBuffer.mcsmRelease()` detaches the wrapper from its native buffer at once (`_mcsmDetach`, G15's export), so the GPU memory goes now and not when a collection finalizes the object; `memory.dart` takes it off G4's tally (`GpuMemory._released`; the finalizer is attached with the object as its detach key). A no-op without the export.
-  Why: a buffer's GPU memory carries no external size, so the VM never felt it, and buffers an owner had dropped waited for the next old-space mark-sweep: the S2 runner's block-store arenas reached 268 MB by the end of Ep205's playtest route against a 48 MB working set.
-  The frames already submitted keep what they bound (Metal's command buffers retain their resources, Vulkan's track them); the object and its views must not be used again.
+- `DeviceBuffer.mcsmRelease()` of `buffer.dart` detaches the wrapper from its native buffer at once with the export of
+  G15, so the GPU memory goes now and not when a collection finalizes the object. `memory.dart` takes it off the tally
+  of G4. The finalizer is attached with the object as its detach key. Without the export it does nothing.
+- The GPU memory of a buffer carries no external size. The VM does not see it, and dropped buffers waited for the next
+  old-space mark-sweep.
+- Frames already submitted keep what they bound. Metal command buffers retain their resources and Vulkan ones track
+  them. The object and its views must not be used again.

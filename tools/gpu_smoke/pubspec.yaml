@@ -37,5 +37,5 @@ flutter:
     - path: flutter_scene_generated/opengl_es/
       platforms:
         - web
-    # S2's shaders (hook/build.dart; mcsm9 engines only).
+    # The shaders of the release 9 checks (tool/s2_bundle.sh).
     - s2_generated/
