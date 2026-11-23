@@ -7,19 +7,19 @@ import 'package:prismarine_kept/prismarine_kept.dart';
 import 'frame_plan.dart';
 import 'plan_codec.dart';
 
-/// Reads what an [PlanWriter] wrote, message by message in the order
-/// written: every message is read, since each may name objects the next
-/// ones refer to.
+/// Reads the messages of a [PlanWriter] in the order written. Every message
+/// must be read, since each may hold objects for the next messages.
 class PlanReader {
   final _objects = <Object?>[];
   final _table = PlanIds();
   late PlanMessage _m;
   int _i = 0, _d = 0;
 
-  /// The writer's string table (PlanWriter: strings by id).
+  /// The string table of the writer, the strings by id.
   final _strings = <String>[];
 
-  /// The plan (null: no camera showed) and the draws of [m].
+  /// Returns the plan and the draws of [m]. The plan is null when no camera
+  /// showed.
   (FramePlan?, List<DrawPlan>) read(PlanMessage m) {
     _m = m;
     _i = _d = 0;
@@ -34,13 +34,14 @@ class PlanReader {
     return (plan, draws);
   }
 
-  /// Each pass's rows as the writer sent them, by pass and row id, in the
-  /// order they came, and the set last made of them.
+  /// The rows of each pass as the writer sent them, by pass and row id in
+  /// the order of their arrival, with the set last made of them.
   final _rowTables = <String, LinkedHashMap<int, DrawPlan>>{};
   final _rowSets = <String, RowSet>{};
 
-  /// A pass's rows (PlanWriter._rows): its table with this message's
-  /// changes, as a set made again only when something changed.
+  /// Returns the rows of [pass] as PlanWriter._rows sent them. The table
+  /// takes the changes of this message. The set is made again only when
+  /// something changed.
   RowSet? _rows(String pass) {
     final mode = _int();
     if (mode == 0) return null;
@@ -66,7 +67,7 @@ class PlanReader {
     }
     final hasBounds = _int() == 1;
     if (hasBounds) {
-      // Filled directly (perf: a list of boxed doubles per row).
+      // Filled directly, without a list of boxed doubles per row.
       for (var i = 0; i < ids.length; i++) {
         final b = bounds[ids[i]] = Float32List(10);
         for (var k = 0; k < 10; k++) {
@@ -102,10 +103,10 @@ class PlanReader {
 
   final _rowIds = KeptList<int>();
 
-  /// Each pass's rows' bounds as sent, by pass and row id.
+  /// The bounds of the rows of each pass as sent, by pass and row id.
   final _rowBounds = <String, Map<int, Float32List>>{};
 
-  /// Objects in the table now (tests).
+  /// The number of objects in the table now.
   int get tableSize => _objects.where((o) => o != null).length;
 
   int _int() => _m.ints[_i++];
@@ -137,10 +138,9 @@ class PlanReader {
     return o;
   }
 
-  /// The next value's tag: for null ([tagNull]) and an object read before
-  /// ([tagRef]) the value is [_found]; any other tag's value is defined by
-  /// the reader's `…Of(tag)` and passed to [_done]. Without a closure per
-  /// value (each read allocated one and its context; perf).
+  /// Reads the tag of the next value. For null ([tagNull]) and an object read
+  /// before ([tagRef]) the value is [_found]. The value of any other tag is
+  /// read by the `…Of(tag)` of the reader and passed to [_done].
   int _tag() {
     final tag = _int();
     _found = tag == tagRef ? _objects[_int()] : null;
@@ -149,8 +149,8 @@ class PlanReader {
 
   Object? _found;
 
-  /// [o], defined for [tag], kept by id when it is of a kind the writer
-  /// keeps.
+  /// Returns [o], read for [tag]. Keeps [o] by id when the writer keeps
+  /// objects of its kind.
   T _done<T extends Object>(int tag, T o) => switch (tag) {
     tagBytes ||
     tagNative ||
@@ -171,8 +171,8 @@ class PlanReader {
   Uint8List _blockOf(int tag) {
     if (tag == tagRole) return FrameRole(_string()).block;
     if (tag == tagNative) {
-      // In the writer's store, read in place (no copy, no finalizer: the
-      // writer frees it once released).
+      // The block is in the store of the writer and is read in place without
+      // a copy or a finalizer. The writer frees it once it is released.
       final address = _int(), length = _int();
       return Pointer<Uint8>.fromAddress(address).asTypedList(length);
     }
@@ -186,17 +186,18 @@ class PlanReader {
     }
   }
 
-  /// The last plan's targets (a plan with the same ones names them so).
+  /// The targets of the last plan. A plan with the same targets reuses
+  /// them.
   Map<String, TargetSpec>? _lastTargets;
 
-  /// The plan's buffers: last plan's map again while every entry is the
-  /// same (its name, size and initial bytes' object; perf: a map and a
-  /// spec per buffer each frame).
+  /// Returns the buffers of the plan. The map of the last plan is returned
+  /// again while every entry has the same name, size and object of initial
+  /// bytes.
   Map<String, BufferSpec> _buffers() {
     final n = _int();
     final names = _bufferNames..clear(), sizes = _bufferSizes..clear();
     final initials = _bufferInitials..clear();
-    // A size carries the read-back flag in its low bit.
+    // The low bit of a size is the read-back flag.
     for (var k = 0; k < n; k++) {
       names.add(_string());
       initials.add(_block());
@@ -236,7 +237,7 @@ class PlanReader {
     final count = _int();
     final Map<String, TargetSpec> targets;
     if (count < 0) {
-      // The writer's last targets again: the same map object.
+      // The last targets of the writer again, as the same map object.
       targets = _lastTargets!;
     } else {
       targets = <String, TargetSpec>{};
@@ -247,21 +248,21 @@ class PlanReader {
     }
     _lastTargets = targets;
     final buffers = _buffers();
-    // Three role maps in turn, as the writer's: a plan's map holds until
-    // the third plan after it (perf: a map and an entry per role a frame).
+    // Three role maps in turn, as on the writer. The map of a plan holds
+    // until the third plan after it.
     final frameBlocks = _roleMaps[_plans++ % 3]..clear();
     for (var n = _int(); n > 0; n--) {
       final role = _block()!;
       frameBlocks[role] = _block()!;
     }
-    // The stamps in the role maps' turn.
+    // The stamps follow the turn of the role maps.
     final retained = _retainMaps[(_plans - 1) % 3]..clear();
     for (var n = _int(); n > 0; n--) {
       final pass = _string();
       retained[pass] = _int();
     }
-    // Read into scratch; last plan's list again while it holds the same
-    // passes (perf: a list of a hundred passes a frame).
+    // The passes are read into scratch. The list of the last plan is used
+    // again while it holds the same passes.
     final scratch = _passScratch..clear();
     for (var n = _int(), k = 0; k < n; k++) {
       scratch.add(_pass(k));
@@ -276,7 +277,7 @@ class PlanReader {
     );
   }
 
-  /// A kept pass's [draws] read whole in place (shortened or grown).
+  /// Reads the [draws] of a kept pass whole in place, shortened or grown.
   void _reshapeDraws(List<DrawPlan> draws) {
     final n = _int();
     if (draws.length > n) draws.length = n;
@@ -312,8 +313,8 @@ class PlanReader {
     final tag = _int();
     if (tag == tagRef) return _objects[_int()]! as PassPlan;
     if (tag == tagRenderEdit) {
-      // The kept pass with its changed draws put in place; its runner
-      // caches see the new version.
+      // The kept pass with its changed draws put in place. The caches of its
+      // runner see the new version.
       final pass = _objects[_int()]! as RenderPassPlan;
       for (var k = _int(); k > 0; k--) {
         final at = _int();
@@ -323,8 +324,8 @@ class PlanReader {
       return pass;
     }
     if (tag == tagRenderRows) {
-      // The kept pass with its draws whole and its rows' changes, written
-      // in place, its runner caches seeing the new version.
+      // The kept pass with its draws whole and the changes of its rows,
+      // written in place. The caches of its runner see the new version.
       final pass = _objects[_int()]! as RenderPassPlan;
       _reshapeDraws(pass.draws);
       pass
@@ -333,8 +334,8 @@ class PlanReader {
       return pass;
     }
     if (tag == tagRenderReshape) {
-      // The kept pass with its draws whole: written in place (shortened
-      // or grown), its runner caches seeing the new version.
+      // The kept pass with its draws whole, written in place, shortened or
+      // grown. The caches of its runner see the new version.
       final pass = _objects[_int()]! as RenderPassPlan;
       _reshapeDraws(pass.draws);
       pass.version++;
@@ -435,9 +436,8 @@ class PlanReader {
   }
 
   StageResources _resources() {
-    // An empty kind shares one constant map (nothing writes a read plan's
-    // resources): most draws bind no storage and few samplers, and four
-    // maps a draw were a frame's garbage (perf).
+    // An empty kind shares one constant map, since nothing writes the
+    // resources of a read plan. Most draws bind no storage and few samplers.
     var n = _int();
     final blocks = n == 0 ? const <String, Uint8List>{} : <String, Uint8List>{};
     for (; n > 0; n--) {

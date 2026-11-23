@@ -2,17 +2,18 @@ import 'dart:typed_data';
 
 import 'package:prismarine_frame/prismarine_frame.dart';
 
-/// The values that a depth target's stencil can hold: its clear value under
-/// any sequence of the replacing writes since the clear. Each write stores
-/// its reference under its write mask. Only replacing writes are followed.
+/// The values that the stencil of a depth target can hold, its clear value
+/// under any sequence of the replacing writes since the clear. Each write
+/// stores its reference under its write mask. Only replacing writes are
+/// followed.
 class StencilValues {
   int _clear = 0;
 
-  /// Distinct writes, reference | write mask << 8.
+  /// The distinct writes, each reference | write mask << 8.
   final _writes = <int>[];
   final _held = Uint8List(256);
 
-  /// Whether the stencil changed since the last copy.
+  /// True when the stencil changed since the last copy.
   bool stale = false;
 
   void reset(int clear) {
@@ -26,14 +27,14 @@ class StencilValues {
     if (st == null || st.passOp != 'replace') return;
     final mask = st.writeMask & 0xff;
     if (mask == 0) return;
-    // Any write changes which pixels hold a value, so the copy is stale
+    // Any write changes the pixels that hold a value. The copy is then stale
     // even when the value is not new.
     stale = true;
     final w = (d.stencilRef & 0xff) | mask << 8;
     if (!_writes.contains(w)) _writes.add(w);
   }
 
-  /// 1 for each value the stencil can hold.
+  /// Returns 1 for each value that the stencil can hold.
   Uint8List held() {
     _held.fillRange(0, 256, 0);
     _held[_clear] = 1;

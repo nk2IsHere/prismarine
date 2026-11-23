@@ -1,10 +1,10 @@
-/// A row's fields as the GPU reads them, defined once: the Dart writer
-/// takes its offsets from here and the effects' GLSL struct is generated
-/// from it ([glslStruct]), so the two can't drift apart.
+/// The fields of a row as the GPU reads them, defined once. The Dart writer
+/// takes its offsets from here and [glslStruct] generates the GLSL struct of
+/// the effects from it.
 ///
-/// Offsets follow std430: each field at its type's base alignment (4 for
-/// scalars, 8 for vec2, 16 for vec3, vec4 and matrix rows), and a row's
-/// stride a multiple of 16.
+/// Offsets follow std430. Each field is at the base alignment of its type,
+/// 4 for scalars, 8 for vec2 and 16 for vec3, vec4 and matrix rows. The
+/// stride of a row is a multiple of 16.
 library;
 
 enum FieldType {
@@ -16,16 +16,15 @@ enum FieldType {
   vec4(16, 'vec4'),
   uvec4(16, 'uvec4'),
 
-  /// Three vec4 rows of a 3 × 4 affine matrix (row r holds column r of the
-  /// 4 × 4 storage: m[r], m[4+r], m[8+r], m[12+r]), the layout of the
-  /// world rows of a BufferObject block.
+  /// Three vec4 rows of a 3 × 4 affine matrix. Row r holds column r of the
+  /// 4 × 4 storage, m[r], m[4+r], m[8+r] and m[12+r].
   rows3x4(48, 'vec4');
 
   const FieldType(this.size, this.glsl, {this.align = 16});
   final int size;
   final String glsl;
 
-  /// std430's base alignment: a vec3 aligns as a vec4.
+  /// The std430 base alignment, in which a vec3 aligns as a vec4.
   final int align;
 }
 
@@ -52,15 +51,15 @@ class RowLayout {
   final List<RowField> fields;
   final _offsets = <String, int>{};
 
-  /// Bytes per row: the fields rounded up to a whole slot.
+  /// The bytes per row, the fields rounded up to a whole slot.
   late final int stride;
 
-  /// [field]'s byte offset in a row.
+  /// Returns the byte offset of [field] in a row.
   int operator [](String field) =>
       _offsets[field] ?? (throw ArgumentError('$name has no field $field'));
 
-  /// The GLSL struct the effects declare for this row; padding becomes
-  /// named `_padN` members so the struct's std430 layout is this one.
+  /// Returns the GLSL struct that the effects declare for this row. Padding
+  /// becomes `_padN` members, which give the struct this std430 layout.
   String glslStruct() {
     final b = StringBuffer('struct $name {\n');
     var o = 0;
@@ -86,10 +85,10 @@ class RowLayout {
     return b.toString();
   }
 
-  /// A GLSL function `<name> load<name>(uint row)` that reads row [row]
-  /// from [words], a storage buffer's `uint` array (`<instance>.d`): shaders
-  /// bind rows as raw words, so no struct layout rule of the compiler can
-  /// move a member.
+  /// Returns a GLSL function `<name> load<name>(uint row)` that reads a row
+  /// from [words], the `uint` array of a storage buffer (`<instance>.d`).
+  /// Shaders bind rows as raw words, which keeps the layout rules of the
+  /// compiler from moving a member.
   String glslLoader(String words) {
     final b = StringBuffer('$name load$name(uint row) {\n')
       ..writeln('  uint b = row * ${stride ~/ 4}u;')

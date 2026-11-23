@@ -11,8 +11,8 @@ String _drawsJson(List<DrawPlan> draws) => _json(
   FramePlan(const {}, [RenderPassPlan('draws', const [], null, draws)]),
 );
 
-/// A frame's plan as the builder makes one: [shared] objects kept from frame
-/// to frame, the per-frame block made anew.
+/// Returns the plan of [frame] as the builder makes one. The [shared] objects
+/// are kept from frame to frame and the per-frame block is made anew.
 FramePlan _plan(_Shared shared, int frame) {
   final perFrame = Float32List.fromList([
     frame.toDouble(),
@@ -125,8 +125,8 @@ void main() {
   });
 
   test('a target filled from the CPU crosses with its role and bytes', () {
-    // A lightmap from the CPU: its spec names a role, each frame gives the
-    // bytes.
+    // A lightmap from the CPU. Its spec refers to a role and each frame gives
+    // the bytes.
     final role = FrameRole('lightmap0');
     const spec = TargetSpec(2, 1, 'R8G8B8A8_UNORM', layers: 2);
     final w = PlanWriter(), r = PlanReader();
@@ -166,7 +166,7 @@ void main() {
       retained: {plan.passes[0].name: 41, plan.passes[1].name: 0},
     );
     expect(r.read(w.write(first, const [])).$1!.retained, first.retained);
-    // A plan without any reads back without.
+    // A plan without retained passes reads back without them.
     expect(r.read(w.write(plan, const [])).$1!.retained, isEmpty);
     expect(r.read(w.write(first, const [])).$1!.retained, first.retained);
   });
@@ -189,7 +189,7 @@ void main() {
     final w = PlanWriter(), r = PlanReader();
     List<DrawPlan> draws(FramePlan p) => (p.passes[1] as RenderPassPlan).draws;
     final a = draws(r.read(w.write(_plan(shared, 0))).$1!).first;
-    // A copy: the kept pass's list is edited in place by the next read.
+    // A copy, since the next read edits the list of the kept pass in place.
     final bs = [...draws(r.read(w.write(_plan(shared, 1))).$1!)];
     final b = bs.first;
     final quad = bs.last.geometry as InlineGeometry;
@@ -219,7 +219,8 @@ void main() {
       b.vertexResources.blocks['BufferScene'],
       same(a.vertexResources.blocks['BufferScene']),
     );
-    // Made anew each frame: a new block on the reader's side too.
+    // A block made anew each frame is a new block on the side of the reader
+    // too.
     expect(
       b.vertexResources.blocks['BufferObject'],
       isNot(same(a.vertexResources.blocks['BufferObject'])),
@@ -268,11 +269,12 @@ void main() {
     final backs = [
       for (var i = 0; i < 4; i++) pass(r.read(w.write(plan([draw]))).$1!),
     ];
-    // Kept from the first frame: the same object every frame.
+    // The pass is kept from the first frame and is the same object every
+    // frame.
     expect(backs[1], same(backs[0]));
     expect(backs[3], same(backs[0]));
     expect(backs[3].draws.single, same(backs[0].draws.single));
-    // Another draw list: the kept pass reshaped, the same object.
+    // Another draw list reshapes the kept pass, which stays the same object.
     final version = backs[1].version;
     final other = pass(r.read(w.write(plan([draw, draw]))).$1!);
     expect(other, same(backs[1]));
@@ -326,13 +328,14 @@ void main() {
     expect(edited.draws[3].vertex, 'vs30');
     expect(edited.draws[2], same(kept.draws[2]));
     expect(_json(FramePlan(const {}, [edited])), _json(plan(moved)));
-    // Most draws changed: every draw again into the same pass (a reshape).
+    // With most draws changed every draw goes again into the same pass as a
+    // reshape.
     final most = [for (var i = 0; i < 8; i++) draw(100 + i)];
     final reshaped = pass(r.read(w.write(plan(most))).$1!);
     expect(reshaped, same(kept));
     expect(reshaped.version, version + 2);
     expect(_json(FramePlan(const {}, [reshaped])), _json(plan(most)));
-    // Fewer draws: shortened in place.
+    // Fewer draws shorten the pass in place.
     final fewer = pass(r.read(w.write(plan(most.sublist(0, 3)))).$1!);
     expect(fewer, same(kept));
     expect(fewer.draws, hasLength(3));
@@ -359,7 +362,8 @@ void main() {
 
   test('the string tables start again together', () {
     final w = PlanWriter(), r = PlanReader();
-    // More distinct strings than the tables hold, a frame's worth at a time.
+    // More distinct strings than the tables hold, the strings of one frame at
+    // a time.
     var f = 0;
     for (var n = 0; n < planMaxStrings + 2000; n += 1000, f++) {
       final draws = [
@@ -384,7 +388,7 @@ void main() {
   test('unused objects are dropped on both sides and ids reused', () {
     final w = PlanWriter(), r = PlanReader();
     for (var f = 0; f < 10 * planKeep; f++) {
-      // A new set of shared objects every frame: none is used again.
+      // A new set of shared objects every frame. None is used again.
       final (back, _) = r.read(w.write(_plan(_Shared(), f)));
       expect(back, isNotNull);
     }
@@ -398,9 +402,9 @@ void main() {
     }
   });
 
-  // A draw the builder keeps from frame to frame binds the frame's camera by
-  // role; the plan gives the role's bytes each frame, and the draw crosses
-  // by value twice, then by id, reading back as the same object.
+  // A draw that the builder keeps from frame to frame binds the camera of the
+  // frame by role. The plan gives the bytes of the role each frame. The draw
+  // crosses by value twice and then by id. It reads back as the same object.
   test('a kept draw crosses once and binds its roles anew', () {
     final role = FrameRole('BufferCamera test');
     final kept = DrawPlan(
@@ -432,14 +436,14 @@ void main() {
       backs.add(draw);
       if (f >= 2) expect(m.ints.length, lessThan(40), reason: 'sent by id');
     }
-    // Its pass kept from the first frame, the draw is the same object.
+    // The pass is kept from the first frame and the draw is the same object.
     expect(backs[1], same(backs[0]));
     expect(backs[4], same(backs[0]));
   });
 
-  // The skin batch: its dispatch kept over many frames names a large
-  // block; a new dispatch over the same block names it by id, as the
-  // kept one's reference kept it from the block sweep.
+  // A dispatch kept over many frames binds a large block. A new dispatch over
+  // the same block refers to it by id, since the reference of the kept
+  // dispatch kept the block from the sweep.
   test('a block a kept dispatch names is not swept', () {
     final sources = Uint8List(1 << 16);
     DispatchPlan batch(int groups) => DispatchPlan('skin batch', 'cs', [
@@ -477,11 +481,11 @@ void main() {
     final first = rowsOf(r.read(w.write(plan([1, 2], [a, b]))));
     expect(first.ids, [1, 2]);
     expect(_drawsJson(first.plans), _drawsJson([a, b]));
-    // Nothing changed: no draw crosses, and the reader's set is the same.
+    // Nothing changed. No draw crosses and the set of the reader is the same.
     final m = w.write(plan([1, 2], [a, b]));
     expect(m.ints.length, lessThan(40));
     expect(rowsOf(r.read(m)), same(first));
-    // Row 1 changed, row 2 gone, row 3 new.
+    // Row 1 changed, row 2 is gone and row 3 is new.
     final next = rowsOf(r.read(w.write(plan([1, 3], [c, b]))));
     expect(next.ids, [1, 3]);
     expect(_drawsJson(next.plans), _drawsJson([c, b]));
@@ -504,13 +508,13 @@ void main() {
         m.$1!.passes.single as RenderPassPlan;
     final first = passOf(r.read(w.write(plan([1], [a], 1))));
     final v = first.version;
-    // New culling values each frame: the same pass, a new version.
+    // New culling values each frame give the same pass with a new version.
     final next = passOf(r.read(w.write(plan([1], [a], 2))));
     expect(next, same(first));
     expect(next.version, greaterThan(v));
     expect(next.rows!.params, [2]);
     expect(_drawsJson(next.allDraws), _drawsJson([a, b]));
-    // A row added: the same pass, its draws with it.
+    // An added row gives the same pass with the draws of the row.
     final third = passOf(r.read(w.write(plan([1, 2], [a, b], 2))));
     expect(third, same(first));
     expect(_drawsJson(third.allDraws), _drawsJson([a, b, b]));

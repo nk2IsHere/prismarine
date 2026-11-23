@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// A GLB's JSON and binary chunks (glTF 2.0 §4.4), for reading cooked
-/// pools without the converter's builder.
+/// Returns the JSON and binary chunks of a GLB (glTF 2.0 §4.4).
 ({Map<String, Object?> json, Uint8List bin}) readGlbParts(Uint8List glb) {
   final d = ByteData.sublistView(glb);
   if (glb.length < 20 || d.getUint32(0, Endian.little) != 0x46546C67) {
@@ -17,8 +16,9 @@ import 'dart:typed_data';
   return (json: json, bin: Uint8List.sublistView(glb, 28 + jl, 28 + jl + bl));
 }
 
-/// A cooked pool's index buffer and its streams' bytes by name (each
-/// accessor's view, tightly packed as the cook writes them).
+/// Returns the index buffer of a cooked pool and the bytes of its streams by
+/// name. Each stream is the view of its accessor, tightly packed as the cook
+/// writes it.
 ({Uint8List indices, Map<String, Uint8List> streams}) cookedPoolParts(
   Uint8List glb,
 ) {
