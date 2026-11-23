@@ -17,6 +17,7 @@ walk from the roots finds to it, after the root's child it hangs under
 
   dart run tools/profiler/bin/heap_owners.dart <ws> <frames.jsonl> <t>…
       [--top=<n>] [--depth=<k>] [--fields] [--roots] [--classes-in=<text>]
+      [--ours=<text>,…]
 
 --fields names the field of ours that holds SDK objects (a map, a list);
 --roots names the SDK classes on the first hops under an isolate's roots.
@@ -43,13 +44,14 @@ Future<void> main(List<String> args) async {
   final fields = args.contains('--fields');
   final roots = args.contains('--roots');
   final classesIn = _opt(args, 'classes-in');
+  final ours = _opt(args, 'ours')?.split(',');
   final vm = await vmServiceConnectUri(pos[0]);
   try {
     for (final t in pos.skip(2).map(double.parse)) {
       while ((lastT(pos[1]) ?? -1) < t) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
-      await _report(vm, pos[1], top, depth, fields, roots, classesIn);
+      await _report(vm, pos[1], top, depth, fields, roots, classesIn, ours);
     }
   } finally {
     await vm.dispose();
@@ -64,6 +66,7 @@ Future<void> _report(
   bool fields,
   bool roots,
   String? classesIn,
+  List<String>? oursIn,
 ) async {
   final isolates = (await vm.getVM()).isolates ?? const <IsolateRef>[];
   final iso = isolates.first;
@@ -71,11 +74,7 @@ Future<void> _report(
   final g = await HeapSnapshotGraph.getSnapshot(vm, iso);
   final objs = g.objects;
   final cls = g.classes;
-  final ours = [
-    for (final c in cls)
-      c.libraryUri.toString().contains('mcsm') ||
-          c.libraryUri.toString().startsWith('package:flutter_gpu'),
-  ];
+  final ours = [for (final c in cls) _isOurs(c.libraryUri.toString(), oursIn)];
   // Owner labels top-down in breadth-first order: a child's label is its
   // parent's, extended by its own class while fewer than [depth] of ours.
   final labels = <String>[];
@@ -181,3 +180,7 @@ Future<void> _report(
     );
   }
 }
+
+bool _isOurs(String library, List<String>? ours) => ours == null
+    ? !library.startsWith('dart:') && !library.startsWith('package:flutter/')
+    : ours.any(library.contains);

@@ -43,17 +43,14 @@ Future<void> main(List<String> args) async {
   // PROFILE_TRACE=ClassA,ClassB: per-allocation stacks for those classes on
   // every isolate (counts per class and the code that allocated them; the
   // allocation profile is the isolate group's, so it can't tell them apart).
-  final traced = (Platform.environment['PROFILE_TRACE'] ?? '')
+  final traced = (_env('TRACE') ?? '')
       .split(',')
       .where((c) => c.isNotEmpty)
       .toSet();
   final frames = args[1];
   final out = Directory(args[2])..createSync(recursive: true);
   await vm.setFlag('profiler', 'true');
-  await vm.setFlag(
-    'profile_period',
-    Platform.environment['PROFILE_PERIOD'] ?? '1000',
-  );
+  await vm.setFlag('profile_period', _env('PERIOD') ?? '1000');
   await vm.setVMTimelineFlags(['GC']);
   for (final w in [for (final a in args.skip(3)) a.split(':')]) {
     final name = w[0];
@@ -175,7 +172,7 @@ Future<Map<String, Object?>> _isolate(
   final samples = cpu.samples ?? const <CpuSample>[];
   // PROFILE_RAW=<dir>: every sample's stack (leaf first) as function names,
   // for call-tree breakdowns the top lists can't give.
-  final raw = Platform.environment['PROFILE_RAW'];
+  final raw = _env('RAW');
   if (raw != null && raw.isNotEmpty && samples.isNotEmpty) {
     String nameOf(int i) => switch (fns[i].function) {
       FuncRef(:final name, :final owner) => switch (owner) {
@@ -275,6 +272,7 @@ Future<Map<String, Object?>> _traces(
   Map<String, String> classIds,
 ) async {
   final out = <String, Object?>{};
+  final oursIn = _env('OURS')?.split(',');
   for (final MapEntry(key: name, value: id) in classIds.entries) {
     // Every sample since tracing was enabled for this window (the
     // profiler's clock is not the timeline's).
@@ -290,8 +288,7 @@ Future<Map<String, Object?>> _traces(
         final url = fns[i].resolvedUrl ?? '';
         // Not the pub cache (it lives under the repo's data/, whose path
         // has "mcsm" in it): vector_math's constructors aren't the site.
-        if ((url.contains('mcsm') || url.contains('flutter_scene')) &&
-            !url.contains('/pub-cache/')) {
+        if (_isOurs(url, oursIn) && !url.contains('/pub-cache/')) {
           final f = fns[i].function;
           final fn = f is FuncRef
               ? '${(f.owner is ClassRef) ? '${(f.owner as ClassRef).name}.' : ''}${f.name}'
@@ -321,3 +318,14 @@ Future<Map<String, Object?>> _traces(
   }
   return out;
 }
+
+String? _env(String name) =>
+    Platform.environment['PRISMARINE_PROFILE_$name'] ??
+    Platform.environment['PROFILE_$name'];
+
+bool _isOurs(String url, List<String>? ours) => ours == null
+    ? url.isNotEmpty &&
+          !url.startsWith('dart:') &&
+          !url.contains('/sdk/lib/') &&
+          !url.contains('org-dartlang-sdk')
+    : ours.any(url.contains);

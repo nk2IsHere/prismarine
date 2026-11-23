@@ -13,13 +13,15 @@
 set -e
 out=${1:?outDir}; wins=${2:?windows}; shift 2
 script=${1:?script}; shift
-source ${0:A:h:h:h}/tools/toolchain/env.sh
 mkdir -p $out
-export BENCH_FRAMES=${BENCH_FRAMES:-$out/frames.jsonl}
+clock=${PRISMARINE_OBSERVE_CLOCK:-${BENCH_FRAMES:-$out/frames.jsonl}}
+export PRISMARINE_OBSERVE_CLOCK=$clock BENCH_FRAMES=$clock
 # A previous run's frames would end the windows at once.
-rm -f $BENCH_FRAMES
+rm -f $clock
+dart_flags=${PRISMARINE_OBSERVE_DART_FLAGS:-$OBSERVE_DART_FLAGS}
+timeout=${PRISMARINE_OBSERVE_TIMEOUT:-${OBSERVE_TIMEOUT:-1800}}
 # perl's setpgrp makes the target a process-group leader (macOS has no setsid).
-perl -e 'setpgrp(0, 0); exec @ARGV' -- dart ${=OBSERVE_DART_FLAGS} \
+perl -e 'setpgrp(0, 0); exec @ARGV' -- dart ${=dart_flags} \
   --no-pause-isolates-on-exit run --observe=0 --disable-service-auth-codes \
   $script "$@" > $out/stdout.txt 2>&1 &
 pg=$!
@@ -32,7 +34,7 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 # The timeout: a loop that also ends within a second of this script.
 self=$$
-( for i in $(seq 1 ${OBSERVE_TIMEOUT:-1800}); do
+( for i in $(seq 1 $timeout); do
     sleep 1; kill -0 $self 2>/dev/null || exit 0
   done
   echo "observe.sh: timeout" >&2; kill -TERM $self ) &
@@ -44,5 +46,6 @@ for i in $(seq 1 180); do
   sleep 1
 done
 if [[ -z $uri ]]; then echo "observe.sh: no VM service URI"; exit 1; fi
-(cd ${0:A:h} && dart run bin/profile.dart "ws://${uri#http://}ws" $BENCH_FRAMES $out ${=wins})
+dart ${PRISMARINE_PROFILER_PACKAGES:+--packages=$PRISMARINE_PROFILER_PACKAGES} \
+  ${0:A:h}/bin/profile.dart "ws://${uri#http://}ws" $clock $out ${=wins}
 wait $pg 2>/dev/null || true
