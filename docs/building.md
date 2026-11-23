@@ -11,8 +11,9 @@ patches. Clone it at its tag.
 
     git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/flutter
 
-Each platform needs the tools of a Flutter desktop app. The build hooks of `prismarine_pad` and `prismarine_audio_out`
-compile Rust crates. `prismarine_pad` also builds SDL with CMake and a C compiler.
+Each platform needs its own compiler and build tools, which Flutter uses for the app's native runner. The build hooks of
+`prismarine_pad` and `prismarine_audio_out` also compile Rust crates, and `prismarine_pad` builds SDL with CMake and a
+C compiler.
 
 - On macOS, install Xcode 27 with its command-line tools and CMake, for example with `brew install cmake`.
 - On Ubuntu, install `git curl unzip xz-utils zip clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
