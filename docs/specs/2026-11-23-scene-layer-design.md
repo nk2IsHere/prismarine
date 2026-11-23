@@ -61,7 +61,7 @@ every node that is no child as a root.
 `GltfModel` reads its draws, cameras and lights from these nodes. Its outputs and its tests stay the same. A vertex
 layout is the choice of a renderer. The layer gives the accessor reads and the nodes and packs no vertices.
 
-The matrices are double precision, as `GltfModel` has them.
+The matrices are double precision, as `GltfModel` has them. `GltfDocument` also reads sparse accessors.
 
 ## GPU helpers
 
@@ -73,9 +73,10 @@ of `prismarine_debug` takes.
 the call. `gpuFeatures` reads the feature bits of the patched engine, 0 on another engine.
 
 `package:prismarine_scene/build_hooks.dart` has `buildShaderBundle` for the build hook of a package. It compiles the
-bundle of a manifest with `flutter_gpu_shaders`, keeps the backends of the target, gives a vertex output
-`mcsm_viewport_index` the viewport index attribute on Metal and adds precompiled Metal libraries on macOS with
-`prismarine_shaders`. Every file that a shader of the manifest includes is a dependency of the hook. The bundle is
+bundle of a manifest with `flutter_gpu_shaders`, keeps the backends of the target, gives a vertex output whose name
+ends in `viewport_index` the viewport index attribute on Metal and adds precompiled Metal libraries on macOS with
+`prismarine_shaders`. The files that a shader includes are dependencies of the hook through the depfile of impellerc,
+which `flutter_gpu_shaders` reads. The bundle is
 written to `build/shaderbundles/` of the package, which the package lists as an asset. `ScreenCopy` uses it for its own
 two shaders and gpu_smoke for its smoke bundle.
 
@@ -91,8 +92,8 @@ reference maths in the test.
 
 `tt_meshes.dart` packs each primitive as before. Position, normal, two UV sets, colour and tangent, then joints and
 weights for a skinned primitive. A primitive without normals gets flat normals on unshared vertices. Z is negated and
-the winding swapped. A missing colour is opaque white. A test compares the bytes with the old packing on every mesh of
-the treehouse slice before the copy goes.
+the winding swapped. A missing colour is opaque white. A test compares the bytes with the old packing on every mesh and
+rig of every S1 slice before the copy goes. `mcsm_slice_scene` keeps only the camera maths of a Telltale camera agent.
 
 The cook includes `mcsm_look_scene/shaders/scene/` in place of the shader folder of flutter_scene. The file names, the
 order of the include folders and the entry names stay the same.
