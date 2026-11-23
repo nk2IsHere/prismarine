@@ -96,7 +96,8 @@ shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
 After a fetch, source `tools/toolchain/env.sh` again to build with the new engine. It sets `prismarine_engine_args`,
-which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched engine, `flutter build` uses Flutter's own engine, which is slower.
+which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched
+engine, `flutter build` uses Flutter's own engine, which is slower.
 
 ## The engine from its patches
 
