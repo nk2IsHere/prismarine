@@ -113,7 +113,8 @@ Future<ShaderBundleReport> buildShaderBundles(
   final entries =
       <String, (String, String)>{}; // entry id to its file and stage
   for (final f in tree.listSync(recursive: true).whereType<File>()) {
-    final rel = f.path.substring(tree.path.length + 1);
+    // Windows lists with backslashes. Entry ids and effects use slashes.
+    final rel = f.path.substring(tree.path.length + 1).replaceAll(r'\', '/');
     // Programs include the files of a bodies folder. They are no entries.
     if (rel.split('/').contains('bodies')) continue;
     if (effects != null && !effects.contains(rel.split('/').first)) continue;
