@@ -12,7 +12,8 @@ Shared machines, git and landing follow mcsm's `docs/memory/rules.md` until they
 ## Writing
 
 - Write for the reader of that page, and only what they need: a README tells a newcomer what prismarine is; an area page tells a developer how a part works and how to check it.
-- Leave out detail no one would miss: inventories of features, sizes, internal names, how we got here.
+- Leave out detail no one would miss: sizes, internal names, how we got here.
+- No history of where code came from: a doc names another project only where it matters now (mcsm as a user of prismarine, in the specs and plans of the split).
 - Plain, everyday English, short sentences, one sentence per line in docs.
 - Say what is, not what was: no dates in prose, no "(was X, now Y)", no "Update:" sections; history belongs in git.
 - No time estimates; say what is done and what is next.

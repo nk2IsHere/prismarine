@@ -12,7 +12,7 @@ Specs live in `docs/specs/`; the split from mcsm is [the split design](../specs/
 ## What prismarine is
 
 - **A toolkit for games on Flutter and Dart (2026-11-21, 2026-11-23, owner).** Everything generic in mcsm (the Minecraft: Story Mode port) moves here, unit by unit, each case decided by the owner against mcsm's inventory; mcsm then builds on prismarine.
-  Generic means no Telltale data, no shipped exe's behaviour and no game words in code or names; docs name mcsm only as where code came from.
+  Generic means no Telltale data, no shipped exe's behaviour and no game words in code or names; docs name mcsm only where it matters now, never as history.
 - **Private, BSD-3 (2026-11-23, owner).** The repo is private for now and licensed BSD-3 from its first commit.
 - **Its own private repo (2026-11-23, owner).** `private/` (gitignored) is prismarine's own private repo, separate from mcsm's; the machine notes and privacy patterns it needs are copied in, not shared.
 

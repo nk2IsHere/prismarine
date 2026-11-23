@@ -1,6 +1,6 @@
 # prismarine — a toolkit for games on Flutter and Dart
 
-Generic engine code, moved out of mcsm (the Minecraft: Story Mode port) unit by unit; mcsm builds on it through a pinned git dependency.
+Our toolkit for making games with Flutter and Dart. mcsm builds on it through a pinned git dependency.
 
 ## Read first
 - [docs/memory/state.md](docs/memory/state.md): where prismarine is now.
@@ -9,7 +9,7 @@ Generic engine code, moved out of mcsm (the Minecraft: Story Mode port) unit by 
 - [docs/memory/rules.md](docs/memory/rules.md): how to write, document and engineer here (binding); shared machines and landing follow mcsm's rules for now.
 
 ## Hard rules
-- No game data in this repo, and no game names in code, identifiers or package names; docs name mcsm only as where code came from. The one exception is the logo (the owner's, 2026-11-23).
+- No game data in this repo, and no game names in code, identifiers or package names; the one exception is the logo. Docs name mcsm only where it matters now (as a user of prismarine), never as history.
 - A moved file is moved verbatim; mcsm's outputs (D1 frames and audio, corpus, slices) stay byte-identical across every step.
 - Commit by pathspec only; commits carry no Co-Authored-By or Claude trailer.
 - Code files stay under 1,000 lines; comments say why, cite sources as tags, carry no history.
