@@ -15,6 +15,22 @@
       "async": 1,
       "sdk": 7
     },
+    "packages/prismarine_loop": {
+      "new": 9,
+      "literal": 1,
+      "string": 5,
+      "box": 5,
+      "sdk": 13
+    },
+    "packages/prismarine_render": {
+      "new": 184,
+      "literal": 97,
+      "string": 101,
+      "closure": 17,
+      "iterate": 60,
+      "async": 7,
+      "sdk": 14
+    },
     "packages/prismarine_snap": {
       "new": 18,
       "literal": 11,

@@ -51,7 +51,11 @@ Options:
   --json=<file>         write every place as JSON
   --packages=<a,b>      resolve only these package directories (default: the
                         alloc.packages list of the config, else the
-                        pure-Dart packages of the workspace)
+                        pure-Dart packages of the workspace, and then the
+                        alloc.flutter_packages list of the config)
+
+A Flutter package resolves through its own package config. Run flutter pub
+get in it first.
 
 Exit codes: 0 clean against the baseline, 1 a count grew or a kind
 appeared, 2 usage error.
@@ -104,8 +108,19 @@ Future<void> main(List<String> argv) async {
   sdkPath = config.allocSdk;
   final packages =
       opts['packages']?.split(',') ??
-      config.allocPackages ??
-      _workspacePackages(root);
+      [
+        ...config.allocPackages ?? _workspacePackages(root),
+        ...config.allocFlutterPackages,
+      ];
+  for (final p in config.allocFlutterPackages) {
+    if (packages.contains(p) &&
+        !File('$root/$p/.dart_tool/package_config.json').existsSync()) {
+      stderr.writeln(
+        'alloc: $p has no package config. Run flutter pub get in $p.',
+      );
+      exit(2);
+    }
+  }
   final program = Program();
   await loadProgram(
     program,

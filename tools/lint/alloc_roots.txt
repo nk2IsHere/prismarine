@@ -42,3 +42,15 @@ packages/prismarine_frame/lib/src/plan/float_bits.dart#scratchFloats  a builder,
 packages/prismarine_pbr/lib/src/pbr_builder.dart#PbrBuilder.frame  an app's frame, building the plan
 apps/prismarine_sample/lib/src/sample_view.dart#_SampleViewState._tick  the ticker of the sample, each frame
 apps/prismarine_sample/lib/src/perf.dart#_PerfRunState._tick  the ticker of the performance run, each frame
+#
+# The runner records a frame plan each frame. The parts of the frame loop run
+# at the start and end of each frame.
+packages/prismarine_render/lib/src/frame_runner.dart#FrameRunner.run  an app's frame, recording its plan
+packages/prismarine_loop/lib/src/frame_pace.dart#FramePace.begin  an app's frame, at its start
+packages/prismarine_loop/lib/src/frame_pace.dart#FramePace.end  an app's frame, after its step
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.beginFrame  an app's frame, at its start
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.endFrame  an app's frame, after its Dart work
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.idlePoint  an app's frame, at its idle point
+packages/prismarine_loop/lib/src/platform/metal_frames.dart#MetalFrameLimiter.beginFrame  an app's frame, at its start on macOS
+packages/prismarine_loop/lib/src/platform/mouse_look.dart#MouseLook  an app's frame, holding the pointer
+packages/prismarine_loop/lib/src/line_writer.dart#JsonLineWriter  a profiled frame, writing its line
