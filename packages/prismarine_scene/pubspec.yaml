@@ -1,12 +1,26 @@
 name: prismarine_scene
-description: Scene assets on Flutter. An asset bundle that reads files by absolute path and paced loading on the UI isolate.
+description: Scene assets on Flutter. An asset bundle that reads files by absolute path, paced loading on the UI isolate, a copy of a texture over the screen and a build hook for the shader bundle of a package.
 publish_to: none
 environment:
   sdk: ^3.10.0
 dependencies:
   flutter:
     sdk: flutter
+  flutter_gpu:
+    sdk: flutter
+  flutter_gpu_shaders: ^0.5.2
+  hooks: ^2.0.0
+  prismarine_shaders:
+    path: ../prismarine_shaders
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+dependency_overrides:
+  # Flutter GPU with the patches of the engine fork.
+  flutter_gpu:
+    path: ../../third_party/flutter_gpu
+flutter:
+  assets:
+    # The bundle of the screen copy, built by hook/build.dart.
+    - build/shaderbundles/

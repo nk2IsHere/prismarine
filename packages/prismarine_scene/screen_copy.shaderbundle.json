@@ -1,0 +1,10 @@
+{
+  "ScreenCopyVertex": {
+    "type": "vertex",
+    "file": "shaders/screen_copy.vert"
+  },
+  "ScreenCopyFragment": {
+    "type": "fragment",
+    "file": "shaders/screen_copy.frag"
+  }
+}
