@@ -23,7 +23,8 @@ The README of each linked package gives its use, a short example and its platfor
 | [`prismarine_snap`](packages/prismarine_snap/README.md) | Binary snapshots of object graphs that preserve the references between objects |
 | [`prismarine_replay`](packages/prismarine_replay/README.md) | Recording of input, deterministic replay, snapshots with a schedule, a snapshot shadow and a corpus runner |
 | [`prismarine_math`](packages/prismarine_math/README.md) | Maths functions that give the same bits on every OS |
-| `prismarine_lua` | An embeddable Lua 5.2 for Dart |
+| [`prismarine_lua`](packages/prismarine_lua/README.md) | An embeddable Lua 5.2 for Dart, with double numbers by default and a float32 mode |
+| [`prismarine_lua_native`](packages/prismarine_lua_native/README.md) | The stock Lua 5.2 compiler in C behind Rust, in a double and a float32 build |
 | [`prismarine_audio`](packages/prismarine_audio/README.md) | Audio interfaces and an engine of events and buses |
 | [`prismarine_audio_out`](packages/prismarine_audio_out/README.md) | Audio output, decoding of MP3 and Vorbis and a cache of decoded sounds |
 | [`prismarine_pad`](packages/prismarine_pad/README.md) | Gamepads through SDL3 |
@@ -85,57 +86,22 @@ libraries of both targets.
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
 
-### The precompiled engine
+### The patched engine
 
-The patched engine is released as archives on the GitHub releases of the prismarine repository.
-`third_party/flutter_engine/RELEASE` gives the release that your checkout needs, such as
-`engine-deb287481e3c-prismarine1`. A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha256`
-file for each of the targets `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`, `windows-x64` and
-`windows-arm64`. It also holds `SHA256SUMS` with the checksums of all archives.
+A release of the patched engine is a set of archives on GitHub, one for each platform and CPU. `fetch.sh` downloads the
+archive of your machine with the GitHub CLI, checks it and unpacks it into the engine directory. `gh` must be logged in
+to an account that can read the repository of the releases. `PRISMARINE_ENGINE_DIR` is the engine directory, which every
+repository on the machine shares. `PRISMARINE_ENGINE_REPO` is the repository of the releases, as owner and name. Run the
+script from the root of your checkout.
 
-`third_party/flutter_engine/fetch.sh` downloads the archive of your machine with the GitHub CLI `gh`, checks its
-SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. The repository is private. You need `gh` logged in with
-`gh auth login` to an account that can read it, or a token with read access to the repository in `GH_TOKEN`. The script
-also needs the Flutter SDK, which `tools/toolchain/env.sh` puts on your `PATH`. Run the commands from the root of your
-checkout.
-
-    source tools/toolchain/env.sh
-    export PRISMARINE_ENGINE_REPO=<owner>/prismarine
+    export PRISMARINE_ENGINE_DIR=$HOME/prismarine-engine
+    export PRISMARINE_ENGINE_REPO=<owner>/<name>
     third_party/flutter_engine/fetch.sh
 
-| Setting | Meaning |
-|---|---|
-| `PRISMARINE_ENGINE_REPO` | The repository of the releases, as owner and name. Without it the script reads the value from a file `private/config/*.env` above the checkout. |
-| `PRISMARINE_ENGINE_DIR` | The engine directory, `~/.prismarine/engine` by default. Every repository on the machine shares it. |
-| `PRISMARINE_FLUTTER` | The Flutter SDK, by default the `flutter` on your `PATH`. |
-| `PRISMARINE_ENGINE_ARCHIVE` | An archive that you downloaded, with its `.sha256` file beside it. The script unpacks it in place of a download. |
-
-`fetch.sh macos-x64` or another target fetches the engine of another machine. On Windows,
-`powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1` fetches into
-`%USERPROFILE%\.prismarine\engine`. The Windows script is not checked against a published release.
-
-You can check an archive yourself. Download it with `SHA256SUMS` and compare the checksums, with `sha256sum` in place
-of `shasum -a 256` on Linux.
-
-    gh release download engine-deb287481e3c-prismarine1 -R "$PRISMARINE_ENGINE_REPO" \
-      -p SHA256SUMS -p prismarine-engine-macos-arm64.tar.xz
-    shasum -a 256 -c --ignore-missing SHA256SUMS
-
-Source `tools/toolchain/env.sh` again after a fetch. It finds the engine of your machine in the engine directory,
-sets the flags of a release `flutter build` in the array `prismarine_engine_args` and exports `PRISMARINE_IMPELLERC`,
-the shader compiler of the engine. The sample app builds on the engine with these commands, with `linux` in place of
-`macos` on Linux.
-
-    source tools/toolchain/env.sh
-    cd apps/prismarine_sample
-    flutter pub get
-    tool/shaders.sh "$PRISMARINE_IMPELLERC"
-    flutter build macos --release "${prismarine_engine_args[@]}"
-
-The commands of this section ran against release prismarine1 on macOS 27.2 on an Apple M2 Pro and on Ubuntu 26.04 on
-x86-64. You can also build the engine yourself, which takes about an hour on each machine. [The engine
-README](third_party/flutter_engine/README.md) describes the build and the publishing of a release. An app builds and
-runs on the stock engine of Flutter too, slower but with the same frames.
+On Windows, run `powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1`. The script prints the
+flags of `flutter build` for the engine at its end. You can also build the engine yourself, which takes about an hour on
+each machine. [The engine README](third_party/flutter_engine/README.md) describes both ways. An app builds and runs on
+the stock engine of Flutter too, slower but with the same frames.
 
 ### Dependencies
 
@@ -162,21 +128,24 @@ about a minute.
     dart test
 
 The sample app in `apps/prismarine_sample` is the example of an app build. It needs the patched engine and the model,
-which its `tool/fetch.dart` downloads, as [its README](apps/prismarine_sample/README.md) describes. `tool/shaders.sh`
+which `dart tool/fetch.dart` in `apps/prismarine_sample` downloads into `~/.prismarine/sample`, or
+`%LOCALAPPDATA%\prismarine\sample` on Windows, as [its README](apps/prismarine_sample/README.md) describes. Set
+`PRISMARINE_SAMPLE_DATA` or pass `--data=<dir>` to the app for another folder. `tool/shaders.sh`
 builds its shaders with the impellerc of the engine before the app is built. The steps below for macOS
 ran on macOS 27.2 on an Apple M2 Pro and the steps for Linux on Ubuntu 26.04 on x86-64. The steps for Windows follow the
 scripts of the engine and are not checked on a Windows machine.
 
 ### macOS
 
-The commands build and start the app on a Mac with the engine of the section above. An Intel Mac takes the engine of
-`macos-x64` in the same way. The Intel form is not checked.
+The commands build and start the app on an Apple silicon Mac. An Intel Mac takes `macos-x64` and `host_release` in place
+of `macos-arm64` and `host_release_arm64`. The Intel form is not checked.
 
-    source tools/toolchain/env.sh
     cd apps/prismarine_sample
     flutter pub get
-    tool/shaders.sh "$PRISMARINE_IMPELLERC"
-    flutter build macos --release "${prismarine_engine_args[@]}"
+    E=$PRISMARINE_ENGINE_DIR/macos-arm64/src
+    tool/shaders.sh $E/out/host_release_arm64/impellerc
+    flutter build macos --release --local-engine-src-path=$E \
+      --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
     build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
 
 ### Linux
@@ -184,11 +153,12 @@ The commands build and start the app on a Mac with the engine of the section abo
 The commands build the app on an x86-64 machine into `build/linux/x64/release/bundle/prismarine_sample`, which runs
 with Vulkan.
 
-    source tools/toolchain/env.sh
     cd apps/prismarine_sample
     flutter pub get
-    tool/shaders.sh "$PRISMARINE_IMPELLERC"
-    flutter build linux --release "${prismarine_engine_args[@]}"
+    E=$PRISMARINE_ENGINE_DIR/linux-x64/src
+    tool/shaders.sh $E/out/host_release/impellerc
+    flutter build linux --release --local-engine-src-path=$E \
+      --local-engine=host_release --local-engine-host=host_release
 
 ### Windows
 
@@ -199,7 +169,7 @@ shaders runs its Dart tool directly.
 
     cd apps\prismarine_sample
     flutter pub get
-    $E = "$env:USERPROFILE\.prismarine\engine\windows-x64\src"
+    $E = "$env:PRISMARINE_ENGINE_DIR\windows-x64\src"
     dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
     flutter build windows --release --local-engine-src-path=$E `
       --local-engine=host_release --local-engine-host=host_release
