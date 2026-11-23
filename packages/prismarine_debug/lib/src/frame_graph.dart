@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'frame_samples.dart';
 import 'profiler.dart' show UiWork;
 
-/// The frame graph's legend: each group's colour and its mean ms over the
-/// last 60 frames, then the raster's.
+/// Builds the legend of the frame graph with the colour of each group, its
+/// mean ms over the last 60 frames and the mean raster ms.
 Widget frameGraphLegend(FrameSamples d, TextStyle small) => Wrap(
   spacing: 8,
   children: [

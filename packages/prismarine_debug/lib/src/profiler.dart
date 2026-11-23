@@ -23,9 +23,9 @@ class FrameProfiler {
 
   final List<(String, double, double)> windows;
 
-  /// A first-use pipeline compile of [what] that took [us]: added to this
-  /// frame's `load.pipe.<what>` and logged with [origin], where the pipeline
-  /// was built.
+  /// Adds a first-use pipeline compile of [what] that took [us] to this
+  /// frame's `load.pipe.<what>`. Logs it with [origin], the place where the
+  /// pipeline was built.
   void stall(String what, int us, String origin) {
     add('load.pipe.$what', us / 1000);
     if (_closed) return;

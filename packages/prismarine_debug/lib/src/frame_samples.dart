@@ -1,5 +1,5 @@
-// The frame graph's model: per-frame timings folded into the graph's groups
-// and the ring of the last frames.
+// The model of the frame graph. It folds per-frame timings into the groups
+// of the graph and keeps the ring of the last frames.
 import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui' show Color, Paint;
@@ -9,7 +9,8 @@ import 'package:prismarine_kept/prismarine_kept.dart';
 
 import 'profiler.dart';
 
-/// A group of the frame graph's stacked bars: its label and its colour.
+/// A group of the stacked bars of the frame graph, with its label and its
+/// colour.
 class FrameGroupStyle {
   FrameGroupStyle(this.label, this.color);
   final String label;
@@ -95,7 +96,7 @@ abstract class FrameSamples {
   /// The graph's stacked groups, bottom to top.
   final List<FrameGroupStyle> groups;
 
-  /// The profiler that the panel's own timings go to (null without one).
+  /// The profiler that receives the panel's own timings, or null.
   FrameProfiler? profiler;
 
   static const _frames = 240;
@@ -112,7 +113,7 @@ abstract class FrameSamples {
   int _openUs = 0;
   final _wall = Stopwatch()..start();
 
-  /// A sample for a new frame, with [groups]' length of times.
+  /// Returns a sample for a new frame with one time per group.
   FrameSample newSample();
 
   /// Starts a frame: the previous one closes with its wall gap and lag.

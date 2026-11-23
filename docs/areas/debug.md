@@ -24,7 +24,7 @@ such as the commands that replay it.
 `GlitchCatcher` reads back every frame of the ring and compares it with the frames before and after it. A bright,
 nearly grey patch that neither neighbour has, while the neighbours agree, is a one-frame artefact. The catcher writes
 the three frames and a mask of the flagged pixels into its folder, with one line each in `caught.jsonl`. On macOS,
-`WindowSurfaceReader` reads the surface that the window shows after Flutter's compositing, and the catcher checks those
+`WindowSurfaceReader` reads the surface that the window shows after Flutter's compositing. The catcher checks those
 frames too. `writeShownFrames` writes the newest frames of the ring into a dump.
 
 ## Profiler

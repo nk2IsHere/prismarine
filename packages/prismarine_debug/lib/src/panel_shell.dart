@@ -1,14 +1,14 @@
-// The debug panel's shell: the application's lines at the top, the frame
-// graph, then the application's sections, on a dark card that scrolls as a
-// whole.
+// The shell of the debug panel. It shows the lines of the application at
+// the top, the frame graph and then the sections of the application on a
+// dark card that scrolls as a whole.
 import 'package:flutter/material.dart';
 
 import 'frame_graph.dart';
 import 'frame_samples.dart';
 import 'profiler.dart' show UiWork;
 
-/// What the parts of a debug panel share: its text theme, the small text
-/// style of its lines and the open state of its sections by id.
+/// The text theme, the small text style and the open state of the sections
+/// by id, which the parts of a debug panel share.
 class PanelContext {
   const PanelContext(this.text, this.small, this.open);
   final TextTheme text;
@@ -16,12 +16,12 @@ class PanelContext {
   final Map<String, bool> open;
 }
 
-/// Builds a part of the panel: its widgets in order.
+/// Builds the widgets of a part of the panel in order.
 typedef PanelPart = List<Widget> Function(BuildContext context, PanelContext p);
 
-/// The debug panel over [samples]: [header], the frame graph, then
-/// [sections]. Its build time goes to the profiler and the open frame as
-/// `panel.build`.
+/// Shows [header], the frame graph of [samples] and then [sections] as the
+/// debug panel. The build time of the panel goes to the profiler and to the
+/// open frame as `panel.build`.
 class DebugPanelShell extends StatefulWidget {
   const DebugPanelShell({
     super.key,

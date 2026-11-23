@@ -160,8 +160,9 @@ class Issue {
     'frames': [for (final f in frames) f.toJson()],
   };
 
-  /// The README lines for [dir] (the dump's folder): per marked frame, its
-  /// time, its note and the lines [commands] gives for it.
+  /// Returns the README lines for [dir], the folder of the dump. Each marked
+  /// frame gets its time, its note and the lines that [commands] gives for
+  /// it.
   List<String> readme(String dir, {IssueCommands? commands}) => [
     '',
     'Issue: ${note.isEmpty ? '(no note)' : note}',
@@ -181,8 +182,8 @@ class Issue {
 /// the commands that render it again.
 typedef IssueCommands = List<String> Function(String dir, IssueFrame frame);
 
-/// Writes [issue] into [dir], a dump's folder: [files] by name,
-/// `issue.json` and the README lines appended to its README.
+/// Writes [issue] into [dir], the folder of a dump. Writes [files] by name,
+/// then `issue.json`, then appends the README lines to the README there.
 void writeIssue(
   String dir,
   Issue issue,

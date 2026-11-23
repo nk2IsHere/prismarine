@@ -8,9 +8,9 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 
 import 'issue.dart';
 
-/// The full-screen copy that the history draws its frames with: a pipeline
-/// of a vertex stage that draws two triangles from 2D clip-space positions
-/// and a fragment stage that samples [source].
+/// A full-screen copy for the frame history. The vertex stage of [pipeline]
+/// draws two triangles from 2D clip-space positions. Its fragment stage
+/// samples [source].
 abstract interface class FrameCopy {
   gpu.RenderPipeline get pipeline;
   gpu.UniformSlot get source;
@@ -64,10 +64,10 @@ class FrameHistory {
   void Function(int seq, gpu.Texture frame, HistoryMeta meta)? onFrameDone;
   int _seq = 0;
 
-  /// After the 3D scene rendered: closes the frame the last paint opened.
-  /// Returns whether a new frame, described by [meta], is kept; [add] then
-  /// takes its image. [meta] is null when the frame repeats the last one
-  /// (paced, held, paused).
+  /// Closes the frame that the last paint opened, after the 3D scene
+  /// rendered. Returns whether a new frame described by [meta] is kept.
+  /// [add] then takes its image. [meta] is null for a frame that repeats the
+  /// last one, such as a paced, held or paused one.
   bool painted(HistoryMeta? meta) {
     if (_open case final open? when onFrameDone != null) {
       onFrameDone!(_seq++, _textures[open]!, _meta[open]!);
@@ -97,8 +97,8 @@ class FrameHistory {
     _open = slot;
   }
 
-  /// After a UI scene rendered over the frame: its image [src] blended over
-  /// the frame [add] opened.
+  /// Blends [src], the image of a UI scene drawn over the frame, over the
+  /// frame that [add] opened.
   void paintedLayer(gpu.Texture? src) {
     final slot = _open;
     if (slot == null) return;

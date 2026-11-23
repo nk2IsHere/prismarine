@@ -93,7 +93,7 @@ void main() {
   });
 }
 
-/// A copy that no test draws with: a ring of no frames never copies.
+/// A copy for a ring of no frames, which never copies.
 final class _NoCopy implements FrameCopy {
   @override
   Never get pipeline => throw UnimplementedError();
