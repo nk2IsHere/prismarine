@@ -57,17 +57,24 @@ void main() {
       );
     });
 
-    test('the scene rows keep whole slots', () {
-      for (final l in [objectRow, instanceRow]) {
+    test('the scene rows keep whole slots after their members', () {
+      final object = objectRowOf(const [
+        RowField('world', FieldType.rows3x4),
+        RowField('alpha', FieldType.float),
+      ]);
+      final instance = instanceRowOf(const [
+        RowField('uvTransform', FieldType.vec4),
+        RowField('pageIndex', FieldType.float),
+      ]);
+      for (final l in [object, instance]) {
         expect(l.stride % 16, 0, reason: l.name);
       }
-      // The rows' leading members keep BufferObject's and BufferInstance's
-      // std140 offsets, which std430 shares here.
-      expect(objectRow['sObjectDiffuseColor'], 128);
-      expect(objectRow['sObjectRimBumpDepth'], 140);
-      expect(objectRow['pad0'], 220);
-      expect(objectRow['sStencilRef'], 224);
-      expect(instanceRow['sLightmapPageIndex'], 124);
+      expect(object['alpha'], 48);
+      expect(object['lightSet'], 52);
+      expect(object['boundsMin'], 64);
+      expect(instance['pageIndex'], 16);
+      expect(instance['object'], 20);
+      expect(instance['sphere'], 64);
     });
   });
 
