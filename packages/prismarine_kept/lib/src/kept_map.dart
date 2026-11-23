@@ -17,14 +17,18 @@ final class KeptMap<K extends Object, V> extends MapBase<K, V> {
 
   /// The entries in insertion order, the first [_used] written ([_gone]
   /// where one was removed), and each one's hash.
+  // alloc: the first storage of a new map, with the map
   var _keys = List<Object?>.filled(_initial, null);
+  // alloc: the first storage of a new map, with the map
   var _values = List<Object?>.filled(_initial, null);
+  // alloc: the first storage of a new map, with the map
   var _hashes = Int32List(_initial);
   int _used = 0;
   int _length = 0;
 
   /// Open addressing over the entries: entry + 1, 0 for an empty slot, -1
   /// for a removed one (probes go past it). Twice the entries' capacity.
+  // alloc: the first storage of a new map, with the map
   var _index = Int32List(_initial * 2);
 
   /// Changes that move entries, for the walks' checks.

@@ -36,6 +36,7 @@ final class KeptList<E> extends ListBase<E> {
     while (size < n) {
       size *= 2;
     }
+    // alloc: the storage grows when it is full and is kept from then on
     _items = List<Object?>.filled(size, null)..setRange(0, _length, _items);
   }
 
@@ -97,5 +98,6 @@ List<E> keptCopyOf<E>(List<E>? had, List<E> now) {
     }
     if (same) return had;
   }
+  // alloc: a copy only when the elements changed
   return List.of(now, growable: false);
 }

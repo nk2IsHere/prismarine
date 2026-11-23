@@ -34,6 +34,7 @@ ok dart:core::Duration.get:inMicroseconds
 ok dart:core::Duration.get:inMilliseconds
 ok dart:core::Duration.get:inSeconds
 ok dart:core::Enum.get:index
+ok dart:core::RangeError.checkValidIndex
 ok dart:core::Expando.[]
 ok dart:core::Expando.[]=
 ok dart:core::Iterable.get:isEmpty
