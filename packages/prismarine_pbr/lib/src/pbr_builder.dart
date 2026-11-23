@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -5,8 +6,13 @@ import 'package:prismarine_frame/prismarine_frame.dart';
 import 'package:prismarine_scene/model.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import 'gi/gi_passes.dart';
+import 'gi/gi_volume.dart';
 import 'pbr_blocks.dart';
+import 'pbr_point_shadows.dart';
+import 'pbr_post.dart';
 import 'pbr_settings.dart';
+import 'pbr_volume.dart';
 
 /// A scene that the builder draws: its model and the prefix of the stems of
 /// its meshes and textures in the render assets.
@@ -61,32 +67,87 @@ class PbrBuilder {
   Vector3 get boundsMax => _max;
 
   FramePlan? _plan;
-  int _width = 0, _height = 0, _shadowSize = 0;
+  int _width = 0, _height = 0, _shadowSize = 0, _giKey = 0;
   bool _shadowView = false;
+  late final _post = PbrPost(settings);
+  late final _points = PbrPointShadows(settings);
+  late final _volume = PbrVolume(settings);
+
+  /// The count of frames so far, for the temporal noise of passes.
+  int frameIndex = 0;
+
+  /// The sub-pixel offset of the camera of this frame in pixels, x to the
+  /// right and y down. Zero without TAA.
+  final jitter = Vector2.zero();
+
+  /// The view-projection of the last frame without jitter.
+  final previousViewProjection = Matrix4.identity();
+
+  bool _reset = true;
+
+  /// Drops the histories of the temporal passes, for a cut of the camera.
+  void resetHistory() => _reset = true;
+
+  /// The labels of the timed parts of the plan. The first part comes before
+  /// the first pass of [timedPasses].
+  List<String> partLabels = const [];
+
+  /// The passes that start the timed parts after the first, for
+  /// `FrameRunner.timedParts`.
+  List<String> timedPasses = const [];
+
+  /// The passes of the indirect light.
+  late final gi = GiPasses(settings.gi);
+
+  /// The voxel copy of the scenes for the probes, null until the app sets
+  /// it. A new volume makes a new plan.
+  GiVolume? get giVolume => gi.volume;
+  set giVolume(GiVolume? v) => gi.volume = v;
 
   final _frame = FrameBlock(), _shadowFrame = FrameBlock();
-  final _tonemap = Uint8List(16);
-  late final _tonemapData = ByteData.sublistView(_tonemap);
-  final _retained = <String, int>{'shadow': 0};
+  Map<int, SamplerState> _samplers = _plainSamplers;
+  final _retained = <String, int>{'shadow': 0, 'pointShadows': 0, 'gi.brdf': 1};
+  List<String> _skyPasses = const [];
   final _blend = <_BlendDraw>[];
   List<DrawPlan> _blendDraws = const [];
+
+  /// The draws of the point shadows in this frame, which [drawCount] does
+  /// not count.
+  int get pointShadowDraws => _points.drawCount;
 
   /// The number of draws in the plan, counted once for each pass.
   int drawCount = 0;
 
   /// The plan of the frame with camera [camera] in a view of [width] by
-  /// [height] pixels.
-  FramePlan frame(PbrCamera camera, int width, int height) {
+  /// [height] pixels, [dt] seconds after the last frame.
+  FramePlan frame(
+    PbrCamera camera,
+    int width,
+    int height, {
+    double dt = 1 / 60,
+  }) {
     if (_plan == null ||
         width != _width ||
         height != _height ||
         settings.shadowSize != _shadowSize ||
-        settings.showShadowMap != _shadowView) {
+        settings.showShadowMap != _shadowView ||
+        _post.changed() ||
+        _points.changed() ||
+        _volume.changed() ||
+        gi.planKey != _giKey) {
       _plan = _make(width, height);
+      _reset = true;
     }
-    _writeFrame(camera, width / height);
+    _writeFrame(camera, width / height, dt);
+    _reset = false;
+    frameIndex++;
     _sortBlend(camera.position);
-    _retained['shadow'] = settings.shadows ? _sunStamp() : 0;
+    final sun = _sunStamp();
+    _retained['shadow'] = settings.shadows ? sun : 0;
+    final sky = _skyPasses;
+    for (var i = 0; i < sky.length; i++) {
+      _retained[sky[i]] = sun;
+    }
     return _plan!;
   }
 
@@ -112,14 +173,20 @@ class PbrBuilder {
     _height = height;
     _shadowSize = settings.shadowSize;
     _shadowView = settings.showShadowMap;
+    _giKey = gi.planKey;
+    _skyPasses = gi.skyPasses;
     final s = _shadowSize.toDouble();
     final view = <double>[0, 0, width.toDouble(), height.toDouble(), 0, 1];
     final shadowView = <double>[0, 0, s, s, 0, 1];
     final frameRole = FrameRole('pbr.frame');
     final shadowRole = FrameRole('pbr.shadowFrame');
-    final tonemapRole = FrameRole('pbr.tonemap');
+    // TAA averages the sharper mips of a negative bias back to a stable
+    // texture.
+    _samplers = settings.post.taa ? _taaSamplers : _plainSamplers;
     final opaque = <(int, DrawPlan)>[];
+    final giTextures = gi.textures;
     final shadow = <DrawPlan>[];
+    final casters = <PbrCaster>[];
     _blend.clear();
     for (final scene in scenes) {
       final model = scene.model;
@@ -138,7 +205,11 @@ class PbrBuilder {
         final pixel = _materialTextures(scene, m);
         final lit = DrawPlan(
           vertex: PbrShaderIds.litVertex,
-          pixel: masked ? PbrShaderIds.litMaskedPixel : PbrShaderIds.litPixel,
+          pixel: blended
+              ? PbrShaderIds.litBlendPixel
+              : masked
+              ? PbrShaderIds.litMaskedPixel
+              : PbrShaderIds.litPixel,
           geometry: geometry,
           state: blended
               ? (m.doubleSided ? _blendTwoSided : _blendOneSided)
@@ -147,11 +218,21 @@ class PbrBuilder {
           vertexResources: StageResources(
             blocks: {'Frame': frameRole.block, 'Draw': block},
           ),
-          pixelResources: StageResources(
-            blocks: {'Frame': frameRole.block, 'Draw': block},
-            textures: pixel,
-            samplers: _samplers,
-          ),
+          pixelResources: blended
+              ? StageResources(
+                  blocks: {
+                    'Frame': frameRole.block,
+                    'Draw': block,
+                    'Indirect': gi.role.block,
+                  },
+                  textures: {...pixel, ...giTextures},
+                  samplers: {..._samplers, ...GiPasses.samplers},
+                )
+              : StageResources(
+                  blocks: {'Frame': frameRole.block, 'Draw': block},
+                  textures: pixel,
+                  samplers: _samplers,
+                ),
           label: m.name,
         );
         if (blended) {
@@ -162,26 +243,26 @@ class PbrBuilder {
           opaque.add((key, lit));
         }
         if (blended) continue;
-        shadow.add(
-          DrawPlan(
-            vertex: PbrShaderIds.shadowVertex,
-            pixel: masked ? PbrShaderIds.shadowMaskedPixel : null,
-            geometry: geometry,
-            state: _shadowState,
-            viewport: shadowView,
-            vertexResources: StageResources(
-              blocks: {'Frame': shadowRole.block, 'Draw': block},
-            ),
-            pixelResources: masked
-                ? StageResources(
-                    blocks: {'Frame': shadowRole.block, 'Draw': block},
-                    textures: {'baseColor': pixel['baseColor']!},
-                    samplers: _samplers,
-                  )
-                : StageResources(),
-            label: m.name,
+        final caster = DrawPlan(
+          vertex: PbrShaderIds.shadowVertex,
+          pixel: masked ? PbrShaderIds.shadowMaskedPixel : null,
+          geometry: geometry,
+          state: _shadowState,
+          viewport: shadowView,
+          vertexResources: StageResources(
+            blocks: {'Frame': shadowRole.block, 'Draw': block},
           ),
+          pixelResources: masked
+              ? StageResources(
+                  blocks: {'Frame': shadowRole.block, 'Draw': block},
+                  textures: {'baseColor': pixel['baseColor']!},
+                  samplers: _samplers,
+                )
+              : StageResources(),
+          label: m.name,
         );
+        shadow.add(caster);
+        casters.add(PbrCaster(caster, d.center, d.radius));
       }
     }
     opaque.sort((a, b) => a.$1.compareTo(b.$1));
@@ -218,79 +299,137 @@ class PbrBuilder {
           label: 'shadow map view',
         ),
       );
-    }
-    drawCount =
-        opaque.length + shadow.length + _blend.length + 2 + overlay.length;
-    final tonemap = DrawPlan(
-      vertex: PbrShaderIds.tonemapVertex,
-      pixel: PbrShaderIds.tonemapPixel,
-      geometry: InlineGeometry(_screenTriangle, 8, const {
-        0: ('R32G32_FLOAT', 0),
-      }, 3),
-      state: const DrawState(cull: 'none', depthTest: false, depthWrite: false),
-      viewport: view,
-      vertexResources: StageResources(),
-      pixelResources: StageResources(
-        blocks: {'Tonemap': tonemapRole.block},
-        textures: {'hdr': const TargetTexture(PbrTargets.hdr)},
-        samplers: {0: _clampSampler},
-      ),
-      label: 'tonemap',
-    );
-    return FramePlan(
-      {
-        PbrTargets.shadowMap: TargetSpec(_shadowSize, _shadowSize, 'D32_FLOAT'),
-        PbrTargets.hdr: TargetSpec(width, height, 'R16G16B16A16_FLOAT'),
-        PbrTargets.depth: TargetSpec(width, height, 'D32_FLOAT'),
-        PbrTargets.backbuffer: TargetSpec(width, height, 'R8G8B8A8_UNORM'),
-      },
-      [
-        RenderPassPlan(
-          'shadow',
-          const [],
-          const Attachment(PbrTargets.shadowMap, clearDepth: 1),
-          shadow,
-        ),
-        RenderPassPlan(
-          'opaque',
-          [
-            Attachment(
-              PbrTargets.hdr,
-              clear: [
-                settings.background.x,
-                settings.background.y,
-                settings.background.z,
-                1,
-              ],
+      final budget = settings.pointShadows.budget.clamp(0, maxPointShadows);
+      if (budget > 0) {
+        // The atlas has six faces in each row and a row for each slot.
+        final w = (side * 2).roundToDouble();
+        overlay.add(
+          DrawPlan(
+            vertex: PbrShaderIds.tonemapVertex,
+            pixel: PbrShaderIds.pointDepthViewPixel,
+            geometry: InlineGeometry(_screenTriangle, 8, const {
+              0: ('R32G32_FLOAT', 0),
+            }, 3),
+            state: _overlayState,
+            viewport: [
+              16,
+              side + 24,
+              w,
+              (w * budget / 6).roundToDouble(),
+              0,
+              1,
+            ],
+            vertexResources: StageResources(),
+            pixelResources: StageResources(
+              textures: {'shadowMap': const TargetTexture(pointShadowAtlas)},
+              samplers: {0: _clampSampler},
             ),
-          ],
-          const Attachment(PbrTargets.depth, clearDepth: 1),
-          [for (final (_, d) in opaque) d],
-        ),
-        RenderPassPlan(
-          'blend',
-          const [Attachment(PbrTargets.hdr)],
-          const Attachment(PbrTargets.depth),
-          _blendDraws,
-        ),
-        RenderPassPlan(
-          'markers',
-          const [Attachment(PbrTargets.hdr)],
-          const Attachment(PbrTargets.depth),
-          [markers],
-        ),
-        RenderPassPlan(
-          'tonemap',
-          const [Attachment(PbrTargets.backbuffer)],
-          null,
-          [tonemap, ...overlay],
-        ),
-      ],
-      frameBlocks: {
-        frameRole.block: _frame.bytes,
-        shadowRole.block: _shadowFrame.bytes,
-        tonemapRole.block: _tonemap,
-      },
+            label: 'point shadow atlas view',
+          ),
+        );
+      }
+    }
+    final targets = {
+      PbrTargets.shadowMap: TargetSpec(_shadowSize, _shadowSize, 'D32_FLOAT'),
+      PbrTargets.hdr: TargetSpec(width, height, 'R16G16B16A16_FLOAT'),
+      PbrTargets.depth: TargetSpec(width, height, 'D32_FLOAT'),
+      PbrTargets.backbuffer: TargetSpec(width, height, 'R8G8B8A8_UNORM'),
+    };
+    gi.addTargets(targets, width, height);
+    final buffers = <String, BufferSpec>{};
+    final blocks = HashMap<Uint8List, Uint8List>.identity()
+      ..[frameRole.block] = _frame.bytes
+      ..[shadowRole.block] = _shadowFrame.bytes
+      ..[gi.role.block] = gi.block.bytes;
+    final passes = <PassPlan>[
+      RenderPassPlan(
+        'shadow',
+        const [],
+        const Attachment(PbrTargets.shadowMap, clearDepth: 1),
+        shadow,
+      ),
+      _points.make(casters, targets, blocks),
+      ...gi.before(frameRole.block, PbrTargets.shadowMap),
+      RenderPassPlan(
+        'opaque',
+        [
+          Attachment(
+            PbrTargets.hdr,
+            clear: [
+              settings.background.x,
+              settings.background.y,
+              settings.background.z,
+              1,
+            ],
+          ),
+          const Attachment(GiTargets.gbufferNormal, clear: [0, 0, 0, 0]),
+          const Attachment(GiTargets.gbufferAlbedo, clear: [0, 0, 0, 0]),
+        ],
+        const Attachment(PbrTargets.depth, clearDepth: 1),
+        [for (final (_, d) in opaque) d],
+      ),
+      ...gi.after(frameRole.block, PbrTargets.hdr, PbrTargets.depth, view),
+      RenderPassPlan(
+        'blend',
+        const [Attachment(PbrTargets.hdr)],
+        const Attachment(PbrTargets.depth),
+        _blendDraws,
+      ),
+      RenderPassPlan(
+        'markers',
+        const [Attachment(PbrTargets.hdr)],
+        const Attachment(PbrTargets.depth),
+        [markers],
+      ),
+      ..._volume.make(
+        width: width,
+        height: height,
+        scene: PbrTargets.hdr,
+        depth: PbrTargets.depth,
+        frame: frameRole.block,
+        shadows: {
+          'shadowMap': const TargetTexture(PbrTargets.shadowMap),
+          'pointShadowAtlas': const TargetTexture(pointShadowAtlas),
+        },
+        targets: targets,
+        blocks: blocks,
+        indirect: gi.role.block,
+        indirectTextures: giTextures,
+        indirectSamplers: GiPasses.samplers,
+      ),
+    ];
+    _post.make(
+      width: width,
+      height: height,
+      scene: PbrTargets.hdr,
+      depth: PbrTargets.depth,
+      output: PbrTargets.backbuffer,
+      targets: targets,
+      buffers: buffers,
+      blocks: blocks,
+      passes: passes,
+      overlay: overlay,
+    );
+    drawCount = 0;
+    for (final p in passes) {
+      if (p is RenderPassPlan) drawCount += p.draws.length;
+    }
+    final parts = [
+      ('shadows', ''),
+      ('point shadows', 'pointShadows'),
+      ('probes and sky', 'gi.brdf'),
+      ('scene', 'opaque'),
+      ('indirect light', gi.firstAfter),
+      if (_volume.enabled) ('fog', 'volumeInject'),
+      ..._post.parts,
+    ];
+    partLabels = [for (final (label, _) in parts) label];
+    timedPasses = [for (final (_, pass) in parts.skip(1)) pass];
+    return FramePlan(
+      targets,
+      passes,
+      buffers: buffers,
+      frameBlocks: blocks,
       retained: _retained,
     );
   }
@@ -306,15 +445,47 @@ class PbrBuilder {
       'metallicRoughness': file(m.metallicRoughness, _white),
       'emissiveMap': file(m.emission, _white, srgb: true),
       'shadowMap': const TargetTexture(PbrTargets.shadowMap),
+      'pointShadowAtlas': const TargetTexture(pointShadowAtlas),
     };
   }
 
   // The camera and the lights each frame, then the sun's matrices.
-  void _writeFrame(PbrCamera camera, double aspect) {
+  void _writeFrame(PbrCamera camera, double aspect, double dt) {
     perspective(_projection, camera.yfov, aspect, camera.near, camera.far);
+    _plain
+      ..setFrom(_projection)
+      ..multiply(camera.view);
+    final n = _post.jitterCount;
+    if (n == 0) {
+      jitter.setZero();
+    } else {
+      final i = frameIndex % n;
+      jitter.setValues(_halton2[i] - 0.5, _halton3[i] - 0.5);
+    }
+    // A clip offset of d moves x by d times w, where w is -z of the view.
+    _projection
+      ..setEntry(0, 2, _projection.entry(0, 2) - 2 * jitter.x / _width)
+      ..setEntry(1, 2, _projection.entry(1, 2) + 2 * jitter.y / _height);
     _viewProjection
       ..setFrom(_projection)
       ..multiply(camera.view);
+    _inverse.copyInverse(_viewProjection);
+    if (_reset) previousViewProjection.setFrom(_plain);
+    _post.write(
+      inverseJittered: _inverse,
+      viewProjection: _plain,
+      previous: previousViewProjection,
+      dt: dt,
+      reset: _reset,
+    );
+    _volume.write(
+      camera,
+      aspect,
+      previousViewProjection,
+      frameIndex,
+      reset: _reset,
+    );
+    previousViewProjection.setFrom(_plain);
     _sunMatrices();
     final f = _frame;
     f
@@ -325,6 +496,12 @@ class PbrBuilder {
       ..vec(40, _scaled(settings.sunColor, settings.sunIntensity), 0)
       ..vec(44, settings.sky, 0);
     final count = math.min(lights.length, maxPointLights);
+    _retained['pointShadows'] = _points.select(
+      lights,
+      count,
+      camera.position,
+      _plain,
+    );
     f
       ..vec(48, settings.ground, count.toDouble())
       ..floats(
@@ -332,14 +509,18 @@ class PbrBuilder {
         1 / _shadowSize,
         settings.shadowBias,
         settings.normalOffset,
-        0,
+        settings.pointShadows.bias,
       );
     for (var i = 0; i < maxPointLights; i++) {
       if (i < count) {
         final l = lights[i];
         f
           ..vec(56 + 4 * i, l.position, l.range)
-          ..vec(120 + 4 * i, _scaled(l.color, l.intensity), 0);
+          ..vec(
+            120 + 4 * i,
+            _scaled(l.color, l.intensity),
+            _points.slotOfLight[i].toDouble(),
+          );
       } else {
         f
           ..floats(56 + 4 * i, 0, 0, 0, 0)
@@ -355,14 +536,24 @@ class PbrBuilder {
       settings.lightMarkers ? 1 : 0,
     );
     _shadowFrame.matrix(0, _sunViewProjection);
-    _tonemapData.setFloat32(0, settings.exposure, Endian.little);
+    final v = camera.view.storage;
+    _cameraForward.setValues(-v[2], -v[6], -v[10]);
+    if (_reset) gi.cut();
+    gi.write(
+      _viewProjection,
+      _projection,
+      _cameraForward,
+      settings.sunIntensity,
+    );
   }
 
   final _projection = Matrix4.zero(), _viewProjection = Matrix4.zero();
+  final _plain = Matrix4.zero(), _inverse = Matrix4.zero();
   final _sunView = Matrix4.zero(), _sunProjection = Matrix4.zero();
   final _sunViewProjection = Matrix4.zero(), _shadowMatrix = Matrix4.zero();
   final _sunEye = Vector3.zero(), _center = Vector3.zero();
   final _up = Vector3.zero(), _forward = Vector3.zero();
+  final _cameraForward = Vector3.zero();
   final _scratch = Vector3.zero();
 
   Vector3 _scaled(Vector3 v, double s) => _scratch
@@ -449,6 +640,22 @@ class _BlendDraw {
   double key = 0;
 }
 
+/// The Halton sequences in bases 2 and 3 from index 1, the jitter of TAA.
+final _halton2 = _halton(2), _halton3 = _halton(3);
+
+Float64List _halton(int base) {
+  final out = Float64List(16);
+  for (var i = 0; i < 16; i++) {
+    var f = 1.0, r = 0.0;
+    for (var k = i + 1; k > 0; k ~/= base) {
+      f /= base;
+      r += f * (k % base);
+    }
+    out[i] = r;
+  }
+  return out;
+}
+
 final _screenTriangle = Float32List.fromList([
   -1, -1, 3, -1, -1, 3, //
 ]).buffer.asUint8List();
@@ -477,13 +684,15 @@ final _flatNormal = ConstantTexture(
 );
 
 const _materialSampler = SamplerState(anisotropy: 8);
+const _taaMaterialSampler = SamplerState(anisotropy: 8, lodBias: -0.5);
 const _clampSampler = SamplerState(address: ['clamp', 'clamp', 'clamp']);
 const _shadowSampler = SamplerState(
   address: ['clamp', 'clamp', 'clamp'],
   compare: 'lessEqual',
   mipLinear: false,
 );
-const _samplers = {0: _materialSampler, 4: _shadowSampler};
+const _plainSamplers = {0: _materialSampler, 4: _shadowSampler};
+const _taaSamplers = {0: _taaMaterialSampler, 4: _shadowSampler};
 
 // The plan's winding follows Direct3D, which counts it on the render target
 // with y down. The counter-clockwise front faces of glTF in clip space with y

@@ -7,6 +7,8 @@ import 'package:prismarine_pbr/prismarine_pbr.dart';
 import 'package:prismarine_render/prismarine_render.dart';
 import 'package:prismarine_scene/prismarine_scene.dart';
 
+import 'sample_data.dart';
+
 /// The scene of the sample on the GPU with its renderer: the prepared
 /// packages of the data directory, the shaders, the builder and the frame
 /// runner.
@@ -14,15 +16,12 @@ class SampleRenderer {
   SampleRenderer._(this.scenes, this.builder, this.runner, this.credits);
 
   /// Loads every prepared package in `<dataDir>/prepared` and the shader
-  /// bundle of the app's assets, then reads every texture.
+  /// bundle of the app's assets, then reads every texture. It builds the
+  /// voxel copy of the scenes for the probes and the paths of the lights
+  /// meanwhile.
   static Future<SampleRenderer> load(String dataDir) async {
     final root = Directory('$dataDir/prepared');
-    if (!root.existsSync()) {
-      throw StateError(
-        'No prepared scene in $dataDir. Run `dart tool/fetch.dart` in '
-        'apps/prismarine_sample first, or set PRISMARINE_SAMPLE_DATA.',
-      );
-    }
+    if (!root.existsSync()) throw SampleDataMissing(dataDir);
     // The base scene first, then the add-ons in name order.
     final dirs =
         root
@@ -36,6 +35,9 @@ class SampleRenderer {
             if (bn == 'main') return 1;
             return an.compareTo(bn);
           });
+    if (dirs.isEmpty) throw SampleDataMissing(dataDir);
+    final paths = [for (final d in dirs) '${d.path}/scene.gltf'];
+    final volume = loadGiVolume(paths);
     final scenes = <String, GpuScene>{
       for (final d in dirs) _name(d): GpuScene.load('${d.path}/scene.gltf'),
     };
@@ -67,6 +69,13 @@ class SampleRenderer {
         break;
       }
     }
+    final sw = Stopwatch()..start();
+    final v = builder.giVolume = await volume;
+    stdout.writeln(
+      'sample: GI volume of ${v.nx}x${v.ny}x${v.nz} cells of '
+      '${v.cell.toStringAsFixed(3)} m, ${v.activeCount} of '
+      '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
+    );
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
     final credits = [
@@ -125,17 +134,56 @@ class SampleRenderer {
 
   final _build = Stopwatch();
 
-  /// Builds the plan of camera [camera] at [width] by [height] and runs it.
-  /// Returns the future of the run, which completes when the GPU is done.
-  Future<bool> submit(PbrCamera camera, int width, int height) {
+  /// Splits the frame into the timed parts of the builder.
+  bool timed = false;
+
+  /// The section of the frame graph of each timed part, as
+  /// `PbrBuilder.partLabels` gives them.
+  List<String> gpuSections = const [];
+  List<String> _labels = const [];
+
+  /// Builds the plan of camera [camera] at [width] by [height], [dt]
+  /// seconds after the last frame and runs it. Returns the future of the
+  /// run, which completes when the GPU is done.
+  Future<bool> submit(
+    PbrCamera camera,
+    int width,
+    int height, {
+    double dt = 1 / 60,
+  }) {
     _build
       ..reset()
       ..start();
-    final plan = builder.frame(camera, width, height);
+    final plan = builder.frame(camera, width, height, dt: dt);
+    runner.timedParts = timed ? builder.timedPasses : const [];
+    if (!identical(_labels, builder.partLabels)) _sections();
     lastBuildMs = _build.elapsedMicroseconds / 1000;
     _inFlight++;
     // alloc: the runner's run is asynchronous and returns a future.
     return runner.run(plan, present: PbrTargets.backbuffer).whenComplete(_done);
+  }
+
+  /// Runs frames from camera [camera] until each probe had [cycles]
+  /// updates, for pictures that do not depend on the time since the load.
+  Future<void> warmProbes(
+    PbrCamera camera,
+    int w,
+    int h, {
+    int cycles = 4,
+  }) async {
+    final v = builder.giVolume;
+    if (v == null || !builder.settings.gi.probes) return;
+    final per = builder.settings.gi.probesPerFrame;
+    final frames = cycles * ((v.activeCount + per - 1) ~/ per);
+    for (var i = 0; i < frames; i++) {
+      await submit(camera, w, h);
+    }
+  }
+
+  // alloc-cold: the labels change with a new plan.
+  void _sections() {
+    _labels = builder.partLabels;
+    gpuSections = [for (final l in _labels) 'gpu $l'];
   }
 
   void _done() {

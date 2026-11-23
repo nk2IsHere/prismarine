@@ -11,10 +11,13 @@ Each entry is wanted work that no plan covers yet. A done entry is removed. The 
 
 ## Renderer
 
-- **Global illumination and reflections.** Image-based light, reflections and a form of global illumination for the
-  generic renderer.
-- **Bloom and anti-aliasing.** Bloom, and anti-aliasing beyond what the hardware gives.
-- **Point light shadows.** Shadows for point lights. The sample renderer casts shadows from the sun only.
+- **Shadowed point lights in the probes for every light.** The rays of the probes see the shadows of the point lights
+  that have a slot in the atlas, two by default. The light of the others reaches the probes through walls.
+- **Moving geometry in the indirect light.** The voxel copy is made once at load. Moving objects need a copy that the
+  GPU updates.
+- **Cheaper point light shadows.** A shadowed point light draws the large chunks of a scene into six faces, about
+  1.5 ms on the GPU of an M2 Pro. Faces redrawn in turns while the lights move, or casters split into smaller
+  clusters, would lower it.
 - **Texture compression.** A BC encoder for prepared textures, which are RGBA8 with mips today.
 - **Skinning and animation.** Skinned meshes and animation playback in the generic renderer.
 

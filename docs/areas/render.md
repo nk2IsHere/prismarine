@@ -7,6 +7,12 @@ that do not change and the passes whose retained stamp is unchanged. It needs th
 package's pubspec takes from `third_party/flutter_gpu`. `onGpuSubmit` receives the number of each command buffer that
 the runner submits, before the submit, for a GPU pass log.
 
+Flutter GPU has no timestamp queries. For the GPU time of parts of a frame you set `timedParts` to the passes that
+start a part. The runner records each part into a command buffer of its own and submits them in order after the last
+one. `lastPartGpuMs` then holds the time of each part of the last finished frame, the part before the first listed
+pass first. A part is the time from the completion of the command buffer before it to its own completion, which
+includes the latency of the completion handler, a few tens of µs. A part costs one more submit on the CPU.
+
 A draw's `frontCounterClockwise` counts the winding on the render target with y down, as Direct3D does. The
 counter-clockwise front faces of glTF and OpenGL in clip space are clockwise there and need `false`, the default.
 

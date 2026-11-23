@@ -61,6 +61,16 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
 - **The app shell with production (2026-11-23).** The player shell stays in mcsm. `prismarine_app` is designed
   together with the launcher and the common UI of production.
 
+## Sample
+
+- **AgX by default (2026-11-23).** The sample and `prismarine_pbr` tone map with AgX by default. ACES, the ACES fit
+  of Narkowicz and PBR Neutral stay selectable.
+- **The same defaults on every platform (2026-11-23).** The sample starts with two shadowed point lights on every
+  platform. The Mac then runs a little below 120 Hz.
+- **The data directory of the sample (2026-11-23).** The app and the fetch script take `--data` or `--out`, else
+  `PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on Windows. Neither
+  looks for the repository.
+
 ## Logo
 
 - **The mark (2026-11-23).** The mark shows the back of the head of a prismarine Colossus, with its helmet and its

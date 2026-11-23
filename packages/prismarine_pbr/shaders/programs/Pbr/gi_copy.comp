@@ -1,0 +1,50 @@
+#version 460 core
+// Copies the tiles of this frame's probes into the atlases that the passes
+// read. A border texel takes the inner texel that the octahedral form puts
+// next to it, which makes bilinear reads at the edges of a tile wrap.
+precision highp float;
+precision highp int;
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+#include "Pbr/bodies/indirect_block.glsl"
+
+uniform textureBuffer giProbes; // t0
+uniform texture2D giIrradianceNext; // t1
+uniform sampler s5;
+#define giIrradianceNext_S s5
+uniform texture2D giDistanceNext; // t2
+#define giDistanceNext_S s5
+layout(rgba16f) uniform writeonly image2D giIrradiance;
+layout(rgba16f) uniform writeonly image2D giDistance;
+
+// The inner texel that border texel t of a tile with inner texels takes.
+ivec2 inner(ivec2 t, int n) {
+  ivec2 i = t - 1;
+  if (i.y < 0) {
+    i = ivec2(n - 1 - i.x, 0);
+  } else if (i.y >= n) {
+    i = ivec2(n - 1 - i.x, n - 1);
+  }
+  if (i.x < 0) {
+    i = ivec2(0, n - 1 - i.y);
+  } else if (i.x >= n) {
+    i = ivec2(n - 1, n - 1 - i.y);
+  }
+  return clamp(i, ivec2(0), ivec2(n - 1)) + 1;
+}
+
+void main() {
+  int row = int(gl_WorkGroupID.x);
+  if (float(row) >= cb2.trace.y) return;
+  ivec2 t = ivec2(gl_LocalInvocationID.xy);
+  ivec3 pc = ivec3(cb2.probeCounts.xyz);
+  int listed = (int(cb2.trace.x) + row) % int(cb2.trace.z);
+  int probe = int(texelFetch(giProbes, pc.x * pc.y * pc.z + listed).x);
+  int tiles = int(cb2.probeCounts.w);
+  ivec2 tile = ivec2(probe % tiles, probe / tiles);
+  ivec2 d = tile * 16;
+  imageStore(giDistance, d + t, texelFetch(sampler2D(giDistanceNext, s5), d + inner(t, 14), 0));
+  if (all(lessThan(t, ivec2(8)))) {
+    ivec2 i = tile * 8;
+    imageStore(giIrradiance, i + t, texelFetch(sampler2D(giIrradianceNext, s5), i + inner(t, 6), 0));
+  }
+}

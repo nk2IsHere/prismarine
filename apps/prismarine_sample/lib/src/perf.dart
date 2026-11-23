@@ -45,6 +45,8 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
   final _intervals = Float64List(100000);
   int _frames = 0, _lastUs = 0;
   double _build = 0, _record = 0, _gpu = 0;
+  final _parts = Float64List(16);
+  int _pointDraws = 0;
   bool _done = false;
 
   @override
@@ -54,6 +56,7 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
       _r.builder.boundsMin,
       _r.builder.boundsMax,
       _r.lamps,
+      volume: _r.builder.giVolume,
     );
     _r.builder.lights.addAll(_lights.lights);
     _r.onFrame = () => _repaint.value++;
@@ -83,13 +86,23 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
     _place(t);
     _lights.place(t);
     _fly.step(0, _noPad, _view);
-    if (_r.inFlight < 2) _r.submit(_view, perfWidth, perfHeight);
+    if (_r.inFlight < 2) {
+      _r.submit(_view, perfWidth, perfHeight, dt: _frames < 2 ? 0 : dt / 1000);
+    }
     final runner = _r.runner;
     _profiler
       ..add('build', _r.lastBuildMs)
       ..add('record', runner.lastRecordMs)
       ..add('gpu', runner.lastGpuOwnMs);
+    if (runner.timedParts.isNotEmpty) {
+      final sections = _r.gpuSections;
+      for (var i = 0; i < sections.length; i++) {
+        _profiler.add(sections[i], runner.lastPartGpuMs[i]);
+        _parts[i] += runner.lastPartGpuMs[i];
+      }
+    }
     _build += _r.lastBuildMs;
+    _pointDraws += _r.builder.pointShadowDraws;
     _record += runner.lastRecordMs;
     _gpu += runner.lastGpuOwnMs;
     // alloc: the end of the run, once.
@@ -130,8 +143,15 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
       '${(_build / frames).toStringAsFixed(2)} ms, record '
       '${(_record / frames).toStringAsFixed(2)} ms, GPU '
       '${(_gpu / frames).toStringAsFixed(2)} ms; ${_r.builder.drawCount} '
-      'draws; log in ${_profiler.dir}',
+      'draws and ${(_pointDraws / frames).round()} of point shadows; log in '
+      '${_profiler.dir}',
     );
+    if (_r.timed) {
+      final labels = _r.builder.partLabels;
+      stdout.writeln(
+        'PERF parts ${[for (var i = 0; i < labels.length; i++) '${labels[i]} ${(_parts[i] / frames).toStringAsFixed(2)} ms'].join(', ')}',
+      );
+    }
     exit(0);
   }
 

@@ -48,6 +48,13 @@ The sample app shows Intel's Sponza, which a script fetches outside git, through
 renderer on `prismarine_render`, with `prismarine_scene` loading the glTF that `prepareGltf` of `prismarine_assets`
 writes. Its `--smoke` mode is the smoke test of the gate and its `--perf` mode a performance scene, proven on macOS
 and on Linux. The design is in [the sample scene design](../specs/2026-11-23-sample-scene-design.md).
+`prismarine_pbr` has TAA, auto exposure, bloom, four tone maps, point light shadows from a cube atlas and froxel fog,
+each switchable in the panel of the sample with its GPU time in the frame graph, as
+[the post-processing design](../specs/2026-11-23-post-and-lights-design.md) describes. The runner of
+`prismarine_render` times parts of a frame by their command buffers. Its indirect light, a procedural sky with
+image-based light, irradiance probes traced in compute through a voxel copy of the scene, ambient occlusion and
+screen-space reflections, follows [the indirect light design](../specs/2026-11-23-indirect-light-design.md). A
+path-traced reference of Sponza in sun and sky light matches it within about a quarter of its brightness.
 The slim scene layer of [its design](../specs/2026-11-23-scene-layer-design.md) is in place. `prismarine_scene` has
 glTF scene nodes under `GltfModel`, the screen copy, the build hook for shader bundles and the backend of the engine.
 The runner of `prismarine_render` calls `onGpuSubmit` for the GPU pass log. mcsm and gpu_smoke use no flutter_scene.

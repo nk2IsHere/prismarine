@@ -13,6 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'src/perf.dart';
+import 'src/sample_data.dart';
+import 'src/sample_options.dart';
 import 'src/sample_renderer.dart';
 import 'src/sample_view.dart';
 import 'src/smoke.dart';
@@ -26,7 +28,7 @@ void main(List<String> args) {
     return null;
   }
 
-  final data = opt('data') ?? defaultDataDir();
+  final data = sampleDataDir(opt('data'));
   final perf = double.tryParse(opt('perf') ?? '');
   runApp(
     SampleApp(
@@ -40,26 +42,17 @@ void main(List<String> args) {
       panel: args.contains('--panel'),
       shadowView: args.contains('--shadow-view'),
       noShadows: args.contains('--no-shadows'),
+      timed: args.contains('--timed'),
+      options: {
+        for (final a in args)
+          if (a.startsWith('--') && a.contains('='))
+            a.substring(2, a.indexOf('=')): a.substring(a.indexOf('=') + 1),
+      },
       sun: opt(
         'sun',
       )?.split(',').map((v) => double.parse(v) * math.pi / 180).toList(),
     ),
   );
-}
-
-/// The data directory: `PRISMARINE_SAMPLE_DATA`, else `data/sample` of the
-/// repository when the app runs from its tree.
-String defaultDataDir() {
-  final env = Platform.environment['PRISMARINE_SAMPLE_DATA'];
-  if (env != null && env.isNotEmpty) return env;
-  var dir = Directory.current;
-  for (var i = 0; i < 6; i++) {
-    if (File('${dir.path}/apps/prismarine_sample/pubspec.yaml').existsSync()) {
-      return '${dir.path}/data/sample';
-    }
-    dir = dir.parent;
-  }
-  return '${Directory.current.path}/data/sample';
 }
 
 class SampleApp extends StatefulWidget {
@@ -75,6 +68,8 @@ class SampleApp extends StatefulWidget {
     this.panel = false,
     this.shadowView = false,
     this.noShadows = false,
+    this.timed = false,
+    this.options = const {},
     this.sun,
   });
 
@@ -96,6 +91,12 @@ class SampleApp extends StatefulWidget {
 
   /// Starts with the sun's shadows off.
   final bool noShadows;
+
+  /// Splits the frames of the performance run into timed parts.
+  final bool timed;
+
+  /// The options of the command line by name, for [applyRenderOptions].
+  final Map<String, String> options;
 
   /// The elevation and azimuth of the sun in radians, or null for the
   /// directional light of the scene.
@@ -122,6 +123,8 @@ class _SampleAppState extends State<SampleApp> {
       r.builder.settings
         ..showShadowMap = widget.shadowView
         ..shadows = !widget.noShadows;
+      applyRenderOptions(r.builder.settings, (n) => widget.options[n]);
+      r.timed = widget.timed;
       if (widget.sun case [final elevation, final azimuth]) {
         r.builder.settings.sunDirection.setValues(
           math.cos(elevation) * math.cos(azimuth),
@@ -140,6 +143,7 @@ class _SampleAppState extends State<SampleApp> {
             widget.data,
             record: widget.record,
             out: widget.out,
+            lightCount: int.tryParse(widget.options['lights'] ?? ''),
           ),
         );
       }
@@ -150,6 +154,10 @@ class _SampleAppState extends State<SampleApp> {
           () => _takeShot(path),
         );
       }
+    } on SampleDataMissing catch (e) {
+      stderr.writeln('sample: $e');
+      if (widget.smoke || widget.perf != null) exit(1);
+      setState(() => _error = e);
     } on Object catch (e, st) {
       stderr.writeln('sample: $e\n$st');
       if (widget.smoke || widget.perf != null) exit(1);

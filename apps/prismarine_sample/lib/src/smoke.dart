@@ -18,15 +18,19 @@ const smokeWidth = 1280, smokeHeight = 720;
 /// reference.
 const smokeShare = 0.001, smokeLevels = 2;
 
-/// Renders a fixed frame from each camera of the scene, writes it as a PNG
-/// into [out] and compares it with the reference in
-/// `<data>/smoke/<os>`. With [record] the frames become the references.
+/// The frames that the smoke test renders of each view.
+const smokeFrames = 24;
+
+/// Renders a fixed frame from each camera of the scene with the first
+/// [lightCount] point lights, all by default. Writes each frame as a PNG
+/// into [out] and compares it with the reference in `<data>/smoke/<os>`. With [record] the frames become the references.
 /// Returns 0 when every frame passed.
 Future<int> runSmoke(
   SampleRenderer r,
   String data, {
   bool record = false,
   String? out,
+  int? lightCount,
 }) async {
   final refs = Directory('$data/smoke/${Platform.operatingSystem}');
   final dir = Directory(out ?? '$data/smoke/last')..createSync(recursive: true);
@@ -35,10 +39,18 @@ Future<int> runSmoke(
     r.builder.boundsMin,
     r.builder.boundsMax,
     r.lamps,
+    volume: r.builder.giVolume,
   )..place(7.5);
+  for (final (i, l) in lights.lights.indexed) {
+    final p = l.position;
+    stdout.writeln(
+      'SMOKE light $i at ${p.x.toStringAsFixed(3)}, '
+      '${p.y.toStringAsFixed(3)}, ${p.z.toStringAsFixed(3)}',
+    );
+  }
   r.builder.lights
     ..clear()
-    ..addAll(lights.lights);
+    ..addAll(lights.lights.take(lightCount ?? lights.lights.length));
   final fly = FlyCamera();
   final view = PbrCamera();
   final cams = r.cameras;
@@ -62,9 +74,14 @@ Future<int> runSmoke(
       view.yfov = cams[i].yfov;
     }
     fly.step(0, _noPad, view);
-    // The second frame runs with the shadow pass kept from the first.
-    await r.submit(view, smokeWidth, smokeHeight);
-    await r.submit(view, smokeWidth, smokeHeight);
+    // The temporal passes start again at each view and converge over the
+    // frames of one jitter cycle and more. The frames after the first run
+    // with the shadow pass kept.
+    r.builder.resetHistory();
+    if (i == 0) await r.warmProbes(view, smokeWidth, smokeHeight);
+    for (var f = 0; f < smokeFrames; f++) {
+      await r.submit(view, smokeWidth, smokeHeight);
+    }
     final rgba = await _read(r);
     final name = 'frame$i';
     final hash = _fnv(rgba);

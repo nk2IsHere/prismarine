@@ -1,0 +1,36 @@
+#version 460
+// Sums each column of froxels from near to far with the energy-conserving
+// integration of Hillaire. rgb holds the light scattered towards the camera
+// in front of the end of each slice and a the transmittance to it. The
+// froxels also go into the history for the next frame.
+layout(local_size_x = 8, local_size_y = 8) in;
+#include "Pbr/bodies/volume_block.glsl"
+
+uniform texture3D scatter; // t0
+uniform sampler s0;
+#define scatter_S s0
+
+layout(rgba16f) uniform image3D integrated;
+layout(rgba16f) uniform image3D history;
+
+void main() {
+  ivec2 id = ivec2(gl_GlobalInvocationID.xy);
+  ivec3 grid = ivec3(cb1.grid.xyz);
+  if (any(greaterThanEqual(id, grid.xy))) return;
+  vec3 sum = vec3(0.0);
+  float transmittance = 1.0;
+  float last = 0.0;
+  for (int k = 0; k < grid.z; k++) {
+    float end = volumeDepth(float(k + 1) / float(grid.z));
+    float step = end - last;
+    last = end;
+    ivec3 at = ivec3(id, k);
+    vec4 v = texelFetch(sampler3D(scatter, s0), at, 0);
+    float sigma = max(v.a, 1e-6);
+    float tr = exp(-sigma * step);
+    sum += transmittance * (v.rgb - v.rgb * tr) / sigma;
+    transmittance *= tr;
+    imageStore(integrated, at, vec4(sum, transmittance));
+    imageStore(history, at, v);
+  }
+}
