@@ -114,4 +114,4 @@ Later, each through its own spec and plan, in this order:
 - **Hot paths.** The runner, the plan codec and the loop are on the frame path; seams must not add a call per draw. The alloc lint must still see them: prismarine lists its own roots for code mcsm's frame reaches.
 - **Two-repo landings.** An mcsm landing on an unlanded prismarine commit would make history unreproducible; mcsm's gate refuses it.
 - **Worktrees and mirrors.** Agents get a worktree in each repo and an override pointing mcsm at their prismarine worktree; the build mirror must follow the override, not `~/Desktop/prismarine`.
-- **Game data.** Prismarine holds no game data, except its logo (the owner's exception, 2026-11-23), which goes in only once the owner settles it.
+- **Game data.** Prismarine holds no game data, except its logo (the owner's exception, 2026-11-23), in `docs/logo/`.
