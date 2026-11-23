@@ -1,9 +1,12 @@
 name: prismarine_audio
-description: Decoded audio as interleaved float32 frames, the source interface that players read, and a WAV writer.
+description: An audio engine of events, buses with effects, voices and mix states, rendered in Dart with the same bits as its native mirror. Decoded audio as PCM sources and a WAV writer.
 publish_to: none
 environment:
   sdk: ^3.10.0
 resolution: workspace
+dependencies:
+  prismarine_math:
+    path: ../prismarine_math
 dev_dependencies:
   lints: ^6.1.0
   test: ^1.33.0

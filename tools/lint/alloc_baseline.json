@@ -6,6 +6,22 @@
       "literal": 1,
       "closure": 3
     },
+    "packages/prismarine_audio": {
+      "new": 132,
+      "literal": 89,
+      "string": 29,
+      "closure": 39,
+      "box": 159,
+      "iterate": 52,
+      "async": 2,
+      "sdk": 1
+    },
+    "packages/prismarine_audio_out": {
+      "new": 6,
+      "closure": 4,
+      "box": 5,
+      "sdk": 20
+    },
     "packages/prismarine_frame": {
       "new": 67,
       "literal": 40,
@@ -30,6 +46,9 @@
       "string": 5,
       "box": 5,
       "sdk": 13
+    },
+    "packages/prismarine_math": {
+      "box": 2
     },
     "packages/prismarine_pbr": {
       "new": 6,

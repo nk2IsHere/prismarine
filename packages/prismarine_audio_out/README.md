@@ -2,6 +2,8 @@
 
 prismarine_audio_out plays audio on the desktop. It decodes MP3 and Ogg Vorbis files outside the Dart heap, keeps
 decoded files in a cache that every isolate shares, streams long files and pushes PCM into the default output device.
+It also holds the native render of the audio engine of [prismarine_audio](../prismarine_audio/README.md), which plays
+in the callback of the device.
 Its native library is a Rust crate in `native/`, which the build hook builds through
 [prismarine_cargo](../prismarine_cargo/README.md). The details are on [the area page](../../docs/areas/audio_out.md).
 
@@ -14,6 +16,10 @@ it is ready. `StreamingPcmSource` decodes an Ogg Vorbis file while it plays.
 `PcmCache` is one cache of decoded files for the whole process. One isolate asks for a file ahead of its use with
 `PcmCache.want`. Another isolate plays it through `CachedPcmSource.acquire`, which holds the entry for as long as the
 source exists. `PcmCache.sceneChanged` lets the cache drop the entries that nobody wanted since the scene before.
+
+`NativeAudioEngine.fromBlob` makes the native engine from the bytes of `projectBlob`. `startDevice` plays it in real
+time and `NativeMixerPort` posts commands to it from any isolate. In lockstep `render` renders on the calling thread
+with the same bits as the Dart `AudioEngine`.
 
 `PcmPushStream.start` opens the default output device at 48 kHz stereo and throws a `StateError` on a machine without
 one, such as a container. `RenderIsolate.spawn` runs your `IsolateRenderer` on an isolate of its own, which keeps the

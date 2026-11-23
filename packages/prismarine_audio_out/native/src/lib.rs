@@ -9,6 +9,7 @@
 
 pub mod decode;
 pub mod device;
+pub mod mix;
 pub mod push;
 
 use std::panic::catch_unwind;
