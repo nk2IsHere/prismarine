@@ -1,6 +1,9 @@
 {
   "about": "analyze ratchet: per package, diagnostics per code may not grow. Lower it with `dart tools/lint/analyze.dart --update-baseline`.",
   "packages": {
+    "packages/prismarine_audio_out": {
+      "dart:close_sinks": 2
+    },
     "packages/prismarine_cargo": {
       "dart:deprecated_member_use": 1,
       "dart:use_null_aware_elements": 1
