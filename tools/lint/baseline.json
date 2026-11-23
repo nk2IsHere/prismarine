@@ -1,5 +1,13 @@
 {
   "about": "code_shape ratchet: files over 1,000 lines may not grow; per-package hit counts may not grow. Lower it with `dart tools/lint/code_shape.dart --update-baseline`.",
   "size": {},
-  "packages": {}
+  "packages": {
+    "packages/prismarine_render": {
+      "game-name": 13
+    },
+    "tools/gpu_smoke": {
+      "game-name": 30,
+      "season-name": 1
+    }
+  }
 }

@@ -20,5 +20,31 @@ code_shape:
   history:
     names: []
     pointers: []
-  # Only the generic rules for size, history, long comments and functions.
-  rule_sets: {}
+  # Code has names by its function and holds no game. The sets below keep
+  # seasons, episodes, the names of games and their engines and the name of
+  # the project that prismarine came from out of identifiers and paths. The
+  # paths of every file under the code roots count, JSON files and compute
+  # shaders included.
+  rule_sets:
+    # An identifier holds a season when one of its parts is S1, S2, Season1 or
+    # Season2, or when it starts with s1, s2, season1 or season2. The libm port
+    # keeps the names of its reference code, such as s1 for a term.
+    name-words:
+      check: season-name
+      word: '(^|[a-z0-9]{2}|_)(S1|S2|Season[12])(?=[A-Z_0-9]|$)|^_*([sS][12]|[sS]eason[12])(?=[A-Z_]|$)'
+      path: '(^|[/_.-])([sS][12]|season[12])(?=[/_.-])'
+      exempt: [packages/prismarine_math/lib/src/libm/]
+      all_paths: true
+    # An episode is ep, Ep or Episode with three digits.
+    name-words-episode:
+      check: episode-name
+      word: '(^|[a-z0-9]{2}|_)(Ep|EP|Episode)[0-9]{3}|^_*(ep|episode)[0-9]{3}'
+      path: '(^|[/_.-])(ep|episode)[0-9]{3}'
+      all_paths: true
+    # The words mcsm, Minecraft, Telltale and FMOD. The native exports of the
+    # engine release still have the forms mcsm and Mcsm.
+    name-words-game:
+      check: game-name
+      word: '[Mm]csm|[Mm]inecraft|MINECRAFT|[Tt]elltale|TELLTALE|FMOD|Fmod(?=[A-Z_0-9]|$)|^_*fmod[A-Z_]'
+      path: '(mcsm|minecraft|telltale)|(^|[/_.-])fmod([/_.-]|$)'
+      all_paths: true
