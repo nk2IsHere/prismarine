@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 /// A texture as KTX 2.0 (Khronos): its texels as stored, every level, layer
 /// and face, with a basic data format descriptor and [values] as key-value
-/// data under keys of their own.
+/// data under keys of their own. The key `KTXwriter` holds [writer].
 ///
 /// [levels] holds each mip level, largest first, as its images in KTX2's
 /// order: layer, then face, then depth slice.
@@ -16,9 +16,10 @@ Uint8List encodeKtx2({
   int faces = 1,
   required List<Uint8List> levels,
   Map<String, String> values = const {},
+  String writer = 'prismarine_assets',
 }) {
   final dfd = _dfd(format);
-  final kvd = _kvd({'KTXwriter': 'mcsm_convert', ...values});
+  final kvd = _kvd({'KTXwriter': writer, ...values});
   const header = 80;
   final index = levels.length * 24;
   final dfdAt = header + index;

@@ -29,8 +29,12 @@ class _Pool {
 
 /// The vertices and indices of meshes, concatenated into one pool per
 /// vertex layout. A pool has one stream per attribute and one 32-bit index
-/// buffer. Pools are numbered in the order of their first mesh.
+/// buffer. Pools are numbered in the order of their first mesh. The pool
+/// GLBs carry [generator] as their `asset.generator`.
 class GeometryPools {
+  GeometryPools({this.generator = 'prismarine_assets'});
+
+  final String generator;
   final _pools = <_Pool>[];
   final _byLayout = <String, int>{};
 
@@ -105,7 +109,7 @@ class GeometryPools {
     for (var i = 0; i < _pools.length; i++) {
       final p = _pools[i];
       final file = 'pool_$i.glb';
-      File('$outDir/$file').writeAsBytesSync(_poolGlb(p));
+      File('$outDir/$file').writeAsBytesSync(_poolGlb(p, generator));
       cooked.add(
         CookedPool(
           file: file,
@@ -168,8 +172,8 @@ Uint32List _indices(
 /// A pool as a viewable glTF: each stream an accessor over all vertices,
 /// one uint32 index accessor and one primitive drawing everything (indices
 /// are mesh-relative, so the viewer's picture is only a sanity check).
-Uint8List _poolGlb(_Pool p) {
-  final b = GltfBuilder();
+Uint8List _poolGlb(_Pool p, String generator) {
+  final b = GltfBuilder(generator: generator);
   final attributes = <String, int>{};
   for (final MapEntry(key: name, value: s) in p.streams.entries) {
     final view = b.addView(s.bytes.toBytes(), target: 34962);

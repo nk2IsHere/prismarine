@@ -45,6 +45,16 @@ void main() {
     },
   );
 
+  test('asset.generator is the given one and a continued GLB keeps it', () {
+    String generator(Uint8List glb) =>
+        (readGlb(glb).json['asset']! as Map)['generator']! as String;
+    expect(generator(triangle().toGlb()), 'prismarine_assets');
+    final own = GltfBuilder(generator: 'tool')..addMesh('m', const []);
+    final glb = own.toGlb();
+    expect(generator(glb), 'tool');
+    expect(generator(GltfBuilder.fromGlb(glb).toGlb()), 'tool');
+  });
+
   test('POSITION accessor carries min/max', () {
     final acc = (triangle().json['accessors'] as List).first as Map;
     expect(acc['min'], [0, 0, 0]);

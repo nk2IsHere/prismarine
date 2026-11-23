@@ -3,14 +3,19 @@ import 'dart:typed_data';
 
 /// Minimal glTF 2.0 builder with one binary buffer, written as GLB.
 class GltfBuilder {
-  GltfBuilder();
+  /// Starts an empty glTF with [generator] as its `asset.generator`.
+  GltfBuilder({String generator = 'prismarine_assets'})
+    : json = {
+        'asset': {'version': '2.0', 'generator': generator},
+        'buffers': <Object?>[],
+        'bufferViews': <Object?>[],
+        'accessors': <Object?>[],
+      };
 
   /// Continues [glb]: its JSON and binary chunk, to add to.
-  GltfBuilder.fromGlb(Uint8List glb) {
+  GltfBuilder.fromGlb(Uint8List glb) : json = {} {
     final read = readGlb(glb);
-    json
-      ..clear()
-      ..addAll(read.json);
+    json.addAll(read.json);
     for (final k in const ['buffers', 'bufferViews', 'accessors']) {
       json[k] ??= <Object?>[];
     }
@@ -18,12 +23,7 @@ class GltfBuilder {
   }
 
   final _bin = BytesBuilder();
-  final Map<String, Object?> json = {
-    'asset': {'version': '2.0', 'generator': 'mcsm_convert'},
-    'buffers': <Object?>[],
-    'bufferViews': <Object?>[],
-    'accessors': <Object?>[],
-  };
+  final Map<String, Object?> json;
 
   /// A buffer view over [bytes] as given; [stride] for interleaved vertices.
   int addView(Uint8List bytes, {int? target, int? stride}) {
