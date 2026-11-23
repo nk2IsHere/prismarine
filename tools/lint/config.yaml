@@ -10,10 +10,13 @@ baselines:
 alloc:
   roots: tools/lint/alloc_roots.txt
   sdk: tools/lint/alloc_sdk.txt
+  # The pure-Dart packages of the workspace, then the Flutter packages and
+  # the app whose frame code the roots name.
+  packages: [packages/prismarine_kept, packages/prismarine_snap, packages/prismarine_math, packages/prismarine_jobs, packages/prismarine_cargo, packages/prismarine_pad, packages/prismarine_frame, packages/prismarine_audio, packages/prismarine_audio_out, packages/prismarine_shaders, packages/prismarine_assets, tools/lint, packages/prismarine_scene, packages/prismarine_pbr, apps/prismarine_sample]
 privacy:
   private_env: PRISMARINE_PRIVATE
   pending: tools/lint/privacy_pending.txt
-links: [CLAUDE.md, README.md, docs/memory, docs/areas, packages, apps, tools]
+links: [CLAUDE.md, README.md, docs/memory, docs/areas, packages, apps, tools, templates, third_party/flutter_engine/README.md]
 # The repository has no doc folders with one file per entry.
 docs_index: []
 code_shape:

@@ -17,7 +17,10 @@ no shader at run time.
 `findImpellerc` returns the impellerc in `PRISMARINE_IMPELLERC`. With a `cacheDir`, a shard whose sources and tools have
 not changed comes from the cache.
 
-The command line does the same:
+`shaderInterface` reads the interface of a GLSL source, its uniform blocks, textures, samplers and vertex inputs, in the
+JSON form that `ShaderRecord` of prismarine_frame reads.
+
+The command line builds bundles too:
 
     dart run prismarine_shaders bundle <root> --cache=<cache folder>
 

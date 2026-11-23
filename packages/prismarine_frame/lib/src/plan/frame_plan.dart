@@ -452,7 +452,7 @@ class Stencil {
   final int readMask, writeMask;
 }
 
-/// Raster and depth state of a draw.
+/// The raster and depth state of a draw.
 ///
 /// [frontCounterClockwise] has the meaning of Direct3D 11. The winding is
 /// counted on the render target, with y down. A triangle that is

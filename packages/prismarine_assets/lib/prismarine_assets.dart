@@ -1,6 +1,6 @@
-/// Asset files and their cook. A glTF reader, builder, checker and prepare
-/// step, 4×4 matrices, KTX2 and PNG files, mips, BC decoders, geometry pools
-/// and texture arrays.
+/// Asset files and their cook, with a glTF reader, builder, checker and
+/// prepare step, 4×4 matrices, KTX2 and PNG files, mips, BC decoders,
+/// geometry pools and texture arrays.
 library;
 
 export 'src/cook/geometry_pools.dart';

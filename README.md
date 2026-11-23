@@ -14,6 +14,7 @@ The README of each linked package gives its use, a short example and its platfor
 |---|---|
 | [`prismarine_frame`](packages/prismarine_frame/README.md) | Frame plans of passes, targets and buffers, with a codec that moves a plan between isolates |
 | [`prismarine_render`](packages/prismarine_render/README.md) | The runner that records a frame plan on Flutter GPU and skips a pass whose inputs are unchanged |
+| [`prismarine_pbr`](packages/prismarine_pbr/README.md) | A forward renderer of glTF scenes with metallic-roughness materials, a shadowed sun, point lights and a tone map |
 | [`prismarine_scene`](packages/prismarine_scene/README.md) | A glTF importer, a scene-node layer and paced loading of assets |
 | [`prismarine_shaders`](packages/prismarine_shaders/README.md) | Shader bundles for impellerc, a cache of compiled shaders and precompiled Metal libraries |
 | [`prismarine_assets`](packages/prismarine_assets/README.md) | Readers and writers for glTF, KTX2 and PNG, with decoding of BC textures |
@@ -52,7 +53,7 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 |---|---|
 | [Allocation lint](tools/lint/README.md) | Finds code on the frame path that allocates memory |
 | [Code checks](tools/lint/README.md) | Runs the analyzer, the formatters and file size checks and comments against a baseline |
-| Heap and allocation profiler | Compares heap snapshots and shows the places that allocate |
+| [Heap and allocation profiler](tools/profiler/README.md) | Compares heap snapshots and shows the places that allocate |
 | [GPU smoke tool](tools/gpu_smoke/README.md) | Checks the Flutter GPU features of the engine on a machine |
 | [Machine locks](tools/machine/README.md) | Share one machine between the heavy jobs and the timed runs of every repository on it |
 | [Engine release scripts](third_party/flutter_engine/README.md) | Build, package and fetch the patched engine for each platform |
@@ -124,8 +125,9 @@ about a minute.
     cd packages/prismarine_pad
     dart test
 
-The sample app in `apps/prismarine_sample` is the example of an app build. A release build with the flags that
-`fetch.sh` printed runs on the patched engine. A build without them runs on the stock engine. The steps below for macOS
+The sample app in `apps/prismarine_sample` is the example of an app build. It needs the patched engine and the model,
+which its `tool/fetch.dart` downloads, as [its README](apps/prismarine_sample/README.md) describes. `tool/shaders.sh`
+builds its shaders with the impellerc of the engine before the app is built. The steps below for macOS
 ran on macOS 27.2 on an Apple M2 Pro and the steps for Linux on Ubuntu 26.04 on x86-64. The steps for Windows follow the
 scripts of the engine and are not checked on a Windows machine.
 
@@ -137,30 +139,34 @@ of `macos-arm64` and `host_release_arm64`. The Intel form is not checked.
     cd apps/prismarine_sample
     flutter pub get
     E=$PRISMARINE_ENGINE_DIR/macos-arm64/src
+    tool/shaders.sh $E/out/host_release_arm64/impellerc
     flutter build macos --release --local-engine-src-path=$E \
       --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
     build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
 
 ### Linux
 
-The commands build the app on an x86-64 machine into `build/linux/x64/release/bundle/prismarine_sample`. The Linux
-runner of the app does not turn Flutter GPU on. The app starts with Vulkan and stops at its first call of Flutter GPU.
+The commands build the app on an x86-64 machine into `build/linux/x64/release/bundle/prismarine_sample`, which runs
+with Vulkan.
 
     cd apps/prismarine_sample
     flutter pub get
     E=$PRISMARINE_ENGINE_DIR/linux-x64/src
+    tool/shaders.sh $E/out/host_release/impellerc
     flutter build linux --release --local-engine-src-path=$E \
       --local-engine=host_release --local-engine-host=host_release
 
 ### Windows
 
 The commands are for PowerShell on an x64 machine and build the app into
-`build\windows\x64\runner\Release\prismarine_sample.exe`. They are not checked on Windows. The Windows runner of the app
-does not turn Flutter GPU on either.
+`build\windows\x64\runner\Release\prismarine_sample.exe`. The build stops in the build of SDL for prismarine_pad,
+whose file paths are longer than MSBuild accepts. `tool/shaders.sh` is a bash script. On Windows the build of the
+shaders runs its Dart tool directly.
 
     cd apps\prismarine_sample
     flutter pub get
     $E = "$env:PRISMARINE_ENGINE_DIR\windows-x64\src"
+    dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
     flutter build windows --release --local-engine-src-path=$E `
       --local-engine=host_release --local-engine-host=host_release
 

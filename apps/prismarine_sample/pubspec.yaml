@@ -1,5 +1,5 @@
 name: prismarine_sample
-description: The smallest app on the patched engine. It clears one frame through Flutter GPU and shows it.
+description: The sample of prismarine. Intel's Sponza with a fly camera, moving coloured lights, gamepads and the debug panel, drawn by prismarine_pbr. It is also the smoke test and a performance scene.
 publish_to: none
 version: 0.1.0
 
@@ -11,10 +11,44 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
+  image: ^4.5.0
+  prismarine_assets:
+    path: ../../packages/prismarine_assets
+  prismarine_debug:
+    path: ../../packages/prismarine_debug
+  prismarine_loop:
+    path: ../../packages/prismarine_loop
+  prismarine_math:
+    path: ../../packages/prismarine_math
+  prismarine_pad:
+    path: ../../packages/prismarine_pad
+  prismarine_pbr:
+    path: ../../packages/prismarine_pbr
+  prismarine_render:
+    path: ../../packages/prismarine_render
+  prismarine_scene:
+    path: ../../packages/prismarine_scene
   vector_math: ^2.1.4
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
 
+dependency_overrides:
+  # Flutter GPU with the patches of the engine fork.
+  flutter_gpu:
+    path: ../../third_party/flutter_gpu
+
 flutter:
-  uses-material-design: false
+  uses-material-design: true
+  # The shaders of prismarine_pbr, built by tool/shaders.sh before a build.
+  assets:
+    - shaders_generated/records.json
+    - path: shaders_generated/bundle/metal/
+      platforms:
+        - macos
+    - path: shaders_generated/bundle/vulkan/
+      platforms:
+        - linux
+        - windows
