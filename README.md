@@ -23,7 +23,8 @@ The README of each linked package gives its use, a short example and its platfor
 | [`prismarine_snap`](packages/prismarine_snap/README.md) | Binary snapshots of object graphs that preserve the references between objects |
 | [`prismarine_replay`](packages/prismarine_replay/README.md) | Recording of input, deterministic replay, snapshots with a schedule, a snapshot shadow and a corpus runner |
 | [`prismarine_math`](packages/prismarine_math/README.md) | Maths functions that give the same bits on every OS |
-| `prismarine_lua` | An embeddable Lua 5.2 for Dart |
+| [`prismarine_lua`](packages/prismarine_lua/README.md) | An embeddable Lua 5.2 for Dart, with double numbers by default and a float32 mode |
+| [`prismarine_lua_native`](packages/prismarine_lua_native/README.md) | The stock Lua 5.2 compiler in C behind Rust, in a double and a float32 build |
 | [`prismarine_audio`](packages/prismarine_audio/README.md) | Audio interfaces and an engine of events and buses |
 | [`prismarine_audio_out`](packages/prismarine_audio_out/README.md) | Audio output, decoding of MP3 and Vorbis and a cache of decoded sounds |
 | [`prismarine_pad`](packages/prismarine_pad/README.md) | Gamepads through SDL3 |
