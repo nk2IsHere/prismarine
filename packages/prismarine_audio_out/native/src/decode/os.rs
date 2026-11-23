@@ -86,8 +86,8 @@ const FEEDER_SLICE_NS: u64 = 1_000_000;
 
 /// Returns the calls that give a thread `role` on `os` with the limits `nice`.
 ///
-/// On Windows the feeder runs at the highest normal priority with EcoQoS off. Background work runs
-/// below normal with EcoQoS on. Background mode is not used, since its very low I/O priority would
+/// On Windows the feeder runs at the highest normal priority without EcoQoS. Background work runs
+/// below normal with EcoQoS. Background mode is not used, since its very low I/O priority would
 /// stall a decode that the render needs.
 ///
 /// On Linux the threads belong to this library and serve no other work. A nice raised for good is
