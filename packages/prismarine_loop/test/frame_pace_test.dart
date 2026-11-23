@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_loop/prismarine_loop.dart';
 
-/// Runs [seconds] of display frames at 120 Hz: a step takes [stepFrames]
-/// display frames when the pace allows fewer, every [dropEvery]-th step
-/// gets no picture, the stages at [stageMs].
+/// Runs [seconds] of display frames at 120 Hz. A step takes [stepFrames]
+/// display frames when the pace allows fewer. Every [dropEvery]-th step gets
+/// no picture. The stages take [stageMs].
 ({int now, int shown}) _run(
   FramePace p, {
   required int from,
@@ -53,7 +53,7 @@ void main() {
 
   test('late steps take the pace down and the slower pace steps evenly', () {
     final p = pace();
-    // Every step takes two display frames: all of them late at pace 1.
+    // Every step takes two display frames, and every step is late at pace 1.
     final a = _run(
       p,
       from: 0,
@@ -64,7 +64,8 @@ void main() {
     );
     expect(p.divisor, 2);
     expect(p.downs, 1);
-    // At pace 2 they are on time; the stages don't fit the display rate.
+    // At pace 2 the steps are on time. The stages do not fit the display
+    // rate.
     _run(
       p,
       from: a.now,
@@ -126,7 +127,8 @@ void main() {
       stageMs: 14,
     );
     expect(p.divisor, 2);
-    // 6.5 ms each: the sim, the build and the record take 19.5 ms in a row.
+    // The simulation, the build and the record take 6.5 ms each and 19.5 ms
+    // in a row.
     _run(p, from: a.now, shown: a.shown, seconds: 10, stageMs: 6.5);
     expect(p.divisor, 2);
   });
@@ -172,8 +174,8 @@ void main() {
     }
     expect(steps.skip(1).toSet(), {2 * 8333});
     expect(at.every((f) => f.isEven), isTrue);
-    // At the display's rate a tick a busy isolate held back steps its own
-    // frame, and the tick after a missed frame steps two.
+    // At the rate of the display a tick that a busy isolate held back steps
+    // its own frame. The tick after a missed frame steps two.
     final q = FramePace()..intervalUs = 8333;
     final got = <int>[];
     for (final (frame, delay) in [(0, 300), (1, 6000), (2, 400), (4, 500)]) {
@@ -187,7 +189,7 @@ void main() {
     _run(f, from: 0, shown: 0, seconds: 5, stepFrames: 3, stageMs: 30);
     expect(f.divisor, 2);
     final p = pace();
-    // Steps 150 ms apart: hitches, not a rate.
+    // Steps 150 ms apart are hitches and not a rate.
     var now = 0;
     for (var i = 0; i < 100; i++) {
       now += 150000;
@@ -210,11 +212,11 @@ void main() {
       ..intervalUs = 8333
       ..intervalSeconds = 1 / 120;
     p.begin(0);
-    // Ticks a little late in their display frames.
+    // The ticks are a little late in their display frames.
     expect(p.begin(16900), 16666);
     expect(p.stepSeconds, 2 / 120);
     // Steps of exactly 1/60 s reach a key at 1/30 s in two frames, as a
-    // fixed 1/60 s step does (whole microseconds stop 0.7 µs short).
+    // fixed 1/60 s step does. Whole microseconds stop 0.7 µs short.
     var clock = 0.0;
     for (var i = 0; i < 2; i++) {
       clock = (clock + p.stepSeconds).toDouble();

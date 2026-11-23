@@ -1,17 +1,15 @@
 import 'dart:ui' show DartPerformanceMode, PlatformDispatcher;
 
-/// GC pacing: the Dart VM's collections at its normal thresholds, none
-/// started by the engine's idle notification, and where the engine has the
-/// call ([collect]) at the frame's idle point ([idlePoint]); collections
-/// never change what the game computes.
+/// GC pacing. The Dart VM collects at its normal thresholds and not on the
+/// idle notification of the engine. An engine with the call [collect] also
+/// collects at the idle point of the frame ([idlePoint]). Collections do not
+/// change what the game computes.
 ///
-/// After each frame the engine lets the VM work until the next one; with
-/// a large heap that meant a full concurrent mark every ~0.6 s.
-/// The engine skips that notification in latency mode, so the mode is
-/// latency from [endFrame] to [beginFrame] and balanced in the frame. GPU
-/// memory awaiting finalization isn't counted by the VM: when [pressure]
-/// grows by [budget] the frames stay balanced through the notification
-/// until it falls back by half or [reliefFrames] pass.
+/// The engine skips its idle notification after a frame in latency mode.
+/// The mode is latency from [endFrame] to [beginFrame] and balanced in the
+/// frame. The VM does not count GPU memory that awaits finalization. When
+/// [pressure] grows by [budget] the frames stay balanced through the
+/// notification until it falls back by half or [reliefFrames] pass.
 class GcPacing {
   GcPacing({
     required this.enabled,
@@ -32,72 +30,76 @@ class GcPacing {
 
   final bool enabled;
 
-  /// GPU bytes awaiting finalization or live (flutter_gpu GpuMemory, G8).
+  /// The GPU bytes that are live or await finalization (flutter_gpu
+  /// GpuMemory, G8).
   final int Function()? pressure;
   final int budget;
   final int reliefFrames;
 
-  /// The VM's collections at an idle point (the GC idle call of
-  /// flutter_gpu: the time left in microseconds, the least and the most
-  /// new-space bytes); what ran (0: nothing). Null on an engine without it.
+  /// Runs the collections of the VM at an idle point with the GC idle call
+  /// of flutter_gpu. It takes the time left in microseconds and the least
+  /// and the most new-space bytes. Returns the work that ran, 0 for none.
+  /// Null on an engine without the call.
   final int Function(int budgetMicros, int minBytes, int maxBytes)? collect;
 
-  /// Whether a picture is on its way (its plan asked for and not recorded):
-  /// the frame's end is then no idle point, the record's end is.
+  /// Returns true while a picture is on its way, with its plan requested and
+  /// not recorded. The idle point is then the end of the record and not the
+  /// end of the frame.
   final bool Function()? busy;
 
-  /// The display's frame interval.
+  /// The frame interval of the display.
   int frameMicros;
   final int idleMinBytes;
   final int idleMaxBytes;
 
-  /// An idle point's collection: what ran, its time and the time it was
-  /// given, in ms (the profile).
+  /// Receives the collection of an idle point with the work that ran, its
+  /// time and the time it was given, in ms.
   final void Function(int ran, double ms, double budgetMs)? onIdle;
 
-  /// Old-space work now (the old-space call of flutter_gpu: 2 compacts);
-  /// null on an engine without it.
+  /// Runs old-space work now through the old-space call of flutter_gpu,
+  /// where the request 2 compacts. Null on an engine without the call.
   final int Function(int request)? oldSpace;
 
-  /// The heap's figures (the heap call of flutter_gpu: 0 old space used, 1 its
-  /// capacity, in bytes); null on an engine without it.
+  /// Returns a figure of the heap in bytes through the heap call of
+  /// flutter_gpu. 0 selects the old space used and 1 its capacity. Null on an
+  /// engine without the call.
   final int Function(int which)? heap;
 
-  /// How much the old space's capacity grows past its size after the last
-  /// compaction (0 before the first) before a scene switch's hold compacts
-  /// it; null: never.
+  /// The growth of the capacity of the old space past its size after the
+  /// last compaction, 0 before the first, at which the hold of a scene
+  /// switch compacts it. Null turns compaction off.
   final int? compactGrowthBytes;
 
-  /// A compaction: its time in ms and the old space's capacity before and
-  /// after, in bytes (the log and the profile).
+  /// Receives each compaction with its time in ms and the capacity of the
+  /// old space before and after it, in bytes.
   final void Function(double ms, int capacityBefore, int capacityAfter)?
   onCompact;
 
   final _clock = Stopwatch()..start();
   int _frameStartUs = 0;
 
-  /// Compactions run (diagnostics, the run log).
+  /// The number of compactions run.
   int compactions = 0;
 
-  /// The old space's capacity after the last compaction.
+  /// The capacity of the old space after the last compaction.
   int _compacted = 0;
 
-  /// When the last mark was started ahead of a switch ([premark]), on
-  /// [_clock]; null: none since the last compaction.
+  /// The time on [_clock] of the last mark started ahead of a switch by
+  /// [premark]. Null when none started since the last compaction.
   int? _premarkUs;
 
-  /// Marks started ahead of a switch (diagnostics, the run log).
+  /// The number of marks started ahead of a switch.
   int premarks = 0;
 
-  /// Seconds since the mark [switchHold]'s last compaction found started
-  /// ahead; null: it marked in the hold.
+  /// The age in seconds of the early mark that the last compaction of
+  /// [switchHold] found. Null when the hold made its own mark.
   double? lastPremarkAge;
 
-  /// A scene is coming (added, or about to open): when its switch's hold
-  /// will compact ([switchHold]'s growth reached), the old space's mark
-  /// starts now, concurrently, on the VM's helper threads; finished, it
-  /// waits for the hold (up to 30 s; dart/0003), whose stop-the-world pause
-  /// is then the slide alone. At most one every 10 s.
+  /// Call it when a scene is added or about to open. When the hold of its
+  /// switch will compact, the mark of the old space starts now on the helper
+  /// threads of the VM. A finished mark waits up to 30 s for the hold
+  /// (dart/0003). The stop-the-world pause of the hold is then the slide
+  /// alone. Starts at most one mark every 10 s.
   void premark() {
     final oldSpace = this.oldSpace, heap = this.heap;
     final growth = compactGrowthBytes;
@@ -110,15 +112,14 @@ class GcPacing {
     if (oldSpace(1) & 1 != 0) premarks++;
   }
 
-  /// A scene switch's hold: the new scene's first picture is not painted
-  /// yet and the screen holds the last one. The VM's old space gives pages
-  /// back only when compacted (its sweeps leave the pages fragmented), so
-  /// once its capacity grew [compactGrowthBytes] past what the
-  /// last compaction left, it is compacted here, every isolate of the
-  /// group stopped; at a switch the closed scene's objects are garbage too.
-  /// Its use is no measure of what is free: it counts what was allocated
-  /// since the last mark, dead or not. Whether the game's state changes:
-  /// never (collections move objects, not values).
+  /// Call it in the hold of a scene switch, while the first picture of the
+  /// new scene is not painted yet and the screen holds the last one. The old
+  /// space of the VM gives pages back only when it is compacted. Once its
+  /// capacity grew [compactGrowthBytes] past the size after the last
+  /// compaction, it is compacted here with every isolate of the group
+  /// stopped. The used size of the old space does not measure free memory,
+  /// since it counts every allocation since the last mark, dead or not.
+  /// Collections move objects and do not change the state of the game.
   void switchHold() {
     final oldSpace = this.oldSpace, heap = this.heap;
     final growth = compactGrowthBytes;
@@ -127,7 +128,7 @@ class GcPacing {
     if (capacity < 0 || capacity - _compacted < growth) return;
     final t0 = _clock.elapsedMicroseconds;
     if (oldSpace(2) & 2 == 0) return;
-    // A mark older than 30 s was finalized as a sweep meanwhile.
+    // A mark older than 30 s was finalized as a sweep in the meantime.
     final at = _premarkUs;
     lastPremarkAge = at != null && t0 - at < 30000000 ? (t0 - at) / 1e6 : null;
     _premarkUs = null;
@@ -140,19 +141,17 @@ class GcPacing {
     );
   }
 
-  /// Idle points that collected (diagnostics, the run log).
+  /// The number of idle points that collected.
   int idleCollections = 0;
 
-  /// The frame's idle point: its picture has just been recorded, or it
-  /// ended with no picture on its way, so the UI isolate (and, when the
-  /// frame fits its interval, the other isolates) has time until the
-  /// next frame is due. A young collection runs when new space holds
-  /// [idleMinBytes] and the VM expects it to fit that time, or holds
-  /// [idleMaxBytes] whatever the time: small ones where a pause costs
-  /// least, so new space never fills inside a frame (a collection there
-  /// stops the three isolates wherever they are; with little garbage they
-  /// came seconds apart and tens of ms long). A finished old-space mark is
-  /// finalized here too.
+  /// Call it at the idle point of the frame, when its picture has just been
+  /// recorded or the frame ended with no picture on its way. The UI isolate
+  /// then has time until the next frame is due, and the other isolates too
+  /// when the frame fits its interval. A young collection runs when new space
+  /// holds [idleMinBytes] and the VM expects it to fit that time, or when new
+  /// space holds [idleMaxBytes] at any time. New space then does not fill
+  /// inside a frame, where a collection stops every isolate wherever it is.
+  /// A finished old-space mark is finalized here too.
   void idlePoint() {
     final collect = this.collect;
     if (!enabled || collect == null) return;
@@ -169,13 +168,13 @@ class GcPacing {
   int? _floor;
   int _relief = 0;
 
-  /// Whether the frames now let the idle policy run (diagnostics).
+  /// True when the frames now let the idle policy run.
   bool get relieving => _relief > 0;
 
-  /// How many reliefs ran (diagnostics, the run log).
+  /// The number of reliefs that ran.
   int reliefs = 0;
 
-  /// A frame starts: balanced (the VM's threshold check runs now).
+  /// Starts a frame in balanced mode. The threshold check of the VM runs now.
   void beginFrame() {
     _frameStartUs = _clock.elapsedMicroseconds;
     if (!enabled || !_latency) return;
@@ -185,8 +184,9 @@ class GcPacing {
     );
   }
 
-  /// The frame's Dart work is done: latency until the next [beginFrame], so
-  /// the engine's idle notification after this frame doesn't reach the VM.
+  /// Ends the Dart work of the frame. The mode is latency until the next
+  /// [beginFrame], which keeps the idle notification of the engine after
+  /// this frame from the VM.
   void endFrame() {
     if (enabled && !(busy?.call() ?? false)) idlePoint();
     if (!enabled || _latency) return;
@@ -198,7 +198,7 @@ class GcPacing {
           _relief = 0;
           _floor = now;
         } else {
-          return; // stays balanced: the idle notification reaches the VM
+          return; // balanced, with the idle notification for the VM
         }
       } else if (now > floor + budget) {
         _relief = reliefFrames;
@@ -214,6 +214,6 @@ class GcPacing {
     );
   }
 
-  /// Back to the VM's own policy.
+  /// Returns to the policy of the VM.
   void stop() => beginFrame();
 }
