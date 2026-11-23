@@ -1,0 +1,35 @@
+nil	boolean	number	string	table	function	thread
+false	bad argument #1 to 'type' (value expected)
+nil	false	12.5	x	1e+100
+OBJ	OBJ
+42	string
+42
+true
+10	31	12	100	nil	nil
+255	255	1295	511	nil
+-5	nil	nil	36
+false	false	bad argument #2 to 'tonumber' (base out of range)
+false	bad argument #1 to 'tonumber' (value expected)
+0	3	b	c
+false	false	bad argument #1 to 'select' (number expected, got string)
+
+true	false	true
+3	4	false	bad argument #1 to 'rawlen' (table or string expected)
+meta	nil
+1	1
+false	table index is nil
+true	nil	true
+locked	false	cannot change a protected metatable
+false	false	bad argument #2 to '_G.setmetatable' (nil or table expected)
+ipairs	1	10
+ipairs	2	20
+__pairs	1	one
+__ipairs	1	v
+__ipairs	2	v
+nil	1	false	invalid key to 'next'
+false	false	bad argument #1 to 'pairs' (table expected, got number)
+Lua 5.2	true	true
+false	bad argument #1 to 'load' (function expected, got nil)
+false	bad argument #1 to 'load' (function expected, got table)
+true	false	bad argument #1 to 'collectgarbage' (invalid option 'bogus')
+1

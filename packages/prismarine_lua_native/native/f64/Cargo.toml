@@ -1,25 +1,25 @@
 [package]
-name = "mcsm_luac"
+name = "prismarine_luac64"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Compiles Lua source with stock Lua 5.2.3 configured like GameApp.exe (vendored C, built by build.rs) and hands back the dumped chunk"
+build = "../build.rs"
+description = "Compiles Lua source with stock Lua 5.2.3 built with double numbers, the float64 mode of prismarine_lua, and returns the dumped chunk"
 
 [lib]
-name = "mcsm_luac"
+name = "prismarine_luac64"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# The portable pow behind luai_numpow (luaconf.h), the version the mixer pins.
+# The portable pow behind luai_numpow of luaconf.h.
 libm = "=0.2.16"
 
 [build-dependencies]
 cc = "1"
 
 [profile.release]
-# No strip pass, here and for host-side proc-macros (rlsf's rustversion):
-# Xcode 27's strip leaves dylibs dyld refuses ("mis-aligned LINKEDIT string
-# pool"). In the manifest, so no build environment can lose it.
+# No strip pass, here and for host-side proc-macros: the strip of Xcode 27
+# leaves dylibs that dyld refuses ("mis-aligned LINKEDIT string pool").
 strip = "none"
 opt-level = 3
 codegen-units = 1
@@ -27,6 +27,9 @@ debug = false
 
 [profile.release.build-override]
 strip = "none"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(lua_float32)"] }
 
 [lints.clippy]
 undocumented_unsafe_blocks = "deny"

@@ -1,0 +1,8 @@
+1971-01-01 00:00:00
+Tue Tuesday Feb February 041 PM 70 %
+1970	1	1	0	0	0	5	1	false
+86400
+6	5
+number	number	nil
+false	bad argument #1 to 'os.date' (invalid conversion specifier '%Q')
+false	field 'day' missing in date table

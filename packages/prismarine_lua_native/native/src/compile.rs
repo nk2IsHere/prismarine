@@ -1,11 +1,11 @@
-//! mcsm_lua_native's library: compiles Lua source with stock Lua 5.2.3
-//! (configured like GameApp.exe; vendored C built by build.rs) and hands back
-//! the dumped chunk or the error text. Everything happens in a fresh state
-//! per call; Lua's errors are caught inside Lua (luaL_loadbufferx is a
-//! protected call), so no longjmp crosses Rust or Dart frames.
-//!
-//! `unsafe` is only the FFI edge: Lua's C API and the C ABI Dart calls
-//! (lib/src/native.dart).
+// Compiles Lua source with stock Lua 5.2.3, which build.rs builds from the
+// vendored C with the luaconf.h of the crate, and returns the dumped chunk
+// or the error text. Each call works in a fresh state. Lua catches its
+// errors inside the protected call of luaL_loadbufferx, and no longjmp
+// crosses Rust or Dart frames.
+//
+// `unsafe` is only at the FFI edge, the C API of Lua and the C ABI that Dart
+// calls.
 
 use std::ffi::{c_char, c_int, c_void, CStr};
 
@@ -35,7 +35,7 @@ extern "C" {
     fn free(p: *mut c_void);
 }
 
-/// Appends to a Vec; false when it can't grow (Lua's memory error).
+/// Appends to a Vec. Returns false when it cannot grow, a memory error of Lua.
 fn add(b: &mut Vec<u8>, bytes: &[u8]) -> bool {
     if b.try_reserve(bytes.len()).is_err() {
         return false;
@@ -44,7 +44,7 @@ fn add(b: &mut Vec<u8>, bytes: &[u8]) -> bool {
     true
 }
 
-/// lua_dump's writer: [ud] is the output Vec.
+/// The writer of lua_dump. [ud] is the output Vec.
 unsafe extern "C" fn writer(
     _l: *mut LuaState,
     p: *const c_void,
@@ -66,9 +66,9 @@ unsafe extern "C" fn writer(
     }
 }
 
-/// Compiles [src] as a text chunk named [name] in a fresh state: Ok(the
-/// dumped chunk, host layout), or Err((status, message)) — 1 a syntax
-/// error, 4 memory.
+/// Compiles [src] as the text chunk [name] in a fresh state. Returns the
+/// dumped chunk in the layout of the host, or the status and the message of
+/// the error. The status is 1 for a syntax error and 4 for memory.
 pub fn compile(src: &[u8], name: &CStr) -> Result<Vec<u8>, (i32, Vec<u8>)> {
     // SAFETY: a new state, closed below; nothing else holds it.
     let l = unsafe { luaL_newstate() };
@@ -116,23 +116,26 @@ pub fn compile(src: &[u8], name: &CStr) -> Result<Vec<u8>, (i32, Vec<u8>)> {
     r
 }
 
-/// Compiles [len] bytes of Lua source at [src] as a text chunk named
-/// [name] in a fresh state. Returns 0 and the dumped chunk (host layout) in
-/// *out, 1 (syntax error) or 4 (memory) with the error message in *out.
-/// *out is malloc'd (or null when empty); release it with mcsm_luac_free.
+/// Compiles the [len] bytes of Lua source at [src] as the text chunk [name]
+/// in a fresh state. Returns 0 with the dumped chunk in the layout of the
+/// host in *out. Returns 1 for a syntax error or 4 for memory with the error
+/// message in *out.
+/// *out is allocated with malloc, or null when empty. Release it with the
+/// free function of this library.
 ///
 /// # Safety
-/// [src] holds [len] bytes; [name] is NUL-terminated; [out] and [outlen]
-/// are writable.
-#[no_mangle]
-pub unsafe extern "C" fn mcsm_luac_compile(
+/// [src] holds [len] bytes. [name] ends with NUL. [out] and [outlen] are
+/// writable.
+#[cfg_attr(lua_float32, export_name = "prismarine_luac32_compile")]
+#[cfg_attr(not(lua_float32), export_name = "prismarine_luac64_compile")]
+pub unsafe extern "C" fn luac_compile(
     src: *const c_char,
     len: usize,
     name: *const c_char,
     out: *mut *mut c_char,
     outlen: *mut usize,
 ) -> c_int {
-    // SAFETY: the caller's contract.
+    // SAFETY: the contract of the caller.
     let (src, name) = unsafe {
         (
             std::slice::from_raw_parts(src as *const u8, len),
@@ -165,7 +168,7 @@ fn give(
     n: usize,
     status: c_int,
 ) -> c_int {
-    // SAFETY: mcsm_luac_compile's contract: both are writable.
+    // SAFETY: the contract of luac_compile makes both writable.
     unsafe {
         *out = p;
         *outlen = n;
@@ -174,10 +177,11 @@ fn give(
 }
 
 /// # Safety
-/// [p] came from mcsm_luac_compile (or is null), released once.
-#[no_mangle]
-pub unsafe extern "C" fn mcsm_luac_free(p: *mut c_void) {
-    // SAFETY: the caller's contract: malloc'd by mcsm_luac_compile.
+/// [p] came from luac_compile or is null, and is released once.
+#[cfg_attr(lua_float32, export_name = "prismarine_luac32_free")]
+#[cfg_attr(not(lua_float32), export_name = "prismarine_luac64_free")]
+pub unsafe extern "C" fn luac_free(p: *mut c_void) {
+    // SAFETY: the contract of the caller. luac_compile allocated it.
     unsafe { free(p) };
 }
 
@@ -205,12 +209,12 @@ mod tests {
     }
 }
 
-/// luaconf.h's `luai_numpow` (constant folding of `^`): the Dart VM's double
-/// `pow` (its fast paths, then the libm crate's pow), as mcsm_lua's `luaPow`
-/// and prismarine_math's `dpow` compute it, so folded constants are the same bits
-/// on every target and equal the runtime's.
+/// `luai_numpow` of luaconf.h for the constant folding of `^`. It is the
+/// double `pow` of the Dart VM with its fast paths and then the pow of the
+/// libm crate, as `dpow` of prismarine_math computes it. Folded constants are
+/// the same bits on every target and equal the results of the runtime.
 #[no_mangle]
-pub extern "C" fn mcsm_luac_pow(b: f64, e: f64) -> f64 {
+pub extern "C" fn prismarine_luac_pow(b: f64, e: f64) -> f64 {
     if e == 0.0 {
         return 1.0;
     }

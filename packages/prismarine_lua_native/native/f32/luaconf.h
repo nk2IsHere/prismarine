@@ -1,9 +1,10 @@
 /*
-** mcsm: stock Lua 5.2.3 luaconf.h configured like Minecraft: Story Mode's GameApp.exe
-** (docs/formats/lua-runtime.md): lua_Number = float with LUA_NUMBER_FLOAT instead of
-** LUA_NUMBER_DOUBLE (no IEEE754/MSASM conversion tricks), "%f" scan, float->int as the
-** exe's _ftol2, the exe's 32-bit lua_Integer, and luai_nummod as the exe's x87 code
-** ("%.14g" and strtod are stock); no compat. Every edit is marked "mcsm:".
+** prismarine: the luaconf.h of stock Lua 5.2.3 for the float32 modes of prismarine_lua.
+** lua_Number is a float with LUA_NUMBER_FLOAT in place of LUA_NUMBER_DOUBLE, which turns
+** off the IEEE754 and MSASM conversion tricks. The scan is "%f". A float converts to an
+** int by truncation, and to INT_MIN out of range. lua_Integer is 32-bit. luai_nummod is
+** the % of the float32 mode. "%.14g" and strtod are stock. No compat. Every edit is
+** marked "prismarine:".
 */
 /*
 ** $Id: luaconf.h,v 1.176.1.1 2013/04/12 18:48:47 roberto Exp $
@@ -390,8 +391,8 @@
 ** ===================================================================
 */
 
-#define LUA_NUMBER_FLOAT  /* mcsm: GameApp.exe builds float numbers without the IEEE754/MSASM tricks */
-#define LUA_NUMBER	float  /* mcsm: GameApp.exe's lua_Number is a 4-byte float */
+#define LUA_NUMBER_FLOAT  /* prismarine: float numbers without the IEEE754 and MSASM tricks */
+#define LUA_NUMBER	float  /* prismarine: a 4-byte float */
 
 /*
 @@ LUAI_UACNUMBER is the result of an 'usual argument conversion'
@@ -406,15 +407,15 @@
 @@ lua_number2str converts a number to a string.
 @@ LUAI_MAXNUMBER2STR is maximum size of previous conversion.
 */
-#define LUA_NUMBER_SCAN		"%f"  /* mcsm: float */
+#define LUA_NUMBER_SCAN		"%f"  /* prismarine: float */
 
-/* mcsm: GameApp.exe converts float->int with the CRT's _ftol2 (0xa0c110 -> 0xb50580):
-** truncation, and 0x80000000 for out-of-range values or NaN. C leaves that case
-** undefined (arm64 saturates), which made stock luac's constant dedup depend on
-** addresses for constants >= 2^31. */
+/* prismarine: truncation, and INT_MIN for a value out of range or NaN, as the x86
+** conversion instructions give. C leaves that case undefined, and arm64 saturates. The
+** constant dedup of stock luac then depends on addresses for constants of 2^31 and
+** more. */
 #define lua_number2int(i,n) \
   ((i) = ((n) >= (lua_Number)INT_MIN && (n) < -(lua_Number)INT_MIN) ? (int)(n) : INT_MIN)
-#define lua_number2integer(i,n)	lua_number2int(i,n)  /* mcsm: lua_Integer is 32-bit */
+#define lua_number2integer(i,n)	lua_number2int(i,n)  /* prismarine: lua_Integer is 32-bit */
 #define LUA_NUMBER_FMT		"%.14g"
 #define lua_number2str(s,n)	sprintf((s), LUA_NUMBER_FMT, (n))
 #define LUAI_MAXNUMBER2STR	32 /* 16 digits, sign, point, and \0 */
@@ -448,15 +449,15 @@
 /* the following operations need the math library */
 #if defined(lobject_c) || defined(lvm_c)
 #include <math.h>
-/* mcsm: as GameApp.exe's x87 code at 53-bit precision (its D3D9 device keeps the FPU
-** control word, D3DCREATE_FPU_PRESERVE): a/b in double, floor stored as float, the
-** product and difference in double. Constant folding of '%' uses this. */
+/* prismarine: the % of the float32 mode. The quotient is in double and its floor is
+** stored as a float. The product and the difference are in double. Constant folding of
+** '%' uses this. */
 #define luai_nummod(L,a,b)	((lua_Number)((double)(a) - (double)(lua_Number)l_mathop(floor)((double)(a)/(double)(b))*(double)(b)))
-/* mcsm: pow from the Rust libm crate (native/src/lib.rs mcsm_luac_pow), not the
-** platform's C library, so constant folding of '^' gives the same bytecode on every
-** target, as mcsm_lua's runtime computes '^' (docs/memory/decision-portable-float.md). */
-double mcsm_luac_pow(double a, double b);
-#define luai_numpow(L,a,b)	((lua_Number)mcsm_luac_pow((double)(a),(double)(b)))
+/* prismarine: pow from the Rust libm crate (prismarine_luac_pow of native/src/lib.rs)
+** and not from the C library of the platform. Constant folding of '^' then gives the same
+** bytecode on every target, and the same result as the runtime of prismarine_lua. */
+double prismarine_luac_pow(double a, double b);
+#define luai_numpow(L,a,b)	((lua_Number)prismarine_luac_pow((double)(a),(double)(b)))
 #endif
 
 /* these are quite standard operations */
@@ -479,7 +480,7 @@ double mcsm_luac_pow(double a, double b);
 ** CHANGE that if ptrdiff_t is not adequate on your machine. (On most
 ** machines, ptrdiff_t gives a good choice between int or long.)
 */
-#define LUA_INTEGER	int  /* mcsm: the exe's 32-bit ptrdiff_t */
+#define LUA_INTEGER	int  /* prismarine: a 32-bit lua_Integer */
 
 /*
 @@ LUA_UNSIGNED is the integral type used by lua_pushunsigned/lua_tounsigned.

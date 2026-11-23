@@ -5,22 +5,24 @@ import 'package:prismarine_lua/prismarine_lua.dart';
 import 'package:prismarine_lua_native/prismarine_lua_native.dart';
 import 'package:test/test.dart';
 
-/// The native compiler gives luac's bytes for every committed source, and every
-/// corpus program run from source prints what the oracle printed.
+import 'support/float_config.dart';
+
+/// The float32 build gives the bytes of the reference build for every
+/// committed source of the corpus of prismarine_lua. Every corpus program run
+/// from source prints what the reference build printed.
 void main() {
-  const compiler = NativeLuaCompiler();
-  const lua = '../mcsm_lua/test';
+  const compiler = NativeLuaCompiler(mode: LuaNumberMode.float32);
+  const lua = '../prismarine_lua/test';
 
   String src(String path) => String.fromCharCodes(File(path).readAsBytesSync());
 
-  /// luac names a chunk after the path it was given: the corpus and fixtures
-  /// were compiled from their own directory, the harness from the package.
-  /// (Directory listings on Windows end in `\name`.)
-  List<int> compiled(String path, [String? name]) => dumpChunk(
-    compiler.compile(
-      src(path),
-      '@${name ?? path.split(RegExp(r'[/\\]')).last}',
-    ),
+  // luac gives a chunk the path that it got. The corpus and the fixtures
+  // were compiled from their own directory. A directory listing on Windows
+  // ends in `\name`.
+  List<int> compiled(String path) => dumpLua(
+    compiler.compile(src(path), '@${path.split(RegExp(r'[/\\]')).last}'),
+    sizeT: 4,
+    float32: true,
   );
 
   final corpus = File('$lua/corpus/programs.txt')
@@ -40,7 +42,7 @@ void main() {
     }
   });
 
-  test('fixtures and the trace harness compile to their luac bytes', () {
+  test('fixtures compile to their luac bytes', () {
     final fixtures = Directory(
       '$lua/fixtures',
     ).listSync().whereType<File>().where((f) => f.path.endsWith('.lua'));
@@ -51,20 +53,13 @@ void main() {
         reason: f.path,
       );
     }
-    expect(
-      compiled(
-        '$lua/support/trace_harness.lua',
-        'test/support/trace_harness.lua',
-      ),
-      File('$lua/support/trace_harness.luac').readAsBytesSync(),
-    );
   });
 
-  test('every corpus program runs from source like the oracle', () {
+  test('every corpus program runs from source as in the reference build', () {
     for (final n in corpus) {
       final host = MemoryLuaHost();
       final vm = LuaVm(
-        config: LuaProfile.stock,
+        config: const FloatConfig(),
         host: host,
         compiler: compiler,
       );

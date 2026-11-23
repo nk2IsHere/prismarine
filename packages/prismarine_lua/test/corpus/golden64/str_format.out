@@ -1,0 +1,26 @@
+42 -7    42 42   | 00042 +42  42
+005  05 ff FF 0xff 10 010 42
+Hi!     A|B  |
+3.141590 2.50      0.333 2.2       | +1.5 1.234568e+04 1.200E-04 0.0001 1E+20
+100000 1e+06 1e-05 0.5 1.00000 0 2 2
+ -1.2|1.000e-03|00003.14|+0003.14| 2.000
+x 1 nil true
+        hi|hi        |he|    h|
+"a \"quoted\" \\ string\
+ with \0 nul and \1 ctrl and \0019"
+"0.33333333333333"
+%	a%b
+0.1	0.100
+true	1
+false	bad argument #2 to 'string.format' (number expected, got string)
+false	bad argument #2 to 'string.format' (not a non-negative number in proper range)
+false	invalid option '%y' to 'format'
+false	invalid option '%a' to 'format'
+false	bad argument #2 to 'string.format' (no value)
+false	invalid format (width or precision too long)
+false	invalid format (repeated flags)
+    T
+150	99	150
+3000000000	b2d05e00
+1000000000000000.00 0.3333333333 0.10000000000000000555
+000 0 0    +3 +3   |
