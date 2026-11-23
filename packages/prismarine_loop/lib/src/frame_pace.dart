@@ -4,12 +4,12 @@
 /// display without variable refresh shows each picture for whole frames
 /// only.
 ///
-/// The pace decides once per [window] from the steps in it. It goes down a
-/// rate when steps came late or too few of them got a picture. It goes up a
-/// rate when the time of every stage fits the faster rate. A rate that did
-/// not hold is tried again after a longer wait each time, and a scene on the
-/// edge settles on the slower rate. A replay of recorded frames steps one
-/// recorded frame each tick and leaves pacing off.
+/// The pace decides once per [window] from the steps in it. It goes down a rate
+/// when steps came late or too few of them got a picture. It goes up a rate
+/// when the time of every stage fits the faster rate. A rate that did not hold
+/// is tried again after a longer wait each time. A scene on the edge settles on
+/// the slower rate. A replay of recorded frames steps one recorded frame each
+/// tick and leaves pacing off.
 class FramePace {
   FramePace({this.enabled = true, int? fixed, this.maxDivisor = 4})
     : _fixed = fixed,
@@ -66,12 +66,12 @@ class FramePace {
   /// the game time that it steps in microseconds, or -1 when it steps nothing
   /// at this pace.
   ///
-  /// A tick starts some milliseconds after its display frame, and later when
-  /// the UI isolate was busy. The distances of ticks are therefore uneven
-  /// where those of the pictures are not. Steps are counted in display
-  /// frames instead. A grid of frame starts follows the earliest ticks. A
-  /// tick belongs to the frame that it started in. A step is as long as the
-  /// frames since the last step. The steps add up to the time of the clock.
+  /// A tick starts some milliseconds after its display frame and later when the
+  /// UI isolate was busy. The distances of ticks are therefore uneven where
+  /// those of the pictures are not. Steps are counted in display frames
+  /// instead. A grid of frame starts follows the earliest ticks. A tick belongs
+  /// to the frame of its start. A step is as long as the frames since the last
+  /// step. The steps add up to the time of the clock.
   int begin(int nowUs) {
     final grid = _gridUs;
     if (grid < 0) {

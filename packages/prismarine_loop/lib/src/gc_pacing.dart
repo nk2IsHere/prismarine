@@ -5,11 +5,11 @@ import 'dart:ui' show DartPerformanceMode, PlatformDispatcher;
 /// collects at the idle point of the frame ([idlePoint]). Collections do not
 /// change what the game computes.
 ///
-/// The engine skips its idle notification after a frame in latency mode.
-/// The mode is latency from [endFrame] to [beginFrame] and balanced in the
-/// frame. The VM does not count GPU memory that awaits finalization. When
-/// [pressure] grows by [budget] the frames stay balanced through the
-/// notification until it falls back by half or [reliefFrames] pass.
+/// The engine skips its idle notification after a frame in latency mode. The
+/// mode is latency from [endFrame] to [beginFrame] and balanced in the frame.
+/// The VM does not count GPU memory that awaits finalization. The frames stay
+/// balanced through the notification after [pressure] grows by [budget], until
+/// it falls back by half or [reliefFrames] pass.
 class GcPacing {
   GcPacing({
     required this.enabled,
@@ -95,11 +95,11 @@ class GcPacing {
   /// [switchHold] found. Null when the hold made its own mark.
   double? lastPremarkAge;
 
-  /// Call it when a scene is added or about to open. When the hold of its
-  /// switch will compact, the mark of the old space starts now on the helper
-  /// threads of the VM. A finished mark waits up to 30 s for the hold
-  /// (dart/0003). The stop-the-world pause of the hold is then the slide
-  /// alone. Starts at most one mark every 10 s.
+  /// Call it when a scene is added or about to open. The mark of the old space
+  /// starts now on the helper threads of the VM if the hold of its switch will
+  /// compact. A finished mark waits up to 30 s for the hold (dart/0003). The
+  /// stop-the-world pause of the hold is then the slide alone. Starts at most
+  /// one mark every 10 s.
   void premark() {
     final oldSpace = this.oldSpace, heap = this.heap;
     final growth = compactGrowthBytes;
@@ -146,12 +146,12 @@ class GcPacing {
 
   /// Call it at the idle point of the frame, when its picture has just been
   /// recorded or the frame ended with no picture on its way. The UI isolate
-  /// then has time until the next frame is due, and the other isolates too
+  /// then has time until the next frame is due. The other isolates have it too
   /// when the frame fits its interval. A young collection runs when new space
   /// holds [idleMinBytes] and the VM expects it to fit that time, or when new
   /// space holds [idleMaxBytes] at any time. New space then does not fill
-  /// inside a frame, where a collection stops every isolate wherever it is.
-  /// A finished old-space mark is finalized here too.
+  /// inside a frame, where a collection stops every isolate wherever it is. A
+  /// finished old-space mark is finalized here too.
   void idlePoint() {
     final collect = this.collect;
     if (!enabled || collect == null) return;

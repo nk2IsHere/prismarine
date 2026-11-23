@@ -45,9 +45,9 @@ class SnapWriter {
   /// each of them.
   final unknownKinds = <String>{};
 
-  /// Runs [write] with origins off. Objects are written as they are, even
-  /// where [SnapRegistry.originOf] gives them an origin. Use it to write the
-  /// data that the origins refer to.
+  /// Runs [write] with origins off. Objects are written as they are, even where
+  /// [SnapRegistry.originOf] gives them an origin. Use it to write the data of
+  /// the origins.
   void noOrigins(void Function() write) {
     _originsOff++;
     try {
@@ -74,8 +74,8 @@ class SnapWriter {
   void traceMark(String what) =>
       _mark(_current.isEmpty ? -1 : _current.last, what);
 
-  /// Returns the bytes and objects of each traced kind, largest first, with
-  /// [trace] on. The kind of an object is its start mark. It covers the
+  /// Returns the bytes and objects of each traced kind, largest first, while
+  /// [trace] is set. The kind of an object is its start mark. It covers the
   /// bytes up to the next mark.
   List<(String, int, int)> traceStats() {
     final bytes = <String, int>{}, count = <String, int>{};
@@ -89,8 +89,8 @@ class SnapWriter {
       ..sort((a, b) => b.$2.compareTo(a.$2));
   }
 
-  /// Returns the path of the object that was written at byte [offset], with
-  /// [trace] on.
+  /// Returns the path of the object that was written at byte [offset] while
+  /// [trace] is set.
   String at(int offset) {
     var lo = 0, hi = _traceAt.length - 1, best = -1;
     while (lo <= hi) {

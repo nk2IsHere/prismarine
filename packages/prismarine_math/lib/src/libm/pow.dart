@@ -194,9 +194,9 @@ double pow(double x, double y) {
   return s * z;
 }
 
-/// Returns [b] to the power [e] with the results of the `pow` of dart:math.
-/// The exponents 0, 1, 2, 3 and 0.5 take the short paths of dart:math, and
-/// the other cases call [pow].
+/// Returns [b] to the power [e] with the results of the `pow` of dart:math. The
+/// exponents 0, 1, 2, 3 and 0.5 take the short paths of dart:math. The other
+/// cases call [pow].
 double dpow(double b, double e) {
   if (e == 0.0) return 1.0;
   if (!e.isNaN) {

@@ -422,7 +422,7 @@ class PlanWriter {
     // them, else a copy goes here. A view crosses a port with the whole
     // buffer that it views. A view of part of a buffer therefore goes as a
     // copy of its own bytes.
-    // alloc: a block sent anew is copied anyway, .buffer tells a view
+    // alloc: a block sent anew is copied anyway, .buffer reveals a view
     final whole = b.lengthInBytes == b.buffer.lengthInBytes;
     // alloc: a block sent anew, as before, or the own bytes of a view
     _bytes.add(sentThroughPort && whole ? b : Uint8List.fromList(b));
@@ -525,8 +525,8 @@ class PlanWriter {
   final _roleSent = HashMap<Uint8List, int>.identity();
 
   /// Writes the bytes [b] of [role] for this frame. It writes the bytes last
-  /// sent for the role again when [b] holds the same bytes, and the role of
-  /// the reader keeps its bytes object. Otherwise it writes [b] as a block.
+  /// sent for the role again when [b] holds the same bytes. The role of the
+  /// reader then keeps its bytes object. Otherwise it writes [b] as a block.
   void _roleBytes(Uint8List role, Uint8List b) {
     if (store case final st? when b.isNotEmpty) {
       _roleNative(st, role, b);

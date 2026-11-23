@@ -95,10 +95,10 @@ extension _PassEdits on PlanWriter {
     return true;
   }
 
-  /// Writes [r], a pass with rows, into the kept pass at [at]. It writes
-  /// every draw again, most of them by id, and then the changes of the rows.
-  /// The pass of the reader holds the attachments of [last]. Returns true
-  /// when it wrote the pass.
+  /// Writes [r], a pass with rows, into the kept pass at [at]. It writes every
+  /// draw again, most of them by id. The changes of the rows follow. The pass
+  /// of the reader holds the attachments of [last]. Returns true when it wrote
+  /// the pass.
   bool _passRows(int at, RenderPassPlan last, RenderPassPlan r) {
     final id = _passIds[at];
     if (id < 0 || !identical(_objects[id], _keptPass[at])) return false;

@@ -8,8 +8,8 @@ import 'dart:io' show Platform;
 import 'thread_linux.dart';
 import 'thread_roles.dart';
 
-/// Gives the calling thread the frame role, for work that the frame of the
-/// UI waits on. Cheap when the thread already has the role.
+/// Gives the calling thread the frame role, for work that holds up the frame of
+/// the UI. Cheap when the thread already has the role.
 void raiseThreadQos() => _roles?.raise();
 
 /// Gives the calling thread the background role. Returns the value to

@@ -64,8 +64,8 @@ class HistoryMeta {
 enum MarkTool { point, arrow, pen, box }
 
 /// One mark on a frame with its tool, its points as fractions from 0 to 1 of
-/// the 16:9 frame with x right and y down, and a label such as the number of
-/// a point.
+/// the 16:9 frame with x right and y down. It has a label, such as the number
+/// of a point.
 class Mark {
   Mark(this.tool, List<(double, double)> points, {this.label})
     : points = List.unmodifiable(points);

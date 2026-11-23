@@ -6,8 +6,8 @@ import 'package:test/test.dart';
 
 import 'ktx2_test.dart' show keyValues;
 
-/// Returns a one-mesh GLB of [positions], with x, y and z per vertex, and two
-/// index lists over them. The positions are in a strided view when
+/// Returns a one-mesh GLB of [positions], with x, y and z per vertex. It has
+/// two index lists over them. The positions are in a strided view when
 /// [interleaved] is true.
 ({Map<String, Object?> json, Uint8List bin}) _mesh(
   List<double> positions, {

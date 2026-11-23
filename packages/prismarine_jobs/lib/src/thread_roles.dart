@@ -52,9 +52,9 @@ const winAboveNormal = 1, winBelowNormal = -1;
 const linuxSchedOther = 0, linuxSchedBatch = 3;
 
 /// The steps of the nice of frame threads above the nice of the process on
-/// Linux, where RLIMIT_NICE allows it, and of background threads below it.
-/// The raster thread of the engine on Android is at -5. The background step
-/// is the default step of `nice`.
+/// Linux, where RLIMIT_NICE allows it, with the step of background threads
+/// below it. The raster thread of the engine on Android is at -5. The
+/// background step is the default step of `nice`.
 const linuxFrameStep = 5, linuxBackgroundStep = 10;
 
 /// Linux I/O priorities from `linux/ioprio.h`. Frame reads use the highest
@@ -153,14 +153,13 @@ class ThreadRoles {
   }
 
   /// Gives the calling thread the background role for a while. Returns the
-  /// value that [restore] puts back, or null when nothing changed. The role
-  /// is utility on macOS. On Windows it is below normal in EcoQoS. Background
-  /// mode is not used, since its very low I/O and memory priority would stall
-  /// a load that a frame waits on. On Linux it is [backgroundNice] where the
-  /// thread may return from it, else SCHED_BATCH, with the lowest level of
-  /// the best-effort I/O class. A raised nice cannot be lowered again without
-  /// RLIMIT_NICE. A pool thread must return to its role for the next
-  /// isolate.
+  /// value that [restore] puts back, or null when nothing changed. The role is
+  /// utility on macOS. On Windows it is below normal in EcoQoS. Background mode
+  /// is not used, since its very low I/O and memory priority would stall a load
+  /// that a frame needs. On Linux it is [backgroundNice] where the thread may
+  /// return from it, else SCHED_BATCH, with the lowest level of the best-effort
+  /// I/O class. A raised nice cannot be lowered again without RLIMIT_NICE. A
+  /// pool thread must return to its role for the next isolate.
   int? lower() {
     if (niced) return null;
     switch (os) {

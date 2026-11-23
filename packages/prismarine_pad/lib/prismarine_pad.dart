@@ -89,9 +89,9 @@ class HostPads {
   /// True when SDL could not start. No pad is read then.
   bool get unavailable => _unavailable;
 
-  /// The pad to play with. Null selects the last pad used, else the first
-  /// pad. A device selects only that pad, which reads as none while it is
-  /// not connected.
+  /// The pad in use for play. Null selects the last pad used, else the first
+  /// pad. A device selects only that pad, which reads as none while it is not
+  /// connected.
   PadDevice? chosen;
 
   /// The connected pads, in connection order.

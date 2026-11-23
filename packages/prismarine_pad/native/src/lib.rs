@@ -377,7 +377,7 @@ pub extern "C" fn prismarine_pad_read_chosen(uuid_hi: u64, uuid_lo: u64, nth: u3
     read(Choice::Pad { uuid, nth })
 }
 
-/// The pad that the player plays with.
+/// The pad that the player uses.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Choice {
     /// The last pad on which a button or stick moved, else the first (Auto).

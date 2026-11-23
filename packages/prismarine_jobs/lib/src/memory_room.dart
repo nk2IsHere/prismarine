@@ -69,10 +69,9 @@ class MemoryRoom {
 
   /// Returns true when the readings [now] leave room for reads far ahead.
   /// [before] holds the readings of the check before, for paging. Reads far
-  /// ahead fit with no memory pressure, no paging since [before],
-  /// [minFreeMb] available to the system, the cgroup of the process and the
-  /// commit limit where the OS gives them, and the process within its
-  /// budget.
+  /// ahead fit with no memory pressure, no paging since [before], [minFreeMb]
+  /// available to the system, the cgroup of the process and the commit limit
+  /// where the OS gives them. The process must be within its budget too.
   bool decide(MemoryReadings now, MemoryReadings? before) {
     final budget = budgetMb ?? (now.physicalMb * 2) ~/ 5;
     final paging =

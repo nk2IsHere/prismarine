@@ -11,7 +11,7 @@ class _Thread implements ThreadCalls {
   bool? eco;
   int io = 0, slc = 0;
 
-  /// True when the kernel keeps a requested slice, from 6.12 on.
+  /// True when the kernel keeps a requested slice, as Linux 6.12 and later do.
   final bool slices;
   final calls = <String>[];
 

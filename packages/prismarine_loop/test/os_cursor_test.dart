@@ -26,7 +26,7 @@ void main() {
     expect(c.calls, isEmpty);
     h.over = true;
     expect(c.depth, 1);
-    h.over = true; // repeated enter: no second hide
+    h.over = true; // a repeated enter hides once
     expect(c.calls, [true]);
     h.over = false; // to the panel or out of the window
     expect(c.depth, 0);

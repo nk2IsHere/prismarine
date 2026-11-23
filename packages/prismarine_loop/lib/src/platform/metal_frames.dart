@@ -1,13 +1,13 @@
 // Limits the frames in flight on macOS. The frames of the app wait for the
 // GPU.
 //
-// The raster thread writes the vertices and uniforms of each composite into
-// a ring of four arenas, the HostBuffer of Impeller. It reuses an arena four
+// The raster thread writes the vertices and uniforms of each composite into a
+// ring of four arenas, the HostBuffer of Impeller. It reuses an arena four
 // frames later without waiting for the GPU. On iOS the few drawables of the
-// CAMetalLayer hold it back. On macOS nothing does. When the GPU work of the
-// 3D scene falls behind, composites queue more than four deep and one reads
-// the arena of a later one. The result is streaked triangles, garbled text or
-// a panel of the wrong colour for one or more frames.
+// CAMetalLayer hold it back. On macOS nothing does. Composites queue more than
+// four deep while the GPU work of the 3D scene falls behind. One then reads the
+// arena of a later one. The result is streaked triangles, garbled text or a
+// panel of the wrong colour for one or more frames.
 //
 // The limiter bounds that queue as the drawables do on iOS. Each frame it
 // commits an empty marker command buffer on the Metal queue of the engine.

@@ -249,13 +249,13 @@ abstract final class UiWork {
 
 /// Measures the lateness of the event loop with a 1 ms timer.
 ///
-/// [take] returns two times since the last take. `loop.lag` is the longest
-/// time the loop was held, the timed sections included, and is about the
-/// longest synchronous section. `loop.untimed` is the time it was held
-/// outside the timed UI work of [UiWork]. Causes are a GC pause of the
-/// isolate group, the build, layout and compositing of Flutter, timers, port
-/// messages and a thread that the OS did not schedule while work was due. A
-/// lateness under 0.5 ms per tick is timer jitter and does not count.
+/// [take] returns two times since the last take. `loop.lag` is the longest time
+/// the loop was held, the timed sections included. It is about the longest
+/// synchronous section. `loop.untimed` is the time it was held outside the
+/// timed UI work of [UiWork]. Causes are a GC pause of the isolate group, the
+/// build, layout and compositing of Flutter, timers, port messages and a thread
+/// that the OS did not schedule while work was due. A lateness under 0.5 ms per
+/// tick is timer jitter and does not count.
 class LoopMonitor {
   LoopMonitor() {
     _clock.start();

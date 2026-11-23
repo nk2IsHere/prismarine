@@ -115,9 +115,9 @@ class JobPool {
   int get running => _running;
   int get runningBackground => _runningBackground;
 
-  /// Runs [job] on a worker isolate. [job] and the values that it captures
-  /// must be sendable, such as strings, numbers and lists, and not open files
-  /// or ports.
+  /// Runs [job] on a worker isolate. [job] and the values that it captures must
+  /// be sendable, such as strings, numbers and lists. Open files and ports are
+  /// not sendable.
   Future<T> run<T>(
     FutureOr<T> Function() job, {
     JobPriority priority = JobPriority.background,
@@ -187,8 +187,8 @@ class JobPool {
     while (_running < workers && _queue.isNotEmpty) {
       final j = _queue.first;
       final bg = j.priority == JobPriority.background;
-      // Background jobs queue last. When they are at their limit or held,
-      // every job left in the queue waits too.
+      // Background jobs queue last. Every job left in the queue waits too while
+      // they are at their limit or held.
       if (bg &&
           (_runningBackground >= backgroundWorkers || _heldUntil != null)) {
         break;

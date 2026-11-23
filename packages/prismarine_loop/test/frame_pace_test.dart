@@ -53,7 +53,7 @@ void main() {
 
   test('late steps take the pace down and the slower pace steps evenly', () {
     final p = pace();
-    // Every step takes two display frames, and every step is late at pace 1.
+    // Every step takes two display frames and every step is late at pace 1.
     final a = _run(
       p,
       from: 0,

@@ -29,8 +29,8 @@ final class HeapSnapshots {
   final List<double> _times;
   int _next = 0;
 
-  /// Writes the snapshot that is due at game time [t], if any, and reports
-  /// to [log].
+  /// Writes the snapshot that is due at game time [t], if any. Reports to
+  /// [log].
   void step(double t, void Function(String)? log) {
     if (_next >= _times.length || t < _times[_next]) return;
     final want = _times[_next++];

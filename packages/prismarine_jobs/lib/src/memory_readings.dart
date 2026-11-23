@@ -43,8 +43,8 @@ class MemoryReadings {
   final int pagedOutMb;
 
   /// True when the OS reports that memory is short. It is a pressure level
-  /// above normal on macOS, and the low-memory resource notification or a
-  /// memory load of 90 % on Windows.
+  /// above normal on macOS. On Windows it is the low-memory resource
+  /// notification or a memory load of 90 %.
   final bool pressure;
 
   @override
@@ -183,7 +183,7 @@ Pointer<Uint8> _alloc(int bytes) {
           Pointer<Void> Function(Uint32, IntPtr),
           Pointer<Void> Function(int, int)
         >('LocalAlloc');
-    return localAlloc(0x40, bytes).cast(); // LPTR: fixed, zeroed
+    return localAlloc(0x40, bytes).cast(); // LPTR, fixed and zeroed
   }
   final malloc = DynamicLibrary.process()
       .lookupFunction<
