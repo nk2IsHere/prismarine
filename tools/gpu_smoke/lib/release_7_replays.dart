@@ -1,4 +1,4 @@
-part of 'mcsm7.dart';
+part of 'release_7.dart';
 
 extension _Replays on _Smoke {
   // 2d. Replays into an MRT pass (RGBA8 + R32F + depth, as the merged

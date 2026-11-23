@@ -1,207 +1,207 @@
 {
-  "S2QuadVertex": {
+  "QuadVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_quad.vert",
+    "file": "shaders/features/quad.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2DepthVertex": {
+  "DepthVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_depth.vert",
+    "file": "shaders/features/depth.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2BigUboFragment": {
+  "BigUboFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_big_ubo.frag",
+    "file": "shaders/features/big_ubo.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2StorageFragment": {
+  "StorageFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_storage.frag",
+    "file": "shaders/features/storage.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2LayersFragment": {
+  "LayersFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_layers.frag",
+    "file": "shaders/features/layers.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2DepthMsFragment": {
+  "DepthMsFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_depth_ms.frag",
+    "file": "shaders/features/depth_ms.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2SampleFragment": {
+  "SampleFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_sample.frag",
+    "file": "shaders/features/sample.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2ColorFragment": {
+  "ColorFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_color.frag",
+    "file": "shaders/features/color.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2OutputsFragment": {
+  "OutputsFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_outputs.frag",
+    "file": "shaders/features/outputs.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2Compute": {
+  "Compute": {
     "type": "compute",
-    "file": "shaders/s2/s2_compute.comp",
+    "file": "shaders/features/compute.comp",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2DepthOnlyFragment": {
+  "DepthOnlyFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_depth_only.frag",
+    "file": "shaders/features/depth_only.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2ShadowFragment": {
+  "ShadowFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_shadow.frag",
+    "file": "shaders/features/shadow.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2SampleAtFragment": {
+  "SampleAtFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_sample_at.frag",
+    "file": "shaders/features/sample_at.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2LayerLodFragment": {
+  "LayerLodFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_layer_lod.frag",
+    "file": "shaders/features/layer_lod.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2AttribVertex": {
+  "AttribVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_attrib.vert",
+    "file": "shaders/features/attrib.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2VColorFragment": {
+  "VColorFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_vcolor.frag",
+    "file": "shaders/features/vcolor.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2SteppedVertex": {
+  "SteppedVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_stepped.vert",
+    "file": "shaders/features/stepped.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2LayeredVertex": {
+  "LayeredVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_layered.vert",
+    "file": "shaders/features/layered.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2LayerColorFragment": {
+  "LayerColorFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_layer_color.frag",
+    "file": "shaders/features/layer_color.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2CubeFragment": {
+  "CubeFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_cube.frag",
+    "file": "shaders/features/cube.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2TexelFragment": {
+  "TexelFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_texel.frag",
+    "file": "shaders/features/texel.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2AtomicsCompute": {
+  "AtomicsCompute": {
     "type": "compute",
-    "file": "shaders/s2/s2_atomics.comp",
+    "file": "shaders/features/atomics.comp",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2CountersFragment": {
+  "CountersFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_counters.frag",
+    "file": "shaders/features/counters.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2ImagesCompute": {
+  "ImagesCompute": {
     "type": "compute",
-    "file": "shaders/s2/s2_images.comp",
+    "file": "shaders/features/images.comp",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2Grid4Fragment": {
+  "Grid4Fragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_grid4.frag",
+    "file": "shaders/features/grid4.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2IeeeFragment": {
+  "IeeeFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_ieee.frag",
+    "file": "shaders/features/ieee.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
@@ -209,9 +209,9 @@
     "metal_safe_math": true,
     "spirv_optimize": false
   },
-  "S2InvariantVertex": {
+  "InvariantVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_invariant.vert",
+    "file": "shaders/features/invariant.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
@@ -219,65 +219,65 @@
     "metal_preserve_invariance": true,
     "metal_safe_math": true
   },
-  "S2BaseFragment": {
+  "BaseFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_base.frag",
+    "file": "shaders/features/base.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2SkinCompute": {
+  "SkinCompute": {
     "type": "compute",
-    "file": "shaders/s2/s2_skin.comp",
+    "file": "shaders/features/skin.comp",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2SeparateFragment": {
+  "SeparateFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_separate.frag",
+    "file": "shaders/features/separate.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2PullVertex": {
+  "PullVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_pull.vert",
+    "file": "shaders/features/pull.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2PullInputVertex": {
+  "PullInputVertex": {
     "type": "vertex",
-    "file": "shaders/s2/s2_pull_input.vert",
+    "file": "shaders/features/pull_input.vert",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2PullFragment": {
+  "PullFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_pull.frag",
+    "file": "shaders/features/pull.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2Texel4Fragment": {
+  "Texel4Fragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_texel4.frag",
+    "file": "shaders/features/texel4.frag",
     "targets": [
       "metal_desktop",
       "vulkan"
     ]
   },
-  "S2PullUnusedFragment": {
+  "PullUnusedFragment": {
     "type": "fragment",
-    "file": "shaders/s2/s2_pull_unused.frag",
+    "file": "shaders/features/pull_unused.frag",
     "targets": [
       "metal_desktop",
       "vulkan"

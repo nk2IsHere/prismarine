@@ -1,4 +1,4 @@
-part of 'mcsm9.dart';
+part of 'release_9.dart';
 
 // Sampler state, copies and mip generation, vertex formats and step rates,
 // layered passes and cube arrays.
@@ -15,31 +15,31 @@ Future<List<int>> _pixel(gpu.Texture t, int x, int y) async {
   return bytes.buffer.asUint8List(bytes.offsetInBytes + i, 4).toList();
 }
 
-Future<String?> _samplers(_S2 s2) async {
+Future<String?> _samplers(_Kit kit) async {
   // Comparison: a D32 float depth of 0.25, references either side of it.
-  final depth = s2.ctx.createTexture(
+  final depth = kit.ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
     16,
     format: gpu.PixelFormat.d32Float,
   );
-  await _depthPass(s2, depth, 0.25);
+  await _depthPass(kit, depth, 0.25);
   for (final (ref, want) in [(0.2, 255), (0.3, 0)]) {
-    final out = s2.rgba8(16);
-    await s2.draw(out, 'S2ShadowFragment', (p, f) {
+    final out = kit.rgba8(16);
+    await kit.draw(out, 'ShadowFragment', (p, f) {
       p.bindTexture(
         f.getUniformSlot('shadow'),
         depth,
         sampler: gpu.McsmSampler(compare: gpu.CompareFunction.less),
       );
-      p.bindUniform(f.getUniformSlot('Ref'), s2.floats([ref, 0, 0, 0]));
+      p.bindUniform(f.getUniformSlot('Ref'), kit.floats([ref, 0, 0, 0]));
     });
     final c = await centre(out);
     if ((c[0] - want).abs() > 2)
       return 'compare at $ref: got $c, want red $want';
   }
   // Two mip levels of different colours, a border, LOD clamps.
-  final t = s2.ctx.createTexture(
+  final t = kit.ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     8,
     8,
@@ -79,10 +79,10 @@ Future<String?> _samplers(_S2 s2) async {
     ),
   ];
   for (final (at, sampler, want, name) in cases) {
-    final out = s2.rgba8(16);
-    await s2.draw(out, 'S2SampleAtFragment', (p, f) {
+    final out = kit.rgba8(16);
+    await kit.draw(out, 'SampleAtFragment', (p, f) {
       p.bindTexture(f.getUniformSlot('source'), t, sampler: sampler);
-      p.bindUniform(f.getUniformSlot('At'), s2.floats(at));
+      p.bindUniform(f.getUniformSlot('At'), kit.floats(at));
     });
     final c = await centre(out);
     if (!near(c, want)) return '$name: got $c, want $want';
@@ -90,8 +90,8 @@ Future<String?> _samplers(_S2 s2) async {
   return null;
 }
 
-Future<String?> _copies(_S2 s2) async {
-  final ctx = s2.ctx;
+Future<String?> _copies(_Kit kit) async {
+  final ctx = kit.ctx;
   final colour = [30, 200, 120, 255];
   final source = ctx.createTexture(
     gpu.StorageMode.devicePrivate,
@@ -134,15 +134,15 @@ Future<String?> _copies(_S2 s2) async {
     gpu.TextureRegion(round),
   );
   if (!await done(cb)) return 'the copies failed';
-  final out = s2.rgba8(16);
-  await s2.draw(out, 'S2SampleAtFragment', (p, f) {
+  final out = kit.rgba8(16);
+  await kit.draw(out, 'SampleAtFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('source'), mipped, sampler: _nearest);
-    p.bindUniform(f.getUniformSlot('At'), s2.floats([0.5, 0.5, 1, 0]));
+    p.bindUniform(f.getUniformSlot('At'), kit.floats([0.5, 0.5, 1, 0]));
   });
   final c = await centre(out);
   if (!near(c, colour)) return 'slice 1 to mip 1: got $c, want $colour';
-  final out2 = s2.rgba8(16);
-  await s2.draw(out2, 'S2SampleFragment', (p, f) {
+  final out2 = kit.rgba8(16);
+  await kit.draw(out2, 'SampleFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('source'), round, sampler: _nearest);
   });
   final c2 = await centre(out2);
@@ -161,18 +161,18 @@ Future<String?> _copies(_S2 s2) async {
   array.overwrite(_texels(64, colour), slice: 1);
   final cb2 = ctx.createCommandBuffer()..generateMipmaps(array);
   if (!await done(cb2)) return 'mip generation failed';
-  final out3 = s2.rgba8(16);
-  await s2.draw(out3, 'S2LayerLodFragment', (p, f) {
+  final out3 = kit.rgba8(16);
+  await kit.draw(out3, 'LayerLodFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('layers'), array, sampler: _nearest);
-    p.bindUniform(f.getUniformSlot('At'), s2.floats([1, 1, 0, 0]));
+    p.bindUniform(f.getUniformSlot('At'), kit.floats([1, 1, 0, 0]));
   });
   final c3 = await centre(out3);
   if (!near(c3, colour)) return 'array layer 1 mip 1: got $c3, want $colour';
   return null;
 }
 
-Future<String?> _vertexFormats(_S2 s2) async {
-  final ctx = s2.ctx;
+Future<String?> _vertexFormats(_Kit kit) async {
+  final ctx = kit.ctx;
   // Positions as float32x2, colours as unorm8x4; then positions as half2.
   final quad = [
     -1.0,
@@ -211,8 +211,8 @@ Future<String?> _vertexFormats(_S2 s2) async {
     (f16, gpu.VertexFormat.float16x2, 8, 4),
   ]) {
     final pipeline = ctx.createRenderPipeline(
-      s2.shader('S2AttribVertex'),
-      s2.shader('S2VColorFragment'),
+      kit.shader('AttribVertex'),
+      kit.shader('VColorFragment'),
       vertexLayout: gpu.VertexLayout(
         buffers: [
           gpu.VertexBuffer(
@@ -234,7 +234,7 @@ Future<String?> _vertexFormats(_S2 s2) async {
       ),
     );
     final buffer = ctx.createDeviceBufferWithCopy(data);
-    final out = s2.rgba8(16);
+    final out = kit.rgba8(16);
     final cb = ctx.createCommandBuffer();
     cb.createRenderPass(
         gpu.RenderTarget.singleColor(
@@ -257,8 +257,8 @@ Future<String?> _vertexFormats(_S2 s2) async {
 
   // A per-instance tint advancing every two instances.
   final pipeline = ctx.createRenderPipeline(
-    s2.shader('S2SteppedVertex'),
-    s2.shader('S2VColorFragment'),
+    kit.shader('SteppedVertex'),
+    kit.shader('VColorFragment'),
     vertexLayout: gpu.VertexLayout(
       buffers: [
         gpu.VertexBuffer(
@@ -289,7 +289,7 @@ Future<String?> _vertexFormats(_S2 s2) async {
   final tints = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(Uint8List.fromList([250, 0, 0, 255, 0, 0, 250, 255])),
   );
-  final out = s2.rgba8(16);
+  final out = kit.rgba8(16);
   final cb = ctx.createCommandBuffer();
   cb.createRenderPass(
       gpu.RenderTarget.singleColor(
@@ -297,7 +297,7 @@ Future<String?> _vertexFormats(_S2 s2) async {
       ),
     )
     ..bindPipeline(pipeline)
-    ..bindVertexBuffer(s2.quad)
+    ..bindVertexBuffer(kit.quad)
     ..bindVertexBuffer(
       gpu.BufferView(tints, offsetInBytes: 0, lengthInBytes: 8),
       slot: 1,
@@ -319,8 +319,8 @@ Future<String?> _vertexFormats(_S2 s2) async {
   return ok ? null : 'step rate 2: rows $row0 $row1';
 }
 
-Future<String?> _layered(_S2 s2) async {
-  final ctx = s2.ctx;
+Future<String?> _layered(_Kit kit) async {
+  final ctx = kit.ctx;
   final array = ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     8,
@@ -329,8 +329,8 @@ Future<String?> _layered(_S2 s2) async {
     layers: 4,
   );
   final pipeline = ctx.createRenderPipeline(
-    s2.shader('S2LayeredVertex'),
-    s2.shader('S2LayerColorFragment'),
+    kit.shader('LayeredVertex'),
+    kit.shader('LayerColorFragment'),
   );
   final cb = ctx.createCommandBuffer();
   cb.createRenderPass(
@@ -343,16 +343,16 @@ Future<String?> _layered(_S2 s2) async {
       ),
     )
     ..bindPipeline(pipeline)
-    ..bindVertexBuffer(s2.quad)
+    ..bindVertexBuffer(kit.quad)
     ..draw(6, instanceCount: 4);
   if (!await done(cb)) return 'the layered pass failed';
   for (var layer = 0; layer < 4; layer++) {
-    final out = s2.rgba8(16);
-    await s2.draw(out, 'S2LayerLodFragment', (p, f) {
+    final out = kit.rgba8(16);
+    await kit.draw(out, 'LayerLodFragment', (p, f) {
       p.bindTexture(f.getUniformSlot('layers'), array, sampler: _nearest);
       p.bindUniform(
         f.getUniformSlot('At'),
-        s2.floats([layer.toDouble(), 0, 0, 0]),
+        kit.floats([layer.toDouble(), 0, 0, 0]),
       );
     });
     final c = await centre(out);
@@ -380,10 +380,10 @@ Future<String?> _layered(_S2 s2) async {
       slice: face,
     );
   }
-  final out = s2.rgba8(16);
-  await s2.draw(out, 'S2CubeFragment', (p, f) {
+  final out = kit.rgba8(16);
+  await kit.draw(out, 'CubeFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('cubes'), cubes, sampler: _nearest);
-    p.bindUniform(f.getUniformSlot('At'), s2.floats([1, 0, 0, 0]));
+    p.bindUniform(f.getUniformSlot('At'), kit.floats([1, 0, 0, 0]));
   });
   final c = await centre(out);
   // Face 6 is cube 1's +X.

@@ -1,4 +1,4 @@
-part of 'mcsm7.dart';
+part of 'release_7.dart';
 
 extension _Cost on _Smoke {
   // 4b. Per-pass CPU cost: a command buffer, one pass with one draw, a

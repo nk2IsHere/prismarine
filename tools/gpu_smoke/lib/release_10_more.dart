@@ -1,4 +1,4 @@
-// mcsm10 checks, continued (mcsm10.dart): resources a pixel stage declares
+// mcsm10 checks, continued (release_10.dart): resources a pixel stage declares
 // but never reads, bindings changed and restored between draws, leaf
 // indirect draws and an sRGB view of a UNORM target.
 import 'dart:typed_data';
@@ -6,10 +6,10 @@ import 'dart:typed_data';
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:vector_math/vector_math.dart';
 
-import 'mcsm10.dart' show mcsm10Centre;
+import 'release_10.dart' show release10Centre;
 
 /// Runs the checks through [check] (which logs and records each result).
-Future<void> mcsm10MoreChecks(
+Future<void> release10MoreChecks(
   gpu.ShaderLibrary lib,
   Future<void> Function(String, Future<String?> Function()) check,
 ) async {
@@ -28,7 +28,7 @@ Future<void> mcsm10MoreChecks(
       view(Float32List.fromList([...List.filled(16, 0.0), r, g, b, 1]));
   final zeros = view(Uint32List(4));
   final unity = view(Float32List.fromList([1, 1, 1, 1]));
-  final vs = lib['S2PullVertex']!;
+  final vs = lib['PullVertex']!;
 
   // An RGBA8 render target (on Vulkan, mutable to its sRGB twin).
   gpu.Texture target() => ctx.createTexture(
@@ -73,10 +73,10 @@ Future<void> mcsm10MoreChecks(
     for (final step in steps) {
       step(pass);
     }
-    return mcsm10Centre(cb, readBack ?? t);
+    return release10Centre(cb, readBack ?? t);
   }
 
-  final unusedFs = lib['S2PullUnusedFragment']!;
+  final unusedFs = lib['PullUnusedFragment']!;
   await check('resources a pixel stage declares but never reads', () async {
     final c = await run(unusedFs, [
       (pass) => pass
@@ -98,7 +98,7 @@ Future<void> mcsm10MoreChecks(
     return near(c, [64, 128, 191, 255]);
   });
 
-  final fs = lib['S2PullFragment']!;
+  final fs = lib['PullFragment']!;
   void Function(gpu.RenderPass) drawWith(gpu.BufferView rows) =>
       (pass) => pass
         ..bindStorageBuffer(fs.getStorageBufferSlot('RawPullRows'), rows)

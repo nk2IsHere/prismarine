@@ -1,4 +1,4 @@
-part of 'mcsm7.dart';
+part of 'release_7.dart';
 
 extension _Targets on _Smoke {
   // 2. Two targets of different formats in one pass, then the R32F one

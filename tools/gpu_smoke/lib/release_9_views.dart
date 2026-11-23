@@ -1,10 +1,10 @@
-part of 'mcsm9.dart';
+part of 'release_9.dart';
 
 // Texture views: a mip level built from the level above in a render pass
 // (S2's MakeMipLevel), and one layer of an array rendered as a 2D target.
 
-Future<String?> _views(_S2 s2) async {
-  final ctx = s2.ctx;
+Future<String?> _views(_Kit kit) async {
+  final ctx = kit.ctx;
   final mipped = ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
@@ -15,11 +15,11 @@ Future<String?> _views(_S2 s2) async {
   final level0 = mipped.makeView();
   final level1 = mipped.makeView(baseMipLevel: 1);
   // Level 1 from level 0, in one pass on the same texture.
-  await s2.draw(level1, 'S2SampleFragment', (p, f) {
+  await kit.draw(level1, 'SampleFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('source'), level0, sampler: _nearest);
   });
-  final out = s2.rgba8(8);
-  await s2.draw(out, 'S2SampleFragment', (p, f) {
+  final out = kit.rgba8(8);
+  await kit.draw(out, 'SampleFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('source'), level1, sampler: _nearest);
   });
   final c = await centre(out);
@@ -28,15 +28,15 @@ Future<String?> _views(_S2 s2) async {
   }
 
   // Layer 3 of the array as a plain 2D target, then sampled from the array.
-  final ph = _ph(s2);
+  final ph = _ph(kit);
   final layer3 = ph.layers.makeView(baseLayer: 3);
-  await s2.draw(layer3, 'S2ColorFragment', (p, f) {
-    p.bindUniform(f.getUniformSlot('Paint'), s2.floats([0.25, 0.75, 0.5, 1]));
+  await kit.draw(layer3, 'ColorFragment', (p, f) {
+    p.bindUniform(f.getUniformSlot('Paint'), kit.floats([0.25, 0.75, 0.5, 1]));
   });
-  final g = s2.rgba8(16);
-  await s2.draw(g, 'S2LayersFragment', (p, f) {
+  final g = kit.rgba8(16);
+  await kit.draw(g, 'LayersFragment', (p, f) {
     _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
-    _pick(s2, p, f, 3, 0);
+    _pick(kit, p, f, 3, 0);
   });
   final c2 = await centre(g);
   if (!near(c2, [64, 191, 128, 255])) {
@@ -48,8 +48,8 @@ Future<String?> _views(_S2 s2) async {
 /// Both layers of a two-layer RGBA8 array rewritten from one buffer in one
 /// command buffer, as Enlighten's output is uploaded every frame, then
 /// sampled.
-Future<String?> _arrayUpload(_S2 s2) async {
-  final ctx = s2.ctx;
+Future<String?> _arrayUpload(_Kit kit) async {
+  final ctx = kit.ctx;
   final array = ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     4,
@@ -72,15 +72,15 @@ Future<String?> _arrayUpload(_S2 s2) async {
     );
   }
   await done(cb);
-  final ph = _ph(s2);
+  final ph = _ph(kit);
   for (final (layer, want) in [
     (0, [250, 20, 90, 255]),
     (1, [30, 160, 240, 255]),
   ]) {
-    final out = s2.rgba8(16);
-    await s2.draw(out, 'S2LayersFragment', (p, f) {
+    final out = kit.rgba8(16);
+    await kit.draw(out, 'LayersFragment', (p, f) {
       _bindLayers(p, f, layers: array, volume: ph.volume, grid: ph.grid);
-      _pick(s2, p, f, layer.toDouble(), 0);
+      _pick(kit, p, f, layer.toDouble(), 0);
     });
     final c = await centre(out);
     if (!near(c, want)) return 'layer $layer: got $c, want $want';

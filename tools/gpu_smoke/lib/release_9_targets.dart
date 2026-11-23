@@ -1,4 +1,4 @@
-part of 'mcsm9.dart';
+part of 'release_9.dart';
 
 // Layered textures, the added formats and multisampled depth.
 
@@ -17,8 +17,14 @@ const _layerColours = [
   [200, 200, 10, 255],
 ];
 
-void _pick(_S2 s2, gpu.RenderPass p, gpu.Shader f, double slice, double mode) {
-  p.bindUniform(f.getUniformSlot('Pick'), s2.floats([slice, mode, 0, 0]));
+void _pick(
+  _Kit kit,
+  gpu.RenderPass p,
+  gpu.Shader f,
+  double slice,
+  double mode,
+) {
+  p.bindUniform(f.getUniformSlot('Pick'), kit.floats([slice, mode, 0, 0]));
 }
 
 // Integer and 32-bit float textures can't be filtered.
@@ -27,7 +33,7 @@ final _nearest = gpu.SamplerOptions(
   magFilter: gpu.MinMagFilter.nearest,
 );
 
-/// Binds every sampler of S2LayersFragment (unused ones get placeholders:
+/// Binds every sampler of LayersFragment (unused ones get placeholders:
 /// Metal and Vulkan want every declared texture bound).
 void _bindLayers(
   gpu.RenderPass p,
@@ -76,18 +82,18 @@ class _Placeholders {
 }
 
 _Placeholders? _placeholders;
-_Placeholders _ph(_S2 s2) => _placeholders ??= _Placeholders(s2.ctx);
+_Placeholders _ph(_Kit kit) => _placeholders ??= _Placeholders(kit.ctx);
 
-Future<String?> _array(_S2 s2) async {
-  final ph = _ph(s2);
+Future<String?> _array(_Kit kit) async {
+  final ph = _ph(kit);
   for (var l = 0; l < 4; l++) {
     ph.layers.overwrite(_texels(16, _layerColours[l]), slice: l);
   }
   for (var l = 0; l < 4; l++) {
-    final target = s2.rgba8(16);
-    await s2.draw(target, 'S2LayersFragment', (p, f) {
+    final target = kit.rgba8(16);
+    await kit.draw(target, 'LayersFragment', (p, f) {
       _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
-      _pick(s2, p, f, l.toDouble(), 0);
+      _pick(kit, p, f, l.toDouble(), 0);
     });
     final c = await centre(target);
     if (!near(c, _layerColours[l])) {
@@ -97,15 +103,15 @@ Future<String?> _array(_S2 s2) async {
   return null;
 }
 
-Future<String?> _arrayTarget(_S2 s2) async {
-  final ph = _ph(s2);
+Future<String?> _arrayTarget(_Kit kit) async {
+  final ph = _ph(kit);
   // Paint layer 1 grey through a render pass on that slice, then sample it.
-  final color = s2.shader('S2ColorFragment');
-  final pipeline = s2.ctx.createRenderPipeline(
-    s2.shader('S2QuadVertex'),
+  final color = kit.shader('ColorFragment');
+  final pipeline = kit.ctx.createRenderPipeline(
+    kit.shader('QuadVertex'),
     color,
   );
-  final cb = s2.ctx.createCommandBuffer();
+  final cb = kit.ctx.createCommandBuffer();
   final pass = cb.createRenderPass(
     gpu.RenderTarget.singleColor(
       gpu.ColorAttachment(
@@ -117,24 +123,24 @@ Future<String?> _arrayTarget(_S2 s2) async {
   );
   pass
     ..bindPipeline(pipeline)
-    ..bindVertexBuffer(s2.quad)
+    ..bindVertexBuffer(kit.quad)
     ..bindUniform(
       color.getUniformSlot('Paint'),
-      s2.floats([0.5, 0.25, 0.75, 1]),
+      kit.floats([0.5, 0.25, 0.75, 1]),
     )
     ..draw(6);
   await done(cb);
-  final target = s2.rgba8(16);
-  await s2.draw(target, 'S2LayersFragment', (p, f) {
+  final target = kit.rgba8(16);
+  await kit.draw(target, 'LayersFragment', (p, f) {
     _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
-    _pick(s2, p, f, 1, 0);
+    _pick(kit, p, f, 1, 0);
   });
   final c = await centre(target);
   // Layer 2 must keep its upload.
-  final other = s2.rgba8(16);
-  await s2.draw(other, 'S2LayersFragment', (p, f) {
+  final other = kit.rgba8(16);
+  await kit.draw(other, 'LayersFragment', (p, f) {
     _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
-    _pick(s2, p, f, 2, 0);
+    _pick(kit, p, f, 2, 0);
   });
   final c2 = await centre(other);
   if (!near(c, [128, 64, 191, 255])) return 'layer 1: got $c';
@@ -142,16 +148,16 @@ Future<String?> _arrayTarget(_S2 s2) async {
   return null;
 }
 
-Future<String?> _volume(_S2 s2) async {
-  final ph = _ph(s2);
+Future<String?> _volume(_Kit kit) async {
+  final ph = _ph(kit);
   for (var z = 0; z < 4; z++) {
     ph.volume.overwrite(_texels(16, _layerColours[3 - z]), slice: z);
   }
   for (var z = 0; z < 4; z++) {
-    final target = s2.rgba8(16);
-    await s2.draw(target, 'S2LayersFragment', (p, f) {
+    final target = kit.rgba8(16);
+    await kit.draw(target, 'LayersFragment', (p, f) {
       _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
-      _pick(s2, p, f, z.toDouble(), 1);
+      _pick(kit, p, f, z.toDouble(), 1);
     });
     final c = await centre(target);
     if (!near(c, _layerColours[3 - z])) {
@@ -163,32 +169,32 @@ Future<String?> _volume(_S2 s2) async {
 
 /// Renders a colour into a texture of [format], samples it into RGBA8.
 Future<List<int>> _throughFormat(
-  _S2 s2,
+  _Kit kit,
   gpu.PixelFormat format,
   List<double> colour,
 ) async {
-  final t = s2.ctx.createTexture(
+  final t = kit.ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
     16,
     format: format,
   );
-  await s2.draw(t, 'S2ColorFragment', (p, f) {
-    p.bindUniform(f.getUniformSlot('Paint'), s2.floats(colour));
+  await kit.draw(t, 'ColorFragment', (p, f) {
+    p.bindUniform(f.getUniformSlot('Paint'), kit.floats(colour));
   });
-  final out = s2.rgba8(16);
-  await s2.draw(out, 'S2SampleFragment', (p, f) {
+  final out = kit.rgba8(16);
+  await kit.draw(out, 'SampleFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('source'), t, sampler: _nearest);
   });
   return centre(out);
 }
 
 /// A depth-only pass at depth [z] into [depth], then [read] samples it.
-Future<void> _depthPass(_S2 s2, gpu.Texture depth, double z) async {
-  final v = s2.shader('S2DepthVertex');
-  final f = s2.shader('S2DepthOnlyFragment');
-  final pipeline = s2.ctx.createRenderPipeline(v, f);
-  final cb = s2.ctx.createCommandBuffer();
+Future<void> _depthPass(_Kit kit, gpu.Texture depth, double z) async {
+  final v = kit.shader('DepthVertex');
+  final f = kit.shader('DepthOnlyFragment');
+  final pipeline = kit.ctx.createRenderPipeline(v, f);
+  final cb = kit.ctx.createCommandBuffer();
   final pass = cb.createRenderPass(
     gpu.RenderTarget(
       depthStencilAttachment: gpu.DepthStencilAttachment(
@@ -202,13 +208,13 @@ Future<void> _depthPass(_S2 s2, gpu.Texture depth, double z) async {
     ..bindPipeline(pipeline)
     ..setDepthWriteEnable(true)
     ..setDepthCompareOperation(gpu.CompareFunction.less)
-    ..bindVertexBuffer(s2.quad)
-    ..bindUniform(v.getUniformSlot('Depth'), s2.floats([z, 0, 0, 0]))
+    ..bindVertexBuffer(kit.quad)
+    ..bindUniform(v.getUniformSlot('Depth'), kit.floats([z, 0, 0, 0]))
     ..draw(6);
   await done(cb);
 }
 
-Future<String?> _formats(_S2 s2) async {
+Future<String?> _formats(_Kit kit) async {
   final cases = <(gpu.PixelFormat, List<double>, List<int>)>[
     (
       gpu.PixelFormat.r11g11b10UFloat,
@@ -236,22 +242,22 @@ Future<String?> _formats(_S2 s2) async {
     (gpu.PixelFormat.r16g16UNormInt, [0.5, 0.25, 0, 1], [128, 64, 0, 255]),
   ];
   for (final (format, colour, want) in cases) {
-    final c = await _throughFormat(s2, format, colour);
+    final c = await _throughFormat(kit, format, colour);
     if (!near(c, want)) return '$format: got $c, want $want';
   }
   for (final format in [
     gpu.PixelFormat.d16UNormInt,
     gpu.PixelFormat.d32Float,
   ]) {
-    final depth = s2.ctx.createTexture(
+    final depth = kit.ctx.createTexture(
       gpu.StorageMode.devicePrivate,
       16,
       16,
       format: format,
     );
-    await _depthPass(s2, depth, 0.25);
-    final out = s2.rgba8(16);
-    await s2.draw(out, 'S2SampleFragment', (p, f) {
+    await _depthPass(kit, depth, 0.25);
+    final out = kit.rgba8(16);
+    await kit.draw(out, 'SampleFragment', (p, f) {
       p.bindTexture(f.getUniformSlot('source'), depth, sampler: _nearest);
     });
     final c = await centre(out);
@@ -261,8 +267,8 @@ Future<String?> _formats(_S2 s2) async {
   return null;
 }
 
-Future<String?> _msaaDepth(_S2 s2) async {
-  final depth = s2.ctx.createTexture(
+Future<String?> _msaaDepth(_Kit kit) async {
+  final depth = kit.ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
     16,
@@ -270,9 +276,9 @@ Future<String?> _msaaDepth(_S2 s2) async {
     sampleCount: 2,
     textureType: gpu.TextureType.texture2DMultisample,
   );
-  await _depthPass(s2, depth, 0.5);
-  final out = s2.rgba8(16);
-  await s2.draw(out, 'S2DepthMsFragment', (p, f) {
+  await _depthPass(kit, depth, 0.5);
+  final out = kit.rgba8(16);
+  await kit.draw(out, 'DepthMsFragment', (p, f) {
     p.bindTexture(f.getUniformSlot('depth_ms'), depth, sampler: _nearest);
   });
   final c = await centre(out);

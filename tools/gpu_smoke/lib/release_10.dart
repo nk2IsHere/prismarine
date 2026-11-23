@@ -7,7 +7,7 @@
 //   second one in the pixel stage, beside a uniform block (Metal crashed in
 //   setFragmentBuffer);
 // - a four-channel unsigned texel buffer in a pixel stage;
-// - (mcsm10_more.dart) resources a pixel stage declares but never reads
+// - (release_10_more.dart) resources a pixel stage declares but never reads
 //   (Metal reflects them without an index; binding them crashed the driver
 //   in setFragmentBuffer and setFragmentTexture), bindings changed and
 //   restored between draws (the resend cut), leaf indirect draws and an sRGB
@@ -23,16 +23,18 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:vector_math/vector_math.dart';
 
-import 'mcsm10_more.dart';
+import 'release_10_more.dart';
 
 /// Runs the mcsm10 checks with [log] for SMOKE lines; true when all pass.
-Future<bool> mcsm10Checks(void Function(String) log) async {
+Future<bool> release10Checks(void Function(String) log) async {
   if (!gpu.mcsmEngine10) {
     log('SMOKE mcsm10 not on this engine or backend (no feature 4096)');
     return true;
   }
   final ctx = gpu.gpuContext;
-  final bytes = await rootBundle.load('s2_generated/s2smoke.shaderbundle');
+  final bytes = await rootBundle.load(
+    'features_generated/features.shaderbundle',
+  );
   final lib = await gpu.ShaderLibrary.fromBytes(bytes);
   if (lib == null) {
     log('SMOKE mcsm10: no S2 shader bundle');
@@ -78,7 +80,7 @@ Future<bool> mcsm10Checks(void Function(String) log) async {
       16,
       format: gpu.PixelFormat.r8g8b8a8UNormInt,
     );
-    final vs = lib[vertex]!, fs = lib['S2PullFragment']!;
+    final vs = lib[vertex]!, fs = lib['PullFragment']!;
     final pipeline = ctx.createRenderPipeline(
       vs,
       fs,
@@ -116,7 +118,7 @@ Future<bool> mcsm10Checks(void Function(String) log) async {
       ..bindStorageBuffer(fs.getStorageBufferSlot('RawPullWords'), words)
       ..bindUniform(fs.getUniformSlot('PullScale'), scale)
       ..draw(3);
-    return mcsm10Centre(cb, target);
+    return release10Centre(cb, target);
   }
 
   // R = 0.25 + 51/255 = 0.45 → 115; G 0.5 → 128; B 0.75 → 191.
@@ -126,11 +128,11 @@ Future<bool> mcsm10Checks(void Function(String) log) async {
       (c[2] - 191).abs() <= 1;
 
   await check('pixel-stage storage beside the vertex stage\'s', () async {
-    final c = await drawPulled('S2PullInputVertex', input: true);
+    final c = await drawPulled('PullInputVertex', input: true);
     return right(c) ? null : 'got $c, want [115, 128, 191, 255]';
   });
   await check('vertex stage without inputs', () async {
-    final c = await drawPulled('S2PullVertex');
+    final c = await drawPulled('PullVertex');
     return right(c) ? null : 'got $c, want [115, 128, 191, 255]';
   });
   await check('RGBA32UI texel buffer in a pixel stage', () async {
@@ -148,7 +150,7 @@ Future<bool> mcsm10Checks(void Function(String) log) async {
         ]),
       ),
     );
-    final vs = lib['S2PullInputVertex']!, fs = lib['S2Texel4Fragment']!;
+    final vs = lib['PullInputVertex']!, fs = lib['Texel4Fragment']!;
     final pipeline = ctx.createRenderPipeline(
       vs,
       fs,
@@ -184,21 +186,24 @@ Future<bool> mcsm10Checks(void Function(String) log) async {
         gpu.PixelFormat.r32g32b32a32UInt,
       )
       ..draw(3);
-    final c = await mcsm10Centre(cb, target);
+    final c = await release10Centre(cb, target);
     return (c[0] - 40).abs() <= 1 &&
             (c[1] - 80).abs() <= 1 &&
             (c[2] - 120).abs() <= 1
         ? null
         : 'got $c, want [40, 80, 120, 255]';
   });
-  await mcsm10MoreChecks(lib, check);
+  await release10MoreChecks(lib, check);
   return ok;
 }
 
 /// Submits [cb], waits for the GPU and reads [target]'s centre pixel
 /// (RGBA8) through a picture, as mcsm9's checks do (GLES gives zeros for a
 /// raw texture's own read).
-Future<List<int>> mcsm10Centre(gpu.CommandBuffer cb, gpu.Texture target) async {
+Future<List<int>> release10Centre(
+  gpu.CommandBuffer cb,
+  gpu.Texture target,
+) async {
   final done = Completer<bool>();
   cb.submit(completionCallback: done.complete);
   await done.future;

@@ -18,7 +18,7 @@ import 'package:flutter_scene/scene.dart' show baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
 /// Runs the mcsm11 checks with [log] for SMOKE lines; true when all pass.
-Future<bool> mcsm11Checks(void Function(String) log) async {
+Future<bool> release11Checks(void Function(String) log) async {
   if (!gpu.mcsmGcIdleSupported) {
     log('SMOKE mcsm11 not on this engine (no McsmDetach)');
     return true;

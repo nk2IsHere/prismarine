@@ -1,4 +1,4 @@
-part of 'mcsm7.dart';
+part of 'release_7.dart';
 
 extension _Instancing on _Smoke {
   // 1. Instancing: all four, then the last two again through an offset

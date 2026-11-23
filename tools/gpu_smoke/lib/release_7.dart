@@ -27,10 +27,10 @@ import 'package:flutter_scene/scene.dart' show baseShaderLibrary;
 import 'package:flutter_scene/src/gpu/gpu.dart' as fs;
 import 'package:vector_math/vector_math.dart';
 
-part 'mcsm7_cost.dart';
-part 'mcsm7_instancing.dart';
-part 'mcsm7_replays.dart';
-part 'mcsm7_targets.dart';
+part 'release_7_cost.dart';
+part 'release_7_instancing.dart';
+part 'release_7_replays.dart';
+part 'release_7_targets.dart';
 
 Future<Uint8List> _readRgba8(gpu.Texture t) async {
   final recorder = ui.PictureRecorder();
@@ -59,7 +59,7 @@ Future<bool> _done(gpu.CommandBuffer cb) {
   return done.future;
 }
 
-Future<bool> mcsm7Checks(void Function(String) log) async {
+Future<bool> release7Checks(void Function(String) log) async {
   final ctx = gpu.gpuContext;
   final features = fs.mcsmEngineFeatures;
   log('SMOKE mcsm features $features backend ${fs.mcsmBackend ?? 'unknown'}');

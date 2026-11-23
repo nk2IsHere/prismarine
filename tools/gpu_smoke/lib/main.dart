@@ -14,10 +14,10 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:flutter_scene/scene.dart' show Scene, baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
-import 'mcsm10.dart';
-import 'mcsm11.dart';
-import 'mcsm7.dart';
-import 'mcsm9.dart';
+import 'release_10.dart';
+import 'release_11.dart';
+import 'release_7.dart';
+import 'release_9.dart';
 
 // Each SMOKE line goes to stdout and, when GPU_SMOKE_OUT names a file, to it
 // too (a Windows GUI app has no console). Lines are ASCII, so the file reads
@@ -175,10 +175,10 @@ Future<int> _smoke() async {
     'SMOKE draw ${bare.toStringAsFixed(3)} us, '
     'draw+texture bind ${bind.toStringAsFixed(3)} us',
   );
-  final mcsm7 = await mcsm7Checks(_log);
-  final mcsm9 = await mcsm9Checks(_log);
-  final mcsm10 = await mcsm10Checks(_log);
-  final mcsm11 = await mcsm11Checks(_log);
+  final release7 = await release7Checks(_log);
+  final release9 = await release9Checks(_log);
+  final release10 = await release10Checks(_log);
+  final release11 = await release11Checks(_log);
   if (firstEmpty) {
     // ANGLE (Windows) gave an empty first readback on the stock engine too,
     // while later readbacks work. First read the same target again without
@@ -220,5 +220,5 @@ Future<int> _smoke() async {
       '(the first readback came back empty; this is a second render and readback)',
     );
   }
-  return ok && mcsm7 && mcsm9 && mcsm10 && mcsm11 ? 0 : 2;
+  return ok && release7 && release9 && release10 && release11 ? 0 : 2;
 }
