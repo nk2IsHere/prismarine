@@ -5,40 +5,6 @@ and eight coloured lights move through the hall in a light fog. Their light boun
 and the floors reflect the hall. You fly through it with the mouse and keyboard or with a gamepad. It runs on Metal on
 macOS and on Vulkan on Linux and Windows.
 
-## Running the sample
-
-You need the patched engine and the model. The steps below assume a checkout of prismarine with its toolchain set up and
-the engine fetched, as [the build page](../../docs/building.md) describes.
-
-The model is not part of the repository. `tool/fetch.dart` downloads it from Intel and prepares it in
-`~/.prismarine/sample`, or in `%LOCALAPPDATA%\prismarine\sample` on Windows. The download takes about 2.4 GB and the
-prepared scene about 0.6 GB. To keep the scene elsewhere, give `--out=<dir>` to the script and `--data=<dir>` to the
-app, or set `PRISMARINE_SAMPLE_DATA`.
-
-| Part | Download | Prepared | Default |
-|---|---|---|---|
-| Sponza base scene | 2.12 GB | 0.5 GB | yes |
-| Colorful curtains | 0.24 GB | 0.1 GB | yes, `--no-curtains` leaves them out |
-| Ivy | 0.14 GB | | no, `--ivy` adds it |
-
-On macOS:
-
-```sh
-source tools/toolchain/env.sh
-cd apps/prismarine_sample
-flutter pub get
-dart tool/fetch.dart
-tool/shaders.sh "$PRISMARINE_IMPELLERC"
-flutter build macos --release "${prismarine_engine_args[@]}"
-build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
-```
-
-On Linux, build with `flutter build linux` and start `build/linux/x64/release/bundle/prismarine_sample`. On Windows the
-steps are on [the build page](../../docs/building.md#running-sample-app).
-
-`tool/fetch.dart` takes about a minute to prepare the scene. It scales the textures to 1024 texels;
-`--texture-size=2048` gives more detail for about four times the memory.
-
 ## Controls
 
 - W, A, S and D move, Q and E move down and up, and Shift moves faster.
@@ -74,23 +40,6 @@ steps are on [the build page](../../docs/building.md#running-sample-app).
 | `--gi-off=<parts>` | Switches off parts of the indirect light, of `sky`, `probes`, `ao` and `ssr`, such as `ao,ssr`. |
 | `--gi-view=<view>` | Shows one part of the indirect light, `diffuse`, `occlusion`, `reflections` or `probes`. |
 | `--lights=<n>` | The number of point lights of the smoke frames, 8 by default. |
-
-## Frame times
-
-At 1920 by 1080 with the default effects, a Mac with an M2 Pro needs about 12 ms of GPU time per frame and shows most
-frames at 120 Hz. The indirect light costs about 1.5 to 2 ms of it and each of the two shadowed point lights about
-1.7 ms. The costs of each effect are on [the pbr page](../../docs/areas/pbr.md#costs).
-
-## Smoke test
-
-`--smoke` renders fixed frames from each camera and compares them with references in the data folder. Record the
-references once with `--smoke --record` on your computer, then run `--smoke` after a change:
-
-```sh
-B=build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
-$B --background --smoke --record
-$B --background --smoke
-```
 
 ## Platforms
 

@@ -154,8 +154,7 @@ build/linux/x64/release/bundle/prismarine_sample
 ```
 
 On Windows the commands are for PowerShell on an x64 PC and build the app into
-`build\windows\x64\runner\Release\prismarine_sample.exe`. `tool/shaders.sh` is a bash script. On Windows the build of
-the shaders runs its Dart tool directly. The sample builds on Windows, but it has not run on a Windows GPU yet.
+`build\windows\x64\runner\Release\prismarine_sample.exe`. `tool/shaders.sh` is a bash script.
 
 ```powershell
 cd apps\prismarine_sample
@@ -165,13 +164,4 @@ $E = "$env:USERPROFILE\.prismarine\engine\windows-x64\src"
 dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
 flutter build windows --release --local-engine-src-path=$E `
   --local-engine=host_release --local-engine-host=host_release
-```
-
-Run the tests of a package in its directory, `dart test` for a pure-Dart package and `flutter test` for a Flutter
-package. The first test run of `prismarine_pad` or `prismarine_audio_out` builds its Rust crate and SDL, which takes
-about a minute.
-
-```sh
-cd packages/prismarine_pad
-dart test
 ```
