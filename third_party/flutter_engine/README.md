@@ -33,17 +33,17 @@ The scripts read these settings from the environment. Each one is also read in i
 
 ## Fetching a release
 
-The GitHub release that `RELEASE` gives, now `engine-deb287481e3c-mcsm11`, holds the engine for six targets of 14 to
+The GitHub release that `RELEASE` gives, now `engine-deb287481e3c-prismarine1`, holds the engine for six targets of 14 to
 21 MB each. Each archive holds only what a release `flutter build … --local-engine` reads.
 
 | Target | Archive | Out dir for `--local-engine` |
 |---|---|---|
-| macOS arm64 | `mcsm-engine-macos-arm64.tar.xz` | `host_release_arm64` |
-| macOS Intel | `mcsm-engine-macos-x64.tar.xz` | `host_release` |
-| Linux x64 | `mcsm-engine-linux-x64.tar.xz` | `host_release` |
-| Linux arm64 | `mcsm-engine-linux-arm64.tar.xz` | `linux_release_arm64` |
-| Windows x64 | `mcsm-engine-windows-x64.tar.xz` | `host_release` |
-| Windows arm64 | `mcsm-engine-windows-arm64.tar.xz` | `host_release_arm64` |
+| macOS arm64 | `prismarine-engine-macos-arm64.tar.xz` | `host_release_arm64` |
+| macOS Intel | `prismarine-engine-macos-x64.tar.xz` | `host_release` |
+| Linux x64 | `prismarine-engine-linux-x64.tar.xz` | `host_release` |
+| Linux arm64 | `prismarine-engine-linux-arm64.tar.xz` | `linux_release_arm64` |
+| Windows x64 | `prismarine-engine-windows-x64.tar.xz` | `host_release` |
+| Windows arm64 | `prismarine-engine-windows-arm64.tar.xz` | `host_release_arm64` |
 
 You need the GitHub CLI, `gh`, logged in to an account that can read the private repository of the releases.
 
@@ -62,6 +62,12 @@ Each build checks out Flutter at the engine revision and applies `patches/*.patc
 engine with `gclient` of Chromium's depot_tools, which the scripts install and builds only the release targets that the
 Flutter tool reads. Plan on several GB of disk and about an hour per machine. The Flutter SDK that builds the app must
 be 3.47.7.
+
+A machine that holds the tree of the previous release builds the next one incrementally. Apply only the new patches,
+with `git am <patch>` in `<engine dir>/flutter` and `git apply <patch>` for a new Dart patch in
+`engine/src/flutter/third_party/dart`, then run the build step alone. For prismarine1 on the tree of mcsm11 these are
+0029, 0030, `dart/0003` and `dart/0004`. The builds then took 3 minutes for each macOS target at 6 jobs, 5 minutes for
+each Linux target at 10 jobs and 16 minutes for Windows x64 and 22 for arm64 at 12 jobs.
 
 ### macOS, arm64 and x86_64
 
@@ -156,16 +162,16 @@ The Windows and Linux embedders of Flutter draw with ANGLE and GLES or with GL o
 Impeller Vulkan path, used by default where the machine has a working Vulkan device.
 
 - Windows uses its own instance and device through `vulkan-1.dll` and a swapchain per view on its window. ANGLE is the
-  fallback when no device works. `MCSM_RENDERER=gles` forces ANGLE.
+  fallback when no device works. `PRISMARINE_RENDERER=gles` forces ANGLE.
 - Linux with GTK uses its own instance and device through `libvulkan.so.1`. Each frame reaches the GL context of GTK
   without a copy through the CPU, through `VK_KHR_external_memory_fd` and `GL_EXT_memory_object_fd` with semaphores, or
-  else through a read-back. `MCSM_RENDERER=gles` or `FLUTTER_LINUX_RENDERER=opengl` forces GL and `software` gives the
+  else through a read-back. `PRISMARINE_RENDERER=gles` or `FLUTTER_LINUX_RENDERER=opengl` forces GL and `software` gives the
   software renderer of Flutter.
 - The engine logs its choice once, as `renderer: Vulkan <device> (api …, driver …, multiViewport, vertex viewport
   index)` or `renderer: ANGLE/GLES (…)`.
 - Impeller keeps its Vulkan pipeline cache in `%LOCALAPPDATA%\<exe>\flutter_vk_cache` or
   `~/.cache/<exe>/flutter_vk_cache`. `FLUTTER_VK_CACHE_DIR=<dir>` moves it and `0` turns it off.
-- The feature bits of `InternalFlutterGpu_McsmFeatures` are those of the running backend, with bit 1024 set. Vulkan has
+- The feature bits of `InternalFlutterGpu_PrismarineFeatures` are those of the running backend, with bit 1024 set. Vulkan has
   1, 2, 4, 8, 64 and 512 and 256 for viewport arrays where the device has `multiViewport` and a viewport index in the
   vertex stage. GLES has 1, 2, 4, 8, 64, 128 and 512 and Metal 1, 2, 4, 8, 16, 64, 256 and 512.
 - On ANGLE, with WARP and the UHD 620, a Flutter GPU texture read back from the UI thread right after its command buffer
@@ -180,7 +186,7 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
    archive and its `.sha256` and records `PRISMARINE_ENGINE_REV`.
 3. Check each archive the way users get it. Run `fetch.sh` with `PRISMARINE_ENGINE_ARCHIVE=<file>`, or `fetch.ps1
    -Archive <file>`, into a scratch engine directory, then build an app or gpu_smoke on it.
-4. Run `gh release create <tag> -R "$PRISMARINE_ENGINE_REPO" --title … --notes-file … mcsm-engine-* SHA256SUMS`. An
+4. Run `gh release create <tag> -R "$PRISMARINE_ENGINE_REPO" --title … --notes-file … prismarine-engine-* SHA256SUMS`. An
    asset must be under 2 GiB and these are about 20 MB.
 
 ## Patches
@@ -350,8 +356,7 @@ first release with the patch.
   `--heap_sample_traces=<bytes>` records about one allocation per that many bytes as a profiler allocation trace with
   its Dart stack. With `--no-inline-alloc` and AOT code compiled with it, every allocation passes the check, and
   `getAllocationTraces` gives allocation by call site weighted by bytes. `--scavenge_census=<n>` prints, every n young
-  collections, the bytes that they copied and promoted per class. Both are compiled out of release builds. `build.sh
-  patch` applies it and `linux.sh` and `windows.ps1` do not.
+  collections, the bytes that they copied and promoted per class. Both are compiled out of release builds.
 - `0028-gpu-detach-gc-idle.patch` (mcsm11) changes `lib/gpu/context`. `InternalFlutterGpu_McsmDetach(wrapper)` detaches
   a Flutter GPU wrapper from its native object at once and the wrapper can be initialized again.
   `InternalFlutterGpu_McsmGcIdle(budget µs, min bytes, max bytes)` calls `Dart_McsmIdle`. Feature bit 8192 on every
@@ -362,26 +367,34 @@ first release with the patch.
   finalized and a mark starts only at the soft threshold. No idle compaction runs and the page cache is kept. While
   such calls arrive, one in the last 100 ms, a finished mark waits for the next call. A VM whose embedder does not call
   it behaves as before.
-- `0029-gpu-old-space-heap-figures.patch` adds `InternalFlutterGpu_McsmOldSpace(request)` and
+- `0029-gpu-old-space-heap-figures.patch` (prismarine1) adds `InternalFlutterGpu_McsmOldSpace(request)` and
   `InternalFlutterGpu_McsmHeap(which)` to `lib/gpu/context`, both through `Dart_McsmOldSpace`, with feature bit 16384.
   A request of 1 starts an old-space mark now and 2 runs a young collection and a mark-compact with the page cache of
   the VM emptied. The heap figures are the old space used, its capacity and external size and the new space used and
-  its capacity, in bytes. No release has this patch yet.
-- `dart/0003-vm-mcsm-old-space.patch` adds `Dart_McsmOldSpace(request, figures)` to the Dart SDK. The VM does not
+  its capacity, in bytes.
+- `dart/0003-vm-mcsm-old-space.patch` (prismarine1) adds `Dart_McsmOldSpace(request, figures)` to the Dart SDK. The VM does not
   compact on its own while the incremental compactor is on. That compactor moves at most a quarter of new space per
-  mark, only from pages at most half full and the old space keeps the pages that its fragmentation holds. No release
-  has this patch yet.
+  mark, only from pages at most half full and the old space keeps the pages that its fragmentation holds.
+- `0030-gpu-prismarine-names.patch` (prismarine1) gives the exports of Flutter GPU their prismarine names. Each
+  `InternalFlutterGpu_Mcsm*` and `InternalFlutterGpu_<class>_Mcsm*` export of the patches above is
+  `InternalFlutterGpu_Prismarine*` and `InternalFlutterGpu_<class>_Prismarine*`, such as
+  `InternalFlutterGpu_PrismarineFeatures`, with the same feature bits. The Linux and Windows embedders read
+  `PRISMARINE_RENDERER` and then `MCSM_RENDERER` and the Linux compositor reads `PRISMARINE_VK_DUMP`. The C++ names
+  inside the engine keep their forms.
+- `dart/0004-vm-prismarine-names.patch` (prismarine1) renames `Dart_McsmIdle` and `Dart_McsmOldSpace` to
+  `Dart_PrismarineIdle` and `Dart_PrismarineOldSpace`.
 
 ## Checks of the current release
 
-These checks ran on release mcsm11.
+These checks ran on release prismarine1.
 
-- gpu_smoke passes every check on Metal from the fetched archive and on Vulkan on an RTX 4060 Ti under Linux from its
-  archive.
-- On Windows x64, built in a VM and run on an Intel UHD 620, the checks of release 11 pass on Vulkan and on ANGLE. On
-  Vulkan the IEEE arithmetic check of release 9 fails only on NaN or Inf and reports the −0 case. The driver drops the
-  addition in −0 + 0, as spirv-opt does. On ANGLE the readback of a target of two passes on one command buffer comes back
-  empty in most runs, the limit of the GLES fallback above.
+- gpu_smoke passes every check on Metal from the fetched macOS arm64 archive and on Vulkan on an RTX 4060 Ti under Linux
+  from the fetched Linux x64 archive. The checks of prismarine1 read the heap figures, start a mark and compact the old
+  space, which falls from 69 MB to 37 MB of capacity after 64 MB of small objects with every other one dropped.
+- The Windows archives are built in a VM, fetched there and checked for the exports. gpu_smoke builds on them. It ran on
+  no Windows machine with Vulkan for this release. The VM has no Vulkan device and on its ANGLE fallback gpu_smoke stops
+  at the `ScreenCopy` of `prismarine_scene`, which has no GLES shaders. On release mcsm11 the checks of release 11
+  passed on Vulkan and on ANGLE on an Intel UHD 620.
 - A scene-like draw in gpu_smoke, with 2 vertex buffers, 2 uniform blocks, 3 textures and cull and winding per draw,
   costs 2.0 µs on the stock engine and about 0.6 µs patched on an M2 Pro. A bare draw costs 0.07 µs.
 - macOS x64, Linux arm64 and Windows arm64 are built, packed and checksummed only, with no machine to run them.

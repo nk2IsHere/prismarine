@@ -28,16 +28,17 @@ pinned checkout.
 
 ## Names
 
-The native exports, the feature bits, the environment variables of the patches, the release and archive names and the
-patch markers of flutter_gpu still have the `Mcsm` and `mcsm` forms of the first releases. gpu_smoke calls the exports
-in these forms and numbers its check files by release, such as `lib/release_9.dart`. The first engine release of
-prismarine adds one patch that renames them, with flutter_gpu and gpu_smoke in lockstep and the feature bits unchanged.
+The native exports, the Dart names of flutter_gpu, the environment variables of the patches and the release and
+archive names have prismarine forms since release prismarine1, such as `InternalFlutterGpu_PrismarineFeatures`,
+`prismarineOldSpace` and `PRISMARINE_RENDERER`. The engine still reads `MCSM_RENDERER` when `PRISMARINE_RENDERER` is
+not set. The patches of the releases before keep their names and the C++ names inside the engine keep their forms.
+gpu_smoke numbers its check files by release, such as `lib/release_9.dart` and `lib/release_prismarine1.dart`.
 
-## gpu_smoke and flutter_scene
+## gpu_smoke
 
-gpu_smoke builds its shaders and reads the capabilities of the engine through the patched flutter_scene of the engine
-fork, which prismarine does not carry. `tools/gpu_smoke/tool/scene.sh <checkout>` points the app at a checkout of it
-with a `pubspec_overrides.yaml`. The dependency goes once the scene layer of prismarine replaces those parts.
+gpu_smoke draws through the `ScreenCopy` of `prismarine_scene` and reads the feature bits of the engine through its
+own calls in `lib/engine_calls.dart`. It builds the shaders of the release 9 checks with the impellerc of the engine,
+as [its README](../../tools/gpu_smoke/README.md) describes.
 
 ## Checks
 

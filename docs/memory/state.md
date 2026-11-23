@@ -22,9 +22,10 @@ gate sources it. The allocation lint also walks `prismarine_render` and `prismar
 the player of mcsm with the shell of its debug panel. mcsm adds its own sections to the shell. Step 8 adds
 `prismarine_audio` and `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of
 `prismarine_audio_out` and links it.
-Step 11 brings the patched engine with its git history from mcsm: `third_party/flutter_engine` at release mcsm11,
+Step 11 brings the patched engine with its git history from mcsm: `third_party/flutter_engine`,
 `third_party/flutter_gpu` and `tools/gpu_smoke`, described in [engine](../areas/engine.md). mcsm reads the release and
-flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bundle build with its shard cache, the
+flutter_gpu through its pin. The first engine release of prismarine, prismarine1, adds the compaction of the old space
+on request with the heap figures and gives the exports and the Dart names of flutter_gpu their prismarine forms. Step 6 adds `prismarine_shaders`, the impellerc bundle build with its shard cache, the
 precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5 adds
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools

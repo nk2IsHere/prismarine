@@ -58,8 +58,8 @@ before the native call. This applies on the patched engine only, with the indexe
 
 - `draw` and `drawIndexed` of `render_pass.dart` take `firstInstance`, 0 by default. Every instance-rate vertex buffer
   starts at that instance and the instance index of the shader still counts from 0. Engine patch 0012
-  (`InternalFlutterGpu_RenderPass_PrismarineDrawInstanced`) makes it one leaf call. On other engines, or before the pass has
-  built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored.
+  (`InternalFlutterGpu_RenderPass_PrismarineDrawInstanced`) makes it one leaf call. On other engines, or before the pass
+  has built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored.
 - A `RenderPipeline` of `render_pipeline.dart` keeps the `VertexLayout` it was made with.
 - gpu_smoke checks it against offset bindings, plain and indexed.
 
@@ -74,18 +74,19 @@ before the native call. This applies on the patched engine only, with the indexe
   32-bit integer and signed-normalized formats, RGB10A2, R16, RG16 and RG32 float, BC2, BC4, BC5 signed and BC6H.
   `TextureType` gains `texture2DArray` and `texture3D`.
 - `createTexture` of `texture.dart` and `context.dart` takes `layers` and `depth`. A layered texture, an added format or
-  a sample count of 2 goes through `InternalFlutterGpu_Texture_PrismarineInitializeLayered` and throws on an engine without
-  it. `sliceCount` is the layer count of an array and the depth of a 3D texture, so `overwrite(slice:)` and
+  a sample count of 2 goes through `InternalFlutterGpu_Texture_PrismarineInitializeLayered` and throws on an engine
+  without it. `sliceCount` is the layer count of an array and the depth of a 3D texture, so `overwrite(slice:)` and
   `CommandBuffer.copyBufferToTexture` upload one layer or depth slice. `Texture.makeView` makes a view that shares the
   memory of the texture, to render into one level while another is sampled or to use one layer as a 2D target. G4
   counts layers and depth and does not count views.
-- `compute.dart` has `prismarineComputeSupported`, engine bit 2048. `Shader.getStorageBufferSlot` finds a storage buffer by
-  the type name of its block and `getStorageImageSlot` an image by its variable name. `RenderPass.bindStorageBuffer` is
-  sent at each draw and is not recorded into draw lists. It also has `RenderPass.drawIndirect`,
+- `compute.dart` has `prismarineComputeSupported`, engine bit 2048. `Shader.getStorageBufferSlot` finds a storage buffer
+  by the type name of its block and `getStorageImageSlot` an image by its variable name. `RenderPass.bindStorageBuffer`
+  is sent at each draw and is not recorded into draw lists. It also has `RenderPass.drawIndirect`,
   `GpuContext.createComputePipeline`, `CommandBuffer.createComputePass` and `ComputePass` with `bindPipeline`,
   `bindUniform`, `bindStorageBuffer`, `bindTexture`, `bindStorageImage`, `dispatch`, `dispatchIndirect` and `barrier`.
   Resources are bound again after each dispatch.
-- `natives.dart` has `_prismarineEngineCompute`, true when the engine exports `InternalFlutterGpu_ComputePass_PrismarineDispatch`.
+- `natives.dart` has `_prismarineEngineCompute`, true when the engine exports
+  `InternalFlutterGpu_ComputePass_PrismarineDispatch`.
 - The release 9 checks of gpu_smoke use all of it on Metal and Vulkan.
 
 ## G10: binds and dispatches as leaf calls
@@ -126,33 +127,33 @@ holds the list and throws otherwise.
 
 ## G15: passes and command buffers made again, collections at an idle point
 
-- `natives.dart` has `_prismarineEngineDetach`, true when the process exports `InternalFlutterGpu_PrismarineDetach` of engine patch
-  0028. `prismarineGcIdleSupported` and `prismarineGcIdle(budgetMicros, minNewBytes, maxNewBytes)` run the collections of the Dart
-  VM at the idle point of the caller. On other engines they return 0 and do nothing.
+- `natives.dart` has `_prismarineEngineDetach`, true when the process exports `InternalFlutterGpu_PrismarineDetach` of
+  engine patch 0028. `prismarineGcIdleSupported` and `prismarineGcIdle(budgetMicros, minNewBytes, maxNewBytes)` run the
+  collections of the Dart VM at the idle point of the caller. On other engines they return 0 and do nothing.
 - At `submit` a command buffer of `command_buffer.dart` detaches its render and compute passes and itself from their
   native objects with `_prismarineDetach`. The native objects are released there and no weak handle is left for a
   collection to finalize. The Dart objects go into the free lists of the context. `createCommandBuffer`,
   `createRenderPass` and `createComputePass` take one from there and initialize it again with `_prismarineAgain` and
-  `_prismarineSetup`. `_prismarineSelf` is read again and is not final. A pass made again counts its clear number on, so the
-  bound-texture memo of G5 from the pass before does not match. Without the export nothing is reused.
+  `_prismarineSetup`. `_prismarineSelf` is read again and is not final. A pass made again counts its clear number on, so
+  the bound-texture memo of G5 from the pass before does not match. Without the export nothing is reused.
 - A command buffer or a pass must not be used after its submit, since the object is another pass by then.
 
 ## G16: compaction on request, the figures of the heap
 
-- `natives.dart` has `_prismarineEngineOldSpace`, true when the process exports `InternalFlutterGpu_PrismarineOldSpace` of engine patch
-  0029 with the Dart patch `dart/0003`. `prismarineOldSpace(request)` with 1 starts an old-space mark now and with 2 runs a
-  young collection and a mark-compact with the page cache of the VM emptied. `prismarineHeap(which)` returns the old space
-  used, its capacity and its external size and the new space used and its capacity, in bytes. On other engines they
-  return 0 and -1 and `prismarineOldSpaceSupported` is false.
+- `natives.dart` has `_prismarineEngineOldSpace`, true when the process exports `InternalFlutterGpu_PrismarineOldSpace`
+  of engine patch 0029 with the Dart patch `dart/0003`. `prismarineOldSpace(request)` with 1 starts an old-space mark
+  now and with 2 runs a young collection and a mark-compact with the page cache of the VM emptied.
+  `prismarineHeap(which)` returns the old space used, its capacity and its external size and the new space used and its
+  capacity, in bytes. On other engines they return 0 and -1 and `prismarineOldSpaceSupported` is false.
 - The old space of the VM does not shrink without compaction. The incremental compactor moves at most a quarter of new
   space per mark, from pages that are at most half full and a release engine has no call that compacts or reads the
   heap.
 
 ## G17: a device buffer released when its owner drops it
 
-- `DeviceBuffer.prismarineRelease()` of `buffer.dart` detaches the wrapper from its native buffer at once with the export of
-  G15, so the GPU memory goes now and not when a collection finalizes the object. `memory.dart` takes it off the tally
-  of G4. The finalizer is attached with the object as its detach key. Without the export it does nothing.
+- `DeviceBuffer.prismarineRelease()` of `buffer.dart` detaches the wrapper from its native buffer at once with the
+  export of G15, so the GPU memory goes now and not when a collection finalizes the object. `memory.dart` takes it off
+  the tally of G4. The finalizer is attached with the object as its detach key. Without the export it does nothing.
 - The GPU memory of a buffer carries no external size. The VM does not see it and dropped buffers waited for the next
   old-space mark-sweep.
 - Frames already submitted keep what they bound. Metal command buffers retain their resources and Vulkan ones track
