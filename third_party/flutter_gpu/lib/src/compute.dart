@@ -2,34 +2,35 @@
 
 part of flutter_gpu;
 
-// mcsm G9: the additions of the mcsm9 engine (Metal and Vulkan): storage
+// prismarine G9: the additions of the mcsm9 engine (Metal and Vulkan): storage
 // buffers in render passes, compute pipelines and compute passes with
 // storage buffers and images (third_party/flutter_engine patch 0019 and
 // on).
 
 /// Whether the running engine and backend have the additions of G9: layered
 /// textures, the added formats and 2x MSAA, storage buffers and compute.
-bool get mcsmEngineSupportsS2 =>
-    _mcsmEngineS2 && (_mcsmFeaturesNative() & 2048) != 0;
+bool get prismarineComputeSupported =>
+    _prismarineEngineCompute && (_prismarineFeaturesNative() & 2048) != 0;
 
-@Native<Int64 Function()>(symbol: 'InternalFlutterGpu_McsmFeatures')
-external int _mcsmFeaturesNative();
+@Native<Int64 Function()>(symbol: 'InternalFlutterGpu_PrismarineFeatures')
+external int _prismarineFeaturesNative();
 
 /// Whether the running engine has the additions of mcsm10 for pulled passes:
 /// vertex stages without inputs, storage and unsigned texel buffers in pixel
 /// stages on Metal, more bindings per draw, leaf indirect draws and sRGB
 /// texture views ([Texture.makeView]'s `format`).
-bool get mcsmEngine10 => _mcsmEngineS2 && (_mcsmFeaturesNative() & 4096) != 0;
+bool get prismarineBindingsSupported =>
+    _prismarineEngineCompute && (_prismarineFeaturesNative() & 4096) != 0;
 
 /// The border colours Metal and Vulkan both offer.
-enum McsmBorderColor { transparentBlack, opaqueBlack, opaqueWhite }
+enum PrismarineBorderColor { transparentBlack, opaqueBlack, opaqueWhite }
 
 /// A whole sampler state, as Direct3D 11's (Metal and Vulkan): the depth
 /// address mode, a comparison function (for `sampler2DShadow` and kin), the
 /// border colour [SamplerAddressMode.clampToBorder] reads, LOD clamps and a
 /// LOD bias (Vulkan only: Metal has no sampler bias).
-base class McsmSampler extends SamplerOptions {
-  McsmSampler({
+base class PrismarineSampler extends SamplerOptions {
+  PrismarineSampler({
     super.minFilter,
     super.magFilter,
     super.mipFilter,
@@ -38,7 +39,7 @@ base class McsmSampler extends SamplerOptions {
     super.maxAnisotropy,
     this.depthAddressMode = SamplerAddressMode.clampToEdge,
     this.compare,
-    this.borderColor = McsmBorderColor.transparentBlack,
+    this.borderColor = PrismarineBorderColor.transparentBlack,
     this.minLod = 0,
     this.maxLod = 1000,
     this.lodBias = 0,
@@ -46,12 +47,12 @@ base class McsmSampler extends SamplerOptions {
 
   SamplerAddressMode depthAddressMode;
   CompareFunction? compare;
-  McsmBorderColor borderColor;
+  PrismarineBorderColor borderColor;
   double minLod;
   double maxLod;
   double lodBias;
 
-  /// The packed fields `McsmSamplerFromPacked` (engine) reads.
+  /// The packed fields `PrismarineSamplerFromPacked` (engine) reads.
   int get _packed =>
       minFilter.index |
       magFilter.index << 4 |
@@ -64,11 +65,11 @@ base class McsmSampler extends SamplerOptions {
       borderColor.index << 36;
 }
 
-void _mcsmBindTextureSampler(
+void _prismarineBindTextureSampler(
   RenderPass pass,
   UniformSlot slot,
   Texture texture,
-  McsmSampler sampler,
+  PrismarineSampler sampler,
 ) {
   final index = slot._resolvedTextureIndex;
   if (index < 0 ||
@@ -85,7 +86,7 @@ void _mcsmBindTextureSampler(
     throw Exception('Failed to bind texture ${slot.uniformName}');
   }
   // The G5 memo no longer holds what this slot has.
-  final bound = slot.shader._mcsmBound;
+  final bound = slot.shader._prismarineBound;
   if (2 * index + 1 < bound.length) {
     bound[2 * index] = null;
     bound[2 * index + 1] = null;
@@ -117,7 +118,7 @@ base class StorageSlot {
         });
 }
 
-extension McsmShaderStorage on Shader {
+extension PrismarineShaderStorage on Shader {
   StorageSlot getStorageBufferSlot(String name) => StorageSlot._(this, name, 0);
 
   StorageSlot getStorageImageSlot(String name) => StorageSlot._(this, name, 1);
@@ -134,9 +135,10 @@ extension McsmShaderStorage on Shader {
       StorageSlot._(this, name, 4);
 }
 
-McsmSampler _asMcsmSampler(SamplerOptions s) => s is McsmSampler
+PrismarineSampler _asPrismarineSampler(SamplerOptions s) =>
+    s is PrismarineSampler
     ? s
-    : McsmSampler(
+    : PrismarineSampler(
         minFilter: s.minFilter,
         magFilter: s.magFilter,
         mipFilter: s.mipFilter,
@@ -145,7 +147,7 @@ McsmSampler _asMcsmSampler(SamplerOptions s) => s is McsmSampler
         maxAnisotropy: s.maxAnisotropy,
       );
 
-extension McsmRenderPassBindings on RenderPass {
+extension PrismarineRenderPassBindings on RenderPass {
   /// Binds a buffer range read (or written, for an `imageBuffer`) as texels
   /// of [format] (Metal texture buffers, Vulkan texel buffers).
   void bindTexelBuffer(StorageSlot slot, BufferView view, PixelFormat format) {
@@ -175,7 +177,7 @@ extension McsmRenderPassBindings on RenderPass {
   }
 
   void bindSeparateSampler(StorageSlot slot, SamplerOptions sampler) {
-    final s = _asMcsmSampler(sampler);
+    final s = _asPrismarineSampler(sampler);
     final index = slot._resolved;
     if (slot._kind != 4 ||
         index < 0 ||
@@ -193,7 +195,7 @@ extension McsmRenderPassBindings on RenderPass {
   }
 }
 
-extension McsmRenderPassStorage on RenderPass {
+extension PrismarineRenderPassStorage on RenderPass {
   /// Binds a storage buffer for this pass's following draws (until
   /// [RenderPass.clearBindings]); draw lists don't record it.
   void bindStorageBuffer(StorageSlot slot, BufferView view) {
@@ -212,14 +214,14 @@ extension McsmRenderPassStorage on RenderPass {
   }
 }
 
-extension McsmRenderPassIndirect on RenderPass {
+extension PrismarineRenderPassIndirect on RenderPass {
   /// A draw whose counts the GPU reads from [args] at draw time: indexed, 5
   /// uint32s (index count, instance count, first index, base vertex, first
   /// instance), else 4 (vertex count, instance count, first vertex, first
   /// instance), as Direct3D 11, Metal and Vulkan lay them out. Draw lists
   /// don't record it.
   void drawIndirect(BufferView args, {bool indexed = false}) {
-    if (_mcsmIndirectLeaf) {
+    if (_prismarineIndirectLeaf) {
       // mcsm10: a leaf call when the pipeline is cached on this pass.
       final drawn = _renderPassDrawIndirectCached(
         this,
@@ -241,7 +243,7 @@ extension McsmRenderPassIndirect on RenderPass {
   }
 }
 
-extension McsmCommandBufferCopies on CommandBuffer {
+extension PrismarineCommandBufferCopies on CommandBuffer {
   /// Copies a region of [source]'s mip level and slice (a 3D texture's depth
   /// slice) to [destination]'s, which may be another level or slice of the
   /// same texture; same format. Not on views.
@@ -313,37 +315,37 @@ extension McsmCommandBufferCopies on CommandBuffer {
   }
 }
 
-extension McsmGpuContextCompute on GpuContext {
+extension PrismarineGpuContextCompute on GpuContext {
   /// A compute pipeline from a compute shader of a shader bundle.
   ComputePipeline createComputePipeline(Shader shader) =>
       ComputePipeline._(this, shader);
 }
 
-extension McsmCommandBufferCompute on CommandBuffer {
+extension PrismarineCommandBufferCompute on CommandBuffer {
   /// A compute pass, encoded in turn with this command buffer's other passes.
   ComputePass createComputePass() {
-    if (!_mcsmEngine11) return ComputePass._(this);
-    // mcsm G15: as render passes (CommandBuffer.createRenderPass).
+    if (!_prismarineEngineDetach) return ComputePass._(this);
+    // prismarine G15: as render passes (CommandBuffer.createRenderPass).
     final ctx = _gpuContext;
     final ComputePass pass;
-    final free = ctx._mcsmFreeCompute;
+    final free = ctx._prismarineFreeCompute;
     if (free != null) {
-      ctx._mcsmFreeCompute = free._mcsmNext;
-      free._mcsmNext = null;
-      pass = free.._mcsmSetup(this, again: true);
+      ctx._prismarineFreeCompute = free._prismarineNext;
+      free._prismarineNext = null;
+      pass = free.._prismarineSetup(this, again: true);
     } else {
       pass = ComputePass._(this);
     }
-    pass._mcsmNext = _mcsmComputes;
-    _mcsmComputes = pass;
+    pass._prismarineNext = _prismarineComputes;
+    _prismarineComputes = pass;
     return pass;
   }
 }
 
 base class ComputePipeline extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   ComputePipeline._(GpuContext gpuContext, this.shader) {
     final String? error = _initialize(gpuContext, shader);
@@ -355,7 +357,7 @@ base class ComputePipeline extends NativeFieldWrapperClass1 {
   final Shader shader;
 
   @Native<Handle Function(Handle, Pointer<Void>, Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePipeline_McsmInitialize',
+    symbol: 'InternalFlutterGpu_ComputePipeline_PrismarineInitialize',
   )
   external String? _initialize(GpuContext gpuContext, Shader shader);
 }
@@ -364,22 +366,22 @@ base class ComputePipeline extends NativeFieldWrapperClass1 {
 /// resource again after each [dispatch]. Dispatches may overlap: put a
 /// [barrier] between one that writes and one that reads.
 base class ComputePass extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  /// (mcsm G15: read again when the object is made again.)
-  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (prismarine G15: read again when the object is made again.)
+  late Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
-  // mcsm G15: the next pass of this one's command buffer, or of the
+  // prismarine G15: the next pass of this one's command buffer, or of the
   // context's free list.
-  ComputePass? _mcsmNext;
+  ComputePass? _prismarineNext;
 
   ComputePass._(CommandBuffer commandBuffer) {
-    _mcsmSetup(commandBuffer, again: false);
+    _prismarineSetup(commandBuffer, again: false);
   }
 
-  void _mcsmSetup(CommandBuffer commandBuffer, {required bool again}) {
+  void _prismarineSetup(CommandBuffer commandBuffer, {required bool again}) {
     _initialize();
-    if (again) _mcsmSelf = _mcsmPointerOf(this);
+    if (again) _prismarineSelf = _prismarinePointerOf(this);
     final String? error = _begin(commandBuffer);
     if (error != null) {
       throw Exception(error);
@@ -426,7 +428,7 @@ base class ComputePass extends NativeFieldWrapperClass1 {
   }) {
     final s = sampler ?? SamplerOptions();
     final index = slot._resolvedTextureIndex;
-    if (s is McsmSampler) {
+    if (s is PrismarineSampler) {
       if (index < 0 ||
           !_bindTextureSampler(
             index,
@@ -485,7 +487,7 @@ base class ComputePass extends NativeFieldWrapperClass1 {
   }
 
   void bindSeparateSampler(StorageSlot slot, SamplerOptions sampler) {
-    final s = _asMcsmSampler(sampler);
+    final s = _asPrismarineSampler(sampler);
     final index = slot._resolved;
     if (slot._kind != 4 ||
         index < 0 ||
@@ -518,17 +520,17 @@ base class ComputePass extends NativeFieldWrapperClass1 {
   void barrier() => _barrier();
 
   @Native<Void Function(Handle)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmInitialize',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineInitialize',
   )
   external void _initialize();
 
   @Native<Handle Function(Pointer<Void>, Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBegin',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBegin',
   )
   external String? _begin(CommandBuffer commandBuffer);
 
   @Native<Bool Function(Pointer<Void>, Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindPipeline',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindPipeline',
     isLeaf: true,
   )
   external static bool _bindPipelineP(
@@ -536,10 +538,10 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     Pointer<Void> pipeline,
   );
   bool _bindPipeline(ComputePipeline pipeline) =>
-      _bindPipelineP(_mcsmSelf, pipeline._mcsmSelf);
+      _bindPipelineP(_prismarineSelf, pipeline._prismarineSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindUniform',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindUniform',
     isLeaf: true,
   )
   external static bool _bindUniformP(
@@ -555,15 +557,15 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int offsetInBytes,
     int lengthInBytes,
   ) => _bindUniformP(
-    _mcsmSelf,
+    _prismarineSelf,
     index,
-    buffer._mcsmSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageBuffer',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindStorageBuffer',
     isLeaf: true,
   )
   external static bool _bindStorageBufferP(
@@ -579,16 +581,19 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int offsetInBytes,
     int lengthInBytes,
   ) => _bindStorageBufferP(
-    _mcsmSelf,
+    _prismarineSelf,
     index,
-    buffer._mcsmSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
   );
 
   @Native<
     Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int, Int, Int, Int)
-  >(symbol: 'InternalFlutterGpu_ComputePass_McsmBindTexture', isLeaf: true)
+  >(
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindTexture',
+    isLeaf: true,
+  )
   external static bool _bindTextureP(
     Pointer<Void> self,
     int index,
@@ -608,9 +613,9 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int widthAddressMode,
     int heightAddressMode,
   ) => _bindTextureP(
-    _mcsmSelf,
+    _prismarineSelf,
     index,
-    texture._mcsmSelf,
+    texture._prismarineSelf,
     minFilter,
     magFilter,
     mipFilter,
@@ -629,7 +634,7 @@ base class ComputePass extends NativeFieldWrapperClass1 {
       Double,
     )
   >(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindTextureSampler',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindTextureSampler',
     isLeaf: true,
   )
   external static bool _bindTextureSamplerP(
@@ -649,9 +654,9 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     double maxLod,
     double lodBias,
   ) => _bindTextureSamplerP(
-    _mcsmSelf,
+    _prismarineSelf,
     index,
-    texture._mcsmSelf,
+    texture._prismarineSelf,
     packed,
     minLod,
     maxLod,
@@ -659,7 +664,7 @@ base class ComputePass extends NativeFieldWrapperClass1 {
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindStorageImage',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindStorageImage',
     isLeaf: true,
   )
   external static bool _bindStorageImageP(
@@ -668,10 +673,10 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     Pointer<Void> texture,
   );
   bool _bindStorageImage(int index, Texture texture) =>
-      _bindStorageImageP(_mcsmSelf, index, texture._mcsmSelf);
+      _bindStorageImageP(_prismarineSelf, index, texture._prismarineSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindTexelBuffer',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindTexelBuffer',
     isLeaf: true,
   )
   external static bool _bindTexelBufferP(
@@ -689,16 +694,16 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int lengthInBytes,
     int format,
   ) => _bindTexelBufferP(
-    _mcsmSelf,
+    _prismarineSelf,
     index,
-    buffer._mcsmSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
     format,
   );
 
   @Native<Bool Function(Pointer<Void>, Int, Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateTexture',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindSeparateTexture',
     isLeaf: true,
   )
   external static bool _bindSeparateTextureP(
@@ -707,10 +712,10 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     Pointer<Void> texture,
   );
   bool _bindSeparateTexture(int index, Texture texture) =>
-      _bindSeparateTextureP(_mcsmSelf, index, texture._mcsmSelf);
+      _bindSeparateTextureP(_prismarineSelf, index, texture._prismarineSelf);
 
   @Native<Bool Function(Pointer<Void>, Int, Int64, Double, Double, Double)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBindSeparateSampler',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBindSeparateSampler',
     isLeaf: true,
   )
   external static bool _bindSeparateSamplerP(
@@ -727,17 +732,24 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     double minLod,
     double maxLod,
     double lodBias,
-  ) => _bindSeparateSamplerP(_mcsmSelf, index, packed, minLod, maxLod, lodBias);
+  ) => _bindSeparateSamplerP(
+    _prismarineSelf,
+    index,
+    packed,
+    minLod,
+    maxLod,
+    lodBias,
+  );
 
   @Native<Bool Function(Pointer<Void>, Int, Int, Int)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmDispatch',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineDispatch',
     isLeaf: true,
   )
   external static bool _dispatchP(Pointer<Void> self, int x, int y, int z);
-  bool _dispatch(int x, int y, int z) => _dispatchP(_mcsmSelf, x, y, z);
+  bool _dispatch(int x, int y, int z) => _dispatchP(_prismarineSelf, x, y, z);
 
   @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmDispatchIndirect',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineDispatchIndirect',
     isLeaf: true,
   )
   external static bool _dispatchIndirectP(
@@ -746,12 +758,12 @@ base class ComputePass extends NativeFieldWrapperClass1 {
     int offsetInBytes,
   );
   bool _dispatchIndirect(DeviceBuffer args, int offsetInBytes) =>
-      _dispatchIndirectP(_mcsmSelf, args._mcsmSelf, offsetInBytes);
+      _dispatchIndirectP(_prismarineSelf, args._prismarineSelf, offsetInBytes);
 
   @Native<Void Function(Pointer<Void>)>(
-    symbol: 'InternalFlutterGpu_ComputePass_McsmBarrier',
+    symbol: 'InternalFlutterGpu_ComputePass_PrismarineBarrier',
     isLeaf: true,
   )
   external static void _barrierP(Pointer<Void> self);
-  void _barrier() => _barrierP(_mcsmSelf);
+  void _barrier() => _barrierP(_prismarineSelf);
 }

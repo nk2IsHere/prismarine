@@ -1,20 +1,23 @@
-// The engine calls behind compute.dart's binds, copies and dispatches (mcsm
-// G9-G11).
+// The engine calls behind compute.dart's binds, copies and dispatches
+// (prismarine G9-G11).
 part of flutter_gpu;
 
 @Native<Int Function(Pointer<Void>, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveStorageBuffer',
+  symbol: 'InternalFlutterGpu_Shader_PrismarineResolveStorageBuffer',
 )
 external int _resolveStorageBuffer(Shader shader, String name);
 
 @Native<Int Function(Pointer<Void>, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveStorageImage',
+  symbol: 'InternalFlutterGpu_Shader_PrismarineResolveStorageImage',
 )
 external int _resolveStorageImage(Shader shader, String name);
 
 @Native<
   Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int)
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindStorageBuffer', isLeaf: true)
+>(
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineBindStorageBuffer',
+  isLeaf: true,
+)
 external bool _renderPassBindStorageBufferP(
   Pointer<Void> pass,
   Pointer<Void> shader,
@@ -31,21 +34,21 @@ bool _renderPassBindStorageBuffer(
   int offsetInBytes,
   int lengthInBytes,
 ) => _renderPassBindStorageBufferP(
-  pass._mcsmSelf,
-  shader._mcsmSelf,
+  pass._prismarineSelf,
+  shader._prismarineSelf,
   index,
-  buffer._mcsmSelf,
+  buffer._prismarineSelf,
   offsetInBytes,
   lengthInBytes,
 );
 
 // mcsm10: whether the engine answers an indirect draw as a leaf call.
-final bool _mcsmIndirectLeaf = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
+final bool _prismarineIndirectLeaf = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_RenderPass_PrismarineDrawIndirectCached',
 );
 
 @Native<Int Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmDrawIndirectCached',
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineDrawIndirectCached',
   isLeaf: true,
 )
 external int _renderPassDrawIndirectCachedP(
@@ -60,14 +63,14 @@ int _renderPassDrawIndirectCached(
   int offsetInBytes,
   bool indexed,
 ) => _renderPassDrawIndirectCachedP(
-  pass._mcsmSelf,
-  args._mcsmSelf,
+  pass._prismarineSelf,
+  args._prismarineSelf,
   offsetInBytes,
   indexed,
 );
 
 @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Bool)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmDrawIndirect',
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineDrawIndirect',
 )
 external bool _renderPassDrawIndirect(
   RenderPass pass,
@@ -87,7 +90,10 @@ external bool _renderPassDrawIndirect(
     Double,
     Double,
   )
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTextureSampler', isLeaf: true)
+>(
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineBindTextureSampler',
+  isLeaf: true,
+)
 external bool _renderPassBindTextureSamplerP(
   Pointer<Void> pass,
   Pointer<Void> shader,
@@ -108,10 +114,10 @@ bool _renderPassBindTextureSampler(
   double maxLod,
   double lodBias,
 ) => _renderPassBindTextureSamplerP(
-  pass._mcsmSelf,
-  shader._mcsmSelf,
+  pass._prismarineSelf,
+  shader._prismarineSelf,
   index,
-  texture._mcsmSelf,
+  texture._prismarineSelf,
   packed,
   minLod,
   maxLod,
@@ -134,7 +140,7 @@ bool _renderPassBindTextureSampler(
     Int,
     Int,
   )
->(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture')
+>(symbol: 'InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToTexture')
 external String? _copyTextureToTexture(
   CommandBuffer commandBuffer,
   Texture source,
@@ -164,7 +170,7 @@ external String? _copyTextureToTexture(
     Pointer<Void>,
     Int,
   )
->(symbol: 'InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer')
+>(symbol: 'InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToBuffer')
 external String? _copyTextureToBuffer(
   CommandBuffer commandBuffer,
   Texture source,
@@ -179,18 +185,21 @@ external String? _copyTextureToBuffer(
 );
 
 @Native<Handle Function(Pointer<Void>, Pointer<Void>)>(
-  symbol: 'InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap',
+  symbol: 'InternalFlutterGpu_CommandBuffer_PrismarineGenerateMipmap',
 )
 external String? _generateMipmap(CommandBuffer commandBuffer, Texture texture);
 
 @Native<Int Function(Pointer<Void>, Int, Handle)>(
-  symbol: 'InternalFlutterGpu_Shader_McsmResolveBinding',
+  symbol: 'InternalFlutterGpu_Shader_PrismarineResolveBinding',
 )
 external int _resolveBinding(Shader shader, int kind, String name);
 
 @Native<
   Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int, Int)
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindTexelBuffer', isLeaf: true)
+>(
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineBindTexelBuffer',
+  isLeaf: true,
+)
 external bool _renderPassBindTexelBufferP(
   Pointer<Void> pass,
   Pointer<Void> shader,
@@ -209,17 +218,17 @@ bool _renderPassBindTexelBuffer(
   int lengthInBytes,
   int format,
 ) => _renderPassBindTexelBufferP(
-  pass._mcsmSelf,
-  shader._mcsmSelf,
+  pass._prismarineSelf,
+  shader._prismarineSelf,
   index,
-  buffer._mcsmSelf,
+  buffer._prismarineSelf,
   offsetInBytes,
   lengthInBytes,
   format,
 );
 
 @Native<Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateTexture',
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineBindSeparateTexture',
   isLeaf: true,
 )
 external bool _renderPassBindSeparateTextureP(
@@ -234,10 +243,10 @@ bool _renderPassBindSeparateTexture(
   int index,
   Texture texture,
 ) => _renderPassBindSeparateTextureP(
-  pass._mcsmSelf,
-  shader._mcsmSelf,
+  pass._prismarineSelf,
+  shader._prismarineSelf,
   index,
-  texture._mcsmSelf,
+  texture._prismarineSelf,
 );
 
 @Native<
@@ -250,7 +259,10 @@ bool _renderPassBindSeparateTexture(
     Double,
     Double,
   )
->(symbol: 'InternalFlutterGpu_RenderPass_McsmBindSeparateSampler', isLeaf: true)
+>(
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineBindSeparateSampler',
+  isLeaf: true,
+)
 external bool _renderPassBindSeparateSamplerP(
   Pointer<Void> pass,
   Pointer<Void> shader,
@@ -269,8 +281,8 @@ bool _renderPassBindSeparateSampler(
   double maxLod,
   double lodBias,
 ) => _renderPassBindSeparateSamplerP(
-  pass._mcsmSelf,
-  shader._mcsmSelf,
+  pass._prismarineSelf,
+  shader._prismarineSelf,
   index,
   packed,
   minLod,

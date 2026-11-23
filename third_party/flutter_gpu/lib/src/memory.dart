@@ -1,5 +1,5 @@
-// mcsm G4: live GPU memory allocated through Flutter GPU, by kind, for the
-// memory profile of an app. Not part of Flutter GPU.
+// prismarine G4: live GPU memory allocated through Flutter GPU, by kind, for
+// the memory profile of an app. Not part of Flutter GPU.
 
 part of flutter_gpu;
 
@@ -25,7 +25,7 @@ abstract final class GpuMemory {
   /// what its buffers are for, so the census splits them by owner.
   static String? tag;
 
-  /// [bytes] summed (mcsm G8): what the GPU holds for objects the Dart GC
+  /// [bytes] summed (prismarine G8): what the GPU holds for objects the Dart GC
   /// hasn't finalized yet, live or garbage.
   static int get totalBytes => _total;
 
@@ -36,8 +36,8 @@ abstract final class GpuMemory {
     _finalizer.attach(o, (kind, bytes), detach: o);
   }
 
-  /// mcsm G17: [o], tracked as [kind] of [bytes], let go of its native
-  /// object itself (DeviceBuffer.mcsmRelease): off the tally now, and its
+  /// prismarine G17: [o], tracked as [kind] of [bytes], let go of its native
+  /// object itself (DeviceBuffer.prismarineRelease): off the tally now, and its
   /// finalizer never runs.
   static void _released(Object o, String kind, int bytes) {
     _finalizer.detach(o);

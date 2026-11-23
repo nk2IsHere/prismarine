@@ -51,7 +51,7 @@ enum VertexFormat {
   /// Four 32-bit signed integers (16 bytes).
   sint32x4(bytesPerElement: 16, componentCount: 4),
 
-  // mcsm G9: half, normalized, packed and 8/16-bit integer formats (the
+  // prismarine G9: half, normalized, packed and 8/16-bit integer formats (the
   // mcsm9 engine on Metal and Vulkan), read by the shader as floats (or, for
   // the integer ones, as uint or int).
   /// Two 16-bit floats.
@@ -226,7 +226,7 @@ final class VertexBuffer {
     this.stepRate = 1,
   });
 
-  /// mcsm G9: an instance buffer advances every [stepRate] instances
+  /// prismarine G9: an instance buffer advances every [stepRate] instances
   /// (Direct3D 11's InstanceDataStepRate; the mcsm9 engine on Metal and
   /// Vulkan).
   final int stepRate;

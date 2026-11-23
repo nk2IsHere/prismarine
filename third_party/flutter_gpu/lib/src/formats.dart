@@ -168,7 +168,7 @@ enum PixelFormat {
   /// HDR samples are linear floating point, so there is no sRGB variant.
   astc8x8HDR,
 
-  // mcsm G9: the formats of feature 2048 (Metal and Vulkan).
+  // prismarine G9: the formats of feature 2048 (Metal and Vulkan).
 
   /// Packed unsigned float red 11, green 11, blue 10 bits (the HDR scene
   /// colour).
@@ -201,7 +201,7 @@ enum PixelFormat {
   /// 32-bit float red and green.
   r32g32Float,
 
-  // mcsm G9: the other formats Metal and Vulkan share (DXGI's, as a D3D11
+  // prismarine G9: the other formats Metal and Vulkan share (DXGI's, as a D3D11
   // app binds them): integer, signed-normalized, 10-bit and shared-exponent
   // formats, and the remaining BC formats (BC2, BC4, BC5 signed, BC6H).
   r8UInt,
@@ -631,11 +631,11 @@ enum SamplerAddressMode {
   /// boundary.
   mirror,
 
-  /// mcsm G9: coordinates outside the texture read the sampler's border
-  /// colour ([McsmSampler.borderColor]; Metal and Vulkan).
+  /// prismarine G9: coordinates outside the texture read the sampler's border
+  /// colour ([PrismarineSampler.borderColor]; Metal and Vulkan).
   clampToBorder,
 
-  /// mcsm G9: mirrored once, then clamped to the edge (Metal and Vulkan).
+  /// prismarine G9: mirrored once, then clamped to the edge (Metal and Vulkan).
   mirrorClampToEdge,
 }
 
@@ -788,14 +788,15 @@ enum TextureType {
   /// A texture sourced from an external source.
   textureExternalOES,
 
-  /// mcsm G9: an array of 2D textures ([Texture.layers]; Metal and Vulkan).
+  /// prismarine G9: an array of 2D textures ([Texture.layers]; Metal and
+  /// Vulkan).
   texture2DArray,
 
-  /// mcsm G9: a 3D texture ([Texture.depth]; Metal and Vulkan). Not a render
-  /// target: compute writes it as a storage image.
+  /// prismarine G9: a 3D texture ([Texture.depth]; Metal and Vulkan). Not a
+  /// render target: compute writes it as a storage image.
   texture3D,
 
-  /// mcsm G9: an array of [Texture.layers] cubes, six slices each (Metal and
-  /// Vulkan).
+  /// prismarine G9: an array of [Texture.layers] cubes, six slices each (Metal
+  /// and Vulkan).
   textureCubeArray,
 }

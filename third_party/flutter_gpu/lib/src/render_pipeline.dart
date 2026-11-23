@@ -7,9 +7,9 @@
 part of flutter_gpu;
 
 base class RenderPipeline extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   /// Creates a new RenderPipeline.
   ///
@@ -44,9 +44,9 @@ base class RenderPipeline extends NativeFieldWrapperClass1 {
   final Shader vertexShader;
   final Shader fragmentShader;
 
-  // mcsm G7: the layout it was made with (null: the shader's default, all
+  // prismarine G7: the layout it was made with (null: the shader's default, all
   // per-vertex), for draws from a first instance on engines without
-  // RenderPass_McsmDrawInstanced.
+  // RenderPass_PrismarineDrawInstanced.
   final VertexLayout? _vertexLayout;
 
   /// Packs a [VertexLayout] into the three ByteData buffers expected by the
@@ -76,7 +76,7 @@ base class RenderPipeline extends NativeFieldWrapperClass1 {
       final VertexBuffer buf = layout.buffers[i];
       buffersData[i * 3 + 0] = buf.strideInBytes;
       buffersData[i * 3 + 1] = buf.attributes.length;
-      // mcsm G9: the step rate in bits 8 and up.
+      // prismarine G9: the step rate in bits 8 and up.
       buffersData[i * 3 + 2] =
           buf.stepMode.index | (buf.stepRate > 1 ? buf.stepRate << 8 : 0);
     }

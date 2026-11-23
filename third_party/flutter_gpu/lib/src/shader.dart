@@ -11,8 +11,8 @@ base class UniformSlot {
   final Shader shader;
   final String uniformName;
 
-  // mcsm G2: the shader's index for this name as a uniform struct and as a
-  // texture, resolved on first use (-2 = not yet, -1 = no such uniform).
+  // prismarine G2: the shader's index for this name as a uniform struct and as
+  // a texture, resolved on first use (-2 = not yet, -1 = no such uniform).
   int _structIndex = -2;
   int _textureIndex = -2;
 
@@ -45,31 +45,31 @@ base class UniformSlot {
 }
 
 base class Shader extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   // [Shader] handles are instantiated when interacting with a [ShaderLibrary].
   Shader._();
 
-  // mcsm G6: the textures and samplers bound per resolved texture index on
-  // [_mcsmBoundPass] since its clear number [_mcsmBoundEpoch] (G5's memo,
-  // kept here instead of in a per-pass identity map).
-  RenderPass? _mcsmBoundPass;
-  int _mcsmBoundEpoch = -1;
-  final List<Object?> _mcsmBound = <Object?>[];
+  // prismarine G6: the textures and samplers bound per resolved texture index
+  // on [_prismarineBoundPass] since its clear number [_prismarineBoundEpoch]
+  // (G5's memo, kept here instead of in a per-pass identity map).
+  RenderPass? _prismarineBoundPass;
+  int _prismarineBoundEpoch = -1;
+  final List<Object?> _prismarineBound = <Object?>[];
 
   UniformSlot getUniformSlot(String uniformName) {
     return UniformSlot._(this, uniformName);
   }
 
-  // mcsm G2
+  // prismarine G2
   @Native<Int Function(Pointer<Void>, Handle)>(
     symbol: 'InternalFlutterGpu_Shader_ResolveUniformStruct',
   )
   external int _resolveUniformStruct(String uniformStructName);
 
-  // mcsm G2
+  // prismarine G2
   @Native<Int Function(Pointer<Void>, Handle)>(
     symbol: 'InternalFlutterGpu_Shader_ResolveUniformTexture',
   )

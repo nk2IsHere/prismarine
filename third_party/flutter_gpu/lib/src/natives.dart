@@ -36,93 +36,102 @@ Future<developer.ServiceExtensionResponse> _reinitializeShaderLibrary(
   );
 }
 
-// mcsm G1: whether the engine has the perf E exports (resolved-slot binds and
-// the cached draw; third_party/flutter_engine/patches). With Flutter's
+// prismarine G1: whether the engine has the perf E exports (resolved-slot binds
+// and the cached draw; third_party/flutter_engine/patches). With Flutter's
 // prebuilt engine every call takes the stock path.
-final bool _mcsmEngineE3 = DynamicLibrary.process().providesSymbol(
+final bool _prismarineEngineSlotBinds = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_RenderPass_BindUniformIndexed',
 );
 
-// mcsm G7: whether the engine draws from a first instance itself
+// prismarine G7: whether the engine draws from a first instance itself
 // (third_party/flutter_engine patch 0012, mcsm7).
-final bool _mcsmDrawInstanced = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
+final bool _prismarineDrawInstanced = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_RenderPass_PrismarineDrawInstanced',
 );
 
-// mcsm G9: whether the engine has the additions of release mcsm9: layered
+// prismarine G9: whether the engine has the additions of release mcsm9: layered
 // textures, the added formats, storage buffers and compute.
-final bool _mcsmEngineS2 = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_ComputePass_McsmDispatch',
+final bool _prismarineEngineCompute = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_ComputePass_PrismarineDispatch',
 );
 
-// mcsm G15: whether the engine detaches wrappers from their native objects
-// and collects at the caller's idle point (third_party/flutter_engine patch
-// 0028, mcsm11).
-final bool _mcsmEngine11 = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_McsmDetach',
+// prismarine G15: whether the engine detaches wrappers from their native
+// objects and collects at the caller's idle point (third_party/flutter_engine
+// patch 0028, mcsm11).
+final bool _prismarineEngineDetach = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_PrismarineDetach',
 );
 
-@Native<Void Function(Handle)>(symbol: 'InternalFlutterGpu_McsmDetach')
-external void _mcsmDetach(Object wrapper);
+@Native<Void Function(Handle)>(symbol: 'InternalFlutterGpu_PrismarineDetach')
+external void _prismarineDetach(Object wrapper);
 
 @Native<Int64 Function(Int64, Int64, Int64)>(
-  symbol: 'InternalFlutterGpu_McsmGcIdle',
+  symbol: 'InternalFlutterGpu_PrismarineGcIdle',
 )
-external int _mcsmGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes);
+external int _prismarineGcIdle(
+  int budgetMicros,
+  int minNewBytes,
+  int maxNewBytes,
+);
 
-/// mcsm G15: whether [mcsmGcIdle] reaches the VM (an mcsm11 engine).
-bool get mcsmGcIdleSupported => _mcsmEngine11;
+/// prismarine G15: whether [prismarineGcIdle] reaches the VM (an mcsm11
+/// engine).
+bool get prismarineGcIdleSupported => _prismarineEngineDetach;
 
-/// mcsm G15: the Dart VM's collections at the caller's idle point, every
+/// prismarine G15: the Dart VM's collections at the caller's idle point, every
 /// isolate of the group with it. A young collection runs when new space
 /// holds at least [minNewBytes] and the VM expects it to end within
 /// [budgetMicros], or when it holds [maxNewBytes]; a finished old-space mark
 /// is finalized and a due one started. Returns what ran (1 a young
 /// collection, 2 a mark started, 4 a mark finalized); 0 on other engines.
-int mcsmGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes) =>
-    _mcsmEngine11 ? _mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes) : 0;
+int prismarineGcIdle(int budgetMicros, int minNewBytes, int maxNewBytes) =>
+    _prismarineEngineDetach
+    ? _prismarineGcIdle(budgetMicros, minNewBytes, maxNewBytes)
+    : 0;
 
-// mcsm G16: whether the engine compacts the old space when asked and gives
-// the heap's figures (third_party/flutter_engine patch 0029 and the Dart
+// prismarine G16: whether the engine compacts the old space when asked and
+// gives the heap's figures (third_party/flutter_engine patch 0029 and the Dart
 // patch dart/0003, mcsm12).
-final bool _mcsmEngine12 = DynamicLibrary.process().providesSymbol(
-  'InternalFlutterGpu_McsmOldSpace',
+final bool _prismarineEngineOldSpace = DynamicLibrary.process().providesSymbol(
+  'InternalFlutterGpu_PrismarineOldSpace',
 );
 
-@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_McsmOldSpace')
-external int _mcsmOldSpace(int request);
+@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_PrismarineOldSpace')
+external int _prismarineOldSpace(int request);
 
-@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_McsmHeap')
-external int _mcsmHeap(int which);
+@Native<Int64 Function(Int64)>(symbol: 'InternalFlutterGpu_PrismarineHeap')
+external int _prismarineHeap(int which);
 
-/// mcsm G16: whether [mcsmOldSpace] and [mcsmHeap] reach the VM (an mcsm12
-/// engine).
-bool get mcsmOldSpaceSupported => _mcsmEngine12;
+/// prismarine G16: whether [prismarineOldSpace] and [prismarineHeap] reach the
+/// VM (an mcsm12 engine).
+bool get prismarineOldSpaceSupported => _prismarineEngineOldSpace;
 
-/// mcsm G16: old-space work now, every isolate of the group stopped for a
+/// prismarine G16: old-space work now, every isolate of the group stopped for a
 /// compaction: [request] 1 starts a concurrent mark, 2 runs a young
 /// collection and a mark-compact and empties the VM's page cache. Returns
 /// what ran (1 a mark started, 2 a compaction); 0 on other engines.
-int mcsmOldSpace(int request) => _mcsmEngine12 ? _mcsmOldSpace(request) : 0;
+int prismarineOldSpace(int request) =>
+    _prismarineEngineOldSpace ? _prismarineOldSpace(request) : 0;
 
-/// mcsm G16: one of the isolate group's heap figures in bytes: [which] 0
+/// prismarine G16: one of the isolate group's heap figures in bytes: [which] 0
 /// old space used, 1 its capacity, 2 its external, 3 new space used, 4 its
 /// capacity; -1 on other engines.
-int mcsmHeap(int which) => _mcsmEngine12 ? _mcsmHeap(which) : -1;
+int prismarineHeap(int which) =>
+    _prismarineEngineOldSpace ? _prismarineHeap(which) : -1;
 
-/// mcsm G11: [o]'s native pointer (libc `memmove(p, p, 0)` returns p; the
+/// prismarine G11: [o]'s native pointer (libc `memmove(p, p, 0)` returns p; the
 /// FFI passes a wrapper as its native field). Read once per object
-/// ([_mcsmSelf]): a wrapper passed to a native call becomes a new Pointer
+/// ([_prismarineSelf]): a wrapper passed to a native call becomes a new Pointer
 /// object each call when the generated call isn't inlined, which the
 /// AOT build of an app doesn't: ~27,000 a frame in a heavy scene.
-Pointer<Void> _mcsmPointerOf(NativeFieldWrapperClass1 o) =>
-    _mcsmMemmove(o, o, 0);
+Pointer<Void> _prismarinePointerOf(NativeFieldWrapperClass1 o) =>
+    _prismarineMemmove(o, o, 0);
 
 @Native<Pointer<Void> Function(Pointer<Void>, Pointer<Void>, Size)>(
   symbol: 'memmove',
   isLeaf: true,
 )
-external Pointer<Void> _mcsmMemmove(
+external Pointer<Void> _prismarineMemmove(
   NativeFieldWrapperClass1 a,
   NativeFieldWrapperClass1 b,
   int n,

@@ -7,9 +7,9 @@
 part of flutter_gpu;
 
 base class Texture extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   bool _valid = false;
   get isValid {
@@ -53,24 +53,26 @@ base class Texture extends NativeFieldWrapperClass1 {
     this.depth = 1,
   }) : _gpuContext = gpuContext,
        _viewParent = null {
-    // mcsm G9: layered textures, the added formats and 2x MSAA go through
-    // the mcsm9 engine's export.
-    final bool mcsm9 =
+    // prismarine G9: layered textures, the added formats and 2x MSAA go through
+    // the export of feature bit 2048.
+    final bool layered =
         layers != 1 ||
         depth != 1 ||
         sampleCount == 2 ||
         textureType.index > TextureType.textureExternalOES.index ||
         format.index > PixelFormat.astc8x8HDR.index;
-    if (sampleCount != 1 && sampleCount != 4 && !(mcsm9 && sampleCount == 2)) {
+    if (sampleCount != 1 &&
+        sampleCount != 4 &&
+        !(layered && sampleCount == 2)) {
       throw Exception("Only a sample count of 1, 2 or 4 is supported");
     }
-    if (mcsm9 && !_mcsmEngineS2) {
+    if (layered && !_prismarineEngineCompute) {
       throw Exception(
-        'Layered textures, the added pixel formats and 2x MSAA need the mcsm9 '
-        'engine',
+        'Layered textures, the added pixel formats and 2x MSAA need an engine '
+        'with feature bit 2048',
       );
     }
-    _valid = mcsm9
+    _valid = layered
         ? _initializeLayered(
             gpuContext,
             storageMode.index,
@@ -104,11 +106,11 @@ base class Texture extends NativeFieldWrapperClass1 {
       // used with render target or shader write usage, which is sample-only).
       throw Exception('Texture creation failed');
     }
-    // mcsm G4: live GPU memory by kind.
+    // prismarine G4: live GPU memory by kind.
     GpuMemory._track(this, GpuMemory._textureKind(this), _bytes());
   }
 
-  /// The bytes this texture's levels occupy (mcsm G4; an estimate: the
+  /// The bytes this texture's levels occupy (prismarine G4; an estimate: the
   /// driver's alignment and padding aren't counted).
   int _bytes() {
     var total = 0;
@@ -116,7 +118,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     for (var l = 0; l < mipLevelCount; l++) {
       final w = (width >> l) < 1 ? 1 : width >> l;
       final h = (height >> l) < 1 ? 1 : height >> l;
-      // mcsm G9: a 3D texture's depth halves per level too.
+      // prismarine G9: a 3D texture's depth halves per level too.
       final d = (depth >> l) < 1 ? 1 : depth >> l;
       total +=
           ((w + bw - 1) ~/ bw) *
@@ -198,7 +200,8 @@ base class Texture extends NativeFieldWrapperClass1 {
     }
   }
 
-  /// mcsm G9: a view of [parent]'s mip levels and layers (see [makeView]).
+  /// prismarine G9: a view of [parent]'s mip levels and layers (see
+  /// [makeView]).
   Texture._view(
     GpuContext gpuContext,
     Texture parent,
@@ -251,7 +254,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     }
   }
 
-  /// mcsm G9: a texture that is mip levels `[baseMipLevel, baseMipLevel +
+  /// prismarine G9: a texture that is mip levels `[baseMipLevel, baseMipLevel +
   /// mipLevelCount)` and layers `[baseLayer, baseLayer + layers)` of this one
   /// (Metal and Vulkan; not of a 3D texture). Sample, render into or write it
   /// as a storage image on its own: one level while sampling the level
@@ -271,11 +274,15 @@ base class Texture extends NativeFieldWrapperClass1 {
     TextureType? textureType,
     PixelFormat? format,
   }) {
-    if (!_mcsmEngineS2) {
-      throw Exception('Texture views need the mcsm9 engine');
+    if (!_prismarineEngineCompute) {
+      throw Exception('Texture views need an engine with feature bit 2048');
     }
-    if (format != null && format != this.format && !mcsmEngine10) {
-      throw Exception('sRGB texture views need the mcsm10 engine');
+    if (format != null &&
+        format != this.format &&
+        !prismarineBindingsSupported) {
+      throw Exception(
+        'sRGB texture views need an engine with feature bit 4096',
+      );
     }
     if (baseMipLevel < 0 ||
         mipLevelCount < 1 ||
@@ -298,7 +305,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     );
   }
 
-  /// mcsm G9: the texture a view was made of (null for a texture of its
+  /// prismarine G9: the texture a view was made of (null for a texture of its
   /// own); it keeps the parent's Dart wrapper alive too.
   final Texture? _viewParent;
 
@@ -329,15 +336,15 @@ base class Texture extends NativeFieldWrapperClass1 {
   /// [Texture.fullMipCount] to compute the maximum for a given size.
   final int mipLevelCount;
 
-  /// mcsm G9: the layers of a [TextureType.texture2DArray] (1 otherwise).
+  /// prismarine G9: the layers of a [TextureType.texture2DArray] (1 otherwise).
   final int layers;
 
-  /// mcsm G9: the depth of a [TextureType.texture3D] (1 otherwise).
+  /// prismarine G9: the depth of a [TextureType.texture3D] (1 otherwise).
   final int depth;
 
   /// The number of slices in this texture. Determined by [textureType]:
   /// 1 for 2D and external textures, 6 for cubemap textures, the layers of
-  /// an array and the depth of a 3D texture (mcsm G9).
+  /// an array and the depth of a 3D texture (prismarine G9).
   int get sliceCount => switch (textureType) {
     TextureType.textureCube => 6,
     TextureType.texture2DArray => layers,
@@ -471,7 +478,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     int mipLevelCount,
   );
 
-  /// mcsm G9: the mcsm9 engine's texture creation (layers and depth).
+  /// prismarine G9: the mcsm9 engine's texture creation (layers and depth).
   @Native<
     Bool Function(
       Handle,
@@ -489,7 +496,7 @@ base class Texture extends NativeFieldWrapperClass1 {
       Bool,
       Int,
     )
-  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeLayered')
+  >(symbol: 'InternalFlutterGpu_Texture_PrismarineInitializeLayered')
   external bool _initializeLayered(
     GpuContext gpuContext,
     int storageMode,
@@ -506,10 +513,10 @@ base class Texture extends NativeFieldWrapperClass1 {
     int mipLevelCount,
   );
 
-  /// mcsm G9: Texture_McsmInitializeView.
+  /// prismarine G9: Texture_PrismarineInitializeView.
   @Native<
     Bool Function(Handle, Pointer<Void>, Pointer<Void>, Int, Int, Int, Int, Int)
-  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeView')
+  >(symbol: 'InternalFlutterGpu_Texture_PrismarineInitializeView')
   external bool _initializeView(
     GpuContext gpuContext,
     Texture parent,
@@ -520,7 +527,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     int layers,
   );
 
-  /// mcsm10: Texture_McsmInitializeViewFormat.
+  /// mcsm10: Texture_PrismarineInitializeViewFormat.
   @Native<
     Bool Function(
       Handle,
@@ -533,7 +540,7 @@ base class Texture extends NativeFieldWrapperClass1 {
       Int,
       Int,
     )
-  >(symbol: 'InternalFlutterGpu_Texture_McsmInitializeViewFormat')
+  >(symbol: 'InternalFlutterGpu_Texture_PrismarineInitializeViewFormat')
   external bool _initializeViewFormat(
     GpuContext gpuContext,
     Texture parent,

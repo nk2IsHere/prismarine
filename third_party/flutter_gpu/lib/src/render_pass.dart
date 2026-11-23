@@ -329,10 +329,10 @@ void _validateAttachmentSubresource(
       "$label mipLevel ($mipLevel) must be in the range [0, ${texture.mipLevelCount - 1}] for this texture",
     );
   }
-  // mcsm G9: -1 attaches every layer of an array or cube texture (the vertex
-  // stage picks each primitive's layer; the mcsm9 engine on Metal and
+  // prismarine G9: -1 attaches every layer of an array or cube texture (the
+  // vertex stage picks each primitive's layer; the mcsm9 engine on Metal and
   // Vulkan).
-  if (slice == -1 && texture.sliceCount > 1 && _mcsmEngineS2) {
+  if (slice == -1 && texture.sliceCount > 1 && _prismarineEngineCompute) {
     return;
   }
   if (slice < 0 || slice >= texture.sliceCount) {
@@ -343,19 +343,19 @@ void _validateAttachmentSubresource(
 }
 
 base class RenderPass extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  /// (mcsm G15: read again when the object is made again.)
-  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (prismarine G15: read again when the object is made again.)
+  late Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
-  // mcsm G15: the next pass of this one's command buffer, or of the
+  // prismarine G15: the next pass of this one's command buffer, or of the
   // context's free list.
-  RenderPass? _mcsmNext;
+  RenderPass? _prismarineNext;
 
-  /// mcsm G15: a pass of a submitted command buffer made again: a new native
-  /// object, this object's memos as a new pass's (the clear number goes on,
-  /// so a shader's bound-texture memo of the old pass never matches).
-  void _mcsmAgain(
+  /// prismarine G15: a pass of a submitted command buffer made again: a new
+  /// native object, this object's memos as a new pass's (the clear number goes
+  /// on, so a shader's bound-texture memo of the old pass never matches).
+  void _prismarineAgain(
     GpuContext gpuContext,
     CommandBuffer commandBuffer,
     RenderTarget renderTarget,
@@ -370,7 +370,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _boundVertices = false;
     if (identical(_vertexViewsOwner, this)) _vertexViewsOwner = null;
     _pipeline = null;
-    _mcsmSetup(gpuContext, commandBuffer, renderTarget, again: true);
+    _prismarineSetup(gpuContext, commandBuffer, renderTarget, again: true);
   }
 
   /// The maximum number of vertex buffer slots that can be bound to a single
@@ -389,22 +389,22 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// the entire bitmask.
   int _maxBoundVertexSlot = -1;
 
-  // mcsm G5: each shader's texture slots as bound since the last
+  // prismarine G5: each shader's texture slots as bound since the last
   // [clearBindings] (texture, sampler; by the slot's resolved index). The
   // pass keeps a binding until cleared, so binding the same texture and
-  // sampler object again changes nothing and is skipped. mcsm G6: the memo
-  // lives on the Shader (pass, clear number), not in an identity map.
+  // sampler object again changes nothing and is skipped. prismarine G6: the
+  // memo lives on the Shader (pass, clear number), not in an identity map.
   int _clearEpoch = 0;
 
-  // mcsm G6: pipeline state as last set on this pass (-1: not yet), so
+  // prismarine G6: pipeline state as last set on this pass (-1: not yet), so
   // setting the same value again doesn't cross into the engine.
   int _cullMode = -1;
   int _windingOrder = -1;
   int _primitiveType = -1;
   int _polygonMode = -1;
 
-  // mcsm G7: the view bound at each vertex buffer slot (for draws from a
-  // first instance on engines without RenderPass_McsmDrawInstanced). mcsm
+  // prismarine G7: the view bound at each vertex buffer slot (for draws from a
+  // first instance on engines without RenderPass_PrismarineDrawInstanced). mcsm
   // G14: one list for every pass, held by the pass that bound last (a pass
   // binds and draws before the next one binds; a list per pass was a
   // frame's garbage); a pass that bound asks its views only while it holds
@@ -430,7 +430,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (!identical(_vertexViewsOwner, this)) {
       throw StateError(
         'a draw from a first instance after another pass bound vertex '
-        'buffers (mcsm G14)',
+        'buffers (prismarine G14)',
       );
     }
     return _sharedVertexViews[slot];
@@ -442,10 +442,10 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     CommandBuffer commandBuffer,
     RenderTarget renderTarget,
   ) {
-    _mcsmSetup(gpuContext, commandBuffer, renderTarget, again: false);
+    _prismarineSetup(gpuContext, commandBuffer, renderTarget, again: false);
   }
 
-  void _mcsmSetup(
+  void _prismarineSetup(
     GpuContext gpuContext,
     CommandBuffer commandBuffer,
     RenderTarget renderTarget, {
@@ -458,12 +458,12 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     }());
 
     _initialize();
-    if (again) _mcsmSelf = _mcsmPointerOf(this);
+    if (again) _prismarineSelf = _prismarinePointerOf(this);
     String? error;
     for (final (index, color) in renderTarget.colorAttachments.indexed) {
       error = _setColorAttachmentP(
-        _mcsmSelf,
-        gpuContext._mcsmSelf,
+        _prismarineSelf,
+        gpuContext._prismarineSelf,
         index,
         color.loadAction.index,
         color.storeAction.index,
@@ -471,7 +471,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
         color.clearValue.g,
         color.clearValue.b,
         color.clearValue.a,
-        color.texture._mcsmSelf,
+        color.texture._prismarineSelf,
         color.resolveTexture,
         color.mipLevel,
         color.slice,
@@ -483,14 +483,14 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (renderTarget.depthStencilAttachment != null) {
       final ds = renderTarget.depthStencilAttachment!;
       error = _setDepthStencilAttachmentP(
-        _mcsmSelf,
+        _prismarineSelf,
         ds.depthLoadAction.index,
         ds.depthStoreAction.index,
         ds.depthClearValue,
         ds.stencilLoadAction.index,
         ds.stencilStoreAction.index,
         ds.stencilClearValue,
-        ds.texture._mcsmSelf,
+        ds.texture._prismarineSelf,
         ds.mipLevel,
         ds.slice,
       );
@@ -498,13 +498,13 @@ base class RenderPass extends NativeFieldWrapperClass1 {
         throw Exception(error);
       }
     }
-    error = _beginP(_mcsmSelf, commandBuffer._mcsmSelf);
+    error = _beginP(_prismarineSelf, commandBuffer._prismarineSelf);
     if (error != null) {
       throw Exception(error);
     }
   }
 
-  // mcsm G6: the pipeline bound last (binding it again changes nothing).
+  // prismarine G6: the pipeline bound last (binding it again changes nothing).
   RenderPipeline? _pipeline;
 
   void bindPipeline(RenderPipeline pipeline) {
@@ -588,9 +588,9 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     if (sampler == null) {
       sampler = SamplerOptions();
     }
-    // mcsm G9: a whole sampler state.
-    if (sampler is McsmSampler) {
-      _mcsmBindTextureSampler(this, slot, texture, sampler);
+    // prismarine G9: a whole sampler state.
+    if (sampler is PrismarineSampler) {
+      _prismarineBindTextureSampler(this, slot, texture, sampler);
       return;
     }
 
@@ -616,16 +616,16 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       );
     }
 
-    if (_mcsmEngineE3) {
-      // mcsm G2: by the resolved index, as a leaf call.
+    if (_prismarineEngineSlotBinds) {
+      // prismarine G2: by the resolved index, as a leaf call.
       final index = slot._resolvedTextureIndex;
-      // mcsm G5: the slot holds this texture and sampler already.
+      // prismarine G5: the slot holds this texture and sampler already.
       final shader = slot.shader;
-      final List<Object?> bound = shader._mcsmBound;
-      if (!identical(shader._mcsmBoundPass, this) ||
-          shader._mcsmBoundEpoch != _clearEpoch) {
-        shader._mcsmBoundPass = this;
-        shader._mcsmBoundEpoch = _clearEpoch;
+      final List<Object?> bound = shader._prismarineBound;
+      if (!identical(shader._prismarineBoundPass, this) ||
+          shader._prismarineBoundEpoch != _clearEpoch) {
+        shader._prismarineBoundPass = this;
+        shader._prismarineBoundEpoch = _clearEpoch;
         bound.length = 0;
       } else if (index >= 0 &&
           2 * index + 1 < bound.length &&
@@ -757,7 +757,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     _setScissor(scissor.x, scissor.y, scissor.width, scissor.height);
   }
 
-  // mcsm G6: an unchanged value doesn't cross into the engine.
+  // prismarine G6: an unchanged value doesn't cross into the engine.
   void setCullMode(CullMode cullMode) {
     final v = cullMode.index;
     if (v == _cullMode) return;
@@ -804,9 +804,9 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// instance will produce the same geometry unless the shader varies its output
   /// another way.
   ///
-  /// mcsm G7: [firstInstance] starts every instance-rate vertex buffer at that
-  /// instance, as if its view were bound [firstInstance] elements further on
-  /// (one instance buffer, many draws). The shader's instance index still
+  /// prismarine G7: [firstInstance] starts every instance-rate vertex buffer at
+  /// that instance, as if its view were bound [firstInstance] elements further
+  /// on (one instance buffer, many draws). The shader's instance index still
   /// counts from 0 on every backend. The views must hold
   /// `firstInstance + instanceCount` elements.
   void draw(int vertexCount, {int instanceCount = 1, int firstInstance = 0}) {
@@ -821,8 +821,8 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       _drawFromInstance(vertexCount, instanceCount, firstInstance, false);
       return;
     }
-    if (_mcsmEngineE3) {
-      // mcsm G3: a leaf draw when the pipeline is cached on this pass.
+    if (_prismarineEngineSlotBinds) {
+      // prismarine G3: a leaf draw when the pipeline is cached on this pass.
       final drawn = _drawCached(vertexCount, instanceCount, false);
       if (drawn == 1) return;
       if (drawn == 0) throw Exception("Failed to append draw");
@@ -851,7 +851,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   /// every instance will produce the same geometry unless the shader varies its
   /// output another way.
   ///
-  /// mcsm G7: [firstInstance] as for [draw].
+  /// prismarine G7: [firstInstance] as for [draw].
   void drawIndexed(
     int indexCount, {
     int instanceCount = 1,
@@ -868,8 +868,8 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       _drawFromInstance(indexCount, instanceCount, firstInstance, true);
       return;
     }
-    if (_mcsmEngineE3) {
-      // mcsm G3: a leaf draw when the pipeline is cached on this pass.
+    if (_prismarineEngineSlotBinds) {
+      // prismarine G3: a leaf draw when the pipeline is cached on this pass.
       final drawn = _drawCached(indexCount, instanceCount, true);
       if (drawn == 1) return;
       if (drawn == 0) throw Exception("Failed to append drawIndexed");
@@ -879,7 +879,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     }
   }
 
-  // mcsm G7: a draw from a first instance. The mcsm7 engine offsets the
+  // prismarine G7: a draw from a first instance. The mcsm7 engine offsets the
   // instance-rate buffers itself (leaf); elsewhere, or before the pass has
   // made the pipeline, they are bound again at the offset for this draw.
   void _drawFromInstance(
@@ -888,8 +888,8 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int first,
     bool indexed,
   ) {
-    if (_mcsmDrawInstanced) {
-      final drawn = _mcsmDrawInstancedNative(
+    if (_prismarineDrawInstanced) {
+      final drawn = _prismarineDrawInstancedNative(
         count,
         instanceCount,
         first,
@@ -937,23 +937,23 @@ base class RenderPass extends NativeFieldWrapperClass1 {
   }
 
   @Native<Int Function(Pointer<Void>, Int, Int, Int, Bool)>(
-    symbol: 'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
+    symbol: 'InternalFlutterGpu_RenderPass_PrismarineDrawInstanced',
     isLeaf: true,
   )
-  external static int _mcsmDrawInstancedNativeP(
+  external static int _prismarineDrawInstancedNativeP(
     Pointer<Void> self,
     int elementCount,
     int instanceCount,
     int firstInstance,
     bool indexed,
   );
-  int _mcsmDrawInstancedNative(
+  int _prismarineDrawInstancedNative(
     int elementCount,
     int instanceCount,
     int firstInstance,
     bool indexed,
-  ) => _mcsmDrawInstancedNativeP(
-    _mcsmSelf,
+  ) => _prismarineDrawInstancedNativeP(
+    _prismarineSelf,
     elementCount,
     instanceCount,
     firstInstance,
@@ -1002,7 +1002,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
       Int,
     )
   >(symbol: 'InternalFlutterGpu_RenderPass_SetColorAttachment')
-  // mcsm G12: the wrappers by their kept pointers (a Pointer per wrapper
+  // prismarine G12: the wrappers by their kept pointers (a Pointer per wrapper
   // argument per call otherwise); the caller holds every one through it.
   external static String? _setColorAttachmentP(
     Pointer<Void> self,
@@ -1035,7 +1035,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     )
   >(symbol: 'InternalFlutterGpu_RenderPass_SetDepthStencilAttachment')
   external static String? _setDepthStencilAttachmentP(
-    // mcsm G12
+    // prismarine G12
     Pointer<Void> self,
     int depthLoadAction,
     int depthStoreAction,
@@ -1052,25 +1052,25 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     symbol: 'InternalFlutterGpu_RenderPass_Begin',
   )
   external static String? _beginP(
-    // mcsm G12
+    // prismarine G12
     Pointer<Void> self,
     Pointer<Void> commandBuffer,
   );
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindPipeline',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _bindPipelineP(
     Pointer<Void> self,
     Pointer<Void> pipeline,
   );
   void _bindPipeline(RenderPipeline pipeline) =>
-      _bindPipelineP(_mcsmSelf, pipeline._mcsmSelf);
+      _bindPipelineP(_prismarineSelf, pipeline._prismarineSelf);
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindVertexBufferDevice',
-    isLeaf: true, // mcsm G3
+    isLeaf: true, // prismarine G3
   )
   external static void _bindVertexBufferDeviceP(
     Pointer<Void> self,
@@ -1085,8 +1085,8 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int lengthInBytes,
     int slot,
   ) => _bindVertexBufferDeviceP(
-    _mcsmSelf,
-    buffer._mcsmSelf,
+    _prismarineSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
     slot,
@@ -1094,7 +1094,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Pointer<Void>, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_BindIndexBufferDevice',
-    isLeaf: true, // mcsm G3
+    isLeaf: true, // prismarine G3
   )
   external static void _bindIndexBufferDeviceP(
     Pointer<Void> self,
@@ -1109,8 +1109,8 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int lengthInBytes,
     int indexType,
   ) => _bindIndexBufferDeviceP(
-    _mcsmSelf,
-    buffer._mcsmSelf,
+    _prismarineSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
     indexType,
@@ -1127,7 +1127,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int lengthInBytes,
   );
 
-  // mcsm G2
+  // prismarine G2
   @Native<
     Bool Function(Pointer<Void>, Pointer<Void>, Int, Pointer<Void>, Int, Int)
   >(symbol: 'InternalFlutterGpu_RenderPass_BindUniformIndexed', isLeaf: true)
@@ -1146,15 +1146,15 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int offsetInBytes,
     int lengthInBytes,
   ) => _bindUniformIndexedP(
-    _mcsmSelf,
-    shader._mcsmSelf,
+    _prismarineSelf,
+    shader._prismarineSelf,
     uniformIndex,
-    buffer._mcsmSelf,
+    buffer._prismarineSelf,
     offsetInBytes,
     lengthInBytes,
   );
 
-  // mcsm G2
+  // prismarine G2
   @Native<
     Bool Function(
       Pointer<Void>,
@@ -1192,10 +1192,10 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int heightAddressMode,
     int maxAnisotropy,
   ) => _bindTextureIndexedP(
-    _mcsmSelf,
-    shader._mcsmSelf,
+    _prismarineSelf,
+    shader._prismarineSelf,
     textureIndex,
-    texture._mcsmSelf,
+    texture._prismarineSelf,
     minFilter,
     magFilter,
     mipFilter,
@@ -1204,7 +1204,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     maxAnisotropy,
   );
 
-  // mcsm G3: 1 drawn, 0 failed, 2 pipeline not cached (nothing done).
+  // prismarine G3: 1 drawn, 0 failed, 2 pipeline not cached (nothing done).
   @Native<Int Function(Pointer<Void>, Int, Int, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_DrawCached',
     isLeaf: true,
@@ -1216,11 +1216,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     bool indexed,
   );
   int _drawCached(int elementCount, int instanceCount, bool indexed) =>
-      _drawCachedP(_mcsmSelf, elementCount, instanceCount, indexed);
+      _drawCachedP(_prismarineSelf, elementCount, instanceCount, indexed);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Float, Float)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetViewport',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setViewportP(
     Pointer<Void> self,
@@ -1239,7 +1239,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     double depthRangeZNear,
     double depthRangeZFar,
   ) => _setViewportP(
-    _mcsmSelf,
+    _prismarineSelf,
     x,
     y,
     width,
@@ -1276,14 +1276,14 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_RenderPass_ClearBindings',
-    isLeaf: true, // mcsm G3
+    isLeaf: true, // prismarine G3
   )
   external static void _clearBindingsP(Pointer<Void> self);
-  void _clearBindings() => _clearBindingsP(_mcsmSelf);
+  void _clearBindings() => _clearBindingsP(_prismarineSelf);
 
   @Native<Void Function(Pointer<Void>, Int, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEnable',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setColorBlendEnableP(
     Pointer<Void> self,
@@ -1291,11 +1291,11 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     bool enable,
   );
   void _setColorBlendEnable(int colorAttachmentIndex, bool enable) =>
-      _setColorBlendEnableP(_mcsmSelf, colorAttachmentIndex, enable);
+      _setColorBlendEnableP(_prismarineSelf, colorAttachmentIndex, enable);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetColorBlendEquation',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setColorBlendEquationP(
     Pointer<Void> self,
@@ -1316,7 +1316,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int sourceAlphaBlendFactor,
     int destinationAlphaBlendFactor,
   ) => _setColorBlendEquationP(
-    _mcsmSelf,
+    _prismarineSelf,
     colorAttachmentIndex,
     colorBlendOperation,
     sourceColorBlendFactor,
@@ -1328,37 +1328,37 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Bool)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthWriteEnable',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setDepthWriteEnableP(Pointer<Void> self, bool enable);
   void _setDepthWriteEnable(bool enable) =>
-      _setDepthWriteEnableP(_mcsmSelf, enable);
+      _setDepthWriteEnableP(_prismarineSelf, enable);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetDepthCompareOperation',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setDepthCompareOperationP(
     Pointer<Void> self,
     int compareOperation,
   );
   void _setDepthCompareOperation(int compareOperation) =>
-      _setDepthCompareOperationP(_mcsmSelf, compareOperation);
+      _setDepthCompareOperationP(_prismarineSelf, compareOperation);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilReference',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setStencilReferenceP(
     Pointer<Void> self,
     int referenceValue,
   );
   void _setStencilReference(int referenceValue) =>
-      _setStencilReferenceP(_mcsmSelf, referenceValue);
+      _setStencilReferenceP(_prismarineSelf, referenceValue);
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetStencilConfig',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setStencilConfigP(
     Pointer<Void> self,
@@ -1379,7 +1379,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int writeMask,
     int target_face,
   ) => _setStencilConfigP(
-    _mcsmSelf,
+    _prismarineSelf,
     compareFunction,
     stencilFailureOperation,
     depthFailureOperation,
@@ -1391,7 +1391,7 @@ base class RenderPass extends NativeFieldWrapperClass1 {
 
   @Native<Void Function(Pointer<Void>, Int, Int, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetScissor',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setScissorP(
     Pointer<Void> self,
@@ -1401,41 +1401,41 @@ base class RenderPass extends NativeFieldWrapperClass1 {
     int height,
   );
   void _setScissor(int x, int y, int width, int height) =>
-      _setScissorP(_mcsmSelf, x, y, width, height);
+      _setScissorP(_prismarineSelf, x, y, width, height);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetCullMode',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setCullModeP(Pointer<Void> self, int cullMode);
-  void _setCullMode(int cullMode) => _setCullModeP(_mcsmSelf, cullMode);
+  void _setCullMode(int cullMode) => _setCullModeP(_prismarineSelf, cullMode);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPrimitiveType',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setPrimitiveTypeP(
     Pointer<Void> self,
     int primitiveType,
   );
   void _setPrimitiveType(int primitiveType) =>
-      _setPrimitiveTypeP(_mcsmSelf, primitiveType);
+      _setPrimitiveTypeP(_prismarineSelf, primitiveType);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetWindingOrder',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setWindingOrderP(Pointer<Void> self, int windingOrder);
   void _setWindingOrder(int windingOrder) =>
-      _setWindingOrderP(_mcsmSelf, windingOrder);
+      _setWindingOrderP(_prismarineSelf, windingOrder);
 
   @Native<Void Function(Pointer<Void>, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_SetPolygonMode',
-    isLeaf: true, // mcsm G6
+    isLeaf: true, // prismarine G6
   )
   external static void _setPolygonModeP(Pointer<Void> self, int polygonMode);
   void _setPolygonMode(int polygonMode) =>
-      _setPolygonModeP(_mcsmSelf, polygonMode);
+      _setPolygonModeP(_prismarineSelf, polygonMode);
 
   @Native<Bool Function(Pointer<Void>, Int, Int)>(
     symbol: 'InternalFlutterGpu_RenderPass_Draw',

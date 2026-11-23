@@ -10,9 +10,9 @@ part of flutter_gpu;
 ///
 /// To obtain the default graphics context, use [getContext].
 base class GpuContext extends NativeFieldWrapperClass1 {
-  /// mcsm G12: this object's native pointer, read once (RenderPass's
+  /// prismarine G12: this object's native pointer, read once (RenderPass's
   /// natives take it as a pointer).
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   /// Creates a new graphics context that corresponds to the default Impeller
   /// context.
@@ -194,10 +194,10 @@ base class GpuContext extends NativeFieldWrapperClass1 {
     bool enableShaderWriteUsage = false,
     int mipLevelCount = 1,
 
-    /// mcsm G9: the layers of a [TextureType.texture2DArray].
+    /// prismarine G9: the layers of a [TextureType.texture2DArray].
     int layers = 1,
 
-    /// mcsm G9: the depth of a [TextureType.texture3D].
+    /// prismarine G9: the depth of a [TextureType.texture3D].
     int depth = 1,
   }) {
     final resolvedTextureType =
@@ -274,24 +274,24 @@ base class GpuContext extends NativeFieldWrapperClass1 {
 
   /// Create a new command buffer that can be used to submit GPU commands.
   CommandBuffer createCommandBuffer() {
-    // mcsm G15: a submitted one again.
-    final free = _mcsmFreeBuffer;
+    // prismarine G15: a submitted one again.
+    final free = _prismarineFreeBuffer;
     if (free != null) {
-      _mcsmFreeBuffer = free._mcsmNext;
-      free._mcsmNext = null;
-      return free.._mcsmAgain();
+      _prismarineFreeBuffer = free._prismarineNext;
+      free._prismarineNext = null;
+      return free.._prismarineAgain();
     }
     return CommandBuffer._(this);
   }
 
-  // mcsm G15: submitted command buffers and their passes, detached from
+  // prismarine G15: submitted command buffers and their passes, detached from
   // their native objects at submit and made again from here (each list
   // through the objects' own links): a frame's ~100 passes otherwise die
   // young and are destroyed natively inside a collection's pause, every
   // isolate stopped.
-  CommandBuffer? _mcsmFreeBuffer;
-  RenderPass? _mcsmFreePass;
-  ComputePass? _mcsmFreeCompute;
+  CommandBuffer? _prismarineFreeBuffer;
+  RenderPass? _prismarineFreePass;
+  ComputePass? _prismarineFreeCompute;
 
   RenderPipeline createRenderPipeline(
     Shader vertexShader,

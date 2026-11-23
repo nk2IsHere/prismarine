@@ -29,9 +29,9 @@ class BufferView {
 /// [DeviceBuffer] is a region of memory allocated on the device heap
 /// (GPU-resident memory).
 base class DeviceBuffer extends NativeFieldWrapperClass1 {
-  /// mcsm G11: this object's native pointer, read once: the leaf natives
+  /// prismarine G11: this object's native pointer, read once: the leaf natives
   /// take it as a pointer, where passing the object made a Pointer per call.
-  late final Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  late final Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   bool _valid = false;
   get isValid {
@@ -46,7 +46,7 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
   ) : storageMode = storageMode,
       sizeInBytes = sizeInBytes {
     _valid = _initialize(gpuContext, storageMode.index, sizeInBytes);
-    if (_valid) GpuMemory._track(this, _mcsmKind, sizeInBytes);
+    if (_valid) GpuMemory._track(this, _prismarineKind, sizeInBytes);
   }
 
   /// Creates a new host visible DeviceBuffer with data copied from the host.
@@ -54,28 +54,28 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
     : storageMode = StorageMode.hostVisible,
       sizeInBytes = data.lengthInBytes {
     _valid = _initializeWithHostData(gpuContext, data);
-    if (_valid) GpuMemory._track(this, _mcsmKind, sizeInBytes);
+    if (_valid) GpuMemory._track(this, _prismarineKind, sizeInBytes);
   }
 
   final StorageMode storageMode;
   final int sizeInBytes;
 
-  /// mcsm G4: the kind this buffer counts under, fixed when it is made.
-  final String _mcsmKind = GpuMemory.tag ?? 'buffer';
+  /// prismarine G4: the kind this buffer counts under, fixed when it is made.
+  final String _prismarineKind = GpuMemory.tag ?? 'buffer';
 
-  /// mcsm G17: lets go of the native buffer now, not when a collection
+  /// prismarine G17: lets go of the native buffer now, not when a collection
   /// finalizes this object: a buffer's GPU memory has no external size, so
   /// the VM's old space never felt it, and buffers the owner had dropped
   /// waited for the next mark-sweep (hundreds of MB over a long run). The
   /// frames already submitted keep what they bound (Metal's command
   /// buffers retain their resources, Vulkan's track them). This object
-  /// and every view of it must not be used again. Without McsmDetach (an
+  /// and every view of it must not be used again. Without PrismarineDetach (an
   /// engine before mcsm11) the collector still lets it go.
-  void mcsmRelease() {
-    if (!_mcsmEngine11 || !_valid) return;
+  void prismarineRelease() {
+    if (!_prismarineEngineDetach || !_valid) return;
     _valid = false;
-    _mcsmDetach(this);
-    GpuMemory._released(this, _mcsmKind, sizeInBytes);
+    _prismarineDetach(this);
+    GpuMemory._released(this, _prismarineKind, sizeInBytes);
   }
 
   void _bindAsVertexBuffer(
@@ -112,8 +112,8 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
     int offsetInBytes,
     int lengthInBytes,
   ) {
-    if (_mcsmEngineE3) {
-      // mcsm G2: by the resolved index, as a leaf call.
+    if (_prismarineEngineSlotBinds) {
+      // prismarine G2: by the resolved index, as a leaf call.
       final index = slot._resolvedStructIndex;
       return index >= 0 &&
           renderPass._bindUniformIndexed(

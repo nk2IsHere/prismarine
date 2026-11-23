@@ -115,10 +115,10 @@ base class TextureDestinationRegion {
 }
 
 base class CommandBuffer extends NativeFieldWrapperClass1 {
-  /// mcsm G12: this object's native pointer, read once (RenderPass's
+  /// prismarine G12: this object's native pointer, read once (RenderPass's
   /// natives take it as a pointer).
-  /// (mcsm G15: read again when the object is made again.)
-  late Pointer<Void> _mcsmSelf = _mcsmPointerOf(this);
+  /// (prismarine G15: read again when the object is made again.)
+  late Pointer<Void> _prismarineSelf = _prismarinePointerOf(this);
 
   final GpuContext _gpuContext;
 
@@ -132,61 +132,62 @@ base class CommandBuffer extends NativeFieldWrapperClass1 {
   /// Whether [submit] has been called on this command buffer.
   bool get submitted => _submitted;
 
-  // mcsm G15: this command buffer's passes (through their links), and its
+  // prismarine G15: this command buffer's passes (through their links), and its
   // own link in the context's free list.
-  RenderPass? _mcsmPasses;
-  ComputePass? _mcsmComputes;
-  CommandBuffer? _mcsmNext;
+  RenderPass? _prismarinePasses;
+  ComputePass? _prismarineComputes;
+  CommandBuffer? _prismarineNext;
 
-  /// mcsm G15: a submitted command buffer taken from the free list.
-  void _mcsmAgain() {
+  /// prismarine G15: a submitted command buffer taken from the free list.
+  void _prismarineAgain() {
     _initialize(_gpuContext);
-    _mcsmSelf = _mcsmPointerOf(this);
+    _prismarineSelf = _prismarinePointerOf(this);
     _submitted = false;
   }
 
-  /// mcsm G15: after submit, the passes and this command buffer leave their
-  /// native objects (released here, not by a collection) and wait in the
+  /// prismarine G15: after submit, the passes and this command buffer leave
+  /// their native objects (released here, not by a collection) and wait in the
   /// context's free lists. None of them is used after its submit.
-  void _mcsmRelease() {
+  void _prismarineRelease() {
     final ctx = _gpuContext;
-    var pass = _mcsmPasses;
-    _mcsmPasses = null;
+    var pass = _prismarinePasses;
+    _prismarinePasses = null;
     while (pass != null) {
-      final next = pass._mcsmNext;
-      _mcsmDetach(pass);
-      pass._mcsmNext = ctx._mcsmFreePass;
-      ctx._mcsmFreePass = pass;
+      final next = pass._prismarineNext;
+      _prismarineDetach(pass);
+      pass._prismarineNext = ctx._prismarineFreePass;
+      ctx._prismarineFreePass = pass;
       pass = next;
     }
-    var compute = _mcsmComputes;
-    _mcsmComputes = null;
+    var compute = _prismarineComputes;
+    _prismarineComputes = null;
     while (compute != null) {
-      final next = compute._mcsmNext;
-      _mcsmDetach(compute);
-      compute._mcsmNext = ctx._mcsmFreeCompute;
-      ctx._mcsmFreeCompute = compute;
+      final next = compute._prismarineNext;
+      _prismarineDetach(compute);
+      compute._prismarineNext = ctx._prismarineFreeCompute;
+      ctx._prismarineFreeCompute = compute;
       compute = next;
     }
-    _mcsmDetach(this);
-    _mcsmNext = ctx._mcsmFreeBuffer;
-    ctx._mcsmFreeBuffer = this;
+    _prismarineDetach(this);
+    _prismarineNext = ctx._prismarineFreeBuffer;
+    ctx._prismarineFreeBuffer = this;
   }
 
   RenderPass createRenderPass(RenderTarget renderTarget) {
-    if (!_mcsmEngine11) return RenderPass._(_gpuContext, this, renderTarget);
+    if (!_prismarineEngineDetach)
+      return RenderPass._(_gpuContext, this, renderTarget);
     final ctx = _gpuContext;
     final RenderPass pass;
-    final free = ctx._mcsmFreePass;
+    final free = ctx._prismarineFreePass;
     if (free != null) {
-      ctx._mcsmFreePass = free._mcsmNext;
-      free._mcsmNext = null;
-      pass = free.._mcsmAgain(ctx, this, renderTarget);
+      ctx._prismarineFreePass = free._prismarineNext;
+      free._prismarineNext = null;
+      pass = free.._prismarineAgain(ctx, this, renderTarget);
     } else {
       pass = RenderPass._(ctx, this, renderTarget);
     }
-    pass._mcsmNext = _mcsmPasses;
-    _mcsmPasses = pass;
+    pass._prismarineNext = _prismarinePasses;
+    _prismarinePasses = pass;
     return pass;
   }
 
@@ -305,7 +306,7 @@ base class CommandBuffer extends NativeFieldWrapperClass1 {
       throw Exception(error);
     }
     _submitted = true;
-    if (_mcsmEngine11) _mcsmRelease();
+    if (_prismarineEngineDetach) _prismarineRelease();
   }
 
   /// Wrap with native counterpart.
