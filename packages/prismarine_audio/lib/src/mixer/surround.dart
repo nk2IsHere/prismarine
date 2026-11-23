@@ -3,24 +3,22 @@ import 'dart:typed_data';
 
 import 'package:prismarine_math/libm.dart' as libm;
 
-/// FMOD 1.09's surround panning onto 5.1 speakers, as the PAN DSP (27) does
-/// in surround mode with a 5.1 target (S2's events: mode 2, "Output
-/// Speaker" 6). Traced in S2's fmod64.dll and checked against the oracle
-/// [O: formats/telltale/fmod-runtime.md "FMOD 1.09 (S2)"].
+/// The surround panning onto 5.1 speakers of the pan DSP in surround mode
+/// with a 5.1 target.
 ///
-/// Channels are FMOD's 5.1 order: FL FR C LFE SL SR. The speakers sit at
-/// −30, 30, 0, −110 and 110 degrees; the LFE takes no part in panning.
+/// The channels have the order FL FR C LFE SL SR. The speakers are at −30,
+/// 30, 0, −110 and 110 degrees, and the LFE takes no part in panning.
 abstract final class Surround {
-  /// Speakers by angle and their channels, the ring FMOD pans over.
+  /// The speakers by angle with their channels, the ring of the panning.
   static const _angle = [-110.0, -30.0, 0.0, 30.0, 110.0];
   static const _chan = [4, 0, 2, 1, 5];
 
-  /// The 5.1 gains of a mono source at [direction] degrees spread over
-  /// [extent] degrees, times [gain], added into [out] (six gains); the LFE
-  /// gets [lfe] (a linear gain) times [gain].
+  /// Adds the six 5.1 gains of a mono source at [direction] degrees spread
+  /// over [extent] degrees, times [gain], into [out]. The LFE gets the
+  /// linear gain [lfe] times [gain].
   ///
   /// A point source pans between the two speakers around it by 2D VBAP at
-  /// unit power. An arc is cut at the speakers; each piece pans as a point
+  /// unit power. An arc is cut at the speakers, and each piece pans as a point
   /// at its middle, weighted by its share of its speaker pair's span, and
   /// the sum is brought back to unit power. An extent of 360 or more puts
   /// gain/√5 on every speaker.
@@ -35,12 +33,12 @@ abstract final class Surround {
     _arc(direction, extent, gain, out, unit: true);
   }
 
-  /// A stereo source in distributed mode (the PAN DSP's stereo mode 0):
-  /// each channel fills half the extent, placed by [rotation] against
-  /// [direction] as FMOD 1.06 places it on stereo speakers, but over the
-  /// 5.1 ring; a channel whose half crosses behind is two arcs summed
-  /// unweighted by power and brought back to unit power together. The LFE
-  /// gets lfe·gain/√2 from each channel.
+  /// Adds the gains of a stereo source in distributed mode, stereo mode 0.
+  /// Each channel fills half the extent, placed by [rotation] against
+  /// [direction] as [Spatial.stereo] places it, over the 5.1 ring. A channel
+  /// whose half crosses behind is two arcs, summed without weights by power
+  /// and brought back to unit power together. The LFE gets lfe·gain/√2 from
+  /// each channel.
   static void stereoDistributed(
     double direction,
     double extent,
@@ -95,9 +93,9 @@ abstract final class Surround {
     outR[3] += lfe * gain * math.sqrt1_2;
   }
 
-  /// A stereo source in discrete mode (stereo mode 1): the channels are
-  /// points at [axis] ∓ separation/2; direction, extent and rotation play
-  /// no part. The LFE gets lfe·gain/√2 from each channel.
+  /// Adds the gains of a stereo source in discrete mode, stereo mode 1. The
+  /// channels are points at [axis] ∓ separation/2, and direction, extent and
+  /// rotation play no part. The LFE gets lfe·gain/√2 from each channel.
   static void stereoDiscrete(
     double axis,
     double separation,
@@ -110,8 +108,9 @@ abstract final class Surround {
     mono(axis + separation * 0.5, 0, gain, lfe * math.sqrt1_2, outR);
   }
 
-  /// One arc's gains times [gain] into [out]. [unit]: brought back to unit
-  /// power before the gain (else the pieces' weighted sum is added as is).
+  /// Adds the gains of one arc times [gain] into [out]. With [unit] they are
+  /// brought back to unit power before the gain, else the weighted sum of
+  /// the pieces is added as it is.
   static void _arc(
     double direction,
     double extent,
@@ -140,7 +139,8 @@ abstract final class Surround {
     final s = wrap(d - extent * 0.5);
     for (var p = 0; p < 5; p++) {
       final a = _angle[p], span = _span(p);
-      // The arc [s, s + extent] against the pair [a, a + span], unwrapped.
+      // The arc from s to s + extent against the pair from a to a + span,
+      // unwrapped.
       for (final shift in const [-360.0, 0.0, 360.0]) {
         final lo = math.max(s + shift, a);
         final hi = math.min(s + shift + extent, a + span);
@@ -157,8 +157,8 @@ abstract final class Surround {
     }
   }
 
-  /// [g] brought to unit power (unless already within 1e-6 of it), times
-  /// [gain], into [out].
+  /// Adds [g] at unit power times [gain] into [out]. Gains within 1e-6 of
+  /// unit power stay as they are.
   static void _normalized(Float64List g, double gain, Float64List out) {
     var sum = 0.0;
     for (var c = 0; c < 6; c++) {
@@ -175,7 +175,7 @@ abstract final class Surround {
   static final _pair = Float64List(6);
   static final _tmp = Float64List(6);
 
-  /// [a] in [−180, 180).
+  /// Returns [a] wrapped into [−180, 180).
   static double wrap(double a) {
     while (a < -180) {
       a += 360;
@@ -198,8 +198,9 @@ abstract final class Surround {
     return t <= span;
   }
 
-  /// VBAP of [d] between pair [p]'s speakers, times [w], into [out]:
-  /// gains sin(b − d) and sin(d − a) over sin(b − a), or at unit power.
+  /// Adds the VBAP gains of [d] between the speakers of pair [p] times [w]
+  /// into [out], sin(b − d) and sin(d − a) over sin(b − a), or at unit
+  /// power.
   static void _vbap(
     int p,
     double d,
@@ -215,8 +216,7 @@ abstract final class Surround {
     out[_chan[(p + 1) % 5]] += gb / n * w;
   }
 
-  /// The 5.1 → stereo downmix FMOD's output stage applies on a stereo
-  /// device: L = FL + C/√2 + SL/√2, R = FR + C/√2 + SR/√2; the LFE is
-  /// dropped [O: oracle wavwriter renders, ww_chick, dmxw_*].
+  /// The downmix from 5.1 to stereo, L = FL + C/√2 + SL/√2 and
+  /// R = FR + C/√2 + SR/√2, without the LFE.
   static const downmix = math.sqrt1_2;
 }

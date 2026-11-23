@@ -1,13 +1,11 @@
 import 'dart:typed_data';
 import 'package:prismarine_math/libm.dart' as libm;
 
-/// The mixer rate.
+/// The rate of the mix in frames per second.
 const mixRate = 48000;
 
-/// An FMOD built-in DSP, rebuilt from the FMOD oracle's measurements of the
-/// game's FMOD 1.06.02 (see formats/telltale/fmod-runtime.md, "Built-in DSPs").
-/// Parameters use FMOD's indices; buffers are stereo, interleaved, processed in
-/// place.
+/// An effect DSP. Its parameters have the order of its [EffectKind]. It
+/// processes interleaved stereo buffers in place.
 abstract class Dsp {
   Dsp(List<double> defaults) : params = [...defaults];
 
@@ -22,40 +20,38 @@ abstract class Dsp {
 
   double get(int index) => params[index];
 
-  /// A parameter changed: recompute coefficients.
+  /// Recomputes the coefficients after parameter [index] changed.
   void changed(int index) {}
 
-  /// The stored parameters are set: a DSP that glides to new parameters
-  /// starts at these instead.
+  /// Takes the parameters set so far as its start values. A DSP that glides
+  /// to new parameters starts at these.
   void start() {}
 
-  /// [frames] of silence went by unprocessed (a skipped strip): advance
-  /// envelopes and phases as silence would.
+  /// Advances envelopes and phases over [frames] frames of silence that a
+  /// skipped strip did not process.
   void idle(int frames) {}
 
-  /// Sound still held inside (a delay line) that silence in would bring
-  /// out: the strip must keep processing.
+  /// The DSP holds sound, as in a delay line, that silence at its input
+  /// would bring out. The strip keeps processing it.
   bool get ringing => false;
 
-  /// Processes [frames] frames of [buf]. [mono]: the signal is mono, held
-  /// dual-mono (L = R). Returns whether the output is still mono.
+  /// Processes [frames] frames of [buf]. With [mono] the signal is mono,
+  /// held with equal channels. Returns whether the output is still mono.
   bool process(Float32List buf, int frames, {bool mono = false});
 
-  /// Processes [frames] frames of a 5.1 buffer (six channels interleaved:
-  /// FL FR C LFE SL SR), as on an S2 bus whose input format is 5.1; false
-  /// when the DSP has no 5.1 form (the strip passes the signal on and
-  /// reports it).
+  /// Processes [frames] frames of a 5.1 buffer, six channels interleaved in
+  /// the order FL FR C LFE SL SR. Returns false when the DSP has no 5.1
+  /// form. The strip then passes the signal on and reports a problem.
   bool process51(Float32List buf, int frames) => false;
 
-  /// The twins that run a per-channel DSP's other two channel pairs of a
-  /// 5.1 buffer (C/LFE and SL/SR), each with its own state.
+  /// The twins that run the other two channel pairs of a 5.1 buffer, C with
+  /// LFE and SL with SR, each with its own state.
   List<Dsp>? _twins;
   Float32List _pair = Float32List(0);
 
-  /// 5.1 as three stereo pairs through this DSP and two twins [make] builds,
-  /// for DSPs that treat every channel alike and on its own (FMOD's
-  /// filters, echo and distortion run per channel [O: c51_echo, c51_eq3,
-  /// mb51]).
+  /// Processes a 5.1 buffer as three stereo pairs through this DSP and two
+  /// twins that [make] builds. It suits DSPs that treat every channel alike
+  /// and on its own, such as the filters, the echo and the distortion.
   bool processPairs51(Float32List buf, int frames, Dsp Function() make) {
     final twins = _twins ??= [make()..start(), make()..start()];
     if (_pair.length < frames * 2) _pair = Float32List(frames * 2);
@@ -78,9 +74,9 @@ abstract class Dsp {
   }
 }
 
-/// dB → amplitude; −80 dB and below is silence.
+/// Converts dB to an amplitude. −80 dB and less is silence.
 double dbGain(double db) => db <= -80 ? 0 : libm.dpow(10, db / 20);
 
-/// A one-pole smoothing coefficient for time constant [ms].
+/// Returns the one-pole smoothing coefficient of the time constant [ms].
 double onePole(double ms) =>
     ms <= 0 ? 1 : 1 - libm.exp(-1 / (ms * 1e-3 * mixRate));

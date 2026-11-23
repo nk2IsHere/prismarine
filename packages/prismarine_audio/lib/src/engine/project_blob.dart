@@ -6,14 +6,14 @@ import '../mixer/dsp_reverb.dart';
 import '../model/curve.dart';
 import '../model/model.dart';
 
-/// A project's model for the native mixer (mcsm_audio_out `native/mixer`,
-/// src/model.rs reads it), so defaults, sort orders and lookup rules stay
-/// Dart's. Strings are interned; little-endian; lists are a count then their
-/// items.
+/// Writes a project as the binary model that the native engine reads. The
+/// model carries the values as the Dart model resolved them, with their
+/// defaults and order. Strings are interned, numbers are little-endian and a
+/// list is a count followed by its items.
 ///
-/// [events] and [mixStates] are by path in lookup order; waveforms come once
-/// per key; the mixer's buses come with their paths. An event without an
-/// input bus plays into the bus [defaultBus].
+/// [events] and [mixStates] are keyed by path in lookup order. An event
+/// without an input bus plays into the bus [defaultBus], by default the
+/// master bus.
 Uint8List projectBlob({
   required Map<String, EventDef> events,
   required Map<String, EventDef> mixStates,
@@ -192,8 +192,8 @@ class _Writer {
     list(fx.properties, prop);
   }
 
-  /// [format]: the channel format an event strip runs in (EventFormats; 0:
-  /// its layout's).
+  /// [format] is the channel format of an event strip, or 0 for the format
+  /// of its layout.
   void bus(StripDef b, {String? path, int format = 0}) {
     s(b.guid);
     u8(b.master);
@@ -309,7 +309,7 @@ class _Writer {
       i64(t.unit);
       i64(t.multiplier);
     });
-    // MixStateInstance's view (empty for events).
+    // The mix state part, empty for an event.
     final ms = d.mixState ?? MixStateDef();
     i64(ms.priority);
     f64(ms.intensity);

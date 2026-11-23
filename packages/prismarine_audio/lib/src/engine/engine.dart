@@ -8,21 +8,22 @@ import '../mixer/mix_state.dart';
 import '../model/model.dart';
 import '../pcm_source.dart';
 
-/// What the runtime asks of the audio (sendable to a render isolate).
+/// A command of a game to the audio engine. Commands can be sent to another
+/// isolate.
 sealed class AudioCommand {
   const AudioCommand(this.id);
 
-  /// The instance (event or snapshot) the command addresses.
+  /// The id of the event or mix state instance that the command addresses.
   final int id;
 }
 
 /// Starts event [path] [seek] seconds in. [sound] is the key of the sound
-/// that its programmer instruments play, which the engine's [SoundLoader]
+/// that its slot instruments play, which the engine's [SoundLoader]
 /// resolves. With [late], a tolerance in seconds, [seek] is the position
-/// the instance should be at by now: it is used only when it is past the
-/// tolerance and [AudioRules.lateStartMinimum] and the event is longer than
-/// the tolerance, and a position past the event's end does not play. The
-/// length of an event with a sound is the sound's.
+/// that the instance should have by now. The engine uses it only when it is
+/// past the tolerance and [AudioRules.lateStartMinimum] and the event is
+/// longer than the tolerance. A position past the event's end does not
+/// play. The length of an event with a sound is the length of the sound.
 class StartEvent extends AudioCommand {
   const StartEvent(super.id, this.path, {this.seek = 0, this.sound, this.late});
   final String path;
@@ -37,19 +38,20 @@ class SetParameter extends AudioCommand {
   final double value;
 }
 
-/// EventInstance volume (linear). With [keepTail], a zero volume for a
-/// one-shot instance that has played and has less than [keepTail] seconds
-/// left is ignored.
+/// Sets the linear volume of an instance. With [keepTail], a zero volume
+/// for a one-shot instance that has played and has less than [keepTail]
+/// seconds left is ignored.
 class SetVolume extends AudioCommand {
   const SetVolume(super.id, this.volume, {this.keepTail});
   final double volume;
   final double? keepTail;
 }
 
-/// Stops an instance: with a fade (an AHDSR release or a short declick) or
-/// at once. With [viaParameter], a fading stop sets that parameter to 1 in
-/// place of stopping when the event has it. With [keepTail], a one-shot
-/// instance with less than [keepTail] seconds left plays on.
+/// Stops an instance with a fade, which is an AHDSR release or a short
+/// declick, or at once. With [viaParameter], a fading stop sets that
+/// parameter to 1 in place of stopping when the event has it. With
+/// [keepTail], a one-shot instance with less than [keepTail] seconds left
+/// plays on.
 class StopEvent extends AudioCommand {
   const StopEvent(
     super.id, {
@@ -62,16 +64,16 @@ class StopEvent extends AudioCommand {
   final double? keepTail;
 }
 
-/// A paused event is silent and doesn't advance; resuming continues in
-/// place.
+/// Pauses or resumes an instance. A paused instance is silent and does not
+/// advance. A resumed one continues in place.
 class SetPaused extends AudioCommand {
   const SetPaused(super.id, this.paused);
   final bool paused;
 }
 
-/// The event's position relative to the listener: [azimuth] degrees (0
-/// ahead, +90 right), [distance], and the cone angle [cone] (degrees between
-/// the event's forward and the listener).
+/// Sets the position of an instance relative to the listener. [azimuth] is
+/// in degrees with 0 ahead and +90 to the right. [cone] is the angle in
+/// degrees between the forward direction of the event and the listener.
 class SetSpatial extends AudioCommand {
   const SetSpatial(super.id, this.azimuth, this.distance, [this.cone = 0]);
   final double azimuth, distance, cone;
@@ -100,8 +102,9 @@ class AudioRules {
     this.wholeMsLengths = false,
   });
 
-  /// Frames by which the reported position of an instance trails its
-  /// render, which [SetVolume.keepTail] and [StopEvent.keepTail] count.
+  /// The frames by which the reported position of an instance trails its
+  /// render. [SetVolume.keepTail] and [StopEvent.keepTail] count from the
+  /// reported position.
   final int reportLag;
 
   /// A late start's position at or under this many seconds starts at 0.
@@ -111,42 +114,44 @@ class AudioRules {
   final bool wholeMsLengths;
 }
 
-/// Where the bridge sends audio commands: lockstep (capture) or real time.
+/// A receiver of a game's audio commands, in lockstep or in real time.
 abstract interface class AudioSink {
-  /// Applies [c] at runtime time [at] (seconds), or as soon as possible.
+  /// Applies [c] at the game time [at] in seconds, or as soon as possible.
   void command(AudioCommand c, {double? at});
 }
 
-/// A sound key → its decoded samples (the host decodes).
+/// Returns the decoded samples of a sound key, or null.
 typedef SoundLoader = PcmSource? Function(String key);
 
-/// What renders a session's audio: the Dart [AudioEngine] or the native
-/// mixer (mcsm_audio_out `NativeAudioEngine`), which render the same bits.
+/// A render of the audio engine. The Dart [AudioEngine] and the native
+/// engine of prismarine_audio_out render the same bits.
 abstract interface class AudioRenderer {
-  /// Frames rendered so far (the render head). Setting it moves the head
-  /// without rendering (a capture's fast-forward: audio.wav starts where
-  /// it stops); commands scheduled at or before it apply at the next frame.
+  /// The frames rendered so far, the render head. Setting it moves the head
+  /// without rendering, as for a capture that skips ahead. Commands
+  /// scheduled at or before the head apply at the next frame.
   int get position;
   set position(int frames);
 
-  /// Applies [c] when the render head reaches frame [at] (now, if it has).
+  /// Applies [c] when the render head reaches frame [at], or now when it
+  /// has.
   void schedule(AudioCommand c, {required int at});
 
   /// Applies [c] before the next frame.
   void apply(AudioCommand c);
 
-  /// [frames] of the master (stereo), applying scheduled commands at their
-  /// frames.
+  /// Renders [frames] stereo frames of the master bus and applies the
+  /// scheduled commands at their frames.
   Float32List render(int frames);
 
   Set<String> get problems;
 }
 
-/// The audio of one session: an [EventPlayer] into a [MixerGraph], driven by
-/// [AudioCommand]s applied at exact frames. Rendering is deterministic.
+/// The Dart render of the audio engine, an [EventPlayer] into a
+/// [MixerGraph] driven by [AudioCommand]s at exact frames. The render is
+/// deterministic.
 class AudioEngine implements AudioRenderer {
-  /// [events] by path; an instance without an input bus plays into the
-  /// mixer bus [defaultBus].
+  /// [events] are keyed by path. An instance without an input bus plays into
+  /// the mixer bus [defaultBus], by default the master bus.
   AudioEngine(
     Map<String, EventDef> events,
     this.mixer,
@@ -171,7 +176,7 @@ class AudioEngine implements AudioRenderer {
   final SoundLoader? sounds;
   final AudioRules rules;
 
-  /// Frames rendered so far (the render head).
+  /// The frames rendered so far, the render head.
   @override
   int position = 0;
 
@@ -210,8 +215,7 @@ class AudioEngine implements AudioRenderer {
         }
         var seek = c.seek;
         if (late != null) {
-          // The instance's length: its timeline's, or its sound's when it
-          // has one, in whole ms by the rules.
+          // The length of the timeline, or of the sound when there is one.
           final double len;
           if (prog != null) {
             len = rules.wholeMsLengths
@@ -220,22 +224,22 @@ class AudioEngine implements AudioRenderer {
           } else {
             len = (player.event(path)?.timeline.length ?? 0) / timelineRate;
           }
-          // A wanted position past the tolerance that is also past the
-          // end does not play; else it is the offset when the instance is
-          // longer than the tolerance and it is past the minimum.
+          // A wanted position past the tolerance and past the end does not
+          // play.
           final past = seek > 0 && seek > late ? seek : -1.0;
           if (len > 0 && past > len) return;
           seek = late >= len || rules.lateStartMinimum >= seek
               ? 0
               : math.max(past, 0);
         }
-        // An offset seeks the event's timeline. A programmer instrument on
-        // a parameter sheet still plays from its start [ORACLE fmod].
+        // The offset seeks the timeline. A slot instrument on a parameter
+        // sheet still plays from its start.
         final i = player.start(path, seek: seek, slot: prog);
         if (i != null) {
           _events[id] = i;
         } else if (player.has(path)) {
-          // Refused by its polyphony: it plays nothing, quietly.
+          // Refused by the polyphony limit. Later commands to it are
+          // ignored without a problem.
           _ended.add(id);
         }
       case SetParameter(:final id, :final name, :final value):
@@ -243,8 +247,7 @@ class AudioEngine implements AudioRenderer {
       case SetVolume(:final id, :final volume, :final keepTail):
         final i = _event(id);
         if (i == null) return;
-        // A volume sent before the instance has played is the one it starts
-        // with.
+        // A volume before the first block is the start volume.
         if (keepTail != null &&
             volume.abs() <= 1e-6 &&
             i.def.oneShot &&
@@ -279,14 +282,14 @@ class AudioEngine implements AudioRenderer {
     }
   }
 
-  /// An instance's length minus its reported position, in seconds: a
-  /// programmer sound's when it has one. The reported position trails the
-  /// render by [AudioRules.reportLag].
+  /// Returns the seconds left after the reported position of [i], on its
+  /// slot sound when it has one.
   double _left(EventInstance i) =>
       (i.slotLeft ?? (i.def.timeline.length - i.cursor) / timelineRate) +
       rules.reportLag / timelineRate;
 
-  /// Instances that ran out: later commands to them are dropped quietly.
+  /// The ids of instances that ended. Later commands to them are ignored
+  /// without a problem.
   final _ended = <int>{};
 
   EventInstance? _event(int id) {

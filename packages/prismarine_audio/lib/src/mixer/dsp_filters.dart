@@ -7,18 +7,16 @@ import 'dsp.dart';
 import 'spatial.dart';
 import 'surround.dart';
 
-/// FMOD_DSP_TYPE_LOWPASS (3): cutoff Hz (0), resonance (1). A 4th-order
-/// Butterworth: two RBJ biquads, each Q × resonance (O: exact to 16-bit).
-///
-/// FMOD 1.06 bypasses it at a cut-off of 22000 Hz (O); 1.09 doesn't, so an
-/// S2 event's "LowPass CutOff" at its default still filters [O: FMOD 1.09,
-/// 22000 Hz renders as the two biquads to 1e-6; ([keep22k])].
+/// The lowpass, with the cutoff in Hz (0) and the resonance (1). It is a
+/// 4th-order Butterworth of two RBJ biquads, each with Q times the
+/// resonance. Without [keep22k] it passes its input unchanged at a cutoff of
+/// 22000 Hz or more and a resonance of 1 or less.
 class Lowpass extends Dsp {
   Lowpass({this.keep22k = false}) : super([5000, 1]) {
     _update();
   }
 
-  /// FMOD 1.09's: no bypass at 22000 Hz.
+  /// The filter runs at 22000 Hz too.
   final bool keep22k;
   final _s = [Biquad(), Biquad()];
 
@@ -47,10 +45,11 @@ class Lowpass extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_THREE_EQ (28): low/mid/high gain dB (0–2), low and high
-/// crossovers Hz (3, 4), slope (5: 1 = 24 dB/oct). Linkwitz-Riley crossovers
-/// in parallel: low = LR4 low-pass at f1, mid = LR4 high-pass f1 then
-/// low-pass f2, high = LR4 high-pass at f2 (O: exact to 16-bit).
+/// The three-band EQ, with the low, mid and high gains in dB (0 to 2), the
+/// low and high crossovers in Hz (3, 4) and the slope (5), where 1 is
+/// 24 dB per octave. The bands are Linkwitz-Riley crossovers in parallel.
+/// The low band is an LR4 low-pass at f1, the mid band an LR4 high-pass at
+/// f1 and a low-pass at f2, the high band an LR4 high-pass at f2.
 class ThreeEq extends Dsp {
   ThreeEq() : super([0, 0, 0, 400, 4000, 1]) {
     _update();
@@ -101,38 +100,38 @@ class ThreeEq extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_PAN (27). 2D: stereo position −100..100 (1). A mono input
-/// pans at constant power (L = cos θ, R = sin θ); a stereo input is balanced
-/// per channel by √2·cos θ and √2·sin θ, with no cross-feed (O). In surround
-/// mode (0 = 2) with a 3D pan blend (17) above 0, the source at [azimuth]
-/// and [distance] (the event's position relative to the listener, set by
-/// the event's 3D attributes) is panned and attenuated as FMOD 1.06 does
-/// ([Spatial]); a blend below 1 mixes in the 2D pan [I: S1 uses 0 or 1].
-/// The output is stereo.
+/// The panner. In 2D it takes the stereo position from −100 to 100 (1). A
+/// mono input pans at constant power, L = cos θ and R = sin θ. A stereo
+/// input is balanced per channel by √2·cos θ and √2·sin θ, without a cross
+/// feed. In surround mode (0 is 2) with a 3D pan blend (17) above 0, the
+/// source at [azimuth] and [distance] relative to the listener is panned
+/// and attenuated by [Spatial]. A blend below 1 mixes in the 2D pan. The
+/// output is stereo.
 class Pan extends Dsp {
   Pan()
     : super([
         1, 0, 0, 360, 0, 0, 1, 60, 0, 255, 0, 0, 1, 20, 0, 0, 0, 0, 0, 0, 3, //
       ]);
 
-  /// The source's direction (degrees, 0 ahead, +90 right) and distance.
+  /// The direction of the source in degrees, 0 ahead and +90 to the right,
+  /// and its distance.
   double azimuth = 0, distance = 0;
   final _g = Float64List(4);
 
-  /// Surround mode with a 5.1 target ("Output Speaker" 6, as S2's events
-  /// set it): the output is 5.1 ([toSurround]).
+  /// Surround mode with a 5.1 target, the output speaker parameter (20) at
+  /// 6. The output is 5.1, from [toSurround].
   bool get surround => params[0].round() == 2 && params[20].round() == 6;
 
   final _l = Float64List(6), _r = Float64List(6);
 
-  /// [frames] of [src] (stereo, or mono held dual-mono) panned onto 5.1
-  /// into [dst] (six channels) by FMOD 1.09's surround panner ([Surround]):
-  /// a mono source by direction (2) and extent (3), a stereo one by its
-  /// stereo mode (6: 0 distributed with rotation 4, 1 discrete at axis 8 ∓
-  /// separation 7 / 2). The LFE level (5) applies to a source without an
-  /// LFE only with the LFE upmix (18) on [traced: formats/telltale/fmod-runtime.md "FMOD 1.09 (S2)"]. With a 3D pan
-  /// blend (17) the event's direction and the distance's extent and
-  /// attenuation pan a share of it [I: S2 has one such panner].
+  /// Pans [frames] frames of [src], stereo or mono with equal channels,
+  /// onto 5.1 into the six channels of [dst] with [Surround]. A mono source
+  /// pans by direction (2) and extent (3). A stereo one pans by its stereo
+  /// mode (6), 0 distributed with the rotation (4) and 1 discrete at the axis
+  /// (8) plus and minus half the separation (7). The LFE level (5) applies to
+  /// a source without an LFE only with the LFE upmix (18) on. With a 3D pan
+  /// blend (17) the direction of the event and the extent and attenuation
+  /// of its distance pan a share of it.
   void toSurround(Float32List src, bool mono, Float32List dst, int frames) {
     final l = _l..fillRange(0, 6, 0), r = _r..fillRange(0, 6, 0);
     final lfe = params[18] >= 0.5 ? dbGain(params[5]) : 0.0;
@@ -173,8 +172,7 @@ class Pan extends Dsp {
     }
   }
 
-  /// A 5.1 input (an S2 bus's panner, at its defaults) passes unchanged
-  /// [O: c51_pan_bus].
+  /// A 5.1 input passes unchanged.
   @override
   bool process51(Float32List buf, int frames) => true;
 

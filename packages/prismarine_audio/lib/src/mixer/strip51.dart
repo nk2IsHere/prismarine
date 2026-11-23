@@ -1,10 +1,7 @@
 part of 'strip.dart';
 
-/// BusStrip in 5.1 (S2): six channels interleaved, FMOD's order FL FR C LFE
-/// SL SR. S2's Master Bank mixes in 5.1 (22 of its 27 buses have input
-/// layout 6) and 760 event panners pan onto 5.1; the output stage folds it
-/// to stereo (MixerGraph) [O: the treasure room's events' 5.1 master
-/// captures; formats/telltale/fmod-runtime.md "FMOD 1.09 (S2)"].
+/// A [BusStrip] in 5.1, six channels interleaved in the order FL FR C LFE SL
+/// SR. [MixerGraph] folds a 5.1 master to stereo.
 extension _Strip51 on BusStrip {
   void _begin51(int frames) {
     if (input51.length != frames * 6) {
@@ -16,9 +13,7 @@ extension _Strip51 on BusStrip {
 
   void _add51(Float32List buf, int frames) {
     if (!_wide) {
-      // A strip that runs in stereo takes a 5.1 signal folded as FMOD's
-      // output stage folds it [I: no S2 bus or event strip outside 5.1
-      // receives one; EventFormats widens every strip that can].
+      // A strip that runs in stereo takes a 5.1 signal folded to stereo.
       add(downmix51(buf, frames), frames);
       return;
     }
@@ -27,9 +22,8 @@ extension _Strip51 on BusStrip {
     }
   }
 
-  /// The stereo input (sources, stereo buses) spread into the 5.1 sum:
-  /// L → FL, R → FR, as FMOD places a stereo signal on 5.1 [O: dmx_2to51;
-  /// the footsteps' and ambience's master captures: FL and FR only].
+  /// Adds the stereo input of sources and stereo buses into the 5.1 sum,
+  /// L into FL and R into FR.
   void _spread(int frames) {
     for (var i = 0; i < frames; i++) {
       input51[i * 6] += input[i * 2];
@@ -129,8 +123,8 @@ extension _Strip51 on BusStrip {
       }
     }
     if (ch == 2) {
-      // A surround PAN that never ran (bypassed by automation): stereo
-      // spread onto 5.1, dual-mono at the upmix gain.
+      // A surround pan that did not run spreads stereo onto 5.1, and mono at
+      // the upmix gain.
       final k = m ? upmixGain : 1.0;
       for (var i = 0; i < frames; i++) {
         output[i * 6] = buf[i * 2] * k;
@@ -153,9 +147,8 @@ extension _Strip51 on BusStrip {
   }
 }
 
-/// [buf] (5.1, six channels interleaved) folded to stereo as FMOD's output
-/// stage does on a stereo device: L = FL + C/√2 + SL/√2, R = FR + C/√2 +
-/// SR/√2, the LFE dropped [O: wavwriter renders, ww_chick].
+/// Folds the 5.1 [buf] to stereo as L = FL + C/√2 + SL/√2 and
+/// R = FR + C/√2 + SR/√2, without the LFE.
 Float32List downmix51(Float32List buf, int frames, [Float32List? out]) {
   final o = out ?? Float32List(frames * 2);
   const k = Surround.downmix;

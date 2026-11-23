@@ -1,7 +1,7 @@
 import '../model/model.dart';
 
-/// A playing snapshot: its entries pull mixer properties toward their values
-/// by its intensity.
+/// A playing mix state. Its entries pull properties of the mixer toward
+/// their values by its intensity.
 class MixStateInstance {
   MixStateInstance(this.def, this.order) {
     for (final p in def.parameters) {
@@ -17,21 +17,18 @@ class MixStateInstance {
 
   final EventDef def;
 
-  /// Start order (ties in priority apply in it).
+  /// The start order, which orders mix states of the same priority.
   final int order;
   late final int priority;
   late final double master;
   late final List<(String target, int property, double value)> entries;
 
-  /// Each entry's automated value, by its snapshot parameters (null: the
-  /// stored value): S2's mix events drive their nested snapshots so, the
-  /// "Snap Reverb" at −80 dB puts a reverb send at −80 dB where the entry
-  /// stores 0 [ORACLE fmod109 the tunnels' fight music with
-  /// MIXEvent_MUS and the cave reverb, data/evidence/audio201].
+  /// The automation of each entry at the parameters of the mix state, null
+  /// for an entry with its stored value.
   late final List<PropertyDef?> automation;
 
-  /// Entry [i]'s value now: its automation at the snapshot's parameters
-  /// (as EventInstance automates a property), else the stored value.
+  /// Returns the value of entry [i] now, its automation at the parameters of
+  /// the mix state, else its stored value.
   double entryValue(int i) {
     final p = automation[i];
     if (p == null) return entries[i].$3;
@@ -59,7 +56,7 @@ class MixStateInstance {
   final _params = <String, (ParameterDef, double)>{};
   bool stopped = false;
 
-  /// Started by an event instrument: its snapshot intensity (0..1).
+  /// The intensity of a mix state instrument that started it, 0 to 1.
   double scale = 1;
 
   String get path => def.path ?? def.guid;
@@ -74,8 +71,8 @@ class MixStateInstance {
     return true;
   }
 
-  /// A parameter by GUID (an event instrument's stub); false when the
-  /// snapshot lacks it.
+  /// Sets a parameter by id, for the stub of an instrument. Returns false
+  /// when the mix state lacks it.
   bool setParameterGuid(String guid, double value) {
     for (final MapEntry(:key, value: (p, _)) in _params.entries) {
       if (p.guid != guid) continue;
@@ -85,8 +82,8 @@ class MixStateInstance {
     return false;
   }
 
-  /// Its automatic parameters from its 3D position (an event instrument's:
-  /// its event's): distance (type 1) and cone angle (type 2).
+  /// Sets the distance and cone parameters from the position of the event
+  /// that plays its instrument.
   void setAuto(double distance, double cone) {
     for (final MapEntry(:key, value: (p, _)) in _params.entries.toList()) {
       if (p.kind == ParameterKind.distance) {
@@ -99,8 +96,8 @@ class MixStateInstance {
 
   void stop() => stopped = true;
 
-  /// 0..1: the intensity property's curve at its parameter (1 without one),
-  /// times the snapshot's own intensity.
+  /// The intensity from 0 to 1, the curve of the intensity property at its
+  /// parameter, or 1 without one, times the intensity of the mix state.
   double get intensity {
     final p = _intensity;
     var v = 1.0;

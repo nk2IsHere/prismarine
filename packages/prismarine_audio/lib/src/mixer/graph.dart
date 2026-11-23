@@ -8,11 +8,10 @@ import 'dsp_dynamics.dart';
 import 'mix_state.dart';
 import 'strip.dart';
 
-/// The Master Bank mixer (events.json `mixer`): buses with their effect
-/// chains, sends into returns, sidechain taps into compressors, snapshots
-/// over bus volumes, send levels and effect parameters; rendered children
-/// before parents, sidechain sources before their targets, senders before
-/// returns.
+/// The mixer, buses with their effect chains, sends into returns and
+/// sidechain taps into compressors, with mix states over bus volumes, send
+/// levels and effect parameters. It renders children before parents,
+/// sidechain sources before their targets and senders before returns.
 class MixerGraph implements StripSink {
   MixerGraph(MixerDef mixer, {this.log}) {
     final paths = mixer.paths;
@@ -54,17 +53,16 @@ class MixerGraph implements StripSink {
   final _volumeType = <String>{};
   final _gainType = <(String, int)>{};
 
-  /// The dB parameters of each DSP type (FMOD's parameter enums), which a
-  /// snapshot blends in linear gain like a volume: three-EQ gains (O), and
-  /// by the same rule [I] the limiter's ceiling/maximizer, the compressor's
-  /// threshold/make-up and the SFX reverb's low-shelf, wet and dry levels.
+  /// The dB parameters of each effect kind, which a mix state blends in
+  /// linear gain like a volume. They are the gains of the three-band EQ, the
+  /// ceiling and maximizer of the limiter, the threshold and make-up of the
+  /// compressor, the low shelf, wet and dry levels of the reverb, the gains
+  /// of the channel mix and the band gains of the multiband EQ.
   static const _gainParams = {
     EffectKind.limiter: {1, 2},
     EffectKind.compressor: {0, 4},
     EffectKind.reverb: {8, 11, 12},
     EffectKind.threeBandEq: {0, 1, 2},
-    // FMOD 1.09 (S2): the channel mix's gains and the multiband EQ's band
-    // gains, by the same rule [I].
     EffectKind.channelMix: {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, //
       19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
@@ -91,10 +89,10 @@ class MixerGraph implements StripSink {
   BusStrip? busByGuid(String guid) => _byGuid[guid];
   Iterable<BusStrip> get buses => _byGuid.values;
 
-  /// Snapshots in [defs] become startable by path.
+  /// Makes the mix states in [defs] startable by path.
   void addMixStates(Iterable<EventDef> defs) {
     for (final d in defs) {
-      // The first loaded bank's (FMOD keeps the first description).
+      // The first definition of a path wins.
       if (d.isMixState && d.path != null) {
         _snapshotDefs.putIfAbsent(d.path!, () => d);
       }
@@ -110,7 +108,7 @@ class MixerGraph implements StripSink {
     return startMixStateDef(d);
   }
 
-  /// A snapshot instance of [d] (an event instrument's snapshot).
+  /// Starts a mix state instance of [d], for a mix state instrument.
   MixStateInstance startMixStateDef(EventDef d) {
     final s = MixStateInstance(d, _started++);
     _active.add(s);
@@ -119,9 +117,9 @@ class MixerGraph implements StripSink {
 
   List<MixStateInstance> get snapshots => List.unmodifiable(_active);
 
-  /// [inputs] (stereo, by bus path) and [inputs51] (5.1) through the graph;
-  /// the master's output, stereo (a 5.1 master folded as FMOD's output does
-  /// on a stereo device).
+  /// Renders [inputs], stereo by bus path, and [inputs51], 5.1 by bus path,
+  /// through the graph. Returns the stereo output of the master. A 5.1
+  /// master is folded to stereo.
   Float32List render(
     Map<String, Float32List> inputs,
     int frames, {
@@ -169,13 +167,10 @@ class MixerGraph implements StripSink {
 
   final _resolved = <(String, int), double?>{};
 
-  /// Snapshots over the stored value, lowest priority first, each pulling the
-  /// value toward its entry by its intensity: volumes and dB effect
-  /// parameters in linear gain (O), other properties linearly [I]. With no
-  /// snapshot on it the stored value comes back, so an effect parameter a
-  /// stopped snapshot moved returns [O: FMOD 1.09, `Underwater_com`'s
-  /// three-EQ on `bus:/Voice/Langs`, formats/telltale/fmod-runtime.md
-  /// "Snapshots"].
+  /// Returns the value of a property under the mix states, lowest priority
+  /// first. Each pulls the value toward its entry by its intensity, volumes
+  /// and dB effect parameters in linear gain and other properties linearly.
+  /// A property that no mix state touches returns to its stored value.
   double? _prop(String owner, int index) =>
       _resolved.putIfAbsent((owner, index), () {
         double? v;
@@ -231,8 +226,9 @@ class MixerGraph implements StripSink {
     }
   }
 
-  /// Kahn's order: children before parents, senders before returns,
-  /// sidechain sources before the buses of their compressors.
+  /// Returns the buses in Kahn's order, children before parents, senders
+  /// before returns and sidechain sources before the buses of their
+  /// compressors.
   List<BusStrip> _sort() {
     final after = <BusStrip, Set<BusStrip>>{
       for (final s in _byGuid.values) s: {},

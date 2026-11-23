@@ -1,6 +1,6 @@
-/// Runtime time from the audio output (spec "Data flow per frame"): the time
-/// the device has consumed minus the output latency, i.e. what is audible;
-/// it never runs backwards (an underrun stalls it).
+/// The time that is audible now, the seconds that the output device has
+/// consumed minus the output latency. The time does not run backwards, and
+/// it stands still while the device starves.
 class AudioClock {
   AudioClock({required this.consumed, this.latency = 0});
 

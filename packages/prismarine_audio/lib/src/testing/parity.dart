@@ -62,8 +62,8 @@ String writeParitySession({
   return hex32(sum >>> 32) + hex32(sum & 0xffffffff);
 }
 
-/// One line of a parity script: the command [c] at frame [at] as the
-/// arguments of a post to the native engine, separated by tabs.
+/// Returns one line of a parity script, the command [c] at frame [at] as
+/// the arguments of a post to the native engine, separated by tabs.
 String parityLine(int at, AudioCommand c, String soundDir) {
   String row(
     int op, {

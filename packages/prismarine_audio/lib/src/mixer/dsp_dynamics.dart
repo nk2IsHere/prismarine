@@ -4,30 +4,28 @@ import 'dart:typed_data';
 import 'package:prismarine_math/libm.dart' as libm;
 import 'dsp.dart';
 
-/// FMOD_DSP_TYPE_COMPRESSOR (18): threshold dB (0), ratio (1), attack ms (2),
-/// release ms (3), make-up gain dB (4), sidechain (5, data: enable), and in
-/// FMOD 1.09 linked (6, default on): off, each channel is detected and
-/// compressed on its own [I: as the limiter's unlinked mode; S2 sets it off
-/// on one bus, `bus:/Voice/Langs ALT`].
+/// The compressor, with the threshold in dB (0), the ratio (1), the attack
+/// and release in ms (2, 3), the make-up gain in dB (4), the sidechain
+/// switch (5) and the link switch (6, on by default). Unlinked, each channel
+/// is detected and compressed on its own.
 ///
-/// O: the detector is the channels' summed power Σx² (stereo L = R reads
-/// +3 dB over one channel), followed by a one-pole attack/release follower;
-/// the gain reduction is (1 − 1/ratio)·(10·log10(env) − threshold) above the
-/// threshold. Static curves match to 0.05 dB with the follower's time
-/// constants at half the attack/release (as amplitude-domain constants would
-/// give) plus 2 ms of gain smoothing; transients match to about 0.6 dB.
+/// The detector is the summed power Σx² of the channels, where stereo with
+/// L = R reads +3 dB over one channel, followed by a one-pole follower. The
+/// gain reduction above the threshold is
+/// (1 − 1/ratio)·(10·log10(env) − threshold). The follower's time constants
+/// are half the attack and release, and the gain is smoothed over 2 ms.
 class Compressor extends Dsp {
   Compressor() : super([0, 2.5, 20, 100, 0, 0, 1]);
 
   bool useSidechain = false;
 
-  /// The sidechain input for the next [process] (stereo, same frames), or
-  /// null for none (the input keys itself when the sidechain is off).
+  /// The stereo sidechain input of the next [process], or null for none.
+  /// The input keys itself when the sidechain is off.
   Float32List? sidechain;
 
   double _env = 0, _gr = 0;
 
-  /// Unlinked: each channel's follower and reduction.
+  /// The follower and reduction of each channel when unlinked.
   final _envs = Float64List(6), _grs = Float64List(6);
   static final _smooth = onePole(2);
 
@@ -49,8 +47,8 @@ class Compressor extends Dsp {
     final s = 1 - 1 / math.max(1, params[1]);
     final thr = params[0], makeup = params[4];
     for (var i = 0; i < frames; i++) {
-      // The detector sums every channel's power [O: c51_comp: one gain on
-      // all six channels].
+      // The detector sums the power of every channel, and one gain applies
+      // to all six.
       var e = 0.0;
       for (var c = 0; c < 6; c++) {
         final x = buf[i * 6 + c];
@@ -102,7 +100,7 @@ class Compressor extends Dsp {
         e = 0;
       } else {
         final l = key[i * 2], r = key[i * 2 + 1];
-        // A mono signal held dual-mono is one channel's power.
+        // A mono signal held in both channels has the power of one.
         e = identical(key, buf) && mono ? l * l : l * l + r * r;
       }
       _env += (e - _env) * (e > _env ? aa : ar);
@@ -118,11 +116,11 @@ class Compressor extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_LIMITER (11): release ms (0), ceiling dB (1), maximizer gain
-/// dB (2), mode (3: linked). O: no lookahead; the gain drops at once to
-/// ceiling/|x| and recovers by e^(1/(release·fs)) per sample (8.686 dB per
-/// release time); a new limiter starts at the ceiling's gain. Mode 0 limits
-/// each channel on its own.
+/// The limiter, with the release in ms (0), the ceiling and maximizer gain
+/// in dB (1, 2) and the link mode (3). It has no lookahead. The gain drops
+/// at once to ceiling/|x| and recovers by e^(1/(release·fs)) per sample,
+/// 8.686 dB per release time. A new limiter starts at the gain of the
+/// ceiling. Mode 0 limits each channel on its own.
 class Limiter extends Dsp {
   Limiter() : super([10, 0, 0, 0]) {
     _g.fillRange(0, 6, dbGain(params[1]));
@@ -144,8 +142,8 @@ class Limiter extends Dsp {
     if (index == 1 && _fresh) _g.fillRange(0, 6, dbGain(params[1]));
   }
 
-  /// 5.1: linked, one gain from the loudest of the six channels [O:
-  /// c51_lim], else each channel on its own.
+  /// Limits 5.1 with one gain from the loudest of the six channels when
+  /// linked, else each channel on its own.
   @override
   bool process51(Float32List buf, int frames) {
     _fresh = false;
@@ -192,14 +190,14 @@ class Limiter extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_TREMOLO (22), also Studio's "FMOD Tremolo": frequency Hz
-/// (0), depth (1), shape (2), skew (3), duty (4), square (5), phase (6),
-/// spread (7). O: gain = 1 − depth + depth·lfo; at phase 0 the LFO starts its
-/// rise from 0; duty d ≥ 0.5 makes a trapezoid (rise over 1 − d of the
-/// period, hold at 1 for 2d − 1, fall over 1 − d; 0.5 is the triangle);
-/// spread puts L ahead and R behind by spread/4 of the period. Duty below
-/// 0.5 (mirrored: rise d, fall d, hold 0), shape (→ sine), square and skew
-/// are approximations [I].
+/// The tremolo, with the frequency in Hz (0), the depth (1), the shape (2),
+/// the skew (3), the duty (4), the square (5), the phase (6) and the spread
+/// (7). The gain is 1 − depth + depth·lfo. At phase 0 the LFO starts its
+/// rise from 0. A duty d of 0.5 or more makes a trapezoid that rises over
+/// 1 − d of the period, holds at 1 for 2d − 1 and falls over 1 − d, and 0.5
+/// is the triangle. A duty below 0.5 rises over d, falls over d and holds
+/// at 0. The shape bends the wave toward a sine. The spread puts L ahead
+/// and R behind by a quarter of the spread of the period.
 class Tremolo extends Dsp {
   Tremolo() : super([5, 1, 0, 0, 0.5, 0, 0, 0]);
   double _t = 0;

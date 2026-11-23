@@ -2,14 +2,13 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:prismarine_math/libm.dart' as libm;
 
-/// FMOD 1.06's 3D panning on a stereo output, as the PAN DSP (27) in surround
-/// mode does it with a 3D pan blend (see formats/telltale/fmod-runtime.md, "3D
-/// events"): distance attenuation by the rolloff, an extent from the distance,
-/// and the source's direction panned across the extent. Traced in the game's
-/// fmod.dll and measured with the oracle (the mono law).
+/// The 3D panning onto a stereo output of the pan DSP in surround mode with
+/// a 3D pan blend. The distance attenuates the source by the rolloff and
+/// gives an extent, and the direction of the source pans across the extent.
 abstract final class Spatial {
-  /// FMOD_DSP_PAN_3D_ROLLOFF [rolloff] at distance [d] (the system's rolloff
-  /// scale is 1: GameApp.exe never calls set3DSettings).
+  /// Returns the attenuation of rolloff [rolloff] at distance [d], with a
+  /// rolloff scale of 1. The rolloffs are 0 linear squared, 1 linear, 2
+  /// inverse and 3 the lesser of inverse and linear squared.
   static double attenuation(int rolloff, double d, double min, double max) {
     if (min >= d) return 1;
     switch (rolloff) {
@@ -29,9 +28,9 @@ abstract final class Spatial {
     }
   }
 
-  /// The 3D extent in degrees at distance [d]: extent mode
-  /// [mode] 0 auto (a sound size of twice the min distance), 1 user
-  /// ([size], at least [minExtent]), 2 off.
+  /// Returns the 3D extent in degrees at distance [d]. Extent mode [mode] 0
+  /// takes a sound size of twice the minimum distance, 1 takes [size] with
+  /// at least [minExtent], and 2 is off.
   static double extent(
     int mode,
     double d,
@@ -52,11 +51,11 @@ abstract final class Spatial {
     }
   }
 
-  /// A mono source at [direction] degrees (0 ahead, +90 right) spread over
-  /// [extent] degrees, on the stereo speakers: (left, right) at constant
-  /// power. The lateral position is the mean of sin over the arc,
-  /// s = sin(direction)·sinc(extent/2), and the gains are (√(2 − s²) ∓ s)/2
-  /// [ORACLE fmod: exact to 0.001° over 42 low-level cases].
+  /// Returns the left and right gains at constant power of a mono source
+  /// at [direction] degrees, 0 ahead and +90 to the right, spread over
+  /// [extent] degrees. The lateral position is the mean of sin over the
+  /// arc, s = sin(direction)·sinc(extent/2), and the gains are
+  /// (√(2 − s²) ∓ s)/2.
   static (double, double) mono(double direction, double extent) {
     var s = libm.sin(direction * math.pi / 180);
     if (extent >= 360) {
@@ -69,7 +68,7 @@ abstract final class Spatial {
     return ((g - s) * 0.5, (g + s) * 0.5);
   }
 
-  /// [a] in [−180, 180).
+  /// Returns [a] wrapped into [−180, 180).
   static double wrap(double a) {
     while (a < -180) {
       a += 360;
@@ -80,7 +79,8 @@ abstract final class Spatial {
     return a;
   }
 
-  /// Two arcs' pans weighted by [w1] and [w2], back to unit power.
+  /// Returns the pans of two arcs weighted by [w1] and [w2], back at unit
+  /// power.
   static (double, double) _join(
     double w1,
     (double, double) p1,
@@ -92,11 +92,10 @@ abstract final class Spatial {
     return n > 0 ? (l / n, r / n) : (0, 0);
   }
 
-  /// A stereo source (distributed): each input channel fills
-  /// half the extent, placed by the image's [rotation] against the
-  /// [direction] (the event's forward azimuth; Telltale sends no event
-  /// orientation, so it stays 0). Returns ((L→left, L→right), (R→left,
-  /// R→right)) [O: within 0.001 of 24 low-level cases].
+  /// Returns the gains of a distributed stereo source as (L into left, L
+  /// into right) and (R into left, R into right). Each input channel fills
+  /// half the extent, placed by the [rotation] of the image against the
+  /// forward azimuth [direction] of the event.
   static ((double, double), (double, double)) stereo(
     double direction,
     double extent,
@@ -127,9 +126,10 @@ abstract final class Spatial {
     return (l, r);
   }
 
-  /// The PAN DSP's 3D gains for its parameters [p] (FMOD indices) with the
-  /// source at [azimuth]/[distance]: into [out] = (L→left, R→left, L→right,
-  /// R→right), times the attenuation; a [mono] input uses the first column.
+  /// Writes the 3D gains of the pan DSP with parameters [p] and the source
+  /// at [azimuth] and [distance] into [out] as L into left, R into left, L
+  /// into right and R into right, times the attenuation. A [mono] input
+  /// uses the first column.
   static void gains(
     List<double> p,
     double azimuth,

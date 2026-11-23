@@ -4,18 +4,15 @@ import 'dart:typed_data';
 import 'package:prismarine_math/libm.dart' as libm;
 import 'dsp.dart';
 
-/// FMOD_DSP_TYPE_MULTIBAND_EQ (36, FMOD 1.09): five bands A–E in series,
-/// each a filter type (0), frequency Hz (1), Q (2) and gain dB (3) at
-/// 4·band + k. Measured with S2's fmod64.dll [O: formats/telltale/
-/// fmod-runtime.md "FMOD 1.09 (S2)"]:
+/// The multiband EQ, five bands A to E in series. Band b has its filter
+/// type, frequency in Hz, Q and gain in dB at 4·b + 0 to 4·b + 3.
 ///
-/// - every type is an RBJ-cookbook biquad in transposed direct form II;
-///   the 24 and 48 dB low- and high-passes are 2 and 4 identical sections
-///   at Q^(1/2) and Q^(1/4);
-/// - shelves ignore Q (S = 1: α = sin ω/√2), peaking uses A = 10^(gain/40);
-/// - a shelf or peak at 0 dB, and a disabled band, pass the input untouched;
-/// - a change of coefficients interpolates them linearly, sample by sample,
-///   over the next block.
+/// Every type is an RBJ cookbook biquad in transposed direct form II. The
+/// 24 and 48 dB low-passes and high-passes are 2 and 4 identical sections at
+/// Q^(1/2) and Q^(1/4). The shelves ignore Q with S = 1, and the peaking
+/// filter uses A = 10^(gain/40). A shelf or peak at 0 dB and a disabled band
+/// pass the input untouched. A change of coefficients interpolates them
+/// linearly, sample by sample, over the next block.
 class MultibandEq extends Dsp {
   MultibandEq() : super(_defaults) {
     for (var b = 0; b < 5; b++) {
@@ -61,10 +58,10 @@ class MultibandEq extends Dsp {
   }
 }
 
-/// One band of the multiband EQ: up to four identical TDF2 sections whose
+/// One band of the multiband EQ, up to four identical TDF2 sections whose
 /// shared coefficients glide to a new design over one block.
 class EqBand {
-  /// Sections in series (0: the band passes its input).
+  /// The sections in series, 0 for a band that passes its input.
   int sections = 0;
 
   /// The coefficients now (b0 b1 b2 a1 a2) and the design they glide to.
@@ -72,10 +69,10 @@ class EqBand {
   final _from = Float64List(5), _k = Float64List(5);
   bool _gliding = false;
 
-  /// TDF2 state: [section][channel] s1 and s2.
+  /// The TDF2 state s1 and s2 by section and channel.
   final _s1 = Float64List(4 * 6), _s2 = Float64List(4 * 6);
 
-  /// Designs band [b] from [p] (the DSP's parameters) as the target.
+  /// Designs band [b] from the DSP's parameters [p] as the target.
   void design(List<double> p, int b) {
     final type = p[b * 4].round(), q = p[b * 4 + 2], gain = p[b * 4 + 3];
     final f = p[b * 4 + 1].clamp(20.0, 22000.0).toDouble();
@@ -151,7 +148,7 @@ class EqBand {
         a2 = 1 - al;
     }
     if (sections != n) {
-      // A band coming on starts from a pass-through, with fresh sections [I].
+      // A band coming on starts from a pass-through, with fresh sections.
       if (sections == 0) c.setAll(0, const [1.0, 0, 0, 0, 0]);
       _s1.fillRange(0, _s1.length, 0);
       _s2.fillRange(0, _s2.length, 0);
@@ -166,13 +163,14 @@ class EqBand {
     _gliding = true;
   }
 
-  /// Jumps to the target (a new DSP's stored parameters apply at once).
+  /// Jumps to the target, as for the stored parameters of a new DSP.
   void settle() {
     c.setAll(0, to);
     _gliding = false;
   }
 
-  /// [frames] of [buf] ([ch] channels interleaved) through the sections.
+  /// Runs [frames] frames of [buf], [ch] channels interleaved, through the
+  /// sections.
   void run(Float32List buf, int frames, int ch) {
     if (sections == 0) return;
     if (_gliding) {

@@ -5,9 +5,8 @@ import 'package:prismarine_math/libm.dart' as libm;
 import 'biquad.dart';
 import 'dsp.dart';
 
-/// FMOD_DSP_TYPE_HIGHPASS (5): cutoff Hz (0), resonance (1). One RBJ
-/// high-pass biquad with Q = resonance (O: an impulse matches to 16-bit at
-/// 500 Hz/1 and 2 kHz/3).
+/// The highpass, with the cutoff in Hz (0) and the resonance (1). It is one
+/// RBJ high-pass biquad with Q equal to the resonance.
 class Highpass extends Dsp {
   Highpass() : super([5000, 1]) {
     _update();
@@ -32,10 +31,9 @@ class Highpass extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_PARAMEQ (12): centre Hz (0), bandwidth (1), gain dB (2).
-/// One RBJ peaking biquad with A = 10^(gain/20) and Q = 1/bandwidth (O: the
-/// impulse responses at 1 kHz/1/+6 and 300 Hz/2.5/−12 match to 16-bit; the
-/// centre moves by twice the gain).
+/// The parametric EQ, with the centre in Hz (0), the bandwidth (1) and the
+/// gain in dB (2). It is one RBJ peaking biquad with A = 10^(gain/20) and
+/// Q = 1/bandwidth. The centre moves by twice the gain.
 class ParamEq extends Dsp {
   ParamEq() : super([8000, 1, 0]) {
     _update();
@@ -61,9 +59,8 @@ class ParamEq extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_DISTORTION (9), also Studio's "FMOD Distortion": level (0).
-/// y = (1 + k)·x / (1 + k·|x|), k = 2·level / (1 − level) (O: a −1..1 ramp
-/// matches to 16-bit at levels 0, 0.225 and 0.5).
+/// The distortion, with the level (0). It computes y = (1 + k)·x / (1 + k·|x|)
+/// with k = 2·level / (1 − level).
 class Distortion extends Dsp {
   Distortion() : super([0.5]);
 
@@ -99,7 +96,8 @@ class _Line {
 
   void write(int ch, double v) => _b[_w * 2 + ch] = v;
 
-  /// The sample written [d] frames ago (0 = this frame's write).
+  /// Returns the sample written [d] frames ago, where 0 is the write of
+  /// this frame.
   double read(int ch, int d) {
     var i = _w - d;
     if (i < 0) i += frames;
@@ -113,10 +111,10 @@ class _Line {
   void clear() => _b.fillRange(0, _b.length, 0);
 }
 
-/// FMOD_DSP_TYPE_ECHO (6): delay ms (0), feedback % (1), dry dB (2), wet dB
-/// (3). out = dry·x + wet·line, line[n] = x[n − D] + feedback·line[n − D],
-/// D = delay·48 samples (O: impulse taps at exactly 460 ms × 48, each
-/// feedback × the last; dry and wet in dB, −80 = off).
+/// The echo, with the delay in ms (0), the feedback in percent (1) and the
+/// dry and wet levels in dB (2, 3), where −80 is off. It computes
+/// out = dry·x + wet·line with line[n] = x[n − D] + feedback·line[n − D] and
+/// D = delay·48 samples.
 class Echo extends Dsp {
   Echo() : super([500, 50, 0, 0]) {
     _update();
@@ -169,13 +167,11 @@ class Echo extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_FLANGE (8): mix % (0), depth (1), rate Hz (2). out =
-/// (1 − mix)·x + mix·x[n − d], d = 480·(1 − cos 2πφ) samples (0–20 ms),
-/// read with linear interpolation; φ is a float32 phase that starts at 0,
-/// steps by rate/48000 per sample and wraps at 1. Depth changes nothing in
-/// 1.06.02 (O: impulse trains at 0.1 and 0.25 Hz match the delay to 0.1
-/// sample over 10 s with the float32 phase; depth 1, 0.4 and 0.05 render
-/// identically).
+/// The flange, with the mix in percent (0), the depth (1) and the rate in Hz
+/// (2). It computes out = (1 − mix)·x + mix·x[n − d] with
+/// d = 480·(1 − cos 2πφ) samples, up to 20 ms, read with linear
+/// interpolation. φ is a float32 phase that starts at 0, steps by
+/// rate/48000 per sample and wraps at 1. The depth changes nothing.
 class Flange extends Dsp {
   Flange() : super([50, 1, 0.1]) {
     _line.size(_max + 2);
@@ -237,32 +233,30 @@ class Flange extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_CHORUS (14): mix % (0), rate Hz (1), depth (2), defaults
-/// 100 / 0.8 / 3 [ORACLE fmod]. A transcription of fmod.dll 1.06.02's
-/// chorus (see formats/telltale/fmod-runtime.md, "14 chorus"), operation for
-/// operation: float32 where the exe uses SSE, the read position in double
-/// (x87 at 53 bits), the delay line in 16 bits.
+/// The chorus, with the mix in percent (0), the rate in Hz (1) and the depth
+/// (2), by default 100, 0.8 and 3. The arithmetic is float32 except for the
+/// read position, which is double, and the delay line holds 16-bit
+/// samples.
 ///
-/// Tap c (of 1 or 2 channels) reads at the write position minus a delay
-/// swinging between 0 and D = 48000·depth²·1e-5 samples, with linear
+/// Tap c of 1 or 2 channels reads at the write position minus a delay that
+/// swings between 0 and D = 48000·depth²·1e-5 samples, with linear
 /// interpolation, weighted against dry = 200/(mix + 200). A depth change
-/// moves the live D by 1/32 of a sample a frame; FMOD resets the effect when
-/// it starts playing, so the first block resets here. Parameter changes are
-/// taken at the start of a read (a 1,024-frame block).
+/// moves the live D by 1/32 of a sample per frame. The first block resets
+/// the effect. A read of a 1,024-frame block takes the parameters at its
+/// start.
 class Chorus extends Dsp {
   Chorus() : super([100, 0.8, 3]) {
     _reset();
   }
 
-  /// fmod.dll: (trunc(rate·120)/1000 / 1024 + 1)·1024 frames (6,144 at
-  /// 48 kHz with the 1,024-frame DSP block).
+  /// The length of the line, (trunc(rate·120)/1000 / 1024 + 1)·1024 frames,
+  /// which is 6,144 at 48 kHz.
   static const lineFrames = 6144;
   static final Float32List table = _table();
   static Float32List _table() {
     final t = Float32List(8192);
     for (var i = 0; i < 8192; i++) {
-      // cosf(f32(i·f32(π/2))·2^-13), the CRT's SSE2 cosf: cos in double,
-      // rounded once.
+      // cosf(f32(i·f32(π/2))·2^-13) as the cosine in double, rounded once.
       t[i] = libm.cos(_f32(_f32(i * _halfPi) * (1 / 8192)));
     }
     return t;
@@ -293,7 +287,7 @@ class Chorus extends Dsp {
 
   static double _clamp100(double v) => v < 0 ? 0 : (v > 100 ? 100 : v);
 
-  /// The mix's gains (+0x140..+0x14c).
+  /// The gains of the mix.
   void _gains(double mix) {
     _dry = _f32(200 / _f32(mix + 200));
     _w[0] = _f32(_f32(_clamp100(_f32(mix * 2)) * _c01) * _dry);
@@ -318,7 +312,7 @@ class Chorus extends Dsp {
     _inc = _f32(_lastRate / mixRate);
   }
 
-  /// The read's parameter check.
+  /// Takes the parameters at the start of a read.
   void _take() {
     final mix = _f32(params[0]), rate = _f32(params[1]);
     final depth = _f32(params[2]);
@@ -335,7 +329,7 @@ class Chorus extends Dsp {
   @override
   bool get ringing => _quiet < lineFrames;
 
-  /// One frame's glide of the live depth toward its target.
+  /// Glides the live depth toward its target by one frame.
   void _glide() {
     final t = _target, c = _cur;
     if (_f32(t - 0.03125) > c) {
@@ -372,7 +366,7 @@ class Chorus extends Dsp {
     _quiet += frames;
   }
 
-  /// The cosine LFO at phase [x] (one period over 0..1).
+  /// Returns the cosine LFO at phase [x], one period from 0 to 1.
   static double _lfo(double x) {
     var i = _f32(x * 32768).truncate();
     if (i < 0) i = -i;
@@ -391,16 +385,16 @@ class Chorus extends Dsp {
     final nch = mono ? 1 : 2;
     const n = lineFrames;
     for (var i = 0; i < frames; i++) {
-      // FMOD reads in 1,024-frame blocks from the effect's start (the line
-      // is six of them): a block takes the parameters, and the read
-      // position adds the block's start and the frame within it.
+      // The reads go in 1,024-frame blocks from the effect's start, six
+      // per line. A block takes the parameters, and the read position adds
+      // the start of the block and the frame within it.
       final j = _pos & 1023;
       if (j == 0) _take();
       _glide();
       var loud = false;
       for (var c = 0; c < nch; c++) {
         final x = buf[i * 2 + c];
-        // cvttss2si into a 16-bit store: truncated and wrapped.
+        // Truncated and wrapped into 16 bits.
         _line[_pos * 2 + c] = _f32(x * 16384).truncate().toSigned(16);
         if (x != 0) loud = true;
       }

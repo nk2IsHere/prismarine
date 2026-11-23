@@ -1,5 +1,5 @@
-/// A small deterministic generator (mulberry32: 32-bit arithmetic only, so it
-/// gives the same sequence on every platform).
+/// The mulberry32 generator, in 32-bit integer arithmetic. It gives the same
+/// sequence on every platform.
 class Rng {
   Rng(int seed) : _s = seed & 0xffffffff;
   int _s;

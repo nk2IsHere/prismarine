@@ -13,15 +13,16 @@ import 'surround.dart';
 
 part 'strip51.dart';
 
-/// A property's current value on a mixer object (a bus's volume, a send's
-/// level, an effect's parameter 1000 + n), or null for its stored value.
+/// Returns the value of a property of a mixer object now, or null for its
+/// stored value. The property is the volume of a bus, the level of a send
+/// or effect parameter n as 1000 + n.
 typedef PropertyValue = double? Function(String owner, int index);
 
-/// Where a strip's sends and sidechain taps deliver this block.
+/// The receiver of the sends and sidechain taps of a strip in a block.
 abstract class StripSink {
-  /// [buf] (stereo; [mono] when dual-mono; 5.1 when [channels] is 6) × the
-  /// send level, into the return bus [returnBus] (its path, when known, is
-  /// [returnPath]).
+  /// Adds [buf] times the send level into the return bus [returnBus], with
+  /// the path [returnPath] when it is known. [buf] is stereo, mono with
+  /// equal channels when [mono], or 5.1 when [channels] is 6.
   void send(
     String returnBus,
     String? returnPath,
@@ -30,23 +31,23 @@ abstract class StripSink {
     int channels = 2,
   });
 
-  /// A sidechain tap feeding the compressors [targets] (effect GUIDs).
+  /// Feeds [buf] into the sidechain input of the compressors [targets],
+  /// given by effect id.
   void sidechain(List<String> targets, Float32List buf);
 }
 
-/// FMOD's default mono → stereo upmix (and the matching downmix) per side
-/// (O on a low-level channel; INFERRED for bus connections).
+/// The gain per side of the upmix from mono to stereo and of the matching
+/// downmix.
 const upmixGain = math.sqrt1_2;
 
-/// A bus: input sum, effect chain (pre-fader effects, the fader, post-fader
-/// effects; sends and sidechain taps where they sit), output. Buffers are
-/// stereo; a mono bus (inputChannelLayout 2) holds its signal dual-mono.
-///
-/// S2's 5.1 buses (inputChannelLayout 6) and strips after a surround PAN
-/// run in 5.1 instead (strip51.dart); S1 has neither.
+/// A bus with its input sum, its effect chain and its output. The chain has
+/// the pre-fader effects, the fader and the post-fader effects, with sends
+/// and sidechain taps at their places. Buffers are stereo, and a mono bus
+/// holds its signal with equal channels. A 5.1 bus and the part of a strip
+/// after a surround pan run in 5.1.
 class BusStrip {
-  /// [format] (1 mono, 2 stereo, 6 5.1) overrides the bus's layout: an S2
-  /// event strip runs in its sources' widest format (EventInstance).
+  /// [format], 1 for mono, 2 for stereo and 6 for 5.1, overrides the layout
+  /// of the bus. An event strip runs in the widest format of its sources.
   BusStrip(this.def, {void Function(String)? problem, int? format})
     : mono = format == null ? def.layout == ChannelLayout.mono : format == 1,
       _wide = format == null
@@ -68,43 +69,40 @@ class BusStrip {
 
   final StripDef def;
 
-  /// The bus's input format is mono.
+  /// The input format of the bus is mono.
   final bool mono;
   late final List<_Stage> _stages;
   Float32List input = Float32List(0), output = Float32List(0);
 
-  /// The 5.1 input sum (5.1 sources and buses), beside the stereo [input]
-  /// sources write into, on a strip that runs in 5.1.
+  /// The 5.1 input sum of a strip that runs in 5.1, beside the stereo
+  /// [input].
   Float32List input51 = Float32List(0);
 
-  /// The strip runs in 5.1: a 5.1 bus, or an S2 event strip whose format
-  /// is 5.1 (EventFormats).
+  /// The strip runs in 5.1, as a 5.1 bus or an event strip of format 5.1.
   final bool _wide;
   int _surround = -1;
   final void Function(String)? _problem;
 
-  /// The output's channels: 6 on a strip that runs in 5.1 or ends in 5.1
-  /// after a surround PAN, else 2.
+  /// The channels of the output, 6 on a strip that runs in 5.1 or ends in
+  /// 5.1 after a surround pan, else 2.
   int get outputChannels => _wide || _surround >= 0 ? 6 : 2;
 
-  /// It mixes its input in 5.1 ([input51]).
+  /// The strip mixes its input in 5.1, in [input51].
   bool get wide => _wide;
 
-  /// The block's output is mono (dual-mono).
+  /// The output of the block is mono, with equal channels.
   bool outputMono = false;
   double? _gain;
 
-  /// A gain ramp the owner applies at the fader this block, on top of the
-  /// bus volume: an event's master track takes the EventInstance volume
-  /// there, so post-fader sends and effects follow it and pre-fader ones
-  /// don't [O: FMOD 1.06, `SFX_Waterfall`'s post-fader reverb send at
-  /// instance volume 0.04 renders 28.0 dB below volume 1 in total;
-  /// `SFX_batSquak_Multi`'s pre-fader send keeps its level].
+  /// A gain ramp that the owner applies at the fader in this block, on top
+  /// of the bus volume. The master track of an event takes the instance
+  /// volume here. Post-fader sends and effects follow it and pre-fader ones
+  /// do not.
   double faderFrom = 1, faderTo = 1;
 
   String get guid => def.guid;
 
-  /// The DSP of effect [guid] here, or null.
+  /// Returns the DSP of effect [guid] on this strip, or null.
   Dsp? effect(String guid) {
     for (final s in _stages) {
       if (s case _Effect(guid: final g, :final dsp) when g == guid) return dsp;
@@ -112,14 +110,15 @@ class BusStrip {
     return null;
   }
 
-  /// The PAN DSPs here (they take the event's 3D position).
+  /// The pan DSPs of the strip, which take the position of the event.
   Iterable<Pan> get pans sync* {
     for (final s in _stages) {
       if (s case _Effect(:final Pan dsp)) yield dsp;
     }
   }
 
-  /// Compressors here, by effect GUID (sidechain targets).
+  /// The compressors of the strip with their effect ids, the targets of
+  /// sidechain taps.
   Iterable<(String, Compressor)> get compressors sync* {
     for (final s in _stages) {
       if (s case _Effect(:final guid, :final Compressor dsp)) yield (guid, dsp);
@@ -136,10 +135,9 @@ class BusStrip {
     if (_wide) _begin51(frames);
   }
 
-  /// Adds [buf] (stereo; dual-mono when [srcMono]; 5.1 when [srcCh] is 6)
-  /// into the input, with the format rule: mono into stereo upmixes, stereo
-  /// into mono downmixes, 5.1 into stereo downmixes as FMOD's output does
-  /// [I: for a strip].
+  /// Adds [buf] into the input. [buf] is stereo, mono with equal channels
+  /// when [srcMono], or 5.1 when [srcCh] is 6. Mono into stereo upmixes,
+  /// stereo into mono downmixes and 5.1 into stereo folds down.
   void add(Float32List buf, int frames, {bool srcMono = false, int srcCh = 2}) {
     if (srcCh == 6) {
       _add51(buf, frames);
@@ -164,14 +162,15 @@ class BusStrip {
 
   double _lastPeak = 0;
 
-  /// The peak of the last block's final 64 frames.
+  /// The peak of the final 64 frames of the last block.
   double _endPeak = 0;
 
-  /// Nothing sounds here at the end of the last block or is held inside
-  /// (effect tails have died away).
+  /// Nothing sounds at the end of the last block and no effect holds a
+  /// tail.
   bool get quiet => _endPeak < 1e-7 && !_keyed;
 
-  /// A compressor here has a sidechain key this block (it must track it).
+  /// A compressor of the strip has a sidechain key in this block and must
+  /// track it.
   bool get _keyed {
     for (final (_, c) in compressors) {
       if (c.useSidechain && c.sidechain != null) return true;
@@ -182,8 +181,9 @@ class BusStrip {
     return false;
   }
 
-  /// Runs the chain over this block's input into [output]. A silent input
-  /// whose last output had died away (< 1e-7, so tails finish) skips it.
+  /// Runs the chain over the input of the block into [output]. The chain
+  /// is skipped for a silent input after an output under 1e-7, which lets
+  /// tails finish first.
   void process(int frames, PropertyValue prop, StripSink sink) {
     if (outputChannels == 6) {
       _process51(frames, prop, sink);
@@ -197,8 +197,8 @@ class BusStrip {
     if (inPeak == 0 && _lastPeak < 1e-7 && !_keyed) {
       for (final st in _stages) {
         switch (st) {
-          // The fader keeps following its target while skipped, so a change
-          // made in silence holds when sound resumes (no stale ramp).
+          // The fader follows its target while skipped. A change made in
+          // silence holds when sound resumes, without a stale ramp.
           case _Fader():
             _gain = dbGain(prop(guid, 0) ?? def.volume);
           case _Effect(:final dsp):
@@ -282,7 +282,8 @@ class BusStrip {
   }
 }
 
-/// A DSP for an effect record, with its stored parameters applied.
+/// Returns a DSP for [fx] with its stored parameters, or null for a kind
+/// that the engine does not have.
 Dsp? createDsp(DspEffect fx) {
   final Dsp? dsp = switch (fx.kind) {
     EffectKind.lowpass => Lowpass(keep22k: !fx.passAtTop),
@@ -321,7 +322,7 @@ class _Effect extends _Stage {
   final String guid;
   final Dsp dsp;
 
-  /// Its DSP type or plugin, for problems.
+  /// The label of the effect in problems.
   final String label;
 }
 

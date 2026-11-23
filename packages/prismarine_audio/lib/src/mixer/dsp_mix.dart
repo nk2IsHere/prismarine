@@ -2,31 +2,26 @@ import 'dart:typed_data';
 
 import 'dsp.dart';
 
-/// FMOD_DSP_TYPE_CHANNELMIX (33, FMOD 1.09): output grouping (0), then a
-/// gain in dB for channel n at 1 + n. S2's Master Bank puts one on six 5.1
-/// buses, grouping 4 (all 5.1). Measured with S2's fmod64.dll [O: the
-/// fmod-runtime.md section "FMOD 1.09 (S2)"]:
-///
-/// - groupings 0 and 4 scale each channel of the buffer by its gain
-///   (−80 dB is silence) and keep the channel count; grouping 6 (all LFE)
-///   leaves a stereo or mono input silent;
-/// - a gain change ramps linearly over the 64 samples from the start of
-///   the block it lands in.
-/// Other groupings (unused by S2) pass the signal as grouping 0 does.
+/// The channel mix, with the output grouping (0) and the gain in dB of
+/// channel n at 1 + n. Groupings 0 and 4 scale each channel of the buffer
+/// by its gain, where −80 dB is silence, and keep the channel count.
+/// Grouping 6 sends all to the LFE and leaves a stereo or mono input
+/// silent. Other groupings act as grouping 0. A gain change ramps linearly
+/// over the 64 samples from the start of its block.
 class ChannelMix extends Dsp {
   ChannelMix() : super(List.filled(33, 0)) {
     start();
   }
 
-  /// The gains now (per channel, linear) and their targets.
+  /// The linear gains of the channels now and their targets.
   final _g = Float64List(32), _to = Float64List(32), _from = Float64List(32);
   bool _ramp = false;
 
-  /// Samples of the current ramp done (a ramp spans our blocks if they are
-  /// shorter than 64 frames).
+  /// The samples of the current ramp that are done. A ramp spans blocks
+  /// that are shorter than 64 frames.
   int _done = 0;
 
-  /// The grouping is one this mixer doesn't regroup by.
+  /// The grouping is one that acts as grouping 0.
   bool get regroups {
     final g = params[0].round();
     return g != 0 && g != 4 && g != 6;
@@ -53,7 +48,7 @@ class ChannelMix extends Dsp {
   @override
   bool process(Float32List buf, int frames, {bool mono = false}) {
     if (mono) {
-      // A mono signal held dual-mono is FMOD's one channel: channel 0.
+      // A mono signal held in both channels is channel 0 alone.
       _run(buf, frames, 2, dual: true);
     } else {
       _run(buf, frames, 2);
@@ -92,12 +87,8 @@ class ChannelMix extends Dsp {
   }
 }
 
-/// FMOD_DSP_TYPE_OBJECTPAN (35, FMOD 1.09): it hands its input to the
-/// output's object mixer, and an output without objects (S2's PC build has
-/// none in FMOD 1.09.04) hears nothing of it [O: FMOD 1.09, `AMB Crowd
-/// Walla_Murmur_Dist` renders silent at every position and sounds with its
-/// object panner bypassed; the low-level DSP alone is silent too]. S2 puts
-/// one on 7 Ep205 crowd events.
+/// The object panner. It passes its input to an object mixer of the output,
+/// and the engine has none, so its output is silence.
 class ObjectPan extends Dsp {
   ObjectPan() : super([0, 0, 1, 20, 0, 0, 0, 0, 1]);
 

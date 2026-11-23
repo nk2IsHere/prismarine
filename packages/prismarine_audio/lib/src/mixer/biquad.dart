@@ -11,9 +11,8 @@ class Biquad {
   void lowpass(double fc, double q) => _set(fc, q, false);
   void highpass(double fc, double q) => _set(fc, q, true);
 
-  /// A peaking EQ as FMOD 1.06's PARAMEQ builds it (O): RBJ's peaking
-  /// section with A = 10^(gain/20) (so the centre moves by twice [gainDb])
-  /// and Q = 1/[bandwidth].
+  /// Sets a peaking section with A = 10^([gainDb]/20) and Q = 1/[bandwidth].
+  /// The centre moves by twice [gainDb].
   void peaking(double fc, double bandwidth, double gainDb) {
     final f = fc.clamp(1.0, mixRate / 2 - 1).toDouble();
     final w = 2 * math.pi * f / mixRate;

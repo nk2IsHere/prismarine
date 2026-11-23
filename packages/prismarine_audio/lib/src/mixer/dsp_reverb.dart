@@ -4,18 +4,18 @@ import 'dart:typed_data';
 import 'package:prismarine_math/libm.dart' as libm;
 import 'dsp.dart';
 
-/// FMOD_DSP_TYPE_SFXREVERB (19), I3DL2-style: decay ms (0), early delay ms
-/// (1), late delay ms (2), HF reference Hz (3), HF decay ratio % (4),
-/// diffusion % (5), density % (6), low-shelf Hz (7) and dB (8), high cut Hz
-/// (9), early/late mix % (10), wet dB (11), dry dB (12).
+/// The reverb in the style of I3DL2, with the decay in ms (0), the early and
+/// late delays in ms (1, 2), the HF reference in Hz (3), the HF decay ratio
+/// in percent (4), the diffusion and density in percent (5, 6), the low
+/// shelf in Hz and dB (7, 8), the high cut in Hz (9), the early and late mix
+/// in percent (10) and the wet and dry levels in dB (11, 12).
 ///
-/// FMOD's algorithm is its own; this one matches what the oracle measured:
-/// the wet input is the channels' sum; early reflections start at the early
-/// delay, the late tail at early + late delay and decays at the decay time
-/// (scaled by the HF ratio at and above the HF reference); the early/late mix
-/// is constant-power and each part carries +4.5 dB of energy per channel for
-/// an impulse in both channels, whatever the decay time; the two outputs are
-/// decorrelated [O statistics; structure I].
+/// The wet input is the sum of the channels. The early reflections start at
+/// the early delay. The late tail starts at the sum of both delays and
+/// decays at the decay time, scaled by the HF ratio at and above the HF
+/// reference. The early and late mix keeps the power, and each part carries
+/// +4.5 dB of energy per channel for an impulse in both channels at every
+/// decay time. The two outputs are decorrelated.
 class Reverb extends Dsp {
   Reverb()
     : super([1500, 20, 40, 5000, 50, 100, 100, 250, 0, 20000, 50, -6, 0]) {
@@ -26,10 +26,11 @@ class Reverb extends Dsp {
   static const _base = [1123, 1291, 1447, 1597, 1777, 1949, 2113, 2311];
   static const _diffusers = [142, 107, 379, 277];
 
-  /// Early taps (ms after the early delay, relative gain), left and right.
+  /// The early taps as ms after the early delay and the relative gains of
+  /// the left and right channels.
   static final _taps = _makeTaps();
 
-  /// [_taps], for the native mixer (drawn from Dart's `Random(19)`).
+  /// The early taps for the native engine, drawn from Dart's `Random(19)`.
   static List<(double, double, double)> get earlyTaps => _taps;
 
   // Delay memory for the input (early taps and the late pre-delay).
@@ -61,17 +62,17 @@ class Reverb extends Dsp {
       _lineLen[i] = len;
       final g = libm.dpow(10, -3 * len / (t60 * mixRate));
       _gain[i] = g;
-      // A one-pole low-pass in the loop: |H(ω_ref)| / |H(0)| = g_ref / g.
+      // A one-pole low-pass in the loop with |H(ω_ref)| / |H(0)| = g_ref / g.
       final gRef = libm.dpow(10, -3 * len / (t60 * ratio * mixRate));
       final rho = (gRef / g).clamp(0.0, 1.0);
       _damp[i] = _solveDamp(rho, w);
     }
     _shelf.set(params[7], params[8]);
-    // The high cut is gentle: a one-pole low-pass (O: band energies).
+    // The high cut is a gentle one-pole low-pass.
     _cutA = 1 - libm.exp(-2 * math.pi * params[9].clamp(20, 20000) / mixRate);
-    // The network's tail energy is mean(g²/(1 − g²)) per unit input (an
-    // orthogonal feedback matrix keeps energy; each pass scales line i by
-    // gᵢ); FMOD's tail carries a fixed energy whatever the decay time.
+    // The tail energy of the network is mean(g²/(1 − g²)) per unit input.
+    // The orthogonal feedback matrix keeps the energy, and each pass scales
+    // line i by gᵢ. The tail carries a fixed energy at every decay time.
     var e = 0.0;
     for (final g in _gain) {
       e += g * g / (1 - g * g) / _lines;
@@ -84,8 +85,8 @@ class Reverb extends Dsp {
     _earlyNorm = math.sqrt(_target / es);
   }
 
-  /// What correlation between the lines adds over the series estimate
-  /// (dB, by decay time; calibrated on this network).
+  /// The dB that the correlation between the lines adds over the series
+  /// estimate, by decay time, calibrated on this network.
   static double _excess(double t60) {
     const pts = [
       (0.17, 0.2),
@@ -110,7 +111,7 @@ class Reverb extends Dsp {
   /// +4.5 dB.
   static final _target = libm.dpow(10, 0.45);
 
-  /// d for a one-pole (1 − d)/(1 − d·z⁻¹) whose gain at ω is [rho].
+  /// Returns d of a one-pole (1 − d)/(1 − d·z⁻¹) whose gain at ω is [rho].
   static double _solveDamp(double rho, double w) {
     if (rho >= 0.9999) return 0;
     // ρ² (1 − 2d cos ω + d²) = (1 − d)²  →  a d² + b d + c = 0.
@@ -126,9 +127,9 @@ class Reverb extends Dsp {
     return 0;
   }
 
-  /// The early stage: a diffused burst. O (early-only impulse, 10 ms bins
-  /// from the early delay): it builds over 30 ms, holds within ~6 dB to
-  /// 90 ms, then falls ~5 dB per 10 ms, whatever the decay time.
+  /// The envelope of the early stage, a diffused burst in 10 ms bins from
+  /// the early delay. It builds over 30 ms, holds within about 6 dB to
+  /// 90 ms, then falls about 5 dB per 10 ms at every decay time.
   static const _earlyEnvelope = [
     -3.1, -1.4, 0.0, -2.7, -6.4, -2.4, -4.9, -6.4, -11.8, -16.9, -21.3, //
     -25.7, -31.5, -36.6, -41.5, -46.9, -51.8, -57.2, -63.2, -68.8, -73.3,
@@ -153,15 +154,13 @@ class Reverb extends Dsp {
 
   double _delayed(int samples) => _pre[(_prePos - samples) & (_pre.length - 1)];
 
-  /// On a 5.1 bus (S2's `bus:/Reverb`, its snapshots' reverbs): the wet
-  /// input is all six channels' sum; each of the six outputs (the LFE too)
-  /// carries the reverb at equal energy, uncorrelated with the others, at
-  /// [_wet51] of the stereo form's level for the same input; the dry part
-  /// is each channel × dry [ORACLE fmod109 rv51_imp_*, rv51_noise*,
-  /// rv51_dry]. The outputs are the network's lines through rows 2–7 of
-  /// the 8-point Hadamard matrix (row 1, which feeds the input in, carries
-  /// more) and the early taps a, b, a·sign b and their alternations by tap
-  /// [I: decorrelated, equal and at the level measured].
+  /// The 5.1 form. The wet input is the sum of all six channels. Each of
+  /// the six outputs, the LFE too, carries the reverb at equal energy,
+  /// uncorrelated with the others, at [_wet51] of the level of the stereo
+  /// form for the same input. The dry part is each channel times dry. The
+  /// outputs are the lines of the network through rows 2 to 7 of the
+  /// 8-point Hadamard matrix, and the early taps a, b, a·sign b and their
+  /// alternations by tap.
   @override
   bool process51(Float32List buf, int frames) {
     final wet = dbGain(params[11]), dry = dbGain(params[12]);
@@ -238,8 +237,8 @@ class Reverb extends Dsp {
     return true;
   }
 
-  /// Row [r] of the 8-point Hadamard matrix at column [j]: the parity of
-  /// the bits they share.
+  /// Returns row [r] of the 8-point Hadamard matrix at column [j], the
+  /// parity of the bits that they share.
   static double _row(int r, int j) {
     var b = r & j, p = 1.0;
     while (b != 0) {
@@ -249,7 +248,8 @@ class Reverb extends Dsp {
     return p;
   }
 
-  /// Each 5.1 output against the stereo form's per-channel level.
+  /// The level of each 5.1 output against the level per channel of the
+  /// stereo form.
   static final _wet51 = libm.dpow(10, -5.2 / 20);
 
   @override
@@ -282,7 +282,8 @@ class Reverb extends Dsp {
           er += b * v;
         }
       }
-      // Late: pre-delay, diffusion, then the feedback network.
+      // The late part runs the pre-delay, the diffusion and the feedback
+      // network.
       var x = _delayed(late);
       for (var k = 0; k < _diff.length; k++) {
         final d = _diff[k], p = _diffPos[k];
@@ -333,7 +334,7 @@ class Reverb extends Dsp {
   }
 }
 
-/// An RBJ low shelf (S = 1), mono.
+/// A mono RBJ low shelf with S = 1.
 class _Shelf {
   double _b0 = 1, _b1 = 0, _b2 = 0, _a1 = 0, _a2 = 0;
   double _x1 = 0, _x2 = 0, _y1 = 0, _y2 = 0;

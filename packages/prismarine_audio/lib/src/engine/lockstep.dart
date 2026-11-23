@@ -4,18 +4,18 @@ import '../wav.dart';
 
 import 'engine.dart';
 
-/// Audio in lockstep with the runtime (capture mode): the engine renders up
-/// to the runtime's time, and commands land at their runtime time, exactly.
+/// An [AudioSink] in lockstep with a game. The renderer renders up to the
+/// game's time, and each command applies at the frame of its game time.
 class LockstepAudio implements AudioSink {
   LockstepAudio(this.engine, {this.wav, this.record});
   final AudioRenderer engine;
   final WavWriter? wav;
 
-  /// Sees every command with the frame it applies at (null: at the render
-  /// head), e.g. to write a session log (session.dart).
+  /// Receives every command with the frame that it applies at, which is the
+  /// render head for a command without a time.
   final void Function(int? frame, AudioCommand c)? record;
 
-  /// Renders up to [seconds] of runtime time.
+  /// Renders up to [seconds] of game time.
   void advanceTo(double seconds) {
     final target = (seconds * 48000).round();
     while (engine.position < target) {
@@ -25,7 +25,7 @@ class LockstepAudio implements AudioSink {
     }
   }
 
-  /// [c] at runtime time [at] (seconds), or at the render head.
+  /// Applies [c] at the game time [at] in seconds, or at the render head.
   @override
   void command(AudioCommand c, {double? at}) {
     final frame = at == null ? null : (at * 48000).round();

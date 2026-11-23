@@ -100,7 +100,7 @@ class EventDef {
       !t.transitions.any((t) => t.isLoop) &&
       !t.placements.any((p) => p.instrument.loopCount == -1 && !p.timelocked);
 
-  /// The event's sound depends on its position: it has a distance or cone
+  /// The event's sound depends on its position. It has a distance or cone
   /// parameter, a 3D panner on a strip, or a nested event that does.
   late final bool spatial =
       parameters.any((p) => p.kind != ParameterKind.game) ||
@@ -201,8 +201,8 @@ class DspEffect extends EffectDef {
   final bool passAtTop;
 }
 
-/// A parameter value of a [DspEffect]: a number, an on or off switch, or
-/// nothing, which keeps the DSP's default.
+/// A parameter value of a [DspEffect], which is a number, an on or off
+/// switch, or nothing. A parameter with nothing keeps the DSP's default.
 class EffectParam {
   const EffectParam.number(double this.value) : isSwitch = false;
   const EffectParam.toggle(bool on) : value = on ? 1 : 0, isSwitch = true;
@@ -211,7 +211,8 @@ class EffectParam {
   final double? value;
   final bool isSwitch;
 
-  /// The value that mix states and modulators start from: a number only.
+  /// The value that mix states and modulators start from, set for a number
+  /// only.
   double? get stored => isSwitch ? null : value;
 }
 
@@ -264,7 +265,7 @@ class PropertyDef {
   /// A [Prop] number.
   final int index;
 
-  /// A volume in dB: several curves add.
+  /// A volume in dB. Several curves add up.
   final bool isVolume;
 
   /// UI units to property units, null for the identity.
@@ -304,10 +305,11 @@ class ModulatorDef {
   /// `random` or `ahdsr`.
   final String type;
 
-  /// Random: the range of a draw at each start.
+  /// The range of a random draw at each start.
   final double minimum, maximum;
 
-  /// AHDSR: levels in the property's UI units, times in seconds.
+  /// The levels of an AHDSR in the property's UI units and its times in
+  /// seconds.
   final double initial, peak, sustain, attack, hold, decay, release;
 }
 
@@ -369,7 +371,7 @@ class InstrumentDef {
 
   final String guid;
 
-  /// `single`, `multi`, `scatterer`, `programmer` or `event`. Another kind
+  /// `sample`, `playlist`, `scatterer`, `slot` or `event`. Another kind
   /// plays nothing and reports a problem.
   final String kind;
 
@@ -408,8 +410,9 @@ class InstrumentDef {
   /// A mix state instrument's intensity in percent.
   final double mixStateIntensity;
 
-  /// Scatterer: seconds between spawns, spawns per trigger with 0 for no
-  /// limit, and live spawns at most with what a spawn past it does.
+  /// The seconds between the spawns of a scatterer, its spawns per trigger
+  /// with 0 for no limit, and its live spawns at most with the mode of a
+  /// spawn past them.
   final double spawnIntervalMin, spawnIntervalMax;
   final int spawnCount, maxSpawnPolyphony;
   final PolyphonyMode spawnPolyphonyMode;
@@ -507,14 +510,14 @@ class TransitionDef {
     this.chancePercent = 100,
   });
 
-  /// A loop region: [start] to [end], back to [destination].
+  /// A loop region from [start] to [end], back to [destination].
   final bool isLoop;
   final int start, end, destination;
   final String? conditionParameter;
   final double conditionMin, conditionMax;
 
-  /// Quantization: unit 1 is a bar, 2 an eighth note, 0 none. The interval
-  /// is [multiplier] units.
+  /// The quantization unit, 1 for a bar, 2 for an eighth note and 0 for
+  /// none. The interval is [multiplier] units.
   final int unit, multiplier;
   final double chancePercent;
 
@@ -546,8 +549,8 @@ class TimelineDef {
   final List<TransitionDef> transitions;
 }
 
-/// The mix state part of an event: entries that pull properties of the
-/// mixer toward values by its intensity.
+/// The mix state part of an event. Its entries pull properties of the mixer
+/// toward values by its intensity.
 class MixStateDef {
   MixStateDef({
     this.priority = 0,
@@ -583,7 +586,7 @@ class MixEntry {
   final PropertyDef? automation;
 }
 
-/// The mixer: its buses, with one master bus.
+/// The buses of the mixer, with one master bus.
 class MixerDef {
   MixerDef({this.buses = const [], this.paths = const {}});
 
