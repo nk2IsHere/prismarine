@@ -1,16 +1,24 @@
-// The player's VM-service profiler: attaches to a profile build and, per
-// window of game time (read from the run's --profile frames.jsonl), records
-// CPU samples (top self and inclusive functions), GC pauses (the timeline's
-// GC stream) and the heap by class (the allocation profile: on this VM its
-// "accumulated" figures are the
-// heap's current contents and the reset does not clear them, so `alloc` and
-// its mbPerSecond are what the heap holds, not an allocation rate; see
-// heap_report.dart).
+// The VM-service profiler. It attaches to a profile build and waits for each
+// window of game time in the clock file, the frames.jsonl of FrameProfiler in
+// prismarine_debug. For each window it writes <outDir>/<name>.json with the
+// CPU samples and their top self and inclusive functions, the GC pauses from
+// the GC stream of the timeline and the heap by class from the allocation
+// profile. On Dart 3.13 the accumulated figures of the allocation profile are
+// the current contents of the heap and its reset does not clear them. `alloc`
+// and its mbPerSecond give the contents of the heap and not an allocation
+// rate.
 //
 // dart run tools/profiler/bin/profile.dart <wsUri> <frames.jsonl> <outDir>
 //     <name>:<t0>:<t1>...
 //
-// PROFILE_PERIOD=<µs> sets the sampling period (default 1000).
+// PRISMARINE_PROFILE_PERIOD=<µs> sets the sampling period, 1000 by default.
+// PRISMARINE_PROFILE_TRACE=<class>,… records the stack of each allocation of
+// those classes on every isolate. A site of such an allocation is the first
+// three frames of own code. Own code is a file outside the pub cache whose
+// path contains one of the texts of PRISMARINE_PROFILE_OURS=<text>,…, or any
+// file outside the SDK and the pub cache when the variable is not set.
+// PRISMARINE_PROFILE_RAW=<dir> writes the stack of every CPU sample. Each
+// variable also reads its form without PRISMARINE_.
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +26,7 @@ import 'package:prismarine_profiler/summary.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
-/// The game time of the last frame written to [path].
+/// The game time of the last frame in [path].
 double? lastT(String path) {
   try {
     final raf = File(path).openSync();
@@ -33,16 +41,16 @@ double? lastT(String path) {
       if (m['t'] is num) return (m['t'] as num).toDouble();
     }
   } on Object {
-    // Not written yet.
+    // The file does not exist yet.
   }
   return null;
 }
 
 Future<void> main(List<String> args) async {
   final vm = await vmServiceConnectUri(args[0]);
-  // PROFILE_TRACE=ClassA,ClassB: per-allocation stacks for those classes on
-  // every isolate (counts per class and the code that allocated them; the
-  // allocation profile is the isolate group's, so it can't tell them apart).
+  // The classes of PRISMARINE_PROFILE_TRACE get a stack for each allocation
+  // on every isolate. The allocation profile belongs to the isolate group and
+  // does not separate the isolates.
   final traced = (_env('TRACE') ?? '')
       .split(',')
       .where((c) => c.isNotEmpty)
@@ -117,8 +125,8 @@ Future<void> main(List<String> args) async {
       }
       result['traces'] = traces;
     }
-    // The target may have ended while the traces were read (a bounded
-    // run): what was collected is still written.
+    // The target can end while the traces are read. The data collected up to
+    // then is still written.
     Timeline? tl;
     try {
       tl = await vm.getVMTimeline(
@@ -133,7 +141,7 @@ Future<void> main(List<String> args) async {
         if (e.json case final Map<String, Object?> j) j,
     ];
     result['gc'] = gcSummary(events, seconds);
-    // A few collections' own numbers (heap sizes, reasons) for diagnosis.
+    // The heap sizes and reasons of a few collections.
     result['gcSample'] = [
       for (final e in events)
         if ((e['name'] as String? ?? '').startsWith('Collect') &&
@@ -144,9 +152,9 @@ Future<void> main(List<String> args) async {
       '${out.path}/$name.json',
     ).writeAsStringSync(const JsonEncoder.withIndent(' ').convert(result));
   }
-  // An observed VM pauses its isolates at exit by default: resume any that
-  // are paused so the target can end (run targets with
-  // --no-pause-isolates-on-exit too; tools/profiler/observe.sh does).
+  // An observed VM pauses its isolates at exit by default. The paused
+  // isolates are resumed, else the target does not end. observe.sh also
+  // starts its target with --no-pause-isolates-on-exit.
   try {
     for (final iso in (await vm.getVM()).isolates ?? const <IsolateRef>[]) {
       final kind = (await vm.getIsolate(iso.id!)).pauseEvent?.kind;
@@ -170,8 +178,9 @@ Future<Map<String, Object?>> _isolate(
   final cpu = await vm.getCpuSamples(iso.id!, origin, extent);
   final fns = cpu.functions ?? const <ProfileFunction>[];
   final samples = cpu.samples ?? const <CpuSample>[];
-  // PROFILE_RAW=<dir>: every sample's stack (leaf first) as function names,
-  // for call-tree breakdowns the top lists can't give.
+  // The folder in PRISMARINE_PROFILE_RAW gets the stack of each sample, leaf
+  // first, as function names. The call trees that the top lists do not show come from
+  // these files.
   final raw = _env('RAW');
   if (raw != null && raw.isNotEmpty && samples.isNotEmpty) {
     String nameOf(int i) => switch (fns[i].function) {
@@ -187,15 +196,15 @@ Future<Map<String, Object?>> _isolate(
       jsonEncode({
         'functions': [for (var i = 0; i < fns.length; i++) nameOf(i)],
         'stacks': [for (final s in samples) s.stack ?? const <int>[]],
-        // Each sample's time (µs, the VM's clock): long stretches of one
-        // stack show a synchronous chunk.
+        // The time of each sample in µs on the clock of the VM. A long run
+        // of one stack shows a long synchronous call.
         'times': [for (final s in samples) s.timestamp],
       }),
     );
   }
   final self = <int, int>{}, incl = <int, int>{};
-  // Caller → callee edges (inclusive, once per sample): enough of the call
-  // tree to tell which caller a hot helper's time belongs to.
+  // The edges from caller to callee, counted once per sample. They split the
+  // time of a hot helper among its callers.
   final edges = <(int, int), int>{};
   for (final s in samples) {
     final st = s.stack ?? const <int>[];
@@ -264,8 +273,8 @@ Future<Map<String, Object?>> _isolate(
   };
 }
 
-/// Per traced class: allocations in the window and the top call sites (the
-/// first frame of our code: mcsm packages, the player, flutter_scene).
+/// Returns the allocations of each traced class in the window with their
+/// top call sites.
 Future<Map<String, Object?>> _traces(
   VmService vm,
   IsolateRef iso,
@@ -274,20 +283,19 @@ Future<Map<String, Object?>> _traces(
   final out = <String, Object?>{};
   final oursIn = _env('OURS')?.split(',');
   for (final MapEntry(key: name, value: id) in classIds.entries) {
-    // Every sample since tracing was enabled for this window (the
-    // profiler's clock is not the timeline's).
+    // Reads every sample since the trace of this window started. The clock
+    // of the profiler differs from the clock of the timeline.
     final t = await vm.getAllocationTraces(iso.id!, classId: id);
     final fns = t.functions ?? const <ProfileFunction>[];
     final sites = <String, int>{};
     final samples = t.samples ?? const <CpuSample>[];
     for (final s in samples) {
-      // The first three frames in our code (the repo's packages, the
-      // vendored flutter_scene / flutter_gpu), innermost first.
+      // The first three frames of own code, innermost first.
       final ours = <String>[];
       for (final i in s.stack ?? const <int>[]) {
         final url = fns[i].resolvedUrl ?? '';
-        // Not the pub cache (it lives under the repo's data/, whose path
-        // has "mcsm" in it): vector_math's constructors aren't the site.
+        // A package in the pub cache, such as the constructors of
+        // vector_math, is not the site.
         if (_isOurs(url, oursIn) && !url.contains('/pub-cache/')) {
           final f = fns[i].function;
           final fn = f is FuncRef
@@ -304,8 +312,9 @@ Future<Map<String, Object?>> _traces(
     final times = [for (final s in samples) s.timestamp ?? 0]..sort();
     out[name] = {
       'count': samples.length,
-      // The samples' time span (the profiler's sample buffer is a ring: a
-      // span shorter than the window means older allocations were dropped).
+      // The time span of the samples. The sample buffer of the profiler is
+      // a ring. A span shorter than the window means that older allocations
+      // were dropped.
       if (times.isNotEmpty) 'spanSeconds': (times.last - times.first) / 1e6,
       'sites': [
         for (final e

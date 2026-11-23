@@ -1,4 +1,4 @@
-// What grows between heap snapshots, by retaining path (usage: --help).
+// Compares heap snapshots by retaining path. --help prints the usage.
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,21 +6,26 @@ import 'package:prismarine_profiler/heap_dominators.dart';
 import 'package:vm_service/vm_service.dart';
 
 const _usage = r'''
-What grows between heap snapshots, by retaining path: reads snapshot files
-(the player's MCSM_HEAP_SNAPSHOT, or any VM-service HeapSnapshotGraph
-written whole), builds each one's dominator tree, and groups what each
-object keeps alive (its retained size, external memory included: Flutter
-GPU's buffers and textures, native blocks) by the path of classes and fields
-from the root that dominates it. Siblings of one class under one field are
-one group. Prints the groups over --min MB in any snapshot side by side, in
-tree order, then the largest growths, then the classes and the external
-memory by holder class.
+Compares heap snapshots by retaining path. The tool reads snapshot files,
+such as the files of PRISMARINE_HEAP_SNAPSHOT in prismarine_debug or any
+HeapSnapshotGraph of the VM service saved in one file. It builds the
+dominator tree of each snapshot and groups the retained size of each object
+by the path of classes and fields from the root to the object that
+dominates it. The retained size includes external memory, such as the
+buffers and textures of Flutter GPU and native blocks. The objects of one
+class under one field form one group. The tool prints the groups above
+--min MB in any snapshot side by side in tree order, then the largest
+growths, then the classes and the external memory by holder class.
 
   dart run tools/profiler/bin/heap_diff.dart <a.dartheap> <b.dartheap>…
       [--min=<MB>] [--keep=<MB>] [--depth=<n>] [--top=<n>]
+      [--who=<path end>]
 
---keep is the smallest group recorded (default 0.5), --min the smallest
-printed (default 4), --depth the deepest path (default 40).
+--keep is the smallest group that is recorded, 0.5 by default. --min is the
+smallest group that is printed, 4 by default. --depth is the deepest path,
+40 by default. --top is the number of rows in each list, 60 by default.
+--who prints the referrers of the members of each group whose path ends in
+the text.
 ''';
 
 String? _opt(List<String> args, String name) {
@@ -102,9 +107,9 @@ void _tally(HeapSnapshotGraph g, HeapDominators d, _Shot shot) {
   }
 }
 
-/// Groups the dominator tree by path: children of a group's members keyed
-/// by the field that holds them (when the member references them itself)
-/// and their class.
+/// Groups the dominator tree by path. The children of the members of a
+/// group are keyed by their class and by the field that holds them when the
+/// member references them directly.
 void _walk(
   HeapSnapshotGraph g,
   HeapDominators d,
@@ -136,9 +141,9 @@ void _walk(
     grp.bytes[shot] += bytes;
   }
 
-  // An SDK collection's storage (a map's or growable list's backing
-  // _List, an Expando's weak properties) is looked through: its entries
-  // group under the collection itself.
+  // The storage of an SDK collection is skipped, such as the backing _List
+  // of a map or a growable list or the weak properties of an Expando. Its
+  // entries are grouped under the collection.
   final sdk = [
     for (final c in cls) c.libraryUri.toString().startsWith('dart:'),
   ];
@@ -148,8 +153,8 @@ void _walk(
     return n == '_List' || n == '_WeakProperty';
   }
 
-  // A closure is named by its function (the snapshot names functions), a
-  // context by a closure over it.
+  // A closure gets the name of its function and a context the name of a
+  // closure over it.
   String className(int c) {
     final o = objs[c];
     if (o.data is String) return o.data as String;
@@ -161,8 +166,8 @@ void _walk(
     return '?';
   }
 
-  // A function's name with its class, a closure's with its parent's
-  // (ClosureData's parent function).
+  // The name of a function with its class. A closure gets the name of the
+  // parent function in its ClosureData.
   String qualified(int fn, int depth) {
     final name = objs[fn].data is String ? objs[fn].data as String : '?';
     for (final r in objs[fn].references) {
@@ -203,9 +208,8 @@ void _walk(
     return n;
   }
 
-  // --who=<path end>: what references a group's members (class.field of
-  // each referrer, members counted once per referrer kind), in each
-  // snapshot.
+  // Prints the referrers of the members of a group for --who as class.field
+  // in each snapshot. A member counts once for each kind of referrer.
   void holders(List<int> members, String path) {
     final by = <String, int>{};
     for (final w in members) {
@@ -220,7 +224,7 @@ void _walk(
             break;
           }
         }
-        // Up through SDK collections to the object of ours holding them.
+        // Follows the SDK collections up to the own object that holds them.
         var k = '${nameOf(p)}${f.isEmpty ? '' : '.$f'}';
         var q = p;
         for (var hop = 0; hop < 5 && sdk[objs[q].classId]; hop++) {
@@ -264,7 +268,8 @@ void _walk(
           todo.add(w);
           continue;
         }
-        // The root's children by place: each isolate's roots apart.
+        // The children of the root are keyed by slot, which keeps the
+        // roots of each isolate apart.
         final f = m == 1 ? '#$j' : fieldOf(objs[m].classId, j);
         final k = '${f.isEmpty ? '' : '.$f:'}${nameOf(w)}';
         (by[k] ??= []).add(w);

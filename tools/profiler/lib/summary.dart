@@ -1,17 +1,16 @@
-// Summaries of a profiled window (perf plan C1): GC pauses from the VM
-// timeline's GC stream, and allocation by class from the allocation
-// profile.
+// Summaries of a profiled window. The GC pauses come from the GC stream of
+// the VM timeline and the allocation by class from the allocation profile.
 
-/// Per GC event name: count, total, max and p95 in ms; plus
-/// `scavengesPerSecond` over [seconds]. B/E events pair per name and
-/// thread; X events carry their `dur`.
+/// Sums the GC [events] by name into count, total, maximum and p95 in
+/// milliseconds, with `scavengesPerSecond` over [seconds]. B and E events
+/// pair by name and thread. X events carry their `dur`.
 Map<String, Object?> gcSummary(
   List<Map<String, Object?>> events,
   double seconds,
 ) {
   final open = <(String, Object?), int>{};
   final durs = <String, List<double>>{};
-  // Metadata events (ph M) carry no timestamp.
+  // Metadata events with ph M carry no timestamp.
   final sorted = [
     for (final e in events)
       if (e['ts'] is num) e,
@@ -45,9 +44,10 @@ Map<String, Object?> gcSummary(
   return out;
 }
 
-/// The [n] classes that allocated the most bytes in the window, with MB/s
-/// over [seconds] (and the instance count, when given: the mean size tells
-/// many small allocations from a few large ones).
+/// Returns the [n] classes of [bytesByClass] with the most bytes and their
+/// MB/s over [seconds]. A class with a count in [instances] also gets its
+/// count and mean size, which tell many small allocations from a few large
+/// ones.
 List<Map<String, Object?>> allocTop(
   List<(String, int)> bytesByClass,
   double seconds, {

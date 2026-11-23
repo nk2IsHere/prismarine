@@ -1,26 +1,36 @@
 #!/bin/zsh
-# observe.sh <outDir> "<name:t0:t1> …" <dart script> [script args…]: runs a
-# headless Dart tool (e.g. packages/mcsm_game/tool/route_bench.dart with
-# BENCH_FRAMES) under the VM service and profiles it with
-# tools/profiler/bin/profile.dart over the given game-time windows (CPU per
-# isolate, GC, PROFILE_TRACE allocation sites; for those also set
-# OBSERVE_DART_FLAGS=--no-inline-alloc).
+# observe.sh <outDir> "<name:t0:t1> …" <dart script> [script args…] runs a
+# headless Dart program under the VM service and profiles it with
+# bin/profile.dart over the windows of game time. It records the CPU of each
+# isolate, the GC and the allocation sites of PRISMARINE_PROFILE_TRACE. The
+# allocation sites also need PRISMARINE_OBSERVE_DART_FLAGS=--no-inline-alloc.
 #
-# The target runs with --no-pause-isolates-on-exit (an observed VM otherwise
-# waits at exit for a debugger, forever) in its own process group, which is
-# killed on exit, timeout (OBSERVE_TIMEOUT seconds, default 1800), INT or
-# TERM, so neither the VM nor its Dart Development Service is left behind.
+# The program writes one line per frame with its game time, such as
+# {"t": 12.5}, to the file in PRISMARINE_OBSERVE_CLOCK. The file is
+# <outDir>/frames.jsonl by default. The program also gets the path in
+# BENCH_FRAMES for one release.
+#
+# The program runs with --no-pause-isolates-on-exit, else an observed VM waits
+# at exit for a debugger. It runs in a process group of its own. The group is
+# killed on exit, on INT or TERM and after PRISMARINE_OBSERVE_TIMEOUT seconds,
+# 1800 by default. No VM and no Dart Development Service stays behind.
+#
+# dart must be on the PATH. PRISMARINE_PROFILER_PACKAGES gives the package
+# config for profile.dart when the checkout has none, as in the pub cache.
+# PRISMARINE_OBSERVE_DART_FLAGS and PRISMARINE_OBSERVE_TIMEOUT also read their
+# OBSERVE_ forms. PRISMARINE_OBSERVE_CLOCK also reads BENCH_FRAMES.
 set -e
 out=${1:?outDir}; wins=${2:?windows}; shift 2
 script=${1:?script}; shift
 mkdir -p $out
 clock=${PRISMARINE_OBSERVE_CLOCK:-${BENCH_FRAMES:-$out/frames.jsonl}}
 export PRISMARINE_OBSERVE_CLOCK=$clock BENCH_FRAMES=$clock
-# A previous run's frames would end the windows at once.
+# The frames of an earlier run would end the windows at once.
 rm -f $clock
 dart_flags=${PRISMARINE_OBSERVE_DART_FLAGS:-$OBSERVE_DART_FLAGS}
 timeout=${PRISMARINE_OBSERVE_TIMEOUT:-${OBSERVE_TIMEOUT:-1800}}
-# perl's setpgrp makes the target a process-group leader (macOS has no setsid).
+# The setpgrp of perl makes the program the leader of a process group. macOS
+# has no setsid.
 perl -e 'setpgrp(0, 0); exec @ARGV' -- dart ${=dart_flags} \
   --no-pause-isolates-on-exit run --observe=0 --disable-service-auth-codes \
   $script "$@" > $out/stdout.txt 2>&1 &
@@ -32,7 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
-# The timeout: a loop that also ends within a second of this script.
+# The timeout is a loop that also ends within a second after this script.
 self=$$
 ( for i in $(seq 1 $timeout); do
     sleep 1; kill -0 $self 2>/dev/null || exit 0

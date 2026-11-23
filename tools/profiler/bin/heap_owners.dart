@@ -1,4 +1,4 @@
-// Where a running player's Dart heap goes, by owner (usage: --help).
+// Sums the Dart heap of a running app by owner. --help prints the usage.
 import 'dart:io';
 
 import 'package:vm_service/vm_service.dart';
@@ -7,20 +7,26 @@ import 'package:vm_service/vm_service_io.dart';
 import 'heap_report.dart' show lastT;
 
 const _usage = r'''
-Where a running player's Dart heap goes, by owner: attaches to a profile
-build's VM service and, at each game time (from the run's --profile
-frames.jsonl), takes one heap snapshot of the isolate group and sums every
-object's shallow size under its owner: the first two classes of our own
-(libraries named mcsm_*, the player's) on the first path a breadth-first
-walk from the roots finds to it, after the root's child it hangs under
-(which isolate's roots, or the group's). Also prints the largest classes.
+Sums the Dart heap of a running app by owner. The tool attaches to the VM
+service of a profile build. At each game time of the clock file, the
+frames.jsonl of FrameProfiler in prismarine_debug, it takes a heap snapshot
+of the isolate group and sums the shallow size of every object under its
+owner. The owner is the child of the root above the object, which keeps the
+roots of each isolate and of the group apart, followed by the first --depth
+classes of own code on the first path from the roots that a breadth-first
+walk finds. The tool also prints the largest classes.
 
   dart run tools/profiler/bin/heap_owners.dart <ws> <frames.jsonl> <t>…
       [--top=<n>] [--depth=<k>] [--fields] [--roots] [--classes-in=<text>]
       [--ours=<text>,…]
 
---fields names the field of ours that holds SDK objects (a map, a list);
---roots names the SDK classes on the first hops under an isolate's roots.
+--ours lists texts. A class is own code when the URI of its library
+contains one of them. Without --ours every class outside the dart: libraries
+and package:flutter/ is own code. --depth is 2 by default and --top 40.
+--fields adds the field of own code that holds SDK objects, such as a map or
+a list. --roots adds the SDK classes on the first hops under the roots of an
+isolate. --classes-in prints the largest classes under the owners whose
+label ends in the text.
 ''';
 
 String? _opt(List<String> args, String name) {
@@ -75,8 +81,9 @@ Future<void> _report(
   final objs = g.objects;
   final cls = g.classes;
   final ours = [for (final c in cls) _isOurs(c.libraryUri.toString(), oursIn)];
-  // Owner labels top-down in breadth-first order: a child's label is its
-  // parent's, extended by its own class while fewer than [depth] of ours.
+  // Owner labels in breadth-first order. A child gets the label of its
+  // parent, extended by its own class while the label holds fewer than
+  // [depth] own classes.
   final labels = <String>[];
   final labelOf = <String, int>{};
   final ourCount = <int>[];
@@ -114,15 +121,16 @@ Future<void> _report(
       if (ours[c] && ourCount[lo] < depth) {
         l = labelId('${labels[lo]} > ${cls[c].name}', ourCount[lo] + 1);
       } else if (!ours[c] && ours[objs[o].classId] && fields) {
-        // A field of ours holding SDK objects (a map, a list): named.
+        // A field of own code that holds SDK objects, such as a map or a
+        // list, gets a label of its own.
         var f = '[]';
         for (final x in cls[objs[o].classId].fields) {
           if (x.index == j) f = x.name;
         }
         l = labelId('${labels[lo]}.$f', ourCount[lo]);
       } else if (!ours[c] && roots && ourCount[lo] == 0 && hops[o] < 3) {
-        // Under an isolate's roots before any class of ours: the SDK
-        // classes on the way (statics, message queues, the codec's tables).
+        // The SDK classes between the roots of an isolate and the first
+        // own class, such as statics and message queues.
         l = labelId('${labels[lo]} / ${cls[c].name}', 0);
       }
       hops[r] = hops[o] + 1;
@@ -146,8 +154,8 @@ Future<void> _report(
       '${(bytes[k]! / 1e6).toStringAsFixed(1).padLeft(8)} MB  ${labels[k]}',
     );
   }
-  // --classes-in=<text>: the largest classes, with the class of the object
-  // that first reached each, under the owners whose label holds <text>.
+  // The largest classes for --classes-in under the owners whose label ends
+  // in the text, each with the class of the object that reached it first.
   if (classesIn != null) {
     final by = <String, int>{};
     for (var i = 1; i < objs.length; i++) {

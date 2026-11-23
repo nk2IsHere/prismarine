@@ -1,5 +1,5 @@
 name: prismarine_profiler
-description: The player's VM-service profiler (perf plan C1) — per window of game time, CPU samples, GC pauses and allocation by class from a profile build.
+description: Heap snapshot diffs, allocation sites with a flame graph and a VM-service profiler for Dart apps.
 publish_to: none
 environment:
   sdk: ^3.10.0

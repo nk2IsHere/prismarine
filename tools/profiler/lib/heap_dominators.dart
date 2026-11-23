@@ -1,14 +1,14 @@
-// A heap snapshot's dominator tree and retained sizes, in flat typed lists
-// (a player's snapshot has tens of millions of objects).
+// The dominator tree and the retained sizes of a heap snapshot in flat typed
+// lists. The snapshot of a game can hold tens of millions of objects.
 import 'dart:typed_data';
 
 import 'package:vm_service/vm_service.dart';
 
-/// The dominator tree of [graph] from its root (object 1): Lengauer and
-/// Tarjan's algorithm with path compression, iterative throughout.
-/// [retained] counts each object's shallow size plus the external memory
-/// its finalizers report (Flutter GPU's buffers and textures, native
-/// blocks), summed over what it dominates.
+/// The dominator tree of [graph] from its root, object 1, by the algorithm of
+/// Lengauer and Tarjan with path compression and without recursion.
+/// [retained] sums the shallow size and the external memory of each object
+/// over the objects that it dominates. The external memory is the size that
+/// finalizers report, such as for the buffers and textures of Flutter GPU.
 final class HeapDominators {
   HeapDominators(this.graph) {
     final objs = graph.objects;
@@ -28,32 +28,32 @@ final class HeapDominators {
   late final Int64List shallow;
   late final Int64List external;
 
-  /// The immediate dominator of each object (0: unreachable; the root's
-  /// own is 0 too).
+  /// The immediate dominator of each object. It is 0 for the root and for an
+  /// object that the root does not reach.
   late final Uint32List idom;
 
-  /// What each object keeps alive: itself, its external memory and every
-  /// object it dominates.
+  /// The retained size of each object. It is the size and the external memory
+  /// of the object and of every object that it dominates.
   late final Int64List retained;
 
-  /// The objects in depth-first order from the root (reachable ones only).
+  /// The objects that the root reaches, in depth-first order.
   late final Uint32List order;
 
-  /// Each object's referrers among the reachable ones: [preds] from
+  /// The referrers of object v among the reached objects are [preds] from
   /// [predStart][v] to [predStart][v + 1].
   late final Uint32List predStart;
   late final Uint32List preds;
 
-  /// The dominator tree's children of object v: [kids] from
+  /// The children of object v in the dominator tree are [kids] from
   /// [kidStart][v] to [kidStart][v + 1].
   late final Uint32List kidStart;
   late final Uint32List kids;
 
-  /// Per class, the reference slots that hold weakly (a weak reference's
-  /// or finalizer entry's target, a weak property's key): an object only
-  /// they reach is garbage the next old-space collection frees, not
-  /// retained. A weak property's value holds only while its key is
-  /// reached otherwise (an ephemeron: an Expando's entry).
+  /// The reference slots of each class that hold weakly, such as the target
+  /// of a weak reference or a finalizer entry and the key of a weak property.
+  /// An object that only these slots reach is garbage that the next old-space
+  /// collection frees. The value of a weak property, such as an entry of an
+  /// Expando, holds only while another path reaches its key.
   late final List<Set<int>?> _weak = [
     for (final c in graph.classes)
       switch (c.name) {
@@ -83,8 +83,8 @@ final class HeapDominators {
     return out.isEmpty ? null : out;
   }
 
-  /// Whether each object is reached through strong references (weak
-  /// properties' values counted once their keys are).
+  /// Flags each object that strong references reach. The value of a weak
+  /// property counts once its key is reached.
   late final Uint8List _live = () {
     final objs = graph.objects;
     final n = objs.length;
@@ -122,8 +122,8 @@ final class HeapDominators {
     return live;
   }();
 
-  /// [o]'s strong references (with [ephemerons], a weak property's value
-  /// when its key is live).
+  /// Returns the strong references of [o]. With [ephemerons] the value of a
+  /// weak property counts when its key is live.
   Uint32List strong(HeapSnapshotObject o, {bool ephemerons = true}) {
     final r = o.references;
     final w = o.classId < _weak.length ? _weak[o.classId] : null;
@@ -142,7 +142,8 @@ final class HeapDominators {
 
   void _build(List<HeapSnapshotObject> objs) {
     final n = objs.length;
-    // Depth-first numbering from the root (1-based numbers; 0 = unseen).
+    // Numbers the objects depth first from the root, from 1. 0 marks an
+    // object that the walk has not seen.
     final num = Uint32List(n);
     final parent = Uint32List(n);
     final vertex = Uint32List(n + 1);
@@ -170,7 +171,7 @@ final class HeapDominators {
       stack[sp++] = w;
     }
     order = Uint32List.sublistView(vertex, 1, count + 1);
-    // Predecessors of the reachable objects, in CSR form.
+    // The referrers of the reached objects as compressed sparse rows.
     final predStart = Uint32List(n + 1);
     for (var i = 1; i <= count; i++) {
       final v = vertex[i];
@@ -270,8 +271,8 @@ final class HeapDominators {
     kids = kidList;
   }
 
-  /// The name of the field of [holder] that references [child] directly,
-  /// or null (held through objects it dominates, or by an unnamed slot).
+  /// Returns the field of [holder] that references [child] directly. Returns
+  /// null when no field of [holder] references it or its slot has no name.
   String? fieldName(int holder, int child) {
     final objs = graph.objects;
     final r = objs[holder].references;

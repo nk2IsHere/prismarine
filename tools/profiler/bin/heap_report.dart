@@ -1,4 +1,4 @@
-// What a running player holds in its Dart heap (usage: --help).
+// Reports the Dart heap of a running app. --help prints the usage.
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,21 +6,21 @@ import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
 const _usage = r'''
-What a running player holds in its Dart heap: attaches to a profile
-build's VM service and reads, at given game times (from the run's
---profile frames.jsonl):
+Reports the Dart heap of a running app. The tool attaches to the VM service
+of a profile build and waits for each game time in the clock file, the
+frames.jsonl of FrameProfiler in prismarine_debug.
 
-  heap: a heap snapshot of one isolate (the group's heap), its objects of
-        the chosen classes grouped by the path that retains them (the
-        first path a breadth-first walk from the roots finds), largest
-        total first.
-  live: each chosen class's bytes and instances in the heap now.
+  heap  takes a heap snapshot of the isolate group at the time and groups
+        the objects of the chosen classes by the path that retains them,
+        the largest total first. The path is the first one from the roots
+        that a breadth-first walk finds.
+  live  prints the bytes and instances of each chosen class at each time.
 
-The VM's allocation profile is not an allocation rate: on this VM (Dart
-3.13) `accumulatedSize` equals `bytesCurrent` and `reset: true` does not
-clear it, so "MB per window" from it is the heap's contents. `live` shows
-it (both columns over time); allocation rates come from GC stats
-(`--verbose_gc` headless, the timeline's GC events) or allocation traces.
+The allocation profile of the VM gives no allocation rate. On Dart 3.13
+`accumulatedSize` equals `bytesCurrent` and `reset: true` does not clear
+it. Its MB per window are the contents of the heap, which `live` shows over
+time. Allocation rates come from GC statistics, such as `--verbose_gc` or
+the GC events of the timeline, or from allocation traces.
 
   dart run tools/profiler/bin/heap_report.dart heap <ws> <frames.jsonl> <t>
       [--classes=_Uint8List,_ByteDataView] [--min=<bytes>] [--max=<bytes>]
@@ -29,7 +29,7 @@ it (both columns over time); allocation rates come from GC stats
       <class,class…> <t>…
 ''';
 
-/// The game time of the last frame written to [path] (null before one).
+/// The game time of the last frame in [path], or null before the first one.
 double? lastT(String path) {
   try {
     final s = File(path).readAsStringSync();
@@ -39,7 +39,7 @@ double? lastT(String path) {
       if (m['t'] is num) return (m['t'] as num).toDouble();
     }
   } on Object {
-    // Not written yet.
+    // The file does not exist yet.
   }
   return null;
 }
@@ -122,8 +122,8 @@ Future<void> _heap(VmService vm, List<String> args) async {
   final g = await HeapSnapshotGraph.getSnapshot(vm, iso);
   final objs = g.objects;
   final cls = g.classes;
-  // The first referrer of each object on a breadth-first walk from the
-  // root (object 1), and which of its references it is.
+  // The first referrer of each object on a breadth-first walk from the root,
+  // object 1, and the index of its reference to the object.
   final parent = List<int>.filled(objs.length, -1);
   final parentSlot = List<int>.filled(objs.length, -1);
   final queue = <int>[1];
@@ -160,8 +160,8 @@ Future<void> _heap(VmService vm, List<String> args) async {
       final pp = parent[p];
       if (pp == -1 || pp == p) break;
       final slot = parentSlot[p];
-      // The field holding it by its reference index; list elements and
-      // the rest as [].
+      // The field of the referrer at the reference index. List elements and
+      // other slots show as [].
       var field = '[]';
       for (final f in cls[objs[pp].classId].fields) {
         if (f.index == slot) field = '.${f.name}';

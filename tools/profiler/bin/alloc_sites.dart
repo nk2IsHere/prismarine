@@ -1,22 +1,22 @@
-// Allocation by call site, weighted by bytes, from a VM with the mcsm Dart
-// patch (prismarine's third_party/flutter_engine/patches/dart:
-// `--heap_sample_traces=<n>`
-// records every n-th allocated byte's object as a profiler allocation trace,
-// its weight in bytes in the sample's identity hash; needs `--profiler`).
+// Reports allocation by call site, weighted by bytes. It needs a Dart VM with
+// the patch dart/0001 of the engine fork in third_party/flutter_engine. With
+// --profiler and --heap_sample_traces=<n> the VM records the object of every
+// n-th allocated byte as an allocation trace of the profiler. The identity
+// hash of the sample holds its weight in bytes.
 //
 // dart run tools/profiler/bin/alloc_sites.dart <wsUri> <seconds> [out.json]
 //     [--frames=<n>] [--top=<n>] [--isolate=<name>]
 //     [--clock=<file> --from=<t> --to=<t>] [--once]
 //
-// Drains each isolate's allocation samples every second for <seconds> (or
-// until the target exits; with --once, read once after the window), then
-// prints per isolate the bytes by class, by
-// allocating site (the first frame outside the Dart SDK, with the class) and
-// by function inclusive. --frames=<n> divides the bytes by n (per frame).
-// --clock names a file whose lines end in the game time (`{"t":…}`: the
-// player's --profile frames.jsonl, route_plan's --clock): sampling runs from
-// game time --from to --to, and the bytes are per frame of the file's lines
-// in that window.
+// The tool reads the allocation samples of each isolate every second for
+// <seconds> or until the target exits. With --once it reads them once after
+// the window. It prints for each isolate the bytes by class, by allocating
+// site with the class and by function, inclusive. The site is the first frame
+// outside the Dart SDK. --frames=<n> divides the bytes by n to give the bytes
+// of a frame. --clock gives a file with one line per frame that ends in the
+// game time, such as {"t": 12.5} in the frames.jsonl of FrameProfiler in
+// prismarine_debug. Sampling then runs from the game time --from to --to and
+// the bytes are per frame of the lines in that window.
 import 'dart:convert';
 import 'dart:io';
 
@@ -48,7 +48,7 @@ Future<void> main(List<String> args) async {
   final to = double.tryParse(flags['to'] ?? '');
   final once = flags.containsKey('once');
   var last = 0;
-  // The allocation traces are the profiler's samples: it must be on.
+  // The allocation traces are samples of the profiler, which must run.
   await vm.setFlag('profiler', 'true');
   if (clock != null && from != null) {
     while ((_lastT(clock) ?? -1) < from) {
@@ -70,8 +70,8 @@ Future<void> main(List<String> args) async {
       break;
     }
     if (now > end) now = end;
-    // --once: one read over the whole window after it ends (below), so a
-    // sample that lands in the buffer after a read past its time counts.
+    // With --once the whole window is read once after it ends. A sample that
+    // reaches the buffer after a read of its time then still counts.
     if (once) {
       last = now;
       continue;
@@ -188,8 +188,8 @@ Future<void> _add(
     st.total += bytes;
     st.samples++;
     st.byClass.update(cls, (v) => v + bytes, ifAbsent: () => bytes);
-    // The site is the innermost frame of ours: an SDK growth or copy is
-    // charged to the code that asked for it.
+    // The site is the innermost frame outside the SDK. The growth or copy of
+    // an SDK collection is charged to the code that called it.
     var site = stack.isEmpty ? '?' : labels[stack.first];
     for (final i in stack) {
       if (!sdk[i]) {
@@ -249,7 +249,7 @@ bool _isSdk(ProfileFunction f) {
       uri.contains('org-dartlang-sdk');
 }
 
-/// The game time of the last line written to [path].
+/// The game time of the last line in [path].
 double? _lastT(String path) {
   try {
     final raf = File(path).openSync();
@@ -262,12 +262,12 @@ double? _lastT(String path) {
       if (_t(l) case final t?) return t;
     }
   } on Object {
-    // Not written yet.
+    // The file does not exist yet.
   }
   return null;
 }
 
-/// How many of [path]'s lines have a game time in [from, to).
+/// Counts the lines of [path] with a game time in [from, to).
 int _framesIn(String path, double from, double to) {
   var n = 0;
   for (final l in File(path).readAsLinesSync()) {

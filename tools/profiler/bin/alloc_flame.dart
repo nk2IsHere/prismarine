@@ -1,14 +1,16 @@
-// alloc_flame: alloc_sites.dart's stacks (its JSON's byStack) as a flame
-// graph: an HTML page (click a frame to zoom, hover for its share) or a
-// text tree. The many small allocations a site list scatters add up under
-// the code that makes them.
+// Draws the stacks of an alloc_sites report, the byStack of its JSON, as a
+// flame graph. The graph is an HTML page or a text tree. A click on a frame
+// of the page zooms in and the pointer over a frame shows its share. The many
+// small allocations that a list of sites scatters add up under the code that
+// makes them.
 //
-//   dart run bin/alloc_flame.dart <sites.json> [--isolate=<name>]
-//     [--html=<out.html>] [--tree] [--min=<MB a frame>] [--depth=<n>]
-//     [--sdk]
+//   dart run tools/profiler/bin/alloc_flame.dart <sites.json>
+//     [--isolate=<name>] [--html=<out.html>] [--tree] [--min=<MB a frame>]
+//     [--depth=<n>] [--sdk]
 //
-// --sdk keeps the SDK's frames (zone, futures, collections); without it a
-// stack keeps only the project's frames, the allocated class its leaf.
+// --sdk keeps the frames of the SDK, such as zones, futures and collections.
+// Without it a stack keeps only the frames outside the SDK, with the
+// allocated class as its leaf.
 import 'dart:convert';
 import 'dart:io';
 
@@ -44,7 +46,8 @@ void main(List<String> args) {
       node.add(_frames(stack, keepSdk), bytes / perFrame / 1e6);
     }
   }
-  // The isolates are added under the root directly: its total is theirs.
+  // The isolates are added under the root directly. The total of the root is
+  // the sum of theirs.
   for (final c in root.children.values) {
     root.total += c.total;
   }
@@ -62,7 +65,9 @@ void main(List<String> args) {
   }
 }
 
-/// [stack] (`Class @ leaf < caller < … < root`) root first, the class last.
+/// Splits [stack] of the form `Class @ leaf < caller < … < root` into its
+/// frames from the root to the leaf, followed by the class. Without
+/// [keepSdk] the frames of the SDK are left out.
 List<String> _frames(String stack, bool keepSdk) {
   final at = stack.indexOf(' @ ');
   final cls = stack.substring(0, at);
@@ -74,7 +79,8 @@ List<String> _frames(String stack, bool keepSdk) {
   ];
 }
 
-/// Whether frame [f] (`name (file.dart)`) is the SDK's.
+/// Returns true for a frame [f] of the SDK. [f] has the form
+/// `name (file.dart)`.
 bool _sdk(String f) {
   final open = f.lastIndexOf('(');
   final file = open < 0 ? f : f.substring(open + 1, f.length - 1);
@@ -167,7 +173,7 @@ void _printTree(_Node n, double all, double min, int depth, String pad) {
   }
 }
 
-/// [name] without its file.
+/// Returns [name] without its file.
 String _short(String name) {
   final open = name.lastIndexOf(' (');
   return open < 0 ? name : name.substring(0, open);
