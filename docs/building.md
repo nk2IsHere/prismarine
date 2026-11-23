@@ -22,9 +22,8 @@ C compiler.
   the MSVC compiler and CMake.
 
 Install Rust with rustup. On Windows, run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and keep its MSVC
-toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since a build hook does not get
-`RUSTUP_HOME` or `CARGO_HOME`. A macOS app build compiles each crate for both CPUs of the Mac, which needs the standard
-libraries of both targets.
+toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since a build hook does not read
+`RUSTUP_HOME` or `CARGO_HOME`.
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
