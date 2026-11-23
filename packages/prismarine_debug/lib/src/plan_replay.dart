@@ -49,10 +49,14 @@ Future<void> replayPlan(
     'pipelines ${_ms(runner.lastPipelineMs)}, '
     'loads ${_ms(runner.lastLoadMs)}; GPU ${_ms(runner.lastGpuMs)})',
   );
-  // MCSM_REPLAY_BENCH=<n>: the plan recorded n times more, each after
+  // PRISMARINE_REPLAY_BENCH=<n>: the plan recorded n times more, each after
   // the last is done on the GPU, and the record's CPU time printed (a
   // still frame's: every draw recorded before).
-  final bench = int.tryParse(Platform.environment['MCSM_REPLAY_BENCH'] ?? '');
+  final bench = int.tryParse(
+    Platform.environment['PRISMARINE_REPLAY_BENCH'] ??
+        Platform.environment['MCSM_REPLAY_BENCH'] ??
+        '',
+  );
   if (bench != null && bench > 0) {
     final record = <double>[], render = <double>[], compute = <double>[];
     final gpuOwn = <double>[];
@@ -94,9 +98,13 @@ Future<void> replayPlan(
       }
       final suffix = spec.layers > 1 ? '.L$layer' : '';
       File('${outDir.path}/$name$suffix.bin').writeAsBytesSync(bytes);
-      // MCSM_REPLAY_MIP=<m>: that mip of each target that has it too
+      // PRISMARINE_REPLAY_MIP=<m>: that mip of each target that has it too
       // (`<target>[.L<layer>].M<m>.bin`).
-      final mip = int.tryParse(Platform.environment['MCSM_REPLAY_MIP'] ?? '');
+      final mip = int.tryParse(
+        Platform.environment['PRISMARINE_REPLAY_MIP'] ??
+            Platform.environment['MCSM_REPLAY_MIP'] ??
+            '',
+      );
       if (mip != null && mip > 0 && mip < spec.mips) {
         File('${outDir.path}/$name$suffix.M$mip.bin').writeAsBytesSync(
           await runner.readTarget(name, mip: mip, layer: layer),

@@ -116,12 +116,13 @@ class GlitchCatcher {
   }
 
   HistoryMeta? _last;
-  static final (double, double)? _saveSpan = switch (Platform
-      .environment['MCSM_CATCH_SAVE']
-      ?.split(':')) {
-    [final a, final b] => (double.parse(a), double.parse(b)),
-    _ => null,
-  };
+  static final (double, double)? _saveSpan =
+      switch ((Platform.environment['PRISMARINE_CATCH_SAVE'] ??
+              Platform.environment['MCSM_CATCH_SAVE'])
+          ?.split(':')) {
+        [final a, final b] => (double.parse(a), double.parse(b)),
+        _ => null,
+      };
   int _windowSeq = 0;
   int windowFrames = 0;
 
@@ -132,8 +133,9 @@ class GlitchCatcher {
     _start();
     windowFrames++;
     final m = _last;
-    // MCSM_CATCH_SAVE=<t0>:<t1>: every window frame in that stretch of game
-    // time is kept as well (window_all/), to look at a moment frame by frame.
+    // PRISMARINE_CATCH_SAVE=<t0>:<t1>: every window frame in that stretch of
+    // game time is kept as well (window_all/), to look at a moment frame by
+    // frame.
     if (_saveSpan case (final t0, final t1)? when m != null) {
       if (m.time >= t0 && m.time <= t1) {
         final path =
