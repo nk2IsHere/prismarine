@@ -21,7 +21,7 @@ Each item is one commit in `mcsm_lua`. The tests of `mcsm_lua`, `mcsm_lua_native
    read the configuration.
 5. A file split. The files of the generic core import nothing of the profiles, the exe runtimes or `mcsm_math`.
 
-Checks: `route_bench --fingerprint` on an S1 and an S2 route, and snapshots at fixed times on both, before and after,
+Checks: `route_bench --fingerprint` on an S1 and an S2 route and snapshots at fixed times on both, before and after,
 byte for byte. `route_bench` timings of the Lua phases on the workstation, base and branch on the same cores.
 
 ## Step 2: the move
@@ -45,4 +45,4 @@ byte for byte. `route_bench` timings of the Lua phases on the workstation, base 
 ## Step 4: hand-back
 
 The pin in mcsm set to the tip of prismarine's branch, the locks committed, the alloc totals, the area docs of both
-repositories, and the list of changes that could move timing, snapshots or saves.
+repositories and the list of changes that could move timing, snapshots or saves.

@@ -56,7 +56,7 @@ A VM has one of three number modes. `LuaNumberMode.float64` is the default.
 | `float32Single` | float | is a single-precision operation | takes the first NaN operand, made quiet, or else the canonical NaN |
 
 A number key of a table hashes with the float formula of `luai_hashnum` in every mode. The `next` order of a table
-with number keys in `float64` therefore differs from a double build of stock Lua. Lua leaves that order open, and the
+with number keys in `float64` therefore differs from a double build of stock Lua. Lua leaves that order open and the
 float formula keeps the table code free of a mode test.
 
 The canonical NaN is the quiet NaN with the sign bit set, which an x86-64 CPU produces for an invalid operation. Lua
@@ -95,7 +95,7 @@ isolates.
 
 A VM rewrites the arithmetic and numeric `for` instructions of a prototype when it loads the chunk. `ADD`, `SUB`,
 `MUL`, `DIV`, `MOD`, `POW`, `FORLOOP` and `FORPREP` keep their standard opcodes in `float64`. In `float32` they become
-the internal opcodes 40 to 47. In `float32Single` the arithmetic becomes 48 to 53, and the loops take 46 and 47 of
+the internal opcodes 40 to 47. In `float32Single` the arithmetic becomes 48 to 53 and the loops take 46 and 47 of
 `float32`. The execute loop has a group of cases for the arithmetic of each mode and a case for each loop opcode of a
 mode. No instruction tests the mode.
 

@@ -1,14 +1,14 @@
 # prismarine_lua
 
 prismarine_lua is Lua 5.2.3 in pure Dart, with the standard libraries, the binary chunks of Lua 5.2 and codecs that
-write a Lua state into a snapshot. Numbers are doubles by default, and a VM can have float numbers for maths that must
+write a Lua state into a snapshot. Numbers are doubles by default and a VM can have float numbers for maths that must
 match a float32 engine. The details are on [the area page](../../docs/areas/lua.md).
 
 ## Usage
 
 You make a `LuaVm` with a `LuaHost` for its output and resources. A host function is a `LuaNative` that reads its
 arguments from the stack of the thread, pushes its results and returns their count, in the style of the C API of Lua.
-`vm.call` calls a Lua function or a native, and `vm.load` loads a binary chunk. Source text needs a compiler, which
+`vm.call` calls a Lua function or a native and `vm.load` loads a binary chunk. Source text needs a compiler, which
 `prismarine_lua_native` has. A `LuaConfig` sets the number mode, the width of `lua_Integer`, the C runtime and the
 patches of the libraries.
 

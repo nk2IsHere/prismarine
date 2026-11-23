@@ -28,7 +28,7 @@ precompiled Metal libraries and a command line. mcsm keeps the settings of its s
 and texture arrays of the cook. GitHub workflows run the lints and the tests for a pull request and by hand, as
 [CI](../areas/ci.md) describes. They are not yet enabled on GitHub.
 The Lua of the later list is in: `prismarine_lua` is Lua 5.2.3 for Dart with double numbers by default and two float32
-modes, and `prismarine_lua_native` is its compiler in a double and a float32 build, as [lua](../areas/lua.md)
+modes. `prismarine_lua_native` is its compiler in a double and a float32 build, as [lua](../areas/lua.md)
 describes. mcsm's exe profiles are configurations of it in mcsm.
 Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
 its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
