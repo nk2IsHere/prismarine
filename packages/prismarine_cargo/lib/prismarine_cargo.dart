@@ -21,8 +21,9 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
-/// Builds [crate] (a directory of the hook's package holding `Cargo.toml`)
-/// in release mode and adds its dynamic library [library] (the crate's
+/// Builds [crate] in release mode. [crate] is the directory that holds
+/// `Cargo.toml`, as a path relative to the hook's package or as an absolute
+/// URI path. The build adds its dynamic library [library] (the crate's
 /// `[lib] name`) as the code asset `package:<package>/<assetName>`.
 ///
 /// [extraSources]: package-relative files or directories outside the crate
@@ -65,6 +66,7 @@ Future<void> buildCargoLibrary(
       'RUSTUP_HOME',
       'CARGO_HOME',
       'RUSTUP_TOOLCHAIN',
+      'SSH_AUTH_SOCK',
       'SYSTEMROOT',
       'TEMP',
       'TMP',
@@ -103,6 +105,9 @@ Future<void> buildCargoLibrary(
             : Platform.isWindows
             ? _visualStudioGenerator()
             : null)),
+    // Git dependencies are fetched with the git command line. It reads the
+    // machine's git config, with its URL mappings and credentials.
+    'CARGO_NET_GIT_FETCH_WITH_CLI': 'true',
     // The app's minimum for rustc and for the C a crate's build.rs
     // compiles (the cc crate reads it; without it cc targeted the SDK's
     // own version).
@@ -149,6 +154,8 @@ Future<void> buildCargoLibrary(
         'link-arg=-Wl,-headerpad_max_install_names',
       ],
     ],
+    // Cargo reads the config files of the crate's directory and its parents.
+    workingDirectory: crateDir.toFilePath(),
     environment: env,
     includeParentEnvironment: false,
   );
