@@ -5,12 +5,12 @@ precision highp float;
 #include "Pbr/bodies/indirect_block.glsl"
 
 uniform texture2D skyEnv; // t0
-uniform sampler s2;
-#define skyEnv_S s2
+uniform sampler s6;
+#define skyEnv_S s6
 uniform texture2D skySpecular; // t1
-#define skySpecular_S s2
+#define skySpecular_S s6
 uniform texture2D skyIrradiance; // t2
-#define skyIrradiance_S s2
+#define skyIrradiance_S s6
 
 #include "Pbr/bodies/sky_read.glsl"
 

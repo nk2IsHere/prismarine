@@ -8,10 +8,10 @@ precision highp float;
 #include "Pbr/bodies/indirect_block.glsl"
 
 uniform texture2D depth; // t0
-uniform sampler s1;
-#define depth_S s1
-uniform texture2D gbufferNormal; // t1
-#define gbufferNormal_S s1
+uniform sampler s5;
+#define depth_S s5
+
+#include "Pbr/bodies/depth_normal.glsl"
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 color;
@@ -19,13 +19,17 @@ layout(location = 0) out vec4 color;
 void main() {
   vec2 full = cb2.view.xy;
   ivec2 px = ivec2(uv * full);
-  float z = texelFetch(sampler2D(depth, s1), px, 0).r;
+  float z = texelFetch(sampler2D(depth, s5), px, 0).r;
   if (z >= 1.0) {
     color = vec4(1.0);
     return;
   }
-  vec3 p = worldAt(uv, z);
-  vec3 n = octDecode(texelFetch(sampler2D(gbufferNormal, s1), px, 0).xy);
+  // Positions at the centres of the texels whose depth they take. A point
+  // off the centre would bend the planes that the depth gives.
+  vec3 p = worldAt((vec2(px) + 0.5) / full, z);
+  // The face normal. The normals of the vertices bend over large faces,
+  // which would darken the faces with them.
+  vec3 n = faceNormal(px, p, -cb2.cameraForward.xyz);
   float radius = cb2.aoParams.x;
   float viewDepth = linearDepth(z);
   float pixels = radius * cb2.misc.w * full.y * 0.5 / viewDepth;
@@ -46,8 +50,9 @@ void main() {
     vec2 offset = vec2(cos(turn), sin(turn)) * a * pixels;
     vec2 q = uv + offset / full;
     if (any(lessThan(q, vec2(0.0))) || any(greaterThan(q, vec2(1.0)))) continue;
-    float qz = texelFetch(sampler2D(depth, s1), ivec2(q * full), 0).r;
-    vec3 s = worldAt(q, qz) - p;
+    ivec2 qt = ivec2(q * full);
+    float qz = texelFetch(sampler2D(depth, s5), qt, 0).r;
+    vec3 s = worldAt((vec2(qt) + 0.5) / full, qz) - p;
     float vv = dot(s, s);
     float vn = dot(s, n);
     float f = max(r2 - vv, 0.0);

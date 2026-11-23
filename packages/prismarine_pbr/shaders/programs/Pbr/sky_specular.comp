@@ -13,8 +13,8 @@ uniform Level {
 } cb3;
 
 uniform texture2D skyEnv; // t0
-uniform sampler s2;
-#define skyEnv_S s2
+uniform sampler s6;
+#define skyEnv_S s6
 layout(rgba16f) uniform writeonly image2D target;
 
 vec2 hammersley(int i, int n) {
@@ -34,7 +34,7 @@ void main() {
   vec3 n = equirectDirection((vec2(p) + 0.5) / vec2(size));
   float roughness = cb3.level.x;
   if (roughness <= 0.0) {
-    imageStore(target, p, textureLod(sampler2D(skyEnv, s2), equirect(n), 1.0));
+    imageStore(target, p, textureLod(sampler2D(skyEnv, s6), equirect(n), 1.0));
     return;
   }
   float a = roughness * roughness;
@@ -59,7 +59,7 @@ void main() {
     float pdf = a * a / (PI * f * f) * 0.25;
     float solid = 1.0 / (float(samples) * pdf + 1e-4);
     float lod = clamp(0.5 * log2(solid / texel) + 1.0, 0.0, cb3.level.z);
-    sum += textureLod(sampler2D(skyEnv, s2), equirect(l), lod).rgb * nl;
+    sum += textureLod(sampler2D(skyEnv, s6), equirect(l), lod).rgb * nl;
     weight += nl;
   }
   imageStore(target, p, vec4(sum / max(weight, 1e-4), 1.0));

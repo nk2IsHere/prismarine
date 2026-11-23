@@ -5,8 +5,8 @@ precision highp float;
 #include "Pbr/bodies/indirect_block.glsl"
 
 uniform texture2D giIrradiance; // t0
-uniform sampler s1;
-#define giIrradiance_S s1
+uniform sampler s5;
+#define giIrradiance_S s5
 
 layout(location = 0) in vec2 corner;
 layout(location = 1) flat in int probe;
@@ -26,5 +26,5 @@ void main() {
   int tiles = int(cb2.probeCounts.w);
   vec2 tile = vec2(float(probe % tiles), float(probe / tiles)) * 8.0;
   vec2 uv = (tile + 1.0 + (octEncode(n) * 0.5 + 0.5) * 6.0) * cb2.atlas.xy;
-  color = vec4(textureLod(sampler2D(giIrradiance, s1), uv, 0.0).rgb / PI, 1.0);
+  color = vec4(textureLod(sampler2D(giIrradiance, s5), uv, 0.0).rgb / PI, 1.0);
 }

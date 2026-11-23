@@ -1,5 +1,5 @@
 // The irradiance of the probes at a point. It needs the Indirect block, the
-// textures giIrradiance and giDistance with a linear clamped sampler s1 and
+// textures giIrradiance and giDistance with a linear clamped sampler s5 and
 // the texel buffer giProbes.
 
 ivec3 probeGrid() {
@@ -20,21 +20,22 @@ vec2 probeTexel(int probe, vec3 d, float tile, float inner, vec2 texel) {
   return (corner + 1.0 + (octEncode(d) * 0.5 + 0.5) * inner) * texel;
 }
 
-// The irradiance from the direction dir at position p in rgb and the share
-// of the sky in alpha. A non-zero view, the direction towards the viewer,
-// moves the point off its surface and weighs the probes by the side of the
-// surface that dir faces.
-vec4 probeIrradiance(vec3 p, vec3 dir, vec3 view) {
+// The irradiance at position p from the direction dir in rgb and the share
+// of the sky in alpha, in a, and with pair set the same from the direction
+// second in b. A non-zero view, the direction towards the viewer, moves the
+// point off its surface along face and view and weighs the probes by the
+// side of the surface that face faces.
+void probeIrradiancePair(vec3 p, vec3 face, vec3 dir, vec3 second, vec3 view, bool pair, out vec4 a, out vec4 b) {
   float spacing = cb2.probeOrigin.w;
   bool surface = dot(view, view) > 0.0;
   vec3 at = surface
-      ? p + (dir * cb2.probeParams.z + view * cb2.probeParams.w) * spacing
+      ? p + (face * cb2.probeParams.z + view * cb2.probeParams.w) * spacing
       : p;
   ivec3 c = probeGrid();
   vec3 rel = (at - cb2.probeOrigin.xyz) / spacing;
   ivec3 base = clamp(ivec3(floor(rel)), ivec3(0), c - 2);
   vec3 alpha = clamp(rel - vec3(base), 0.0, 1.0);
-  vec4 sum = vec4(0.0);
+  vec4 sumA = vec4(0.0), sumB = vec4(0.0);
   float total = 0.0;
   for (int i = 0; i < 8; i++) {
     ivec3 o = ivec3(i & 1, (i >> 1) & 1, (i >> 2) & 1);
@@ -46,14 +47,17 @@ vec4 probeIrradiance(vec3 p, vec3 dir, vec3 view) {
     vec3 tri = mix(1.0 - alpha, alpha, vec3(o));
     float w = 1.0;
     if (surface) {
-      float side = (dot(normalize(probe - p), dir) + 1.0) * 0.5;
+      float side = (dot(normalize(probe - p), face) + 1.0) * 0.5;
       w *= side * side + 0.2;
     }
     vec3 from = at - probe;
     float d = length(from);
-    vec2 m = textureLod(sampler2D(giDistance, s1), probeTexel(index, from / max(d, 1e-4), 16.0, 14.0, cb2.atlas.zw), 0.0).rg;
+    vec2 m = textureLod(sampler2D(giDistance, s5), probeTexel(index, from / max(d, 1e-4), 16.0, 14.0, cb2.atlas.zw), 0.0).rg;
     if (d > m.x) {
-      float variance = abs(m.y - m.x * m.x);
+      // A floor on the variance softens the edges of the shadows that the
+      // probes see. A wall in front of a probe still hides it.
+      float soft = 0.15 * spacing;
+      float variance = max(abs(m.y - m.x * m.x), soft * soft);
       float t = d - m.x;
       float chebyshev = variance / (variance + t * t);
       w *= max(chebyshev * chebyshev * chebyshev, 0.0);
@@ -62,8 +66,20 @@ vec4 probeIrradiance(vec3 p, vec3 dir, vec3 view) {
     // Weak weights fall faster, which hides light that leaks past them.
     if (w < 0.2) w *= w * w / 0.04;
     w *= tri.x * tri.y * tri.z;
-    sum += textureLod(sampler2D(giIrradiance, s1), probeTexel(index, dir, 8.0, 6.0, cb2.atlas.xy), 0.0) * w;
+    sumA += textureLod(sampler2D(giIrradiance, s5), probeTexel(index, dir, 8.0, 6.0, cb2.atlas.xy), 0.0) * w;
+    if (pair) {
+      sumB += textureLod(sampler2D(giIrradiance, s5), probeTexel(index, second, 8.0, 6.0, cb2.atlas.xy), 0.0) * w;
+    }
     total += w;
   }
-  return total > 0.0 ? sum / total : vec4(0.0);
+  a = total > 0.0 ? sumA / total : vec4(0.0);
+  b = total > 0.0 ? sumB / total : vec4(0.0);
+}
+
+// The irradiance at p from the direction dir, as probeIrradiancePair gives
+// it.
+vec4 probeIrradiance(vec3 p, vec3 dir, vec3 view) {
+  vec4 a, b;
+  probeIrradiancePair(p, dir, dir, dir, view, false, a, b);
+  return a;
 }

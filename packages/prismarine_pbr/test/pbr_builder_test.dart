@@ -55,6 +55,8 @@ void main() {
       'ao',
       'aoBlur',
       'ssr',
+      'ssrBlur',
+      'giResolve',
       'indirect',
       'history',
       'historyMip1',

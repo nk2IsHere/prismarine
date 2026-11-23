@@ -30,20 +30,20 @@ layout(location = 3) in vec2 uv;
 
 #ifdef BLENDED
 uniform texture2D giIrradiance; // t6
-uniform sampler s1;
-#define giIrradiance_S s1
+uniform sampler s5;
+#define giIrradiance_S s5
 uniform texture2D giDistance; // t7
-#define giDistance_S s1
+#define giDistance_S s5
 uniform textureBuffer giProbes; // t8
 uniform texture2D skyEnv; // t9
-uniform sampler s2;
-#define skyEnv_S s2
+uniform sampler s6;
+#define skyEnv_S s6
 uniform texture2D skySpecular; // t10
-#define skySpecular_S s2
+#define skySpecular_S s6
 uniform texture2D skyIrradiance; // t11
-#define skyIrradiance_S s2
+#define skyIrradiance_S s6
 uniform texture2D brdfLut; // t12
-#define brdfLut_S s1
+#define brdfLut_S s5
 #include "Pbr/bodies/gi_probes.glsl"
 #include "Pbr/bodies/sky_read.glsl"
 #include "Pbr/bodies/indirect_light.glsl"
@@ -152,7 +152,8 @@ void main() {
   result += texture(sampler2D(emissiveMap, s0), uv).rgb * cb1.emissive.rgb;
 #ifdef BLENDED
   vec3 diffuse, specular;
-  indirectTerms(worldPosition, n, v, base.rgb, metallic, roughness, 1.0, vec4(0.0), diffuse, specular);
+  vec3 face = normalize(worldNormal) * (gl_FrontFacing ? 1.0 : -1.0);
+  indirectTerms(worldPosition, n, face, v, base.rgb, metallic, roughness, 1.0, vec4(0.0), diffuse, specular);
   result += diffuse + specular;
 #else
   gbufferNormal = vec4(octEncode(n), roughness, metallic);

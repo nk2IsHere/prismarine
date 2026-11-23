@@ -11,12 +11,12 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 uniform textureBuffer giProbes; // t0
 uniform texture2D giRays; // t1
-uniform sampler s1;
-#define giRays_S s1
+uniform sampler s5;
+#define giRays_S s5
 uniform texture2D giIrradiance; // t2
-#define giIrradiance_S s1
+#define giIrradiance_S s5
 uniform texture2D giDistance; // t3
-#define giDistance_S s1
+#define giDistance_S s5
 layout(rgba16f) uniform writeonly image2D giIrradianceNext;
 layout(rgba16f) uniform writeonly image2D giDistanceNext;
 
@@ -41,7 +41,7 @@ void main() {
   vec2 moments = vec2(0.0);
   float distanceWeights = 0.0;
   for (int r = 0; r < rays; r++) {
-    vec4 ray = texelFetch(sampler2D(giRays, s1), ivec2(r, row), 0);
+    vec4 ray = texelFetch(sampler2D(giRays, s5), ivec2(r, row), 0);
     vec3 d = rotation * fibonacci(r, rays);
     float miss = ray.a < 0.0 ? 1.0 : 0.0;
     if (irradiance) {
@@ -58,11 +58,12 @@ void main() {
   if (irradiance) {
     ivec2 at = tile * 8 + t;
     vec4 now = weights > 0.0 ? vec4(sum.rgb * PI, sum.a) / weights : vec4(0.0);
-    vec4 old = texelFetch(sampler2D(giIrradiance, s1), at, 0);
-    imageStore(giIrradianceNext, at, mix(now, old, h));
+    vec4 old = texelFetch(sampler2D(giIrradiance, s5), at, 0);
+    // A first update does not read the old texels, which hold no value yet.
+    imageStore(giIrradianceNext, at, h > 0.0 ? mix(now, old, h) : now);
   }
   ivec2 at = tile * 16 + t;
   vec2 now = distanceWeights > 0.0 ? moments / distanceWeights : vec2(far, far * far);
-  vec2 old = texelFetch(sampler2D(giDistance, s1), at, 0).rg;
-  imageStore(giDistanceNext, at, vec4(mix(now, old, h), 0.0, 1.0));
+  vec2 old = texelFetch(sampler2D(giDistance, s5), at, 0).rg;
+  imageStore(giDistanceNext, at, vec4(h > 0.0 ? mix(now, old, h) : now, 0.0, 1.0));
 }

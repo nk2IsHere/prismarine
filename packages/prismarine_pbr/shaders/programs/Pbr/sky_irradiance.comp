@@ -6,8 +6,8 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #include "Pbr/bodies/gi_common.glsl"
 
 uniform texture2D source; // t0
-uniform sampler s1;
-#define source_S s1
+uniform sampler s5;
+#define source_S s5
 layout(rgba16f) uniform writeonly image2D skyIrradiance;
 
 void main() {
@@ -15,7 +15,7 @@ void main() {
   ivec2 size = imageSize(skyIrradiance);
   if (any(greaterThanEqual(p, size))) return;
   vec3 n = equirectDirection((vec2(p) + 0.5) / vec2(size));
-  ivec2 s = textureSize(sampler2D(source, s1), 0);
+  ivec2 s = textureSize(sampler2D(source, s5), 0);
   vec3 sum = vec3(0.0);
   for (int y = 0; y < s.y; y++) {
     float theta = (float(y) + 0.5) / float(s.y) * PI;
@@ -23,7 +23,7 @@ void main() {
     for (int x = 0; x < s.x; x++) {
       vec3 d = equirectDirection((vec2(x, y) + 0.5) / vec2(s));
       float c = dot(n, d);
-      if (c > 0.0) sum += texelFetch(sampler2D(source, s1), ivec2(x, y), 0).rgb * c * solid;
+      if (c > 0.0) sum += texelFetch(sampler2D(source, s5), ivec2(x, y), 0).rgb * c * solid;
     }
   }
   imageStore(skyIrradiance, p, vec4(sum, 1.0));

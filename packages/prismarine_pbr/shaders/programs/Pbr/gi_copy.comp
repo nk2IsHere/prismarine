@@ -9,10 +9,10 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 uniform textureBuffer giProbes; // t0
 uniform texture2D giIrradianceNext; // t1
-uniform sampler s1;
-#define giIrradianceNext_S s1
+uniform sampler s5;
+#define giIrradianceNext_S s5
 uniform texture2D giDistanceNext; // t2
-#define giDistanceNext_S s1
+#define giDistanceNext_S s5
 layout(rgba16f) uniform writeonly image2D giIrradiance;
 layout(rgba16f) uniform writeonly image2D giDistance;
 
@@ -42,9 +42,9 @@ void main() {
   int tiles = int(cb2.probeCounts.w);
   ivec2 tile = ivec2(probe % tiles, probe / tiles);
   ivec2 d = tile * 16;
-  imageStore(giDistance, d + t, texelFetch(sampler2D(giDistanceNext, s1), d + inner(t, 14), 0));
+  imageStore(giDistance, d + t, texelFetch(sampler2D(giDistanceNext, s5), d + inner(t, 14), 0));
   if (all(lessThan(t, ivec2(8)))) {
     ivec2 i = tile * 8;
-    imageStore(giIrradiance, i + t, texelFetch(sampler2D(giIrradianceNext, s1), i + inner(t, 6), 0));
+    imageStore(giIrradiance, i + t, texelFetch(sampler2D(giIrradianceNext, s5), i + inner(t, 6), 0));
   }
 }

@@ -25,6 +25,9 @@ abstract final class GiTargets {
       aoRaw = 'aoRaw',
       ao = 'ao',
       ssr = 'ssr',
+      ssrBlur = 'ssrBlur',
+      giDiffuseHalf = 'giDiffuseHalf',
+      giSpecularHalf = 'giSpecularHalf',
       history = 'history';
 }
 
@@ -56,6 +59,10 @@ class GiPasses {
   Uint8List _voxels = Uint8List(16), _probes = Uint8List(16);
   final _previous = Matrix4.identity(), _inverse = Matrix4.identity();
   bool _hasPrevious = false;
+
+  /// The frames since the reflection history was made. The first frame has
+  /// no history to read.
+  int _historyFrames = 0;
   int _width = 1, _height = 1;
 
   bool get _probesOn => settings.probes && volume != null;
@@ -82,6 +89,7 @@ class GiPasses {
   void addTargets(Map<String, TargetSpec> targets, int width, int height) {
     _width = width;
     _height = height;
+    _historyFrames = 0;
     final v = volume;
     if (!identical(v, _volumeOf)) {
       _volumeOf = v;
@@ -149,14 +157,18 @@ class GiPasses {
       }
     }
     final hw = (width + 1) ~/ 2, hh = (height + 1) ~/ 2;
+    targets[GiTargets.giDiffuseHalf] = TargetSpec(hw, hh, hdr);
+    targets[GiTargets.giSpecularHalf] = TargetSpec(hw, hh, hdr);
     if (settings.ambientOcclusion) {
       targets[GiTargets.aoRaw] = TargetSpec(hw, hh, 'R8_UNORM');
       targets[GiTargets.ao] = TargetSpec(hw, hh, 'R8_UNORM');
     }
     if (settings.reflections) {
-      targets[GiTargets.ssr] = settings.ssrFullSize
-          ? TargetSpec(width, height, hdr)
-          : TargetSpec(hw, hh, hdr);
+      for (final name in const [GiTargets.ssr, GiTargets.ssrBlur]) {
+        targets[name] = settings.ssrFullSize
+            ? TargetSpec(width, height, hdr)
+            : TargetSpec(hw, hh, hdr);
+      }
       targets[GiTargets.history] = TargetSpec(hw, hh, hdr, mips: _historyMips);
     }
   }
@@ -202,7 +214,7 @@ class GiPasses {
             textures: {
               'skyEnv': const TargetTexture(GiTargets.skyEnv, mips: _skyMips),
             },
-            samplers: const {2: _equirect},
+            samplers: const {6: _equirect},
             storage: {'target': ImageRef(GiTargets.skySpecular, mip: m)},
           ),
         ),
@@ -212,7 +224,7 @@ class GiPasses {
         const [4, 2, 1],
         StageResources(
           textures: {'source': const TargetTexture(GiTargets.skyEnv, mip: 3)},
-          samplers: const {1: _pointClamp},
+          samplers: const {5: _pointClamp},
           storage: {'skyIrradiance': const ImageRef(GiTargets.skyIrradiance)},
         ),
       ),
@@ -234,7 +246,7 @@ class GiPasses {
             'skyEnv': const TargetTexture(GiTargets.skyEnv, mips: _skyMips),
             'shadowMap': TargetTexture(shadowMap),
           },
-          samplers: const {1: _linearClamp, 2: _equirect, 4: _shadowCompare},
+          samplers: const {5: _linearClamp, 6: _equirect, 4: _shadowCompare},
           storage: {
             'RawVoxels': InlineBuffer(_voxels),
             'giRays': const ImageRef(GiTargets.giRays),
@@ -253,7 +265,7 @@ class GiPasses {
             'giIrradiance': const TargetTexture(GiTargets.giIrradiance),
             'giDistance': const TargetTexture(GiTargets.giDistance),
           },
-          samplers: const {1: _pointClamp},
+          samplers: const {5: _pointClamp},
           storage: {
             'giIrradianceNext': const ImageRef(GiTargets.giIrradianceNext),
             'giDistanceNext': const ImageRef(GiTargets.giDistanceNext),
@@ -271,7 +283,7 @@ class GiPasses {
             'giIrradianceNext': const TargetTexture(GiTargets.giIrradianceNext),
             'giDistanceNext': const TargetTexture(GiTargets.giDistanceNext),
           },
-          samplers: const {1: _pointClamp},
+          samplers: const {5: _pointClamp},
           storage: {
             'giIrradiance': const ImageRef(GiTargets.giIrradiance),
             'giDistance': const ImageRef(GiTargets.giDistance),
@@ -313,7 +325,7 @@ class GiPasses {
   };
 
   /// The samplers of the pixel shaders that read [textures].
-  static const samplers = {1: _linearClamp, 2: _equirect};
+  static const samplers = {5: _linearClamp, 6: _equirect};
 
   /// The passes after the opaque pass into [hdr] with depth [depth]. [frame]
   /// is the block of the frame role and [view] the viewport of the plan.
@@ -421,6 +433,34 @@ class GiPasses {
         ),
       );
     }
+    if (settings.reflections) {
+      passes.add(
+        RenderPassPlan(
+          'ssrBlur',
+          const [Attachment(GiTargets.ssrBlur)],
+          null,
+          [
+            screen(_ssrBlurPixel, settings.ssrFullSize ? view : half, {
+              'depth': TargetTexture(depth),
+              'ssrRaw': const TargetTexture(GiTargets.ssr),
+            }),
+          ],
+        ),
+      );
+    }
+    passes.add(
+      RenderPassPlan(
+        'giResolve',
+        const [
+          Attachment(GiTargets.giDiffuseHalf),
+          Attachment(GiTargets.giSpecularHalf),
+        ],
+        null,
+        [
+          screen(_resolvePixel, half, {...gbuffer, ...textures}),
+        ],
+      ),
+    );
     final debug = settings.debugView;
     final replace = debug != GiDebugView.none && debug != GiDebugView.probes;
     passes.add(
@@ -436,9 +476,11 @@ class GiPasses {
                 ? const TargetTexture(GiTargets.ao)
                 : _white,
             'ssr': settings.reflections
-                ? const TargetTexture(GiTargets.ssr)
+                ? const TargetTexture(GiTargets.ssrBlur)
                 : _black,
-            ...textures,
+            'giDiffuseHalf': const TargetTexture(GiTargets.giDiffuseHalf),
+            'giSpecularHalf': const TargetTexture(GiTargets.giSpecularHalf),
+            'brdfLut': const TargetTexture(GiTargets.brdfLut),
           }, state: replace ? _screenState : _addState),
         ],
       ),
@@ -542,8 +584,9 @@ class GiPasses {
         settings.sky ? 1 : 0,
         _probesOn ? 1 : 0,
         settings.ambientOcclusion ? 1 : 0,
-        settings.reflections ? 1 : 0,
+        settings.reflections && _historyFrames > 0 ? 1 : 0,
       );
+    _historyFrames++;
     _previous.setFrom(viewProjection);
     final v = volume;
     if (v != null) {
@@ -598,7 +641,7 @@ class GiPasses {
           v.nz.toDouble(),
           v.spacing * 1.5,
         )
-        ..floats(IndirectBlock.probeParams, h, settings.bounce, 0.2, 0.1);
+        ..floats(IndirectBlock.probeParams, h, settings.bounce, 0.25, 0.1);
       _first = (_first + _count) % active;
     }
     final p = projection.storage;
@@ -651,7 +694,9 @@ const _brdfShader = 'Pbr/brdf_lut.comp',
     _aoPixel = 'Pbr/ao.frag',
     _aoBlurPixel = 'Pbr/ao_blur.frag',
     _ssrPixel = 'Pbr/ssr.frag',
+    _ssrBlurPixel = 'Pbr/ssr_blur.frag',
     _indirectPixel = 'Pbr/indirect.frag',
+    _resolvePixel = 'Pbr/gi_resolve.frag',
     _downsamplePixel = 'Pbr/downsample.frag',
     _probeVertex = 'Pbr/probe.vert',
     _probePixel = 'Pbr/probe.frag';
@@ -670,7 +715,9 @@ const giShaderIds = [
   _aoPixel,
   _aoBlurPixel,
   _ssrPixel,
+  _ssrBlurPixel,
   _indirectPixel,
+  _resolvePixel,
   _downsamplePixel,
   _probeVertex,
   _probePixel,

@@ -74,7 +74,7 @@ Future<GiVolume> loadGiVolume(
   Vector3? probeMin,
   Vector3? probeMax,
   int maxCells = 2000000,
-  int maxProbes = 4096,
+  int maxProbes = 8192,
 }) => Isolate.run(
   () => buildGiVolume(
     [for (final p in paths) GltfDocument.open(p)],
@@ -94,7 +94,7 @@ GiVolume buildGiVolume(
   Vector3? probeMin,
   Vector3? probeMax,
   int maxCells = 2000000,
-  int maxProbes = 4096,
+  int maxProbes = 8192,
 }) {
   final grid = voxelize(docs, maxCells);
   final lo = probeMin ?? grid.sceneMin, hi = probeMax ?? grid.sceneMax;
@@ -116,37 +116,34 @@ GiVolume buildGiVolume(
   final moves = Float32List(n * 4);
   final active = <int>[];
   final at = Vector3.zero();
+  final candidates = <(int, double, double, double)>[];
   for (var i = 0; i < n; i++) {
     final x = i % px, y = (i ~/ px) % py, z = i ~/ (px * py);
-    var best = 0, bx = 0.0, by = 0.0, bz = 0.0;
-    // Candidate 0 is the place on the grid, then the 26 around it. A probe
-    // two cells or more from a surface stays in its place.
-    for (var k = 0; k < 27; k++) {
-      final c = k == 0 ? 13 : (k <= 13 ? k - 1 : k);
+    final bx = probeOrigin.x + x * spacing, by = probeOrigin.y + y * spacing;
+    final bz = probeOrigin.z + z * spacing;
+    // The place on the grid and the 26 places around it, the place on the
+    // grid first when it is two cells or more from a surface, else by
+    // their distance to the surfaces.
+    candidates.clear();
+    for (var c = 0; c < 27; c++) {
       final ox = ((c % 3) - 1) * 0.3 * spacing;
       final oy = ((c ~/ 3) % 3 - 1) * 0.3 * spacing;
       final oz = (c ~/ 9 - 1) * 0.3 * spacing;
-      at.setValues(
-        probeOrigin.x + x * spacing + ox,
-        probeOrigin.y + y * spacing + oy,
-        probeOrigin.z + z * spacing + oz,
-      );
-      final d = grid.clearance(at);
-      if (d > best) {
-        best = d;
-        bx = ox;
-        by = oy;
-        bz = oz;
-      }
-      if (k == 0 && d >= 2) break;
+      final d = grid.clearance(at..setValues(bx + ox, by + oy, bz + oz));
+      if (d > 0) candidates.add((c == 13 && d >= 2 ? 1000 : d, ox, oy, oz));
     }
-    if (best > 0) {
+    candidates.sort((a, b) => b.$1.compareTo(a.$1));
+    // A probe that sees the backs of surfaces is inside a part.
+    for (final (_, ox, oy, oz) in candidates.take(4)) {
+      at.setValues(bx + ox, by + oy, bz + oz);
+      if (grid.backShare(at, 64) > 0.25) continue;
       moves
-        ..[i * 4] = bx
-        ..[i * 4 + 1] = by
-        ..[i * 4 + 2] = bz
+        ..[i * 4] = ox
+        ..[i * 4 + 1] = oy
+        ..[i * 4 + 2] = oz
         ..[i * 4 + 3] = 1;
       active.add(i);
+      break;
     }
   }
   final probes = Float32List(n * 4 + active.length * 4)..setAll(0, moves);

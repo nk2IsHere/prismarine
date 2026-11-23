@@ -4,12 +4,12 @@
 precision highp float;
 
 uniform texture2D source; // t0
-uniform sampler s1;
-#define source_S s1
+uniform sampler s5;
+#define source_S s5
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 color;
 
 void main() {
-  color = vec4(textureLod(sampler2D(source, s1), uv, 0.0).rgb, 1.0);
+  color = vec4(textureLod(sampler2D(source, s5), uv, 0.0).rgb, 1.0);
 }

@@ -79,6 +79,62 @@ class VoxelGrid {
     return distance[cx + nx * (cy + ny * cz)];
   }
 
+  /// The share of [rays] rays from [p] in a spherical Fibonacci pattern
+  /// that hit the back of a surface or a solid cell, as from a point inside
+  /// a part of the scene.
+  double backShare(Vector3 p, int rays) {
+    var back = 0;
+    final sx = (p.x - origin.x) / cell, sy = (p.y - origin.y) / cell;
+    final sz = (p.z - origin.z) / cell;
+    for (var r = 0; r < rays; r++) {
+      final phi = 2 * math.pi * ((r * 0.6180339887) % 1);
+      final dy = 1 - (2 * r + 1) / rays;
+      final rr = math.sqrt(math.max(1 - dy * dy, 0));
+      final dx = rr * math.cos(phi), dz = rr * math.sin(phi);
+      var t = 0.0;
+      for (var step = 0; step < 512; step++) {
+        final px = sx + dx * t, py = sy + dy * t, pz = sz + dz * t;
+        final cx = px.floor(), cy = py.floor(), cz = pz.floor();
+        if (cx < 0 || cy < 0 || cz < 0 || cx >= nx || cy >= ny || cz >= nz) {
+          break;
+        }
+        final i = cx + nx * (cy + ny * cz);
+        final d = distance[i];
+        if (d == 0) {
+          if (solid[i] != 0) {
+            back++;
+          } else {
+            final at = i * _fields;
+            final w = _sums[at];
+            final facing =
+                _sums[at + 4] * dx + _sums[at + 5] * dy + _sums[at + 6] * dz;
+            if (_sums[at + 7] <= 0.5 * w && facing > 0) back++;
+          }
+          break;
+        }
+        if (d > 1) {
+          t += d - 1;
+        } else {
+          double next(double pos, int c, double dir) => dir > 0
+              ? (c + 1 - pos) / dir
+              : dir < 0
+              ? (c - pos) / dir
+              : double.infinity;
+          t +=
+              math.max(
+                math.min(
+                  next(px, cx, dx),
+                  math.min(next(py, cy, dy), next(pz, cz, dz)),
+                ),
+                0,
+              ) +
+              1e-3;
+        }
+      }
+    }
+    return back / rays;
+  }
+
   /// Sets [distance] from the marked and solid cells with two passes of a
   /// 3 by 3 by 3 mask, which give the Chebyshev distance exactly.
   void measure() {
