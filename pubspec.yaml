@@ -12,4 +12,5 @@ workspace:
   - packages/prismarine_frame
   - packages/prismarine_audio
   - packages/prismarine_audio_out
+  - packages/prismarine_shaders
   - tools/lint
