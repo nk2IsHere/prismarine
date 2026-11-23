@@ -3,6 +3,7 @@ description: Transcendental maths with the same bits on every OS and architectur
 publish_to: none
 environment:
   sdk: ^3.10.0
+resolution: workspace
 dev_dependencies:
   lints: ^6.1.0
   test: ^1.33.0
