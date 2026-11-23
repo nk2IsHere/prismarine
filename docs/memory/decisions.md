@@ -50,7 +50,8 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
 - **The renderer core, now (2026-11-23).** The frame plan format and its codec, the builder framework, the GPU runner
   and the cook model move now, into `prismarine_frame` and `prismarine_render`. The builders of the game stay in mcsm.
 - **A slim scene layer in place of flutter_scene (2026-11-23).** prismarine carries no vendored flutter_scene. A slim
-  glTF importer and scene-node layer on Flutter GPU, `prismarine_scene`, is under the renderer. It gets its own spec.
+  glTF importer and scene-node layer on Flutter GPU, `prismarine_scene`, is under the renderer. Its design is
+  [the scene layer design](../specs/2026-11-23-scene-layer-design.md).
 - **Generic Lua and audio (2026-11-23).** The Lua VM becomes an embeddable Lua for Dart, `prismarine_lua`, with double
   numbers by default. The audio becomes an event and bus engine, `prismarine_audio`. The exe profiles, the FMOD
   behaviour and the Telltale bindings become adapters in mcsm. Each gets its own spec.

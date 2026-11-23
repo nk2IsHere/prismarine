@@ -1,6 +1,6 @@
-# The tests of the lints, the machine locks, the workspace packages and the
-# Flutter packages, with clippy and cargo test for every crate. Pull requests
-# run on Linux and Windows. A run by hand picks the runners, macOS included.
+# The tests of the lints, the profiler, the machine locks, the workspace
+# packages and the Flutter packages, with clippy and cargo test for every
+# crate. Pull requests run on Linux and Windows. A run by hand picks the runners, macOS included.
 # The landing gate runs the same steps on the Mac.
 #
 # The Flutter packages run their tests on the stock Flutter SDK with the
@@ -15,6 +15,7 @@ on:
       - third_party/flutter_gpu/**
       - tools/lint/**
       - tools/machine/**
+      - tools/profiler/**
       - pubspec.yaml
       - pubspec.lock
   workflow_dispatch:
@@ -90,6 +91,9 @@ jobs:
       - run: dart pub get
       - name: lint tests
         working-directory: tools/lint
+        run: dart test
+      - name: profiler tests
+        working-directory: tools/profiler
         run: dart test
       - name: machine locks test
         run: tools/machine/test/locks_test.sh

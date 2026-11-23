@@ -362,7 +362,10 @@ extension RunnerWarm on FrameRunner {
         }
       }
     } finally {
-      cb?.submit();
+      if (cb != null) {
+        gpuSubmitted();
+        cb.submit();
+      }
       w.ms += sw.elapsedMicroseconds / 1000;
     }
     return n;

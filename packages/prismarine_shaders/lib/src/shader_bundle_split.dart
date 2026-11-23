@@ -100,6 +100,10 @@ const shaderBundleBackends = {
   'vulkan': 5,
 };
 
+/// The `BackendShader` field that holds the source of a backend, the MSL of
+/// Metal.
+const backendShaderSource = 5;
+
 /// The `BackendShader` field that holds the compiled code of a backend, a
 /// Metal library that the engine loads in place of the source.
 const backendShaderCompiled = 6;
@@ -108,10 +112,13 @@ const backendShaderCompiled = 6;
 /// the `metal_desktop` copy and an app on Vulkan the `vulkan` copy and each
 /// backend can be stored in a bundle of its own. [metalCompiled] maps entry
 /// names to Metal libraries for the `compiled` field of `metal_desktop`.
+/// [metalSource] maps entry names to the source that replaces the one of
+/// `metal_desktop`.
 Uint8List keepShaderBundleBackends(
   Uint8List bundle,
   Set<String> keep, {
   Map<String, Uint8List> metalCompiled = const {},
+  Map<String, Uint8List> metalSource = const {},
 }) {
   final r = _Reader(ByteData.sublistView(bundle));
   final b = fb.Builder(initialSize: bundle.length ~/ 2);
@@ -126,6 +133,7 @@ Uint8List keepShaderBundleBackends(
     'ShaderBundle',
     (table, field) => table == 'Shader' && drop.contains(field),
     metalCompiled: metalCompiled,
+    metalSource: metalSource,
   );
   b.finish(root, 'IPSB');
   return b.buffer;
@@ -168,7 +176,9 @@ int _copy(
   String table,
   bool Function(String table, int field) skip, {
   Map<String, Uint8List> metalCompiled = const {},
+  Map<String, Uint8List> metalSource = const {},
   Uint8List? compiled,
+  Uint8List? source,
 }) {
   final fields = _schema[table]!;
   // A field that this schema lacks would be dropped without notice. The
@@ -178,16 +188,24 @@ int _copy(
       '$table has ${r.fieldCount(t)} fields; the copier knows ${fields.length}',
     );
   }
-  // A shader's Metal library goes to its metal_desktop table.
-  Uint8List? metalLib;
-  if (table == 'Shader' && metalCompiled.isNotEmpty) {
+  // A shader's Metal library and source go to its metal_desktop table.
+  Uint8List? metalLib, metalSrc;
+  if (table == 'Shader' &&
+      (metalCompiled.isNotEmpty || metalSource.isNotEmpty)) {
     final at = r.field(t, 0);
-    if (at != null) metalLib = metalCompiled[_string(r, r.deref(at))];
+    if (at != null) {
+      final name = _string(r, r.deref(at));
+      metalLib = metalCompiled[name];
+      metalSrc = metalSource[name];
+    }
   }
   // Children are written before the table that points at them.
   final offs = <int, int>{};
   if (compiled != null) {
     offs[backendShaderCompiled] = b.writeListUint8(compiled);
+  }
+  if (source != null) {
+    offs[backendShaderSource] = b.writeListUint8(source);
   }
   for (var i = 0; i < fields.length; i++) {
     final at = r.field(t, i);
@@ -218,6 +236,7 @@ int _copy(
           compiled: i == shaderBundleBackends['metal_desktop']
               ? metalLib
               : null,
+          source: i == shaderBundleBackends['metal_desktop'] ? metalSrc : null,
         );
       case _F.tables:
         final v = r.deref(at);
@@ -230,6 +249,7 @@ int _copy(
               child!,
               skip,
               metalCompiled: metalCompiled,
+              metalSource: metalSource,
             ),
         ];
         offs[i] = b.writeList(items);

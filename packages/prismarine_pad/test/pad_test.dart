@@ -47,4 +47,10 @@ void main() {
     expect(r.pressed(PadButton.dpadRight), isTrue);
     expect(r.pressed(PadButton.b), isFalse);
   });
+
+  test('a pad state decodes buttons by bit', () {
+    final s = PadState()..buttons = 1 << 2;
+    expect(s.pressed(PadButton.x), isTrue);
+    expect(s.pressed(PadButton.a), isFalse);
+  });
 }

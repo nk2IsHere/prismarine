@@ -1,7 +1,7 @@
 # gpu_smoke
 
 gpu_smoke checks that Flutter GPU works with a given engine on a given desktop platform. The app renders a 4×4 texture
-through the base `FullscreenVertex` and `CopyFragment` shaders of flutter_scene into a 64×64 target, waits for the GPU
+through the `ScreenCopy` of [prismarine_scene](../../docs/areas/scene.md) into a 64×64 target, waits for the GPU
 and reads a pixel back. It times 2,000 draws with and without a texture bind per draw, prints `SMOKE` lines and exits
 with 0 when the pixel matched.
 
@@ -19,10 +19,9 @@ buffers and images, indirect dispatches and draws and per-frame array uploads.
 
 ## Building and running
 
-gpu_smoke needs the patched flutter_scene of the engine fork, which prismarine does not carry. Point the app at a
-checkout of it once, then build it for the platform with the flags of the engine.
+Build the shaders of the release 9 checks once, then build the app for the platform with the flags of the engine. The
+build hook of the app builds the smoke bundle and the hook of prismarine_scene builds the copy.
 
-    tool/scene.sh <flutter_scene checkout>
     tool/features_bundle.sh [<engine out dir>/impellerc]
     flutter build <macos|linux|windows> --release \
       [--local-engine-src-path=<engine/src> --local-engine=<out> --local-engine-host=<out>]

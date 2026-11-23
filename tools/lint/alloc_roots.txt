@@ -45,3 +45,9 @@ packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.apply  the rend
 packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.schedule  an app's frame, a command
 packages/prismarine_audio/lib/src/engine/lockstep.dart#LockstepAudio.advanceTo  an app's frame in lockstep
 packages/prismarine_audio_out/lib/src/mix/native_engine.dart#NativeMixerPort.post  an app's frame, a command to the native engine
+#
+# The renderer of glTF scenes builds its plan each frame, and the sample
+# app steps its camera and lights and builds that plan in its ticker.
+packages/prismarine_pbr/lib/src/pbr_builder.dart#PbrBuilder.frame  an app's frame, building the plan
+apps/prismarine_sample/lib/src/sample_view.dart#_SampleViewState._tick  the ticker of the sample, each frame
+apps/prismarine_sample/lib/src/perf.dart#_PerfRunState._tick  the ticker of the performance run, each frame

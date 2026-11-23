@@ -5,6 +5,7 @@ environment:
   sdk: ^3.10.0
 resolution: workspace
 dependencies:
+  image: ^4.5.0
   prismarine_frame:
     path: ../prismarine_frame
 dev_dependencies:

@@ -203,3 +203,51 @@ Uint8List _kvd(Map<String, String> values) {
   }
   return b.toBytes();
 }
+
+/// A KTX2 file as read: its format, size, layers and mip levels.
+class Ktx2Image {
+  Ktx2Image(
+    this.format,
+    this.width,
+    this.height,
+    this.layers,
+    this.faces,
+    this.levels,
+  );
+
+  final Ktx2Format format;
+  final int width, height, layers, faces;
+
+  /// Each mip level, largest first, as stored.
+  final List<Uint8List> levels;
+}
+
+/// Reads a KTX2 file without supercompression in one of the formats of
+/// [Ktx2Format]. The levels are views into [bytes].
+Ktx2Image readKtx2(Uint8List bytes) {
+  for (var i = 0; i < _identifier.length; i++) {
+    if (bytes.length < 80 || bytes[i] != _identifier[i]) {
+      throw const FormatException('not a KTX2 file');
+    }
+  }
+  final d = ByteData.sublistView(bytes);
+  int u32(int at) => d.getUint32(at, Endian.little);
+  final vk = u32(12);
+  final format = Ktx2Format.values.firstWhere(
+    (f) => f.vk == vk,
+    orElse: () => throw FormatException('KTX2 format $vk is not supported'),
+  );
+  if (u32(44) != 0) {
+    throw const FormatException('KTX2 supercompression is not supported');
+  }
+  final count = u32(40) == 0 ? 1 : u32(40);
+  return Ktx2Image(format, u32(20), u32(24), u32(32), u32(36), [
+    for (var k = 0; k < count; k++)
+      Uint8List.sublistView(
+        bytes,
+        d.getUint64(80 + 24 * k, Endian.little),
+        d.getUint64(80 + 24 * k, Endian.little) +
+            d.getUint64(88 + 24 * k, Endian.little),
+      ),
+  ]);
+}

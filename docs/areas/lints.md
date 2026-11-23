@@ -19,7 +19,7 @@ The ratcheted lints compare their counts with a baseline per package. A count ma
 
 ## Config
 
-The config lists the code roots, the baselines, the roots and SDK verdicts of the allocation lint, the variable of the
+The config lists the code roots, the baselines, the roots, SDK verdicts and packages of the allocation lint, the variable of the
 private repo, the files that `check_links` reads and the doc folders that `docs_index` indexes. Under `code_shape` it
 lists the agent words and pointer patterns of the history rule and the rule sets of the repository. The rule set
 `exe-address` counts addresses of shipped binaries in comments and strings. The rule set `name-words` counts words that

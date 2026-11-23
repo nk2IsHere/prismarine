@@ -50,8 +50,8 @@ extension _Targets on _Smoke {
         gpu.ColorAttachment(texture: copyOut, clearValue: Vector4(0, 0, 0, 1)),
       ),
     );
-    final fsv = baseShaderLibrary['FullscreenVertex']!;
-    final fcopy = baseShaderLibrary['CopyFragment']!;
+    final fsv = ScreenCopy.loaded!.vertex;
+    final fcopy = ScreenCopy.loaded!.fragment;
     copy
       ..bindPipeline(ctx.createRenderPipeline(fsv, fcopy))
       ..bindVertexBuffer(quad)
@@ -179,8 +179,8 @@ extension _Targets on _Smoke {
       ..draw(6, instanceCount: 2);
     await _done(cb);
     cb = ctx.createCommandBuffer();
-    final fsv = baseShaderLibrary['FullscreenVertex']!;
-    final fcopy = baseShaderLibrary['CopyFragment']!;
+    final fsv = ScreenCopy.loaded!.vertex;
+    final fcopy = ScreenCopy.loaded!.fragment;
     cb.createRenderPass(
         gpu.RenderTarget.singleColor(
           gpu.ColorAttachment(
