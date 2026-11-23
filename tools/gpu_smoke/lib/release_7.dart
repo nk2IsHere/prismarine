@@ -21,11 +21,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
-import 'package:flutter_scene/gpu.dart' as bundles;
-import 'package:flutter_scene/scene.dart' show baseShaderLibrary;
-// ignore: implementation_imports
-import 'package:flutter_scene/src/gpu/gpu.dart' as fs;
+import 'package:prismarine_scene/prismarine_scene.dart' show ScreenCopy;
 import 'package:vector_math/vector_math.dart';
+
+import 'engine_calls.dart' as fs;
 
 part 'release_7_cost.dart';
 part 'release_7_instancing.dart';
@@ -53,6 +52,9 @@ bool _near(List<int> a, List<int> b) {
   return true;
 }
 
+/// The asset of the smoke bundle, which hook/build.dart builds.
+const smokeBundle = 'build/shaderbundles/smoke.shaderbundle';
+
 Future<bool> _done(gpu.CommandBuffer cb) {
   final done = Completer<bool>();
   cb.submit(completionCallback: done.complete);
@@ -63,9 +65,7 @@ Future<bool> release7Checks(void Function(String) log) async {
   final ctx = gpu.gpuContext;
   final features = fs.mcsmEngineFeatures;
   log('SMOKE engine features $features backend ${fs.mcsmBackend ?? 'unknown'}');
-  final lib = await fs.loadShaderLibraryAsync(
-    await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
-  );
+  final lib = await gpu.ShaderLibrary.fromAsset(smokeBundle);
   if (lib == null) {
     log('SMOKE release 7 FAILED: no smoke shader bundle');
     return false;

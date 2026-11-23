@@ -5,6 +5,7 @@
 # These files of gpu_smoke call the engine exports and the shader output
 # mcsm_viewport_index, which have the mcsm forms. The first engine release of
 # prismarine renames them.
+tools/gpu_smoke/lib/engine_calls.dart
 tools/gpu_smoke/lib/release_7.dart
 tools/gpu_smoke/lib/release_7_instancing.dart
 tools/gpu_smoke/lib/release_7_replays.dart
