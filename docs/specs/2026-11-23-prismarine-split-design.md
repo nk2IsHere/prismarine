@@ -100,6 +100,12 @@ A step's mcsm side is imports, pubspecs and deletions only, except the seams nam
 11. **Engine:** `third_party/flutter_engine`, `flutter_gpu` and `tools/gpu_smoke` move with their git history from mcsm. The commits that touched these paths are rewritten to the new paths and merged into prismarine, so the history of every engine patch stays in `git log`. mcsm reads the release through the pin; the same release and archives (no build in this step).
 12. **First engine release (prismarine's):** mcsm12's patches (Dart old-space compaction at switch holds: dart/0003, 0029, flutter_gpu G16, G17) plus one new patch on top that renames the `Mcsm*` exports to prismarine forms. The existing patches stay unchanged, so each machine applies only the new patches. Built for every target incrementally, gpu_smoke on each.
 
+After the last move:
+
+- A README for each package, with its purpose, its use, a short example and its platforms.
+- The root README gets workspace setup and building for each platform.
+- GitHub workflows for the lints, the tests, clippy and `cargo test` on Linux, macOS and Windows.
+
 Later, each through its own spec and plan, in this order:
 
 - **Slim scene layer:** `prismarine_scene` grows into a glTF importer and scene-node layer on Flutter GPU, under our renderer; mcsm's vendored flutter_scene goes once nothing uses it. The old S1 look's patches (shadow binder, display tone mapping, render textures, translucent depth) go with it.
