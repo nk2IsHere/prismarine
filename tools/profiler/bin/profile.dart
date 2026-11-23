@@ -192,7 +192,7 @@ Future<Map<String, Object?>> _isolate(
       NativeFunction(:final name) => 'native $name',
       final f => '$f',
     };
-    File('$raw/${iso.name}.${origin}.samples.json').writeAsStringSync(
+    File('$raw/${iso.name}.$origin.samples.json').writeAsStringSync(
       jsonEncode({
         'functions': [for (var i = 0; i < fns.length; i++) nameOf(i)],
         'stacks': [for (final s in samples) s.stack ?? const <int>[]],
