@@ -39,8 +39,11 @@ shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic
 
 To keep any of the three folders elsewhere, set `PRISMARINE_FLUTTER`, `PRISMARINE_PUB_CACHE` or
 `PRISMARINE_ENGINE_DIR` to its path before you source `env.sh`. The [toolchain
-README](../tools/toolchain/README.md) lists the details. Windows has no form of `env.sh`. Put the `bin` folder of the
-Flutter SDK on your `PATH` there.
+README](../tools/toolchain/README.md) lists the details.
+
+`env.sh` is for bash and zsh only. On Windows you set up the same things yourself. Add the `bin` folder of your
+Flutter SDK to `PATH`. Set `PRISMARINE_ENGINE_DIR` if the engine should not be in
+`%USERPROFILE%\.prismarine\engine`.
 
 `dart pub get` at the root of the checkout resolves the pub workspace, which holds the pure-Dart packages and the
 lints. The Flutter packages `prismarine_render`, `prismarine_scene`, `prismarine_loop` and `prismarine_debug`, the
