@@ -122,7 +122,7 @@ with the effect on and off. The runs vary by about 0.2 ms.
 |---|---|---|
 | TAA, auto exposure, bloom and tone map at default | about 0.35 ms | about 0.15 ms |
 | Fog at medium | about 0.15 ms | about 0.25 ms |
-| Point shadows, each shadowed light at medium | about 1.5 ms | about 0.2 ms |
+| Point shadows, each shadowed light at medium | about 1.2 to 1.5 ms | about 0.2 ms |
 
 ## Shaders
 

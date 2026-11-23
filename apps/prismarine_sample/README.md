@@ -69,11 +69,11 @@ frame and the title of each effect gives its GPU time.
 | `--fog=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
 | `--fog-density=<d>`, `--fog-anisotropy=<g>` | The extinction of the fog per metre, 0.006 by default and its forward scattering, 0.5. |
 
-At 1920 by 1080 with the default effects the scene holds 120 Hz on a Mac with an M2 Pro, with about 6.9 ms on the GPU,
+At 1920 by 1080 with the default effects the scene holds 120 Hz on a Mac with an M2 Pro, with about 6.6 ms on the GPU,
 and 60 Hz on Linux with an RTX 4060 Ti, with about 5.6 ms on the GPU. A frame has about 920 draws and 670 more for the
-two shadowed point lights. It records the shadow pass of the sun only when the sun moves and the pass of the point
-shadows only when the lights move. Each shadowed point light costs about 1.5 ms of the GPU of the Mac, which is why
-the Mac starts without them. The costs of the effects are on [the pbr page](../../docs/areas/pbr.md#costs).
+two shadowed point lights on Linux. It records the shadow pass of the sun only when the sun moves and the pass of the
+point shadows only when the lights move. Each shadowed point light costs about 1.2 to 1.5 ms of the GPU of the Mac,
+which is why the Mac starts without them. The costs of the effects are on [the pbr page](../../docs/areas/pbr.md#costs).
 
 ## Example
 
