@@ -24,6 +24,7 @@ part 'runner_compute.dart';
 part 'runner_first_uses.dart';
 part 'runner_kept.dart';
 part 'runner_passes.dart';
+part 'runner_present.dart';
 part 'runner_prepare.dart';
 part 'runner_pulled.dart';
 part 'runner_pulled_data.dart';
@@ -36,6 +37,7 @@ part 'runner_slots.dart';
 part 'runner_srgb.dart';
 part 'runner_stencil.dart';
 part 'runner_stores.dart';
+part 'runner_timing.dart';
 part 'runner_warm.dart';
 
 /// Runs a [FramePlan] on the GPU. Creates its targets, then records each
@@ -404,6 +406,15 @@ class FrameRunner {
   /// The own GPU time in ms of the last frame, from its submission or the
   /// completion of the previous frame, whichever is later, to its completion.
   double lastGpuOwnMs = 0;
+
+  /// The passes that start a timed part of the frame. Each part is recorded
+  /// into a command buffer of its own. Empty for one command buffer.
+  List<String> timedParts = const [];
+
+  /// The GPU time in ms of each part of the last finished frame. The part
+  /// before the first pass of [timedParts] comes first.
+  final lastPartGpuMs = Float64List(maxTimedParts);
+  late final _timing = _Timing(_gpuClock);
   final _gpuClock = Stopwatch()..start();
   int _lastDoneUs = 0;
 
@@ -473,7 +484,7 @@ class FrameRunner {
     _frameBlocks = plan.frameBlocks;
     _runs++;
     _store?.begin();
-    final cb = gpu.gpuContext.createCommandBuffer();
+    var cb = gpu.gpuContext.createCommandBuffer();
     _uploadTargets(cb, plan, host);
     _passLog = _passLogPath == null ? null : [];
     final setup = record.elapsedMicroseconds;
@@ -484,7 +495,12 @@ class FrameRunner {
     var draws = 0, dispatches = 0;
     final unstored = _depthUnstored(plan);
     final retained = _retained..begin(plan, _texGen);
+    final timing = _timing..begin(timedParts);
     for (final p in plan.passes) {
+      if (timedParts.isNotEmpty && timing.starts(p.name)) {
+        cb = timing.cut(cb);
+        compute = null;
+      }
       if (retained.leaves(p)) continue;
       switch (p) {
         case final RenderPassPlan r:
@@ -539,6 +555,8 @@ class FrameRunner {
     _store?.flush();
     final submitted = _gpuClock.elapsedMicroseconds;
     lastSubmitAt = Timeline.now;
+    timing.submit();
+    final cuts = timing.cuts;
     gpuSubmitted();
     cb.submit(
       completionCallback: (ok) {
@@ -546,6 +564,7 @@ class FrameRunner {
         lastGpuMs = (now - submitted) / 1000;
         final from = submitted > _lastDoneUs ? submitted : _lastDoneUs;
         lastGpuOwnMs = (now - from) / 1000;
+        _timing.read(lastPartGpuMs, cuts, from, now);
         _lastDoneUs = now;
         if (ok && copy != null) presented = copy;
         if (ok && reads != null) unawaited(_deliverReads(reads));
@@ -569,28 +588,6 @@ class FrameRunner {
   /// The draws of the last [prepare] that the assets cannot feed, left to
   /// their frame.
   int lastPrepareErrors = 0;
-
-  gpu.Texture _presentCopy(gpu.Texture t) {
-    final k = _presentTurn++ % 3;
-    if (k < _presented.length) {
-      final had = _presented[k];
-      if (had.width == t.width && had.height == t.height) return had;
-    }
-    final copy = gpu.gpuContext.createTexture(
-      gpu.StorageMode.devicePrivate,
-      t.width,
-      t.height,
-      format: t.format,
-      enableRenderTargetUsage: true,
-      enableShaderReadUsage: true,
-    );
-    if (k < _presented.length) {
-      _presented[k] = copy;
-    } else {
-      _presented.add(copy);
-    }
-    return copy;
-  }
 
   void _render(
     gpu.CommandBuffer cb,

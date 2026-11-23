@@ -18,6 +18,9 @@ const smokeWidth = 1280, smokeHeight = 720;
 /// reference.
 const smokeShare = 0.001, smokeLevels = 2;
 
+/// The frames that the smoke test renders of each view.
+const smokeFrames = 24;
+
 /// Renders a fixed frame from each camera of the scene, writes it as a PNG
 /// into [out] and compares it with the reference in
 /// `<data>/smoke/<os>`. With [record] the frames become the references.
@@ -62,10 +65,14 @@ Future<int> runSmoke(
       view.yfov = cams[i].yfov;
     }
     fly.step(0, _noPad, view);
+    // The temporal passes start again at each view and converge over the
+    // frames of one jitter cycle and more. The frames after the first run
+    // with the shadow pass kept.
+    r.builder.resetHistory();
     if (i == 0) await r.warmProbes(view, smokeWidth, smokeHeight);
-    // The second frame runs with the shadow pass kept from the first.
-    await r.submit(view, smokeWidth, smokeHeight);
-    await r.submit(view, smokeWidth, smokeHeight);
+    for (var f = 0; f < smokeFrames; f++) {
+      await r.submit(view, smokeWidth, smokeHeight);
+    }
     final rgba = await _read(r);
     final name = 'frame$i';
     final hash = _fnv(rgba);

@@ -46,38 +46,30 @@ class IndirectBlock {
     _f[at + 3] = w;
   }
 
-  /// Writes the rows of a random rotation for frame [frame] at
-  /// [rayRotation], from a quaternion of three hashed values by Shoemake's
-  /// method.
+  /// Writes the rows of a rotation for frame [frame] at [rayRotation], by
+  /// three hashed angles about z, y and x.
   void rotation(int frame) {
-    final u1 = _hash(frame * 3), u2 = _hash(frame * 3 + 1);
-    final u3 = _hash(frame * 3 + 2);
-    final a = math.sqrt(1 - u1), b = math.sqrt(u1);
-    final x = a * libm.sin(2 * math.pi * u2);
-    final y = a * libm.cos(2 * math.pi * u2);
-    final z = b * libm.sin(2 * math.pi * u3);
-    final w = b * libm.cos(2 * math.pi * u3);
+    final a = 2 * math.pi * _hash(frame * 3);
+    final b = 2 * math.pi * _hash(frame * 3 + 1);
+    final c = 2 * math.pi * _hash(frame * 3 + 2);
+    final ca = libm.cos(a), sa = libm.sin(a);
+    final cb = libm.cos(b), sb = libm.sin(b);
+    final cc = libm.cos(c), sc = libm.sin(c);
     floats(
       rayRotation,
-      1 - 2 * (y * y + z * z),
-      2 * (x * y - z * w),
-      2 * (x * z + y * w),
+      ca * cb,
+      ca * sb * sc - sa * cc,
+      ca * sb * cc + sa * sc,
       0,
     );
     floats(
       rayRotation + 4,
-      2 * (x * y + z * w),
-      1 - 2 * (x * x + z * z),
-      2 * (y * z - x * w),
+      sa * cb,
+      sa * sb * sc + ca * cc,
+      sa * sb * cc - ca * sc,
       0,
     );
-    floats(
-      rayRotation + 8,
-      2 * (x * z - y * w),
-      2 * (y * z + x * w),
-      1 - 2 * (x * x + y * y),
-      0,
-    );
+    floats(rayRotation + 8, -sb, cb * sc, cb * cc, 0);
   }
 
   /// A value from 0 to 1 for [i], from an integer hash.

@@ -1,9 +1,10 @@
 // The lit pixel stage: glTF metallic-roughness with a GGX distribution,
 // height-correlated Smith visibility and Schlick Fresnel, a sun with a
 // filtered shadow map, point lights with the range falloff of
-// KHR_lights_punctual and emission. An opaque draw writes its normal,
-// roughness, metallic value and base colour for the indirect pass. A
-// blended draw, with BLENDED defined, adds its indirect light itself.
+// KHR_lights_punctual and shadows from an atlas and emission. An opaque
+// draw writes its normal, roughness, metallic value and base colour for the
+// indirect pass. A blended draw, with BLENDED defined, adds its indirect
+// light itself.
 precision highp float;
 #include "Pbr/bodies/blocks.glsl"
 #ifdef BLENDED
@@ -22,6 +23,7 @@ uniform texture2D emissiveMap; // t3
 uniform texture2D shadowMap; // t4
 uniform samplerShadow s4;
 #define shadowMap_S s4
+#include "Pbr/bodies/point_shadow.glsl"
 
 layout(location = 0) in vec3 worldPosition;
 layout(location = 1) in vec3 worldNormal;
@@ -130,6 +132,11 @@ void main() {
   float metallic = clamp(cb1.material.x * mr.b, 0.0, 1.0);
   float roughness = clamp(cb1.material.y * mr.g, 0.04, 1.0);
   float a2 = roughness * roughness * roughness * roughness;
+  // The specular anti-aliasing of Kaplanyan and Tokuyoshi widens the lobe
+  // where the normal turns within a pixel, such as on the pits of the stone.
+  vec3 dndx = dFdx(n), dndy = dFdy(n);
+  float variance = 0.25 * (dot(dndx, dndx) + dot(dndy, dndy));
+  a2 = clamp(a2 + min(2.0 * variance, 0.18), 0.0, 1.0);
   vec3 albedo = base.rgb * (1.0 - metallic);
   vec3 f0 = mix(vec3(0.04), base.rgb, metallic);
   vec3 v = normalize(cb0.camera.xyz - worldPosition);
@@ -147,7 +154,8 @@ void main() {
     float falloff = clamp(1.0 - r * r, 0.0, 1.0) / dist2;
     if (falloff <= 0.0) continue;
     result += surface(n, v, d * inversesqrt(dist2), albedo, f0, a2) *
-        cb0.lightColor[i].rgb * falloff;
+        cb0.lightColor[i].rgb * falloff *
+        pointShadow(i, worldPosition, normalize(worldNormal));
   }
   result += texture(sampler2D(emissiveMap, s0), uv).rgb * cb1.emissive.rgb;
 #ifdef BLENDED

@@ -1,6 +1,9 @@
 import 'package:vector_math/vector_math_64.dart';
 
 import 'pbr_gi_settings.dart';
+import 'pbr_post_settings.dart';
+
+export 'pbr_post_settings.dart';
 
 /// The ids of the shaders of the renderer in its bundle.
 abstract final class PbrShaderIds {
@@ -15,7 +18,8 @@ abstract final class PbrShaderIds {
       tonemapPixel = 'Pbr/tonemap.frag',
       markerVertex = 'Pbr/marker.vert',
       markerPixel = 'Pbr/marker.frag',
-      depthViewPixel = 'Pbr/depth_view.frag';
+      depthViewPixel = 'Pbr/depth_view.frag',
+      pointDepthViewPixel = 'Pbr/point_depth_view.frag';
 
   static const all = [
     litVertex,
@@ -30,6 +34,7 @@ abstract final class PbrShaderIds {
     markerVertex,
     markerPixel,
     depthViewPixel,
+    pointDepthViewPixel,
   ];
 }
 
@@ -71,7 +76,8 @@ class PbrSettings {
   /// Draws the sun's shadows. On by default.
   bool shadows = true;
 
-  /// The factor of the light before the tone map, 1 by default.
+  /// The factor of the light before the tone map without auto exposure, 1
+  /// by default.
   double exposure = 1;
 
   /// The direction towards the sun.
@@ -98,8 +104,8 @@ class PbrSettings {
   /// The radius of a light's disc in metres, 0.2 by default.
   double markerSize = 0.2;
 
-  /// Shows the shadow map in the top left corner of the view. Off by default. A change
-  /// makes a new plan.
+  /// Shows the shadow map in the top left corner of the view and the atlas of
+  /// the point shadows below it. Off by default. A change makes a new plan.
   bool showShadowMap = false;
 
   /// The depth bias of the shadow test and the offset along the normal in
@@ -108,4 +114,13 @@ class PbrSettings {
 
   /// The settings of the indirect light.
   final gi = PbrGiSettings();
+
+  /// Anti-aliasing, bloom, exposure and the tone map.
+  final post = PbrPostSettings();
+
+  /// The shadows of the point lights.
+  final pointShadows = PbrPointShadowSettings();
+
+  /// The volumetric light.
+  final volume = PbrVolumeSettings();
 }

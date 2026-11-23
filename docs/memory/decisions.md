@@ -61,6 +61,13 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
 - **The app shell with production (2026-11-23).** The player shell stays in mcsm. `prismarine_app` is designed
   together with the launcher and the common UI of production.
 
+## Sample
+
+- **AgX by default (2026-11-23).** The sample and `prismarine_pbr` tone map with AgX by default. ACES, the ACES fit
+  of Narkowicz and PBR Neutral stay selectable.
+- **No point light shadows on the Mac by default (2026-11-23).** Each shadowed point light costs about 1.5 ms of the
+  GPU of an M2 Pro at 1920 by 1080. The sample starts with none on macOS and with two elsewhere.
+
 ## Logo
 
 - **The mark (2026-11-23).** The mark shows the back of the head of a prismarine Colossus, with its helmet and its

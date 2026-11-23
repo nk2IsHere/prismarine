@@ -39,6 +39,16 @@ GltfModel _model([double offset = 0]) {
   return GltfModel.read(GltfDocument(glb.json, [glb.bin]));
 }
 
+const _scenePasses = ['shadow', 'pointShadows', 'opaque', 'blend', 'markers'];
+
+/// True for the passes of the indirect light.
+bool _isIndirect(String name) =>
+    name.startsWith('gi') ||
+    name.startsWith('history') ||
+    name.startsWith('ssr') ||
+    name.startsWith('ao') ||
+    const ['sky', 'indirect'].contains(name);
+
 void main() {
   final scene = PbrScene('s', _model());
 
@@ -48,8 +58,9 @@ void main() {
     final passes = {
       for (final p in plan.passes.whereType<RenderPassPlan>()) p.name: p.draws,
     };
-    expect(passes.keys, [
+    expect(passes.keys.take(15), [
       'shadow',
+      'pointShadows',
       'opaque',
       'sky',
       'ao',
@@ -63,10 +74,9 @@ void main() {
       'historyMip2',
       'historyMip3',
       'historyMip4',
-      'blend',
-      'markers',
-      'tonemap',
     ]);
+    expect(passes.keys.skip(15).take(2), ['blend', 'markers']);
+    expect(passes.keys.last, 'tonemap');
     expect(passes['shadow']!.map((d) => d.label), ['OPAQUE', 'MASK']);
     expect(passes['opaque']!.map((d) => d.pixel), [
       PbrShaderIds.litPixel,
@@ -127,6 +137,120 @@ void main() {
     b.settings.sunDirection.setValues(0, 1, 0);
     b.frame(PbrCamera(), 64, 32);
     expect(plan.retained['shadow'], isNot(stamp));
+  });
+
+  test('the post passes follow the switches of the settings', () {
+    final b = PbrBuilder([scene]);
+    List<String> names() => [
+      for (final p in b.frame(PbrCamera(), 64, 32).passes)
+        if (!_scenePasses.contains(p.name) && !_isIndirect(p.name)) p.name,
+    ];
+    b.settings.volume.enabled = false;
+    final post = b.settings.post..bloomQuality = PbrQuality.low;
+    expect(names(), [
+      'taa',
+      'exposureHistogram',
+      'exposureAdapt',
+      for (var i = 0; i < 5; i++) 'bloomDown$i',
+      for (var i = 3; i >= 0; i--) 'bloomUp$i',
+      'tonemap',
+    ]);
+    expect(b.timedPasses, [
+      'pointShadows',
+      'gi.brdf',
+      'opaque',
+      'sky',
+      'taa',
+      'exposureHistogram',
+      'tonemap',
+    ]);
+    expect(b.partLabels, hasLength(b.timedPasses.length + 1));
+    post
+      ..taa = false
+      ..bloom = false
+      ..autoExposure = false;
+    expect(names(), ['tonemap']);
+    final tonemap = b.frame(PbrCamera(), 64, 32).passes.last as RenderPassPlan;
+    expect(tonemap.colors.map((c) => c.target), [PbrTargets.backbuffer]);
+    post.taa = true;
+    final withTaa = b.frame(PbrCamera(), 64, 32).passes.last as RenderPassPlan;
+    expect(withTaa.colors.map((c) => c.target), [
+      PbrTargets.backbuffer,
+      PbrPostTargets.taaHistory,
+    ]);
+  });
+
+  test('the camera moves by a sub-pixel jitter with TAA', () {
+    final b = PbrBuilder([scene]);
+    final cam = PbrCamera();
+    final seen = <double>{};
+    for (var i = 0; i < 8; i++) {
+      b.frame(cam, 64, 32);
+      expect(b.jitter.x.abs(), lessThan(0.5));
+      expect(b.jitter.y.abs(), lessThan(0.5));
+      seen.add(b.jitter.x);
+    }
+    expect(seen, hasLength(8));
+    b.settings.post.taa = false;
+    b.frame(cam, 64, 32);
+    expect(b.jitter.x, 0);
+  });
+
+  test('the fog adds its computes and its pass after the markers', () {
+    final b = PbrBuilder([scene]);
+    final plan = b.frame(PbrCamera(), 64, 32);
+    final names = [for (final p in plan.passes) p.name];
+    final at = names.indexOf('markers');
+    expect(names.sublist(at + 1, at + 4), [
+      'volumeInject',
+      'volumeIntegrate',
+      'volumeApply',
+    ]);
+    expect(plan.targets[PbrVolumeTargets.scatter]!.volume, isTrue);
+    expect(b.timedPasses, contains('volumeInject'));
+    b.settings.volume.enabled = false;
+    expect(
+      b.frame(PbrCamera(), 64, 32).passes.map((p) => p.name),
+      isNot(contains('volumeInject')),
+    );
+  });
+
+  test('point lights near the camera get the shadow slots', () {
+    final b = PbrBuilder([scene])..settings.pointShadows.budget = 1;
+    final cam = PbrCamera();
+    // The camera looks along negative z from the origin.
+    final near = PointLight()
+      ..position.setValues(1, 0, -3)
+      ..range = 20;
+    final far = PointLight()
+      ..position.setValues(1, 0, -15)
+      ..range = 20;
+    b.lights.addAll([far, near]);
+    final plan = b.frame(cam, 64, 32);
+    final f = plan.frameBlocks[FrameRole('pbr.frame').block]!.buffer
+        .asFloat32List();
+    // The shadow slot plus one of each light, in the w of its colour.
+    expect(f[123], 0);
+    expect(f[127], 1);
+    final pass =
+        plan.passes.firstWhere((p) => p.name == 'pointShadows')
+            as RenderPassPlan;
+    // The opaque and the masked triangle are within the range. Each is seen
+    // by the faces whose frustum its sphere touches.
+    expect(pass.draws, isNotEmpty);
+    expect(pass.draws.map((d) => d.label).toSet(), {'OPAQUE', 'MASK'});
+    final stamp = plan.retained['pointShadows'];
+    b.frame(cam, 64, 32);
+    expect(plan.retained['pointShadows'], stamp);
+    near.position.x = 2;
+    b.frame(cam, 64, 32);
+    expect(plan.retained['pointShadows'], isNot(stamp));
+    // A light behind a wall of distance is out of the budget and keeps no
+    // slot. A light out of the view gets none.
+    near.position.setValues(0, 0, 50);
+    b.frame(cam, 64, 32);
+    expect(f[123], 1);
+    expect(f[127], 0);
   });
 
   test('lookAlong matches the view matrix of vector_math', () {

@@ -25,8 +25,8 @@ void main(List<String> args) {
     File('$from/$uri').copySync('$to/$uri');
   }
   var count = 0;
-  for (final i in (json['images'] as List? ?? const [])
-      .cast<Map<String, Object?>>()) {
+  for (final i
+      in (json['images'] as List? ?? const []).cast<Map<String, Object?>>()) {
     final uri = i['uri'];
     if (uri is! String || !uri.endsWith('.ktx2')) continue;
     final k = readKtx2(

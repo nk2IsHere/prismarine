@@ -79,6 +79,9 @@ class SampleRenderer {
         '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
       );
     }
+    // Each shadowed point light costs about 1.5 ms of the GPU of an M2 Pro
+    // at 1920 by 1080, more than the frame of 120 Hz leaves.
+    if (Platform.isMacOS) builder.settings.pointShadows.budget = 0;
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
     final credits = [
@@ -137,13 +140,29 @@ class SampleRenderer {
 
   final _build = Stopwatch();
 
-  /// Builds the plan of camera [camera] at [width] by [height] and runs it.
-  /// Returns the future of the run, which completes when the GPU is done.
-  Future<bool> submit(PbrCamera camera, int width, int height) {
+  /// Splits the frame into the timed parts of the builder.
+  bool timed = false;
+
+  /// The section of the frame graph of each timed part, as
+  /// `PbrBuilder.partLabels` gives them.
+  List<String> gpuSections = const [];
+  List<String> _labels = const [];
+
+  /// Builds the plan of camera [camera] at [width] by [height], [dt]
+  /// seconds after the last frame and runs it. Returns the future of the
+  /// run, which completes when the GPU is done.
+  Future<bool> submit(
+    PbrCamera camera,
+    int width,
+    int height, {
+    double dt = 1 / 60,
+  }) {
     _build
       ..reset()
       ..start();
-    final plan = builder.frame(camera, width, height);
+    final plan = builder.frame(camera, width, height, dt: dt);
+    runner.timedParts = timed ? builder.timedPasses : const [];
+    if (!identical(_labels, builder.partLabels)) _sections();
     lastBuildMs = _build.elapsedMicroseconds / 1000;
     _inFlight++;
     // alloc: the runner's run is asynchronous and returns a future.
@@ -165,6 +184,12 @@ class SampleRenderer {
     for (var i = 0; i < frames; i++) {
       await submit(camera, w, h);
     }
+  }
+
+  // alloc-cold: the labels change with a new plan.
+  void _sections() {
+    _labels = builder.partLabels;
+    gpuSections = [for (final l in _labels) 'gpu $l'];
   }
 
   void _done() {

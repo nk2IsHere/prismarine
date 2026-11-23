@@ -68,17 +68,17 @@ class GiPasses {
   bool get _probesOn => settings.probes && volume != null;
 
   /// A value that changes whenever the passes of a plan would change.
-  int get planKey => Object.hash(
-    settings.sky,
-    _probesOn,
-    settings.ambientOcclusion,
-    settings.reflections,
-    settings.raysPerProbe,
-    settings.probesPerFrame,
-    settings.ssrFullSize,
-    settings.debugView,
-    identityHashCode(volume),
-  );
+  int get planKey {
+    var h = identityHashCode(volume);
+    h = (h * 2 + (settings.sky ? 1 : 0)) & 0x3fffffff;
+    h = (h * 2 + (_probesOn ? 1 : 0)) & 0x3fffffff;
+    h = (h * 2 + (settings.ambientOcclusion ? 1 : 0)) & 0x3fffffff;
+    h = (h * 2 + (settings.reflections ? 1 : 0)) & 0x3fffffff;
+    h = (h * 2 + (settings.ssrFullSize ? 1 : 0)) & 0x3fffffff;
+    h = (h * 31 + settings.raysPerProbe) & 0x3fffffff;
+    h = (h * 31 + settings.probesPerFrame) & 0x3fffffff;
+    return (h * 31 + settings.debugView.index) & 0x3fffffff;
+  }
 
   int get _tiles => math.max(1, math.sqrt(volume!.probeCount).ceil());
   int get _rows => (volume!.probeCount + _tiles - 1) ~/ _tiles;
@@ -327,6 +327,9 @@ class GiPasses {
   /// The samplers of the pixel shaders that read [textures].
   static const samplers = {5: _linearClamp, 6: _equirect};
 
+  /// The name of the first pass after the opaque pass in the last plan.
+  String firstAfter = 'indirect';
+
   /// The passes after the opaque pass into [hdr] with depth [depth]. [frame]
   /// is the block of the frame role and [view] the viewport of the plan.
   // alloc-cold: a new plan.
@@ -551,8 +554,12 @@ class GiPasses {
         );
       }
     }
+    firstAfter = passes.first.name;
     return passes;
   }
+
+  /// Drops the reflection history, for a cut of the camera.
+  void cut() => _historyFrames = 0;
 
   /// Writes the block for a frame with the view-projection [viewProjection]
   /// and the projection [projection] of a camera at [camera] that looks
