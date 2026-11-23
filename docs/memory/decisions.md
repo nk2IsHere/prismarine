@@ -41,5 +41,5 @@ Specs live in `docs/specs/`; the split from mcsm is [the split design](../specs/
 
 - **The mark (2026-11-23, owner).** The back of a prismarine Colossus's head (head, helmet and the tentacle "beard"), drawn from mcsm's game data at the soldier's texel size: the head in the prismarine soldier's skin, the rest in the Colossus's skin cut to the same grid; its glyph glows; a contact shadow falls from the head onto the beard.
   It is the owner's second, deliberate exception to "no game data in git", covering this logo render only.
-- **The lockup (2026-11-23, owner).** The mark, then "prismarine" in Google Sans (OFL; the word "Google" is not used in any name) in a light prismarine colour, as Flutter's lockup; transparent backgrounds, with a darker word for light backgrounds.
+- **The lockup (2026-11-23, owner).** The mark, then "prismarine" in Google Sans (OFL; the word "Google" is not used in any name) in a light prismarine colour on every background, as Flutter's lockup; transparent backgrounds.
 - **"Built with prismarine" (2026-11-23, owner).** Games built on it carry a chip in the style of "Built with Flutter": the mark, "Built with" over "prismarine".

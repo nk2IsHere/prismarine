@@ -1,7 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/lockup.png">
-  <img alt="prismarine" src="docs/logo/lockup_light_bg.png" height="96">
-</picture>
+<img alt="prismarine" src="docs/logo/lockup.png" height="96">
 
 # prismarine
 
@@ -13,6 +10,6 @@ Licensed BSD-3 ([LICENSE](LICENSE)).
 
 ## Logo
 
-`docs/logo/`: the mark (`mark.png`), the lockup (`lockup.png`, and `lockup_light_bg.png` for light backgrounds) and the "Built with prismarine" chip (`built_with.png`, `built_with_light_bg.png`) for games built on it; all transparent PNGs.
+`docs/logo/`: the mark (`mark.png`), the lockup (`lockup.png`) and the "Built with prismarine" chip (`built_with.png`, and `built_with_light_bg.png` with a darker "Built with" for light backgrounds) for games built on it; all transparent PNGs.
 The mark is rendered from game data, a deliberate exception ([decisions](docs/memory/decisions.md) "Logo"); the word is set in Google Sans (SIL OFL 1.1).
 
