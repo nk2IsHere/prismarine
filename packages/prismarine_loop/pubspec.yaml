@@ -1,0 +1,12 @@
+name: prismarine_loop
+description: Parts of a real-time frame loop on Flutter. Frame pacing, GC pacing, a frame limiter for Metal, a JSON-lines writer, window focus, the OS cursor and mouse look.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  flutter:
+    sdk: flutter
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

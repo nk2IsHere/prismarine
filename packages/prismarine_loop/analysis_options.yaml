@@ -1,0 +1,4 @@
+analyzer:
+  exclude:
+    - build/**
+include: ../../tools/lint/analysis/flutter.yaml
