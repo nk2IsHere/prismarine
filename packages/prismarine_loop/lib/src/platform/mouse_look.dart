@@ -1,10 +1,8 @@
 // Mouse-look without pointer warps. While the game hides its cursor and
-// re-centres it every frame (S2's ReticleController; the exe's SetCursorPos
-// and GetCursorPos [LOCAL ReticleController.lua]), the runner holds the OS
-// pointer still and sums the mouse's own movement; the game's cursor is the
-// position the game last set plus that movement in whole device pixels, so
-// a screen's width of travel still crosses the screen (quirk
-// Q-input-s2-reticle-pointer-speed). Warping the pointer back every frame
+// re-centres it every frame, the runner holds the OS pointer still and sums
+// the mouse's own movement; the game's cursor is the position the game last
+// set plus that movement in whole device pixels, so a screen's width of
+// travel still crosses the screen. Warping the pointer back every frame
 // fought the hand: the pointer stood still for frames mid-motion and the
 // events around each warp disagreed with its place.
 //
@@ -14,7 +12,7 @@
 /// The render area in view points (the game's screen in the window).
 typedef LookArea = ({double left, double top, double width, double height});
 
-/// The runner's side (macOS MainFlutterWindow.swift, McsmMouseLook).
+/// The runner's side, such as the mouse-look class of the macOS runner.
 abstract interface class MouseLookHost {
   /// The mouse's movement summed since launch, in view points, y down;
   /// only grows, readers take differences.
@@ -31,7 +29,7 @@ abstract interface class MouseLookHost {
 
 /// Whether mouse-look holds the pointer after a frame: the game hid its
 /// cursor and re-centred it that frame, the window has focus, and neither
-/// the F1 panel nor the F7 review has the pointer.
+/// a debug panel nor a review tool has the pointer.
 bool holdsPointer({
   required bool hidden,
   required bool recentred,
@@ -43,7 +41,7 @@ bool holdsPointer({
 /// The game's cursor from the mouse's summed movement.
 ///
 /// The anchor is the position the game last set; the travel since is kept
-/// in whole device pixels with the remainder carried, as the exe's
+/// in whole device pixels with the remainder carried, as Windows'
 /// GetCursorPos counts whole pixels of a pointer moving in finer steps.
 /// The frame's read takes the travel so far ([sample]); the game's
 /// re-centre after it ([set]) moves the anchor and keeps the travel made

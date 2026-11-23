@@ -9,8 +9,8 @@
 /// steps came late or too few of them got a picture, up a rate when every
 /// stage's time fits the faster one. A rate that didn't hold is tried again
 /// after a longer wait each time, so a scene on the edge settles on the
-/// slower rate. Pacing never changes what a route replays: a replay steps
-/// its recorded frames, each tick one (the player leaves pacing off there).
+/// slower rate. A replay of recorded frames steps one recorded frame each
+/// tick and leaves pacing off.
 class FramePace {
   FramePace({this.enabled = true, int? fixed, this.maxDivisor = 4})
     : _fixed = fixed,
@@ -35,9 +35,9 @@ class FramePace {
 
   /// The last [begin]'s step in seconds: its display frames times
   /// [intervalSeconds]. Whole microseconds fall short of a 60 Hz frame
-  /// (16,666 µs at 120 Hz, two frames), so a chore's clock ran 0.67 µs a
-  /// step behind Minecraft2.exe's and a key on a frame's time (a lip
-  /// sync's mouth at 1/30 s) came a frame late.
+  /// (16,666 µs at 120 Hz, two frames), so a clock that sums them runs
+  /// 0.67 µs a step behind a fixed 1/60 s step and a key on a frame's time
+  /// comes a frame late.
   double stepSeconds = 0;
 
   /// A decision's span.

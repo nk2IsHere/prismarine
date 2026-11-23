@@ -213,8 +213,8 @@ void main() {
     // Ticks a little late in their display frames.
     expect(p.begin(16900), 16666);
     expect(p.stepSeconds, 2 / 120);
-    // Steps of exactly 1/60 s reach a key at 1/30 s in two frames, as the
-    // exe's fixed 1/60 s does (whole microseconds stop 0.7 µs short).
+    // Steps of exactly 1/60 s reach a key at 1/30 s in two frames, as a
+    // fixed 1/60 s step does (whole microseconds stop 0.7 µs short).
     var clock = 0.0;
     for (var i = 0; i < 2; i++) {
       clock = (clock + p.stepSeconds).toDouble();

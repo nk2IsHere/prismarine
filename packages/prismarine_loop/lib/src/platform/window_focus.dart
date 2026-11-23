@@ -1,16 +1,16 @@
 import 'dart:ui' show AppLifecycleState;
 
-/// Whether the game's window has the input focus, which the exe's input
-/// gate follows (formats/telltale/engine-api/input.md "The gate") and the
-/// player's pointer warps need.
+/// Whether the app's window has the input focus, which an input gate and
+/// pointer warps need.
 ///
 /// The app's lifecycle alone is not the window's focus: on macOS a panel of
 /// another process (Spotlight and the like, a screenshot's overlay) takes
-/// the key window while the app stays active and "resumed", and the game
-/// went on warping the pointer under it. So the window is focused while the
-/// app is resumed and its window is the key window, as the runner reports
-/// it ("mcsm/window"; Windows' engine sends view focus events instead). A
-/// platform that reports neither keeps the key window true.
+/// the key window while the app stays active and "resumed", and an app
+/// would go on warping the pointer under it. So the window is focused while
+/// the app is resumed and its window is the key window, as the runner
+/// reports it on its key-window channel (Windows' engine sends view focus
+/// events instead). A platform that reports neither keeps the key window
+/// true.
 class WindowFocus {
   bool _resumed = true;
   bool _key = true;

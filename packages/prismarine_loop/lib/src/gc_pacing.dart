@@ -6,7 +6,7 @@ import 'dart:ui' show DartPerformanceMode, PlatformDispatcher;
 /// never change what the game computes.
 ///
 /// After each frame the engine lets the VM work until the next one; with
-/// this game's large heap that meant a full concurrent mark every ~0.6 s.
+/// a large heap that meant a full concurrent mark every ~0.6 s.
 /// The engine skips that notification in latency mode, so the mode is
 /// latency from [endFrame] to [beginFrame] and balanced in the frame. GPU
 /// memory awaiting finalization isn't counted by the VM: when [pressure]
@@ -97,9 +97,7 @@ class GcPacing {
   /// will compact ([switchHold]'s growth reached), the old space's mark
   /// starts now, concurrently, on the VM's helper threads; finished, it
   /// waits for the hold (up to 30 s; dart/0003), whose stop-the-world pause
-  /// is then the slide alone (Ep205's route on the Mac: the boot's 1.7 →
-  /// 0.5 s, the others 1.1–2.2 s either way: the slide of ~2 GB, in swap,
-  /// is most of it). At most one every 10 s.
+  /// is then the slide alone. At most one every 10 s.
   void premark() {
     final oldSpace = this.oldSpace, heap = this.heap;
     final growth = compactGrowthBytes;
@@ -113,11 +111,9 @@ class GcPacing {
   }
 
   /// A scene switch's hold: the new scene's first picture is not painted
-  /// yet and the screen holds the last one, as the exe's blocking scene
-  /// load holds it. The VM's old space gives pages back only when
-  /// compacted (its sweeps leave the pages fragmented: over Ep205's
-  /// playtest route its capacity grew 1.6 → 3.4 GB for 1.25 → 1.95 GB
-  /// live), so once its capacity grew [compactGrowthBytes] past what the
+  /// yet and the screen holds the last one. The VM's old space gives pages
+  /// back only when compacted (its sweeps leave the pages fragmented), so
+  /// once its capacity grew [compactGrowthBytes] past what the
   /// last compaction left, it is compacted here, every isolate of the
   /// group stopped; at a switch the closed scene's objects are garbage too.
   /// Its use is no measure of what is free: it counts what was allocated
@@ -149,7 +145,7 @@ class GcPacing {
 
   /// The frame's idle point: its picture has just been recorded, or it
   /// ended with no picture on its way, so the UI isolate (and, when the
-  /// frame fits its interval, the sim and the build) has time until the
+  /// frame fits its interval, the other isolates) has time until the
   /// next frame is due. A young collection runs when new space holds
   /// [idleMinBytes] and the VM expects it to fit that time, or holds
   /// [idleMaxBytes] whatever the time: small ones where a pause costs

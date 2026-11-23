@@ -1,4 +1,4 @@
-// Frames in flight on macOS: the player's frames wait for the GPU.
+// Frames in flight on macOS: the app's frames wait for the GPU.
 //
 // The raster thread writes each composite's vertices and uniforms into a
 // ring of four arenas (Impeller's HostBuffer) and reuses an arena four

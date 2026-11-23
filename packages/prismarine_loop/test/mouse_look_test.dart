@@ -162,7 +162,7 @@ void main() {
     expect(holds(hidden: false), isFalse, reason: 'the cursor shows');
     expect(holds(recentred: false), isFalse, reason: 'no re-centre');
     expect(holds(focused: false), isFalse, reason: 'focus lost');
-    expect(holds(panelOpen: true), isFalse, reason: 'the F1 panel');
-    expect(holds(reviewing: true), isFalse, reason: 'the F7 review');
+    expect(holds(panelOpen: true), isFalse, reason: 'a debug panel');
+    expect(holds(reviewing: true), isFalse, reason: 'a review tool');
   });
 }

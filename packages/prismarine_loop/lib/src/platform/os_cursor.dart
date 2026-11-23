@@ -1,12 +1,12 @@
 /// The OS pointer over the game area.
 ///
-/// The game draws S1's own cursor, so the game area asks for no OS cursor
+/// The game draws its own cursor, so the game area asks for no OS cursor
 /// (`SystemMouseCursors.none`). On macOS that only swaps in a blank cursor
 /// image: the system still owns a cursor there, and "shake to locate" draws
 /// it enlarged when the mouse is flung. So while the pointer is over
 /// the game area the runner also hides the cursor itself (NSCursor
-/// hide/unhide, "mcsm/cursor" `setHidden`), and shows it again when the
-/// pointer leaves (the F1 panel, the window's edge) or the F7 review takes
+/// hide/unhide through its `setHidden` call), and shows it again when the
+/// pointer leaves (a debug panel, the window's edge) or a review tool takes
 /// the area (its tools want the OS pointer).
 ///
 /// [OsCursorHider] decides when to ask: it sends only changes, so the
@@ -31,7 +31,7 @@ class OsCursorHider {
     _apply();
   }
 
-  /// The F7 review is open over the game area.
+  /// A review tool is open over the game area.
   set reviewing(bool v) {
     _reviewing = v;
     _apply();
