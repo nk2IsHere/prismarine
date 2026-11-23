@@ -25,3 +25,14 @@ packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.list  an app's snap
 packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.str  an app's snapshot restore
 packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.bytes  an app's snapshot restore
 packages/prismarine_snap/lib/src/snap_registry.dart#snapFn  a codec, naming a function
+#
+# The frame plan core is reached from an app's frame: a builder making the
+# frame's plan and its roles, the codec writing it on the build isolate and
+# reading it on the isolate that records it.
+packages/prismarine_frame/lib/src/plan/plan_codec.dart#PlanWriter.write  the build isolate, the plan's message
+packages/prismarine_frame/lib/src/plan/plan_codec_read.dart#PlanReader  the isolate that records the plan, the plan's message
+packages/prismarine_frame/lib/src/plan/frame_plan.dart#FramePlan.new  a builder, once a plan
+packages/prismarine_frame/lib/src/plan/frame_plan.dart#FrameRole.new  a builder, naming a role
+packages/prismarine_frame/lib/src/plan/frame_plan.dart#StageResources.new  a builder, a draw's resources
+packages/prismarine_frame/lib/src/plan/float_bits.dart#sameFloat32Bits  a builder, comparing a draw's floats
+packages/prismarine_frame/lib/src/plan/float_bits.dart#scratchFloats  a builder, reading floats
