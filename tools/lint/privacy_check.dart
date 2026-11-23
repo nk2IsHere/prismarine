@@ -9,8 +9,10 @@
 // <private>/config/privacy-patterns.txt, and every value in
 // <private>/secrets/*.env is added as a plain-text pattern. A pattern line
 // that starts with `code: ` applies only to the files that the code lints
-// check. Docs can mention a word that code must not use. <private> is the
-// directory in the variable of privacy.private_env in the config. Without
+// check, outside the comment_check_exempt paths of the config, where the
+// files of the lint quote the words. Docs can mention a word that code must
+// not use. <private> is the directory in the variable of
+// privacy.private_env in the config. Without
 // it, the check takes `private/` beside the main checkout of the git
 // repository of the tree, then the first `private/` with a `config/` above
 // the tree. The password and key checks below are generic and need no
@@ -126,7 +128,9 @@ void main(List<String> args) {
     if (bytes.length > 8 << 20 || bytes.take(8000).contains(0)) continue;
     final text = utf8.decode(bytes, allowMalformed: true);
     final isPending = pending.any((p) => rel == p || rel.startsWith(p));
-    final isCode = excludedBecause(rel) == null;
+    final isCode =
+        excludedBecause(rel) == null &&
+        !config.commentCheckExempt.any(rel.startsWith);
     final lines = const LineSplitter().convert(text);
     for (var i = 0; i < lines.length; i++) {
       for (final p in patterns) {
