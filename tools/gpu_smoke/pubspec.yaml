@@ -1,5 +1,5 @@
 name: gpu_smoke
-description: "Flutter GPU smoke test for a (patched) engine: renders through flutter_scene's base shaders, reads the pixels back, times draws and binds, exits."
+description: "Flutter GPU smoke test for a (patched) engine: renders through the screen copy of prismarine_scene, reads the pixels back, times draws and binds, exits."
 publish_to: none
 version: 0.1.0
 environment:
@@ -9,8 +9,8 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
-  flutter_scene:
-    path: ../../third_party/flutter_scene
+  prismarine_scene:
+    path: ../../packages/prismarine_scene
   vector_math: ^2.1.4
   hooks: ^2.0.0
 dependency_overrides:
@@ -22,20 +22,6 @@ flutter:
   uses-material-design: false
   # The smoke test's shader bundle (hook/build.dart).
   assets:
-    - flutter_scene_generated/
-    - path: flutter_scene_generated/metal_ios/
-      platforms:
-        - ios
-    - path: flutter_scene_generated/metal_desktop/
-      platforms:
-        - macos
-    - path: flutter_scene_generated/opengl_es_vulkan/
-      platforms:
-        - android
-        - linux
-        - windows
-    - path: flutter_scene_generated/opengl_es/
-      platforms:
-        - web
+    - build/shaderbundles/
     # The shaders of the release 9 checks (tool/features_bundle.sh).
     - features_generated/

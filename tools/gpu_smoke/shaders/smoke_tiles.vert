@@ -4,7 +4,7 @@
 #endif
 
 // Viewport arrays of release 7. Each instance draws into the viewport of its
-// `tile`. flutter_scene P34 turns the `mcsm_viewport_index` output into the
+// `tile`. The build hook turns the `mcsm_viewport_index` output into the
 // [[viewport_array_index]] of Metal. On Vulkan (release 8) the shader writes
 // gl_ViewportIndex itself. Elsewhere nobody reads the output.
 

@@ -1,7 +1,9 @@
 # prismarine_scene
 
-prismarine_scene holds scene assets on Flutter. It has a glTF on the GPU with the model of its draws, an asset bundle
-that reads files by absolute path and a pace for long loads on the UI isolate. The details are on [the area page](../../docs/areas/scene.md).
+prismarine_scene holds scene assets on Flutter. It has glTF scenes with their nodes, a glTF on the GPU with the model of
+its draws, an asset bundle that reads files by absolute path, a pace for long loads on the UI isolate, a copy of a
+texture over the screen and a build hook for the shader bundle of a package. The details are on [the area
+page](../../docs/areas/scene.md).
 
 ## Usage
 
@@ -16,6 +18,9 @@ transparent black PNG. The bundle reports it once through `FileAssetBundle.onMis
 `loadPace` lets a long load on the UI isolate give a waiting frame its turn. Call `if (loadPace() case final p?) await
 p;` between the steps of the load. It returns null until the load has run for `loadTurn`, 4 ms, since the last turn. The
 common case therefore stays synchronous.
+
+`importSceneNodes` gives the scene nodes of a `GltfDocument`, which `GltfModel.read` walks. `ScreenCopy.load` loads the copy. `buildShaderBundle` of
+`package:prismarine_scene/build_hooks.dart` builds a bundle in the build hook of a package.
 
 ## Example
 

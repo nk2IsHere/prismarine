@@ -77,65 +77,113 @@ class GltfDocument {
 
   /// Reads accessor [i] as floats, element after element. Normalized
   /// integers become values from 0 to 1, or from -1 to 1 when signed. An
-  /// accessor without a buffer view reads as zeros.
+  /// accessor without a buffer view reads as zeros. The elements of a
+  /// sparse accessor replace those at its indices.
   Float32List floats(int i) {
     final a = accessor(i);
-    if (a['sparse'] != null) {
-      throw UnsupportedError('accessor $i is sparse');
-    }
     final n = count(i), c = components(i);
     final out = Float32List(n * c);
-    final view = a['bufferView'] as int?;
-    if (view == null) return out;
     final type = a['componentType'] as int;
     final norm = a['normalized'] == true;
-    final (data, stride) = _element(i, view, type, c);
     final size = _size(type);
-    for (var e = 0; e < n; e++) {
-      for (var k = 0; k < c; k++) {
-        final at = e * stride + k * size;
-        out[e * c + k] = switch (type) {
-          5126 => data.getFloat32(at, Endian.little),
-          5120 => norm ? _max(data.getInt8(at) / 127) : data.getInt8(at) * 1.0,
-          5121 => norm ? data.getUint8(at) / 255 : data.getUint8(at) * 1.0,
-          5122 =>
-            norm
-                ? _max(data.getInt16(at, Endian.little) / 32767)
-                : data.getInt16(at, Endian.little) * 1.0,
-          5123 =>
-            norm
-                ? data.getUint16(at, Endian.little) / 65535
-                : data.getUint16(at, Endian.little) * 1.0,
-          5125 => data.getUint32(at, Endian.little) * 1.0,
-          _ => throw FormatException('accessor $i has component type $type'),
-        };
+    if (a['bufferView'] case final int view) {
+      final (data, stride) = _element(i, view, type, c);
+      for (var e = 0; e < n; e++) {
+        for (var k = 0; k < c; k++) {
+          out[e * c + k] = _float(data, e * stride + k * size, type, norm, i);
+        }
+      }
+    }
+    if (a['sparse'] case final Map sparse) {
+      final (indices, values) = _sparse(sparse);
+      for (var j = 0; j < indices.length; j++) {
+        for (var k = 0; k < c; k++) {
+          out[indices[j] * c + k] = _float(
+            values,
+            (j * c + k) * size,
+            type,
+            norm,
+            i,
+          );
+        }
       }
     }
     return out;
   }
 
+  static double _float(ByteData data, int at, int type, bool norm, int i) =>
+      switch (type) {
+        5126 => data.getFloat32(at, Endian.little),
+        5120 => norm ? _max(data.getInt8(at) / 127) : data.getInt8(at) * 1.0,
+        5121 => norm ? data.getUint8(at) / 255 : data.getUint8(at) * 1.0,
+        5122 =>
+          norm
+              ? _max(data.getInt16(at, Endian.little) / 32767)
+              : data.getInt16(at, Endian.little) * 1.0,
+        5123 =>
+          norm
+              ? data.getUint16(at, Endian.little) / 65535
+              : data.getUint16(at, Endian.little) * 1.0,
+        5125 => data.getUint32(at, Endian.little) * 1.0,
+        _ => throw FormatException('accessor $i has component type $type'),
+      };
+
+  /// The indices of [sparse] and the bytes of its values.
+  (List<int>, ByteData) _sparse(Map sparse) {
+    final n = sparse['count'] as int;
+    final ix = sparse['indices'] as Map, vx = sparse['values'] as Map;
+    ByteData bytes(Map m) {
+      final v = list('bufferViews')[m['bufferView'] as int];
+      return ByteData.sublistView(
+        buffers[v['buffer'] as int],
+        ((v['byteOffset'] as int?) ?? 0) + ((m['byteOffset'] as int?) ?? 0),
+      );
+    }
+
+    final type = ix['componentType'] as int;
+    final at = bytes(ix);
+    final indices = [
+      for (var j = 0; j < n; j++)
+        switch (type) {
+          5121 => at.getUint8(j),
+          5123 => at.getUint16(2 * j, Endian.little),
+          _ => at.getUint32(4 * j, Endian.little),
+        },
+    ];
+    return (indices, bytes(vx));
+  }
+
   static double _max(double v) => v < -1 ? -1 : v;
 
   /// Reads accessor [i] of unsigned integers as 32-bit values, such as the
-  /// indices of a primitive.
+  /// indices of a primitive. The elements of a sparse accessor replace those
+  /// at its indices.
   Uint32List uints(int i) {
     final a = accessor(i);
     final n = count(i), c = components(i);
     final out = Uint32List(n * c);
-    final view = a['bufferView'] as int?;
-    if (view == null) return out;
     final type = a['componentType'] as int;
-    final (data, stride) = _element(i, view, type, c);
     final size = _size(type);
-    for (var e = 0; e < n; e++) {
-      for (var k = 0; k < c; k++) {
-        final at = e * stride + k * size;
-        out[e * c + k] = switch (type) {
-          5121 => data.getUint8(at),
-          5123 => data.getUint16(at, Endian.little),
-          5125 => data.getUint32(at, Endian.little),
-          _ => throw FormatException('accessor $i is not unsigned'),
-        };
+    int read(ByteData data, int at) => switch (type) {
+      5121 => data.getUint8(at),
+      5123 => data.getUint16(at, Endian.little),
+      5125 => data.getUint32(at, Endian.little),
+      _ => throw FormatException('accessor $i is not unsigned'),
+    };
+    if (a['bufferView'] case final int view) {
+      final (data, stride) = _element(i, view, type, c);
+      for (var e = 0; e < n; e++) {
+        for (var k = 0; k < c; k++) {
+          out[e * c + k] = read(data, e * stride + k * size);
+        }
+      }
+    }
+    if (a['sparse'] case final Map sparse) {
+      final (indices, values) = _sparse(sparse);
+      for (var j = 0; j < indices.length; j++) {
+        for (var k = 0; k < c; k++) {
+          out[indices[j] * c + k] = read(values, (j * c + k) * size);
+        }
       }
     }
     return out;

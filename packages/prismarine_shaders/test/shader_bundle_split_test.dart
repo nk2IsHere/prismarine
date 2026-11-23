@@ -113,6 +113,23 @@ void main() {
     expect(vk[13], 3);
   });
 
+  test('a Metal source replaces only the source of metal_desktop', () {
+    final src = Uint8List.fromList([9, 8, 7]);
+    final out = keepShaderBundleBackends(
+      _bundle(),
+      {'metal_desktop', 'vulkan'},
+      metalSource: {'g0123': src},
+    );
+    final shader = ((decodeShaderBundle(out) as List)[0] as List)[0] as List;
+    final orig =
+        ((decodeShaderBundle(_bundle()) as List)[0] as List)[0] as List;
+    final mtl = shader[shaderBundleBackends['metal_desktop']!] as List;
+    expect(mtl[backendShaderSource], src);
+    final want = [...(orig[2] as List)]..[backendShaderSource] = src;
+    expect(jsonEncode(mtl), jsonEncode(want));
+    expect(jsonEncode(shader[5]), jsonEncode(orig[5]));
+  });
+
   test("a Metal library fills only metal_desktop's compiled field and "
       'round-trips', () {
     final x = _bundle();
