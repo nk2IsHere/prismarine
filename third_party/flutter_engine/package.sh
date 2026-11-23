@@ -51,7 +51,7 @@ cat > "$stage/$target/mcsm-engine.txt" <<EOF
 target=$target
 release=$(cat "$here/RELEASE")
 out=$out
-engine_revision=${MCSM_ENGINE_REV:-deb287481e3ce9468f3434937ced4240a70539ca}
+engine_revision=${PRISMARINE_ENGINE_REV:-${MCSM_ENGINE_REV:-deb287481e3ce9468f3434937ced4240a70539ca}}
 patches=$(cd "$here/patches" && ls *.patch | tr '\n' ' ')
 patches_sha256=$patches
 EOF

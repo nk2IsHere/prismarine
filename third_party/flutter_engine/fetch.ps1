@@ -32,7 +32,8 @@ function Get-PrivateSetting([string] $Key) {
   }
   return $null
 }
-$repo = Get-PrivateSetting 'MCSM_ENGINE_REPO'
+$repo = Get-PrivateSetting 'PRISMARINE_ENGINE_REPO'
+if (!$repo) { $repo = Get-PrivateSetting 'MCSM_ENGINE_REPO' }
 if (!$repo -and !$Archive) {
   throw "mcsm: missing machine setting MCSM_ENGINE_REPO (the engine release repo, owner/name): set it in the environment or in <repo>\private\config\*.env, or pass -Archive"
 }
@@ -40,8 +41,13 @@ $tag = (Get-Content "$here\RELEASE").Trim()
 if (!$Target) {
   $Target = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'windows-arm64' } else { 'windows-x64' }
 }
-if (!$Data) {
+if ($Data) {
+  $dest = Join-Path $Data 'engine'
+} elseif ($env:PRISMARINE_ENGINE_DIR) {
+  $dest = $env:PRISMARINE_ENGINE_DIR
+} else {
   $Data = if ($env:MCSM_DATA) { $env:MCSM_DATA } else { Join-Path (Resolve-Path "$here\..\..") 'data' }
+  $dest = Join-Path $Data 'engine'
 }
 $asset = "mcsm-engine-$Target.tar.xz"
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("mcsm-engine-fetch-" + [guid]::NewGuid())
@@ -58,7 +64,6 @@ try {
   $want = ((Get-Content "$tmp\$asset.sha256") -split '\s+')[0]
   $have = (Get-FileHash -Algorithm SHA256 "$tmp\$asset").Hash.ToLower()
   if ($want -ne $have) { throw "SHA-256 mismatch for $asset" }
-  $dest = Join-Path $Data 'engine'
   New-Item -ItemType Directory -Force $dest | Out-Null
   if (Test-Path "$dest\$Target") { Remove-Item -Recurse -Force "$dest\$Target" }
   tar -C $dest -xJf "$tmp\$asset"
@@ -66,7 +71,7 @@ try {
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
-$flutter = if ($env:MCSM_FLUTTER) { $env:MCSM_FLUTTER } else { Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source) }
+$flutter = if ($env:PRISMARINE_FLUTTER) { $env:PRISMARINE_FLUTTER } elseif ($env:MCSM_FLUTTER) { $env:MCSM_FLUTTER } else { Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source) }
 $out = Get-ChildItem "$dest\$Target\src\out" -Directory | Select-Object -First 1
 cmd /c mklink /J "$($out.FullName)\dart-sdk" "$flutter\bin\cache\dart-sdk" | Out-Null
 "mcsm: engine $Target in $dest\$Target"

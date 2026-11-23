@@ -19,10 +19,15 @@
 # Then set MCSM_LOCAL_ENGINE=$MCSM_DATA/engine/flutter/engine/src in .env.
 # Needs the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`).
 set -e
-source ${0:A:h:h:h}/tools/toolchain/env.sh
 here=${0:A:h}
-E=$MCSM_DATA/engine
-rev=$(cat $MCSM_FLUTTER/bin/internal/engine.version)
+E=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
+: ${E:=${0:A:h:h:h}/data/engine}
+F=${PRISMARINE_FLUTTER:-$MCSM_FLUTTER}
+if [[ -z $F ]]; then
+  whence -p flutter >/dev/null || { echo "build.sh: no Flutter SDK: set PRISMARINE_FLUTTER or put flutter on PATH" >&2; exit 1; }
+  F=${$(whence -p flutter):A:h:h}
+fi
+rev=$(cat $F/bin/internal/engine.version)
 export PATH=$E/depot_tools:$PATH DEPOT_TOOLS_METRICS=0
 src=$E/flutter/engine/src
 step=${1:-all}
@@ -32,7 +37,7 @@ if [[ $step == setup || $step == all ]]; then
   [[ -d $E/depot_tools ]] || git clone -q --depth 1 \
     https://chromium.googlesource.com/chromium/tools/depot_tools.git $E/depot_tools
   if [[ ! -d $E/flutter ]]; then
-    git clone -q --shared --no-checkout $MCSM_FLUTTER $E/flutter
+    git clone -q --shared --no-checkout $F $E/flutter
     git -C $E/flutter checkout -q --detach $rev
     git -C $E/flutter remote set-url origin https://github.com/flutter/flutter.git
   fi
@@ -68,13 +73,13 @@ fi
 
 if [[ $step == build || $step == all ]]; then
   cd $src
-  cpu=${MCSM_ENGINE_CPU:-arm64}
-  mode=${MCSM_ENGINE_MODE:-release}
+  cpu=${PRISMARINE_ENGINE_CPU:-${MCSM_ENGINE_CPU:-arm64}}
+  mode=${PRISMARINE_ENGINE_MODE:-${MCSM_ENGINE_MODE:-release}}
   out=out/host_$mode
   if [[ $cpu == arm64 ]]; then out=out/host_${mode}_arm64; fi
   ./flutter/tools/gn --runtime-mode=$mode --mac-cpu=$cpu --no-lto \
     --prebuilt-dart-sdk --no-enable-unittests
-  ninja -C $out -j${MCSM_ENGINE_JOBS:-6} \
+  ninja -C $out -j${PRISMARINE_ENGINE_JOBS:-${MCSM_ENGINE_JOBS:-6}} \
     flutter/shell/platform/darwin/macos:flutter_framework \
     flutter/lib/snapshot:create_macos_gen_snapshots \
     flutter/lib/snapshot:kernel_platform_files \
@@ -88,6 +93,6 @@ if [[ $step == build || $step == all ]]; then
   [[ $mode == release ]] && ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product
   # MCSM_ENGINE_TRIM=1: drop the object files (~2–4 GB); the next build of
   # this out dir is then a full one.
-  [[ -n $MCSM_ENGINE_TRIM ]] && rm -rf "${src:?}/$out/obj"
+  [[ -n ${PRISMARINE_ENGINE_TRIM:-$MCSM_ENGINE_TRIM} ]] && rm -rf "${src:?}/$out/obj"
   true
 fi

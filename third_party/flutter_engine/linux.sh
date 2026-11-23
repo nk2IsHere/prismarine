@@ -9,9 +9,9 @@
 # 5.4 GB for the test build; ~10 + 13 min on 16 cores (MCSM_ENGINE_JOBS, default 10).
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
-E=${MCSM_ENGINE_DIR:?set MCSM_ENGINE_DIR}
-rev=${MCSM_ENGINE_REV:-deb287481e3ce9468f3434937ced4240a70539ca}
-J=${MCSM_ENGINE_JOBS:-10}
+E=${PRISMARINE_ENGINE_DIR:-${MCSM_ENGINE_DIR:?set PRISMARINE_ENGINE_DIR}}
+rev=${PRISMARINE_ENGINE_REV:-${MCSM_ENGINE_REV:-deb287481e3ce9468f3434937ced4240a70539ca}}
+J=${PRISMARINE_ENGINE_JOBS:-${MCSM_ENGINE_JOBS:-10}}
 export PATH=$E/depot_tools:$PATH DEPOT_TOOLS_METRICS=0
 step=${1:-all}
 if [[ $step == setup || $step == all ]]; then

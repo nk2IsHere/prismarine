@@ -17,21 +17,37 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$here/../.." && pwd)
-if [[ -z ${MCSM_DATA:-} && -f $repo_root/.env ]]; then
-  MCSM_DATA=$(sed -n 's/^MCSM_DATA=//p' "$repo_root/.env" | tail -1)
+# setting <key>…: the first value of a key in the private config, the first
+# private/config/*.env found walking up from here.
+setting() {
+  local d=$here f k
+  while [[ $d != / ]]; do
+    if [[ -d $d/private/config ]]; then
+      for f in "$d"/private/config/*.env; do
+        [[ -f $f ]] || continue
+        for k in "$@"; do
+          sed -n "s/^$k=//p" "$f" | tail -1 | sed -e "s/^[\"']//" -e "s/[\"']\$//"
+        done
+      done | sed -n 1p
+      return 0
+    fi
+    d=$(dirname "$d")
+  done
+}
+dest=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
+dest=${dest:-$repo_root/data/engine}
+flutter_sdk=${PRISMARINE_FLUTTER:-${MCSM_FLUTTER:-}}
+if [[ -z $flutter_sdk ]]; then
+  command -v flutter >/dev/null || { echo "mcsm: no Flutter SDK: set PRISMARINE_FLUTTER or put flutter on PATH" >&2; exit 1; }
+  flutter_sdk=$(cd "$(dirname "$(command -v flutter)")/.." && pwd)
 fi
-MCSM_DATA=${MCSM_DATA:-$repo_root/data}
-[[ $MCSM_DATA == /* ]] || MCSM_DATA=$repo_root/$MCSM_DATA
-if [[ -z ${MCSM_FLUTTER:-} ]]; then
-  if [[ -x $repo_root/data/flutter/bin/flutter ]]; then
-    MCSM_FLUTTER=$repo_root/data/flutter
-  else
-    MCSM_FLUTTER=$(cd "$(dirname "$(command -v flutter)")/.." && pwd)
-  fi
+archive=${PRISMARINE_ENGINE_ARCHIVE:-${MCSM_ENGINE_ARCHIVE:-}}
+repo=${PRISMARINE_ENGINE_REPO:-${MCSM_ENGINE_REPO:-}}
+[[ -n $repo ]] || repo=$(setting PRISMARINE_ENGINE_REPO MCSM_ENGINE_REPO)
+if [[ -z $repo && -z $archive ]]; then
+  echo "mcsm: missing machine setting MCSM_ENGINE_REPO (the engine release repo, owner/name)" >&2
+  exit 1
 fi
-. "$repo_root/tools/toolchain/private_env.sh"
-[[ -n ${MCSM_ENGINE_ARCHIVE:-} ]] || mcsm_need MCSM_ENGINE_REPO
-repo=${MCSM_ENGINE_REPO:-}
 tag=$(cat "$here/RELEASE")
 target=${1:-}
 if [[ -z $target ]]; then
@@ -47,27 +63,26 @@ sha256() { if command -v shasum >/dev/null; then shasum -a 256 "$@"; else sha256
 asset=mcsm-engine-$target.tar.xz
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mcsm-engine-fetch.XXXXXX")
 trap 'rm -rf "${tmp:?}"' EXIT
-if [[ -n ${MCSM_ENGINE_ARCHIVE:-} ]]; then
+if [[ -n $archive ]]; then
   # A local copy (with its .sha256 beside it) instead of the download.
-  cp "$MCSM_ENGINE_ARCHIVE" "$tmp/$asset"
-  cp "$MCSM_ENGINE_ARCHIVE.sha256" "$tmp/$asset.sha256"
+  cp "$archive" "$tmp/$asset"
+  cp "$archive.sha256" "$tmp/$asset.sha256"
 else
   echo "mcsm: fetching $asset from $repo release $tag"
   gh release download "$tag" -R "$repo" -p "$asset" -p "$asset.sha256" -D "$tmp"
 fi
 (cd "$tmp" && sha256 -c "$asset.sha256")
-dest=$MCSM_DATA/engine
 mkdir -p "$dest"
 rm -rf "${dest:?}/${target:?}"
 xz -dc "$tmp/$asset" | tar -C "$dest" -xf -
 outs=()
 for out in "$dest/$target"/src/out/*/; do
   out=${out%/}
-  ln -sfn "$MCSM_FLUTTER/bin/cache/dart-sdk" "$out/dart-sdk"
+  ln -sfn "$flutter_sdk/bin/cache/dart-sdk" "$out/dart-sdk"
   outs+=("$(basename "$out")")
 done
 want=$(sed -n 's/^engine_revision=//p' "$dest/$target/mcsm-engine.txt")
-have=$(cat "$MCSM_FLUTTER/bin/internal/engine.version" 2>/dev/null || true)
+have=$(cat "$flutter_sdk/bin/internal/engine.version" 2>/dev/null || true)
 [[ $want == "$have" ]] || echo "mcsm: warning: the engine is for Flutter engine $want, the Flutter SDK has ${have:-unknown}" >&2
 echo "mcsm: engine $target in $dest/$target ($(du -sh "$dest/$target" | cut -f1))"
 case $target in
