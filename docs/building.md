@@ -95,13 +95,9 @@ gh release download engine-deb287481e3c-prismarine1 -R "$PRISMARINE_ENGINE_REPO"
 shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
-Source `tools/toolchain/env.sh` again after a fetch. It finds the engine of your machine in the engine directory,
-sets the flags of a release `flutter build` in the array `prismarine_engine_args` and exports `PRISMARINE_IMPELLERC`,
-the shader compiler of the engine. The array is empty without a patched engine and the build then runs on the stock
-engine of Flutter, slower but with the same frames.
-
-The commands of this section ran against release prismarine1 on macOS 27.2 on an Apple M2 Pro and on Ubuntu 26.04 on
-x86-64.
+Source `tools/toolchain/env.sh` again after a fetch, so that your builds use the new engine. It sets
+`prismarine_engine_args`, which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the
+engine. Without a fetched engine, `flutter build` uses Flutter's own engine, which is slower.
 
 ## The engine from its patches
 
