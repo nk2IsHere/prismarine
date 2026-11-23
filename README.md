@@ -2,7 +2,7 @@
 
 prismarine is a toolkit for making games with Flutter and Dart. It provides a renderer on Flutter GPU, a patched
 Flutter engine and the parts that a real-time game needs around them, from worker threads to deterministic replay.
-The code that a frame runs keeps its storage between frames. Every part runs on macOS, Linux and Windows.
+Every part runs on macOS, Linux and Windows.
 
 ## Packages
 
