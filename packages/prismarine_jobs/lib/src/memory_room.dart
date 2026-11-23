@@ -13,13 +13,9 @@ export 'memory_readings.dart' show MemoryReadings, readMemory;
 /// not, from [readMemory] (macOS, Linux, Windows) through [decide].
 class MemoryRoom {
   MemoryRoom({int? budgetMb, int? minFreeMb, MemoryReadings Function()? read})
-    : budgetMb =
-          budgetMb ??
-          int.tryParse(Platform.environment['MCSM_AHEAD_BUDGET_MB'] ?? ''),
+    : budgetMb = budgetMb ?? int.tryParse(_env('AHEAD_BUDGET_MB') ?? ''),
       minFreeMb =
-          minFreeMb ??
-          int.tryParse(Platform.environment['MCSM_AHEAD_FREE_MB'] ?? '') ??
-          2048,
+          minFreeMb ?? int.tryParse(_env('AHEAD_FREE_MB') ?? '') ?? 2048,
       _read = read ?? readMemory;
 
   /// The process's own memory (macOS: its footprint; Linux: its resident
@@ -33,8 +29,14 @@ class MemoryRoom {
 
   final MemoryReadings Function() _read;
 
-  /// `MCSM_AHEAD=deep|short` fixes the answer (A/B runs); else the OS's.
-  static final _forced = Platform.environment['MCSM_AHEAD'];
+  /// `PRISMARINE_AHEAD=deep|short` fixes the answer (A/B runs); else the
+  /// OS's.
+  static final _forced = _env('AHEAD');
+
+  /// Reads `PRISMARINE_<name>`, else `MCSM_<name>`.
+  static String? _env(String name) =>
+      Platform.environment['PRISMARINE_$name'] ??
+      Platform.environment['MCSM_$name'];
 
   bool _deep = false;
   final _clock = Stopwatch();
@@ -47,7 +49,7 @@ class MemoryRoom {
   /// read at most once a second).
   bool get deep {
     if (_forced case final f?) {
-      why = 'MCSM_AHEAD=$f';
+      why = 'PRISMARINE_AHEAD=$f';
       return f == 'deep';
     }
     if (_clock.isRunning && _clock.elapsedMilliseconds < 1000) return _deep;

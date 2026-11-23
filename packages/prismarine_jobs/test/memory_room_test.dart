@@ -81,7 +81,7 @@ void main() {
 
   test('a reader that throws reads short', () {
     final r = MemoryRoom(read: () => throw StateError('none'));
-    expect(r.deep, anyOf(isFalse, isTrue)); // MCSM_AHEAD may force it
-    if (!r.why.startsWith('MCSM_AHEAD')) expect(r.deep, isFalse);
+    expect(r.deep, anyOf(isFalse, isTrue)); // PRISMARINE_AHEAD may force it
+    if (!r.why.startsWith('PRISMARINE_AHEAD')) expect(r.deep, isFalse);
   });
 }
