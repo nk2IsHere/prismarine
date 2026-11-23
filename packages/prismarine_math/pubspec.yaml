@@ -1,0 +1,8 @@
+name: prismarine_math
+description: Transcendental maths with the same bits on every OS and architecture (a Dart port of the Rust libm crate), for the audio mix and the game simulation.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

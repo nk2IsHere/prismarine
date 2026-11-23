@@ -1,0 +1,57 @@
+[package]
+name = "prismarine_pad"
+version = "0.1.0"
+edition = "2021"
+# The toolchain the project builds with (rustup on the Mac, the Linux
+# image and the Windows VM): dependencies resolve to versions it builds.
+rust-version = "1.88"
+resolver = "3"
+publish = false
+description = "prismarine_pad's native library: the host's game pads through SDL3's gamepad subsystem, read by the player each frame (docs/formats/engine-api.md \"Game pads\")"
+
+[lib]
+name = "prismarine_pad"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Game pads on every desktop platform through SDL3's gamepad subsystem
+# (macOS: HIDAPI drivers + GameController; Windows: Windows.Gaming.Input,
+# XInput, raw input, DirectInput; Linux: evdev), with SDL's controller
+# database for the standard layout. `sdl3` is the safe wrapper (no unsafe
+# of ours); SDL itself is built from the source the `sdl3-src` crate ships
+# (pinned by Cargo.lock) and linked statically into this library, so
+# players need no SDL installed. Building it needs CMake and a C compiler.
+sdl3 = { version = "0.20.0", default-features = false, features = ["build-from-source-static"] }
+# Only what reading pads needs: SDL's joystick and gamepad code with its
+# HIDAPI drivers (and the sensor code the gamepad code links), no video,
+# audio, rendering, camera, haptics, power, dialogs or tray. On Linux SDL
+# refuses to configure without X11/Wayland headers unless told it is a
+# console build (SDL_UNIX_CONSOLE_BUILD; ignored elsewhere): we open no
+# windows.
+sdl3-sys = { version = "0.7.2", default-features = false, features = [
+    "sdl-unix-console-build",
+    "sdl-joystick",
+    "sdl-hidapi",
+    "sdl-sensor",
+    "no-sdl-audio",
+    "no-sdl-video",
+    "no-sdl-gpu",
+    "no-sdl-render",
+    "no-sdl-camera",
+    "no-sdl-haptic",
+    "no-sdl-power",
+    "no-sdl-dialog",
+    "no-sdl-tray",
+] }
+
+[profile.release]
+# As mcsm_mixer: no strip pass (Xcode 27's strip leaves dylibs dyld refuses).
+strip = "none"
+opt-level = 3
+debug = false
+
+[profile.release.build-override]
+strip = "none"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

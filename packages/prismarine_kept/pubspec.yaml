@@ -1,0 +1,8 @@
+name: prismarine_kept
+description: Hash maps and sets that keep their storage when cleared, for state a frame clears and refills (the VM's own drop theirs).
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0
