@@ -1,24 +1,15 @@
 #!/bin/zsh
 # observe.sh <outDir> "<name:t0:t1> …" <dart script> [script args…] runs a
 # headless Dart program under the VM service and profiles it with
-# bin/profile.dart over the windows of game time. It records the CPU of each
-# isolate, the GC and the allocation sites of PRISMARINE_PROFILE_TRACE. The
-# allocation sites also need PRISMARINE_OBSERVE_DART_FLAGS=--no-inline-alloc.
-#
-# The program writes one line per frame with its game time, such as
-# {"t": 12.5}, to the file in PRISMARINE_OBSERVE_CLOCK. The file is
-# <outDir>/frames.jsonl by default. The program also gets the path in
-# BENCH_FRAMES for one release.
-#
-# The program runs with --no-pause-isolates-on-exit, else an observed VM waits
-# at exit for a debugger. It runs in a process group of its own. The group is
-# killed on exit, on INT or TERM and after PRISMARINE_OBSERVE_TIMEOUT seconds,
-# 1800 by default. No VM and no Dart Development Service stays behind.
-#
-# dart must be on the PATH. PRISMARINE_PROFILER_PACKAGES gives the package
-# config for profile.dart when the checkout has none, as in the pub cache.
-# PRISMARINE_OBSERVE_DART_FLAGS and PRISMARINE_OBSERVE_TIMEOUT also read their
-# OBSERVE_ forms. PRISMARINE_OBSERVE_CLOCK also reads BENCH_FRAMES.
+# bin/profile.dart over the windows of game time. The program writes one line
+# per frame with its game time, such as {"t": 12.5}, to the file in
+# PRISMARINE_OBSERVE_CLOCK, <outDir>/frames.jsonl by default. It runs with
+# --no-pause-isolates-on-exit in a process group of its own, which is killed
+# on exit, on INT or TERM and after PRISMARINE_OBSERVE_TIMEOUT seconds, 1800
+# by default. PRISMARINE_OBSERVE_DART_FLAGS adds flags of the VM, such as
+# --no-inline-alloc for PRISMARINE_PROFILE_TRACE. PRISMARINE_PROFILER_PACKAGES
+# gives the package config of profile.dart in a checkout without one. The
+# README of the profiler lists the older forms of the variables.
 set -e
 out=${1:?outDir}; wins=${2:?windows}; shift 2
 script=${1:?script}; shift

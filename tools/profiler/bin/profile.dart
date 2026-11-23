@@ -13,12 +13,11 @@
 //
 // PRISMARINE_PROFILE_PERIOD=<µs> sets the sampling period, 1000 by default.
 // PRISMARINE_PROFILE_TRACE=<class>,… records the stack of each allocation of
-// those classes on every isolate. A site of such an allocation is the first
-// three frames of own code. Own code is a file outside the pub cache whose
-// path contains one of the texts of PRISMARINE_PROFILE_OURS=<text>,…, or any
-// file outside the SDK and the pub cache when the variable is not set.
-// PRISMARINE_PROFILE_RAW=<dir> writes the stack of every CPU sample. Each
-// variable also reads its form without PRISMARINE_.
+// those classes, with the first three frames of own code as its site.
+// PRISMARINE_PROFILE_OURS=<text>,… makes own code the files outside the pub
+// cache whose path holds one of the texts, else every file outside the SDK
+// and the pub cache. PRISMARINE_PROFILE_RAW=<dir> writes the stack of every
+// CPU sample. Each variable also reads its form without PRISMARINE_.
 import 'dart:convert';
 import 'dart:io';
 
