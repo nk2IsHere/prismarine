@@ -9,4 +9,5 @@ workspace:
   - packages/prismarine_jobs
   - packages/prismarine_cargo
   - packages/prismarine_pad
+  - packages/prismarine_frame
   - tools/lint

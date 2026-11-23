@@ -1,0 +1,12 @@
+name: prismarine_frame
+description: Frame plans as plain data, their codec between isolates and their JSON form, the packed rows of a GPU scene and the data model of cooked scenes. Pure Dart.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+dependencies:
+  prismarine_kept:
+    path: ../prismarine_kept
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0
