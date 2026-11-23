@@ -23,7 +23,10 @@ The config lists the code roots, the baselines, the roots and SDK verdicts of th
 private repo, the files that `check_links` reads and the doc folders that `docs_index` indexes. Under `code_shape` it
 lists the agent words and pointer patterns of the history rule and the rule sets of the repository. The rule set
 `exe-address` counts addresses of shipped binaries in comments and strings. The rule set `name-words` counts words that
-identifiers and paths must not contain.
+identifiers and paths must not contain, under the check that its `check` setting gives. Each further key that starts
+with `name-words`, such as `name-words-game`, adds one more set. The paths in the `exempt` list of a set are left out.
+With `all_paths: true` the set also checks the paths of the files that the lint does not read, such as JSON files and
+compute shaders. prismarine's own config counts seasons, episodes and the names of games, their engines and mcsm.
 
 ## Use from another repository
 
@@ -38,7 +41,7 @@ baselines. Run a lint from the root of that repository with its package config, 
 
 `privacy_check` reads `config/privacy-patterns.txt` and `secrets/*.env` of the private repo. The repo is the
 directory in `$PRISMARINE_PRIVATE`, else `private/` beside the main checkout. A pattern line that starts with `code: `
-applies only to the files that the code lints check.
+applies only to the files that the code lints check, outside the `comment_check_exempt` paths of the config.
 
 ## Allocation roots
 
