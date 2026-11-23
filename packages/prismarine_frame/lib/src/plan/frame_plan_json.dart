@@ -19,10 +19,16 @@ BufferRef _refFrom(Map r) => BufferRef(
   format: r['format'] as String?,
 );
 
+/// The format tag of [planToJson]'s form unless a caller gives its own.
+const framePlanFormat = 'prismarine.frame/1';
+
+/// Writes [p] as JSON with the tag [format]. [putBlob] stores a byte payload
+/// and returns its blob name.
 Map<String, Object?> planToJson(
   FramePlan p,
-  String Function(Uint8List bytes) putBlob,
-) {
+  String Function(Uint8List bytes) putBlob, {
+  String format = framePlanFormat,
+}) {
   Map<String, Object?> res(StageResources r) => {
     'blocks': {
       // A frame role's bytes for this frame (FrameRole).
@@ -104,7 +110,7 @@ Map<String, Object?> planToJson(
     if (a.srgb) 'srgb': true,
   };
   return {
-    'format': 'mcsm.s2frame/1',
+    'format': format,
     'buffers': {
       for (final MapEntry(:key, :value) in p.buffers.entries)
         key: {
@@ -221,13 +227,17 @@ Map<String, Object?> planToJson(
   };
 }
 
-/// Reads [planToJson]'s form back; [blob] resolves a blob name.
+/// Reads [planToJson]'s form back; [blob] resolves a blob name. Fails
+/// unless the plan has the tag [format].
 FramePlan planFromJson(
   Map<String, Object?> j,
-  Uint8List Function(String name) blob,
-) {
-  if (j['format'] != 'mcsm.s2frame/1') {
-    throw FormatException('not an S2 frame plan: ${j['format']}');
+  Uint8List Function(String name) blob, {
+  String format = framePlanFormat,
+}) {
+  if (j['format'] != format) {
+    throw FormatException(
+      'reading a frame plan: its format is ${j['format']}, not $format',
+    );
   }
   List<double> nums(Object? l) => [
     for (final x in l as List) (x as num).toDouble(),
