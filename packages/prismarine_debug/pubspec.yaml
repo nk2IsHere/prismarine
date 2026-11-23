@@ -8,6 +8,8 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
+  prismarine_assets:
+    path: ../prismarine_assets
   prismarine_frame:
     path: ../prismarine_frame
   prismarine_kept:

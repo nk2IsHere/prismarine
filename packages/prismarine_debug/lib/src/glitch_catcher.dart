@@ -18,10 +18,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
+import 'package:prismarine_assets/prismarine_assets.dart' show encodePng;
 
 import 'frame_history.dart';
 import 'issue.dart';
-import 'png.dart';
 
 class GlitchCatcher {
   GlitchCatcher(this.dir, {this.log});
@@ -146,7 +146,13 @@ class GlitchCatcher {
           File(path)
             ..parent.createSync(recursive: true)
             ..writeAsBytesSync(
-              encodePng(bytes.materialize().asUint8List(), width, height),
+              encodePng(
+                width,
+                height,
+                bytes.materialize().asUint8List(),
+                alpha: false,
+                level: 1,
+              ),
             );
         });
       }
@@ -197,9 +203,15 @@ Future<void> writeShownFrames(
       final bytes = TransferableTypedData.fromList([raw.buffer.asUint8List()]);
       final path = '$dir/shown_${k}_f${meta.frame}.png';
       await Isolate.run(() {
-        File(
-          path,
-        ).writeAsBytesSync(encodePng(bytes.materialize().asUint8List(), w, h));
+        File(path).writeAsBytesSync(
+          encodePng(
+            w,
+            h,
+            bytes.materialize().asUint8List(),
+            alpha: false,
+            level: 1,
+          ),
+        );
       });
     } finally {
       image.dispose();
@@ -416,9 +428,15 @@ void _catcherMain((SendPort, String) args) {
       // One image has the frame before and the caught frame in its top row.
       // The frame after and the flagged pixels in red over the darkened
       // caught frame are in its bottom row.
-      File(
-        out,
-      ).writeAsBytesSync(encodePng(_sheet(p, c, n, r.mask), 2 * c.w, 2 * c.h));
+      File(out).writeAsBytesSync(
+        encodePng(
+          2 * c.w,
+          2 * c.h,
+          _sheet(p, c, n, r.mask),
+          alpha: false,
+          level: 1,
+        ),
+      );
     }
     final line = {
       'kind': 'bright',

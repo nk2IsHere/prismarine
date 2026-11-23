@@ -51,7 +51,8 @@ buffers of a Metal System Trace their passes. Set the function that it returns a
 The log sees the command buffers of the runner only through this hook. A renderer of your own calls the function before
 each submit. `HeapSnapshots` writes the heap of the isolate group at chosen game times in profile and debug builds. The
 [profiler](profiler.md) compares these snapshots. `replayPlan` runs a frame plan from its JSON form on a `FrameRunner`
-of `prismarine_render` and writes the bytes of each target. `encodePng` encodes RGBA rows as a PNG at zlib level 1.
+of `prismarine_render` and writes the bytes of each target. The tools write their images with `encodePng` of
+[prismarine_assets](assets.md) as RGB at zlib level 1.
 
 | Variable | Effect |
 |---|---|

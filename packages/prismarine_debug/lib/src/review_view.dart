@@ -7,10 +7,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:prismarine_assets/prismarine_assets.dart' show encodePng;
 
 import 'frame_history.dart';
 import 'issue.dart';
-import 'png.dart';
 
 /// The save of the review with the issue and its PNGs by file name.
 typedef ReviewSave =
@@ -294,7 +294,13 @@ class _ReviewViewState extends State<ReviewView> {
     out.dispose();
     final bytes = TransferableTypedData.fromList([raw!.buffer.asUint8List()]);
     return Isolate.run(
-      () => encodePng(bytes.materialize().asUint8List(), w, h),
+      () => encodePng(
+        w,
+        h,
+        bytes.materialize().asUint8List(),
+        alpha: false,
+        level: 1,
+      ),
     );
   }
 
