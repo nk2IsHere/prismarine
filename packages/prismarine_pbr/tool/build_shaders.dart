@@ -61,6 +61,7 @@ Future<void> main(List<String> args) async {
           : backends,
       impellercArgs: const ['--metal-version=2.3'],
     ),
+    shard: 100,
     impellerc: impellerc,
   );
   if (report.failed.isNotEmpty) {
@@ -82,8 +83,32 @@ Future<void> main(List<String> args) async {
   );
 }
 
-/// The text of [f] with its includes in place, for the interface.
-String _expand(File f, Directory root) => f.readAsStringSync().replaceAllMapped(
-  RegExp(r'#include "([^"]+)"'),
-  (m) => _expand(File('${root.path}/${m[1]}'), root),
-);
+/// The text of [f] with its includes in place and the lines that its
+/// `#ifdef` and `#ifndef` blocks leave out removed, for the interface.
+String _expand(File f, Directory root) {
+  final defined = <String>{};
+  final active = <bool>[];
+  final out = StringBuffer();
+  for (final line in _included(f, root).split('\n')) {
+    final t = line.trim();
+    final on = active.every((a) => a);
+    if (t.startsWith('#ifdef ') || t.startsWith('#ifndef ')) {
+      final name = t.split(RegExp(r'\s+'))[1];
+      active.add(defined.contains(name) == t.startsWith('#ifdef '));
+    } else if (t.startsWith('#else')) {
+      active.add(!active.removeLast());
+    } else if (t.startsWith('#endif')) {
+      active.removeLast();
+    } else if (on) {
+      if (t.startsWith('#define ')) defined.add(t.split(RegExp(r'\s+'))[1]);
+      out.writeln(line);
+    }
+  }
+  return out.toString();
+}
+
+String _included(File f, Directory root) =>
+    f.readAsStringSync().replaceAllMapped(
+      RegExp(r'#include "([^"]+)"'),
+      (m) => _included(File('${root.path}/${m[1]}'), root),
+    );

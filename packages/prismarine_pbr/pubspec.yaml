@@ -8,6 +8,8 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
+  prismarine_assets:
+    path: ../prismarine_assets
   prismarine_frame:
     path: ../prismarine_frame
   prismarine_math:
@@ -21,8 +23,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  prismarine_assets:
-    path: ../prismarine_assets
   prismarine_shaders:
     path: ../prismarine_shaders
 dependency_overrides:

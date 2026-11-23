@@ -1,0 +1,30 @@
+#version 460 core
+// The irradiance of the sky on a surface facing each direction, the cosine
+// sum over a small mip of the sky map.
+precision highp float;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+#include "Pbr/bodies/gi_common.glsl"
+
+uniform texture2D source; // t0
+uniform sampler s1;
+#define source_S s1
+layout(rgba16f) uniform writeonly image2D skyIrradiance;
+
+void main() {
+  ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+  ivec2 size = imageSize(skyIrradiance);
+  if (any(greaterThanEqual(p, size))) return;
+  vec3 n = equirectDirection((vec2(p) + 0.5) / vec2(size));
+  ivec2 s = textureSize(sampler2D(source, s1), 0);
+  vec3 sum = vec3(0.0);
+  for (int y = 0; y < s.y; y++) {
+    float theta = (float(y) + 0.5) / float(s.y) * PI;
+    float solid = (2.0 * PI / float(s.x)) * (PI / float(s.y)) * sin(theta);
+    for (int x = 0; x < s.x; x++) {
+      vec3 d = equirectDirection((vec2(x, y) + 0.5) / vec2(s));
+      float c = dot(n, d);
+      if (c > 0.0) sum += texelFetch(sampler2D(source, s1), ivec2(x, y), 0).rgb * c * solid;
+    }
+  }
+  imageStore(skyIrradiance, p, vec4(sum, 1.0));
+}

@@ -4,6 +4,8 @@
 // `--perf=<seconds>` flies a fixed path and logs the frame times.
 // `--shot=<png>` lays the view out at 1600 by 900 points with `--panel`
 // open or not and writes it after `--shot-after=<seconds>`, 8 by default.
+// `--gi=off`, `--gi-off=<effects>`, `--quality=<preset>` and
+// `--debug-view=<view>` set the indirect light.
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -11,6 +13,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:prismarine_pbr/prismarine_pbr.dart';
 
 import 'src/perf.dart';
 import 'src/sample_renderer.dart';
@@ -43,6 +46,11 @@ void main(List<String> args) {
       sun: opt(
         'sun',
       )?.split(',').map((v) => double.parse(v) * math.pi / 180).toList(),
+      giOff: opt('gi') == 'off'
+          ? const {'sky', 'probes', 'ao', 'ssr'}
+          : (opt('gi-off')?.split(',').toSet() ?? const {}),
+      quality: opt('quality'),
+      debugView: opt('debug-view'),
     ),
   );
 }
@@ -76,6 +84,9 @@ class SampleApp extends StatefulWidget {
     this.shadowView = false,
     this.noShadows = false,
     this.sun,
+    this.giOff = const {},
+    this.quality,
+    this.debugView,
   });
 
   final String data;
@@ -101,6 +112,14 @@ class SampleApp extends StatefulWidget {
   /// directional light of the scene.
   final List<double>? sun;
 
+  /// The effects of the indirect light to switch off: `sky`, `probes`, `ao`
+  /// and `ssr`.
+  final Set<String> giOff;
+
+  /// The name of the quality preset and of the debug view, or null for the
+  /// defaults.
+  final String? quality, debugView;
+
   @override
   State<SampleApp> createState() => _SampleAppState();
 }
@@ -118,10 +137,24 @@ class _SampleAppState extends State<SampleApp> {
   Future<void> _load() async {
     try {
       final sw = Stopwatch()..start();
-      final r = await SampleRenderer.load(widget.data);
+      final off = widget.giOff;
+      final r = await SampleRenderer.load(
+        widget.data,
+        gi: !off.contains('probes'),
+      );
       r.builder.settings
         ..showShadowMap = widget.shadowView
         ..shadows = !widget.noShadows;
+      final gi = r.builder.settings.gi;
+      if (widget.quality case final q?) gi.quality = GiQuality.values.byName(q);
+      if (widget.debugView case final v?) {
+        gi.debugView = GiDebugView.values.byName(v);
+      }
+      gi
+        ..sky = !off.contains('sky')
+        ..probes = !off.contains('probes')
+        ..ambientOcclusion = !off.contains('ao')
+        ..reflections = !off.contains('ssr');
       if (widget.sun case [final elevation, final azimuth]) {
         r.builder.settings.sunDirection.setValues(
           math.cos(elevation) * math.cos(azimuth),

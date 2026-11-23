@@ -14,8 +14,9 @@ class SampleRenderer {
   SampleRenderer._(this.scenes, this.builder, this.runner, this.credits);
 
   /// Loads every prepared package in `<dataDir>/prepared` and the shader
-  /// bundle of the app's assets, then reads every texture.
-  static Future<SampleRenderer> load(String dataDir) async {
+  /// bundle of the app's assets, then reads every texture. With [gi] it
+  /// builds the voxel copy of the scenes for the probes meanwhile.
+  static Future<SampleRenderer> load(String dataDir, {bool gi = true}) async {
     final root = Directory('$dataDir/prepared');
     if (!root.existsSync()) {
       throw StateError(
@@ -36,6 +37,8 @@ class SampleRenderer {
             if (bn == 'main') return 1;
             return an.compareTo(bn);
           });
+    final paths = [for (final d in dirs) '${d.path}/scene.gltf'];
+    final volume = gi ? loadGiVolume(paths) : null;
     final scenes = <String, GpuScene>{
       for (final d in dirs) _name(d): GpuScene.load('${d.path}/scene.gltf'),
     };
@@ -66,6 +69,15 @@ class SampleRenderer {
           ..negate();
         break;
       }
+    }
+    if (volume != null) {
+      final sw = Stopwatch()..start();
+      final v = builder.giVolume = await volume;
+      stdout.writeln(
+        'sample: GI volume of ${v.nx}x${v.ny}x${v.nz} cells of '
+        '${v.cell.toStringAsFixed(3)} m, ${v.activeCount} of '
+        '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
+      );
     }
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
@@ -136,6 +148,23 @@ class SampleRenderer {
     _inFlight++;
     // alloc: the runner's run is asynchronous and returns a future.
     return runner.run(plan, present: PbrTargets.backbuffer).whenComplete(_done);
+  }
+
+  /// Runs frames from camera [camera] until each probe had [cycles]
+  /// updates, for pictures that do not depend on the time since the load.
+  Future<void> warmProbes(
+    PbrCamera camera,
+    int w,
+    int h, {
+    int cycles = 4,
+  }) async {
+    final v = builder.giVolume;
+    if (v == null || !builder.settings.gi.probes) return;
+    final per = builder.settings.gi.probesPerFrame;
+    final frames = cycles * ((v.activeCount + per - 1) ~/ per);
+    for (var i = 0; i < frames; i++) {
+      await submit(camera, w, h);
+    }
   }
 
   void _done() {

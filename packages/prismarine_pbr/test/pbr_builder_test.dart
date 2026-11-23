@@ -46,15 +46,32 @@ void main() {
     final b = PbrBuilder([scene]);
     final plan = b.frame(PbrCamera(), 64, 32);
     final passes = {
-      for (final p in plan.passes.cast<RenderPassPlan>()) p.name: p.draws,
+      for (final p in plan.passes.whereType<RenderPassPlan>()) p.name: p.draws,
     };
-    expect(passes.keys, ['shadow', 'opaque', 'blend', 'markers', 'tonemap']);
+    expect(passes.keys, [
+      'shadow',
+      'opaque',
+      'sky',
+      'ao',
+      'aoBlur',
+      'ssr',
+      'indirect',
+      'history',
+      'historyMip1',
+      'historyMip2',
+      'historyMip3',
+      'historyMip4',
+      'blend',
+      'markers',
+      'tonemap',
+    ]);
     expect(passes['shadow']!.map((d) => d.label), ['OPAQUE', 'MASK']);
     expect(passes['opaque']!.map((d) => d.pixel), [
       PbrShaderIds.litPixel,
       PbrShaderIds.litMaskedPixel,
     ]);
     expect(passes['blend']!.single.label, 'BLEND');
+    expect(passes['blend']!.single.pixel, PbrShaderIds.litBlendPixel);
     // glTF's counter-clockwise fronts are clockwise on the render target.
     expect(passes['opaque']!.first.state.frontCounterClockwise, isFalse);
     expect(passes['opaque']!.first.state.cull, 'back');
@@ -91,7 +108,7 @@ void main() {
     final blend = b
         .frame(cam..position.setValues(-100, 0, 0), 64, 32)
         .passes
-        .cast<RenderPassPlan>()
+        .whereType<RenderPassPlan>()
         .firstWhere((p) => p.name == 'blend');
     expect(blend.draws, hasLength(2));
     final far = blend.draws.first;

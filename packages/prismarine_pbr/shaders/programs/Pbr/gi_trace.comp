@@ -1,0 +1,147 @@
+#version 460 core
+// Traces the rays of this frame's probes through the voxel copy of the
+// scene. A hit returns the light that leaves the cell towards the probe, a
+// miss the sky. Each row of giRays holds the rays of one probe, the radiance
+// in rgb and the distance to the hit in alpha, negative for a miss.
+precision highp float;
+precision highp int;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+#include "Pbr/bodies/frame_block.glsl"
+#include "Pbr/bodies/indirect_block.glsl"
+
+layout(std430) readonly buffer RawVoxels {
+  uint words[];
+} voxels;
+uniform textureBuffer giProbes; // t0
+uniform texture2D giIrradiance; // t1
+uniform sampler s1;
+#define giIrradiance_S s1
+uniform texture2D giDistance; // t2
+#define giDistance_S s1
+uniform texture2D skyEnv; // t3
+uniform sampler s2;
+#define skyEnv_S s2
+uniform texture2D shadowMap; // t4
+uniform samplerShadow s4;
+#define shadowMap_S s4
+layout(rgba16f) uniform writeonly image2D giRays;
+
+#include "Pbr/bodies/gi_probes.glsl"
+
+vec3 skyTowards(vec3 d) {
+  if (cb2.switches.x < 0.5) {
+    return mix(cb0.groundColor.rgb, cb0.skyColor.rgb, clamp(d.y * 0.5 + 0.5, 0.0, 1.0));
+  }
+  return textureLod(sampler2D(skyEnv, s2), equirect(d), 2.0).rgb * cb2.skyParams.x;
+}
+
+float sunVisible(vec3 p) {
+  if (cb0.sunDirection.w < 0.5) return 1.0;
+  vec4 s = cb0.shadowMatrix * vec4(p, 1.0);
+  if (s.z >= 1.0) return 1.0;
+  return texture(sampler2DShadow(shadowMap, s4), vec3(s.xy, s.z - cb0.shadowParams.y));
+}
+
+// The light that reaches a point p with normal n from the sun and the point
+// lights. A double-sided cell takes light from both sides.
+vec3 directLight(vec3 p, vec3 n, bool twoSided) {
+  vec3 sun = cb0.sunDirection.xyz;
+  float ns = dot(n, sun);
+  if (twoSided) ns = abs(ns);
+  vec3 light = vec3(0.0);
+  if (ns > 0.0) light += cb0.sunColor.rgb * ns * sunVisible(p);
+  int count = int(cb0.groundColor.w);
+  for (int i = 0; i < 16; i++) {
+    if (i >= count) break;
+    vec4 lp = cb0.lightPosition[i];
+    vec3 d = lp.xyz - p;
+    float dist2 = max(dot(d, d), 1e-4);
+    float r = dist2 / (lp.w * lp.w);
+    float falloff = clamp(1.0 - r * r, 0.0, 1.0) / dist2;
+    float nl = dot(n, d) * inversesqrt(dist2);
+    if (twoSided) nl = abs(nl);
+    if (falloff > 0.0 && nl > 0.0) light += cb0.lightColor[i].rgb * falloff * nl;
+  }
+  return light;
+}
+
+void main() {
+  int ray = int(gl_GlobalInvocationID.x);
+  int row = int(gl_GlobalInvocationID.y);
+  int rays = int(cb2.trace.w);
+  if (ray >= rays || float(row) >= cb2.trace.y) return;
+  ivec3 pc = probeGrid();
+  int listed = (int(cb2.trace.x) + row) % int(cb2.trace.z);
+  int probe = int(texelFetch(giProbes, pc.x * pc.y * pc.z + listed).x);
+  vec3 origin = probePosition(probe);
+  vec3 dir = rayRotation() * fibonacci(ray, rays);
+
+  ivec3 n = ivec3(cb2.voxelCounts.xyz);
+  float cell = cb2.voxelOrigin.w;
+  vec3 start = (origin - cb2.voxelOrigin.xyz) / cell;
+  vec3 safeInv = vec3(dir.x == 0.0 ? 1e6 : 1.0 / dir.x, dir.y == 0.0 ? 1e6 : 1.0 / dir.y, dir.z == 0.0 ? 1e6 : 1.0 / dir.z);
+  float t = 0.0;
+  // -1 while the ray is in the grid, -2 once it left it.
+  int hit = -1;
+  ivec3 c = ivec3(0);
+  for (int i = 0; i < 384; i++) {
+    vec3 p = start + dir * t;
+    c = ivec3(floor(p));
+    if (any(lessThan(c, ivec3(0))) || any(greaterThanEqual(c, n))) {
+      hit = -2;
+      break;
+    }
+    int index = c.x + n.x * (c.y + n.y * c.z);
+    uint d = voxels.words[index * 2] >> 24;
+    if (d == 0u) {
+      hit = index;
+      break;
+    }
+    if (d > 1u) {
+      t += float(d - 1u);
+    } else {
+      // To the next cell boundary along the ray.
+      vec3 next = (floor(p) + step(vec3(0.0), dir) - p) * safeInv;
+      next = mix(next, vec3(1e9), lessThanEqual(abs(dir), vec3(1e-6)));
+      t += max(min(next.x, min(next.y, next.z)), 0.0) + 1e-3;
+    }
+  }
+  vec4 result;
+  if (hit == -2) {
+    result = vec4(skyTowards(dir), -1.0);
+  } else if (hit == -1) {
+    // Out of steps. The ray counts as a far hit without light.
+    result = vec4(0.0, 0.0, 0.0, cb2.voxelCounts.w);
+  } else {
+    uint w0 = voxels.words[hit * 2];
+    uint w1 = voxels.words[hit * 2 + 1];
+    uint flags = (w1 >> 16) & 255u;
+    float distance = t * cell;
+    if ((flags & 2u) != 0u) {
+      // Inside a closed part, which no light reaches.
+      result = vec4(0.0, 0.0, 0.0, distance * 0.2);
+    } else {
+      vec3 albedo = vec3(float(w0 & 255u), float((w0 >> 8) & 255u), float((w0 >> 16) & 255u)) / 255.0;
+      albedo *= albedo;
+      vec2 o = vec2(float(int(w1 << 24) >> 24), float(int(w1 << 16) >> 24)) / 127.0;
+      vec3 normal = octDecode(clamp(o, -1.0, 1.0));
+      bool twoSided = (flags & 1u) != 0u;
+      if (dot(normal, dir) > 0.0) {
+        if (twoSided) {
+          normal = -normal;
+        } else {
+          // The back of a surface. The probe sees into a part.
+          imageStore(giRays, ivec2(ray, row), vec4(0.0, 0.0, 0.0, distance * 0.2));
+          return;
+        }
+      }
+      vec3 p = origin + dir * (distance - 0.5 * cell) + normal * (0.5 * cell);
+      vec3 light = directLight(p, normal, twoSided);
+      if (cb2.switches.y > 0.5) {
+        light += probeIrradiance(p, normal, -dir).rgb * cb2.probeParams.y;
+      }
+      result = vec4(albedo / PI * light, distance);
+    }
+  }
+  imageStore(giRays, ivec2(ray, row), result);
+}

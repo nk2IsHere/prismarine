@@ -5,6 +5,8 @@ import 'package:prismarine_frame/prismarine_frame.dart';
 import 'package:prismarine_scene/model.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import 'gi/gi_passes.dart';
+import 'gi/gi_volume.dart';
 import 'pbr_blocks.dart';
 import 'pbr_settings.dart';
 
@@ -61,13 +63,22 @@ class PbrBuilder {
   Vector3 get boundsMax => _max;
 
   FramePlan? _plan;
-  int _width = 0, _height = 0, _shadowSize = 0;
+  int _width = 0, _height = 0, _shadowSize = 0, _giKey = 0;
   bool _shadowView = false;
+
+  /// The passes of the indirect light.
+  late final gi = GiPasses(settings.gi);
+
+  /// The voxel copy of the scenes for the probes, null until the app sets
+  /// it. A new volume makes a new plan.
+  GiVolume? get giVolume => gi.volume;
+  set giVolume(GiVolume? v) => gi.volume = v;
 
   final _frame = FrameBlock(), _shadowFrame = FrameBlock();
   final _tonemap = Uint8List(16);
   late final _tonemapData = ByteData.sublistView(_tonemap);
-  final _retained = <String, int>{'shadow': 0};
+  final _retained = <String, int>{'shadow': 0, 'gi.brdf': 1};
+  List<String> _skyPasses = const [];
   final _blend = <_BlendDraw>[];
   List<DrawPlan> _blendDraws = const [];
 
@@ -81,12 +92,18 @@ class PbrBuilder {
         width != _width ||
         height != _height ||
         settings.shadowSize != _shadowSize ||
-        settings.showShadowMap != _shadowView) {
+        settings.showShadowMap != _shadowView ||
+        gi.planKey != _giKey) {
       _plan = _make(width, height);
     }
     _writeFrame(camera, width / height);
     _sortBlend(camera.position);
-    _retained['shadow'] = settings.shadows ? _sunStamp() : 0;
+    final sun = _sunStamp();
+    _retained['shadow'] = settings.shadows ? sun : 0;
+    final sky = _skyPasses;
+    for (var i = 0; i < sky.length; i++) {
+      _retained[sky[i]] = sun;
+    }
     return _plan!;
   }
 
@@ -112,6 +129,8 @@ class PbrBuilder {
     _height = height;
     _shadowSize = settings.shadowSize;
     _shadowView = settings.showShadowMap;
+    _giKey = gi.planKey;
+    _skyPasses = gi.skyPasses;
     final s = _shadowSize.toDouble();
     final view = <double>[0, 0, width.toDouble(), height.toDouble(), 0, 1];
     final shadowView = <double>[0, 0, s, s, 0, 1];
@@ -119,6 +138,7 @@ class PbrBuilder {
     final shadowRole = FrameRole('pbr.shadowFrame');
     final tonemapRole = FrameRole('pbr.tonemap');
     final opaque = <(int, DrawPlan)>[];
+    final giTextures = gi.textures;
     final shadow = <DrawPlan>[];
     _blend.clear();
     for (final scene in scenes) {
@@ -138,7 +158,11 @@ class PbrBuilder {
         final pixel = _materialTextures(scene, m);
         final lit = DrawPlan(
           vertex: PbrShaderIds.litVertex,
-          pixel: masked ? PbrShaderIds.litMaskedPixel : PbrShaderIds.litPixel,
+          pixel: blended
+              ? PbrShaderIds.litBlendPixel
+              : masked
+              ? PbrShaderIds.litMaskedPixel
+              : PbrShaderIds.litPixel,
           geometry: geometry,
           state: blended
               ? (m.doubleSided ? _blendTwoSided : _blendOneSided)
@@ -147,11 +171,21 @@ class PbrBuilder {
           vertexResources: StageResources(
             blocks: {'Frame': frameRole.block, 'Draw': block},
           ),
-          pixelResources: StageResources(
-            blocks: {'Frame': frameRole.block, 'Draw': block},
-            textures: pixel,
-            samplers: _samplers,
-          ),
+          pixelResources: blended
+              ? StageResources(
+                  blocks: {
+                    'Frame': frameRole.block,
+                    'Draw': block,
+                    'Indirect': gi.role.block,
+                  },
+                  textures: {...pixel, ...giTextures},
+                  samplers: {..._samplers, ...GiPasses.samplers},
+                )
+              : StageResources(
+                  blocks: {'Frame': frameRole.block, 'Draw': block},
+                  textures: pixel,
+                  samplers: _samplers,
+                ),
           label: m.name,
         );
         if (blended) {
@@ -237,13 +271,15 @@ class PbrBuilder {
       ),
       label: 'tonemap',
     );
+    final targets = {
+      PbrTargets.shadowMap: TargetSpec(_shadowSize, _shadowSize, 'D32_FLOAT'),
+      PbrTargets.hdr: TargetSpec(width, height, 'R16G16B16A16_FLOAT'),
+      PbrTargets.depth: TargetSpec(width, height, 'D32_FLOAT'),
+      PbrTargets.backbuffer: TargetSpec(width, height, 'R8G8B8A8_UNORM'),
+    };
+    gi.addTargets(targets, width, height);
     return FramePlan(
-      {
-        PbrTargets.shadowMap: TargetSpec(_shadowSize, _shadowSize, 'D32_FLOAT'),
-        PbrTargets.hdr: TargetSpec(width, height, 'R16G16B16A16_FLOAT'),
-        PbrTargets.depth: TargetSpec(width, height, 'D32_FLOAT'),
-        PbrTargets.backbuffer: TargetSpec(width, height, 'R8G8B8A8_UNORM'),
-      },
+      targets,
       [
         RenderPassPlan(
           'shadow',
@@ -251,6 +287,7 @@ class PbrBuilder {
           const Attachment(PbrTargets.shadowMap, clearDepth: 1),
           shadow,
         ),
+        ...gi.before(frameRole.block, PbrTargets.shadowMap),
         RenderPassPlan(
           'opaque',
           [
@@ -263,10 +300,13 @@ class PbrBuilder {
                 1,
               ],
             ),
+            const Attachment(GiTargets.gbufferNormal, clear: [0, 0, 0, 0]),
+            const Attachment(GiTargets.gbufferAlbedo, clear: [0, 0, 0, 0]),
           ],
           const Attachment(PbrTargets.depth, clearDepth: 1),
           [for (final (_, d) in opaque) d],
         ),
+        ...gi.after(frameRole.block, PbrTargets.hdr, PbrTargets.depth, view),
         RenderPassPlan(
           'blend',
           const [Attachment(PbrTargets.hdr)],
@@ -290,6 +330,7 @@ class PbrBuilder {
         frameRole.block: _frame.bytes,
         shadowRole.block: _shadowFrame.bytes,
         tonemapRole.block: _tonemap,
+        gi.role.block: gi.block.bytes,
       },
       retained: _retained,
     );
@@ -356,6 +397,14 @@ class PbrBuilder {
     );
     _shadowFrame.matrix(0, _sunViewProjection);
     _tonemapData.setFloat32(0, settings.exposure, Endian.little);
+    final v = camera.view.storage;
+    _cameraForward.setValues(-v[2], -v[6], -v[10]);
+    gi.write(
+      _viewProjection,
+      _projection,
+      _cameraForward,
+      settings.sunIntensity,
+    );
   }
 
   final _projection = Matrix4.zero(), _viewProjection = Matrix4.zero();
@@ -363,6 +412,7 @@ class PbrBuilder {
   final _sunViewProjection = Matrix4.zero(), _shadowMatrix = Matrix4.zero();
   final _sunEye = Vector3.zero(), _center = Vector3.zero();
   final _up = Vector3.zero(), _forward = Vector3.zero();
+  final _cameraForward = Vector3.zero();
   final _scratch = Vector3.zero();
 
   Vector3 _scaled(Vector3 v, double s) => _scratch

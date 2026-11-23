@@ -1,9 +1,14 @@
 // The lit pixel stage: glTF metallic-roughness with a GGX distribution,
 // height-correlated Smith visibility and Schlick Fresnel, a sun with a
 // filtered shadow map, point lights with the range falloff of
-// KHR_lights_punctual, a sky and ground ambient term and emission.
+// KHR_lights_punctual and emission. An opaque draw writes its normal,
+// roughness, metallic value and base colour for the indirect pass. A
+// blended draw, with BLENDED defined, adds its indirect light itself.
 precision highp float;
 #include "Pbr/bodies/blocks.glsl"
+#ifdef BLENDED
+#include "Pbr/bodies/indirect_block.glsl"
+#endif
 
 uniform texture2D baseColor; // t0
 uniform sampler s0;
@@ -23,9 +28,45 @@ layout(location = 1) in vec3 worldNormal;
 layout(location = 2) in vec4 worldTangent;
 layout(location = 3) in vec2 uv;
 
-layout(location = 0) out vec4 color;
-
+#ifdef BLENDED
+uniform texture2D giIrradiance; // t6
+uniform sampler s1;
+#define giIrradiance_S s1
+uniform texture2D giDistance; // t7
+#define giDistance_S s1
+uniform textureBuffer giProbes; // t8
+uniform texture2D skyEnv; // t9
+uniform sampler s2;
+#define skyEnv_S s2
+uniform texture2D skySpecular; // t10
+#define skySpecular_S s2
+uniform texture2D skyIrradiance; // t11
+#define skyIrradiance_S s2
+uniform texture2D brdfLut; // t12
+#define brdfLut_S s1
+#include "Pbr/bodies/gi_probes.glsl"
+#include "Pbr/bodies/sky_read.glsl"
+#include "Pbr/bodies/indirect_light.glsl"
+#else
 const float PI = 3.14159265;
+
+vec2 signNotZero(vec2 v) {
+  return vec2(v.x >= 0.0 ? 1.0 : -1.0, v.y >= 0.0 ? 1.0 : -1.0);
+}
+
+vec2 octEncode(vec3 n) {
+  n /= abs(n.x) + abs(n.y) + abs(n.z);
+  vec2 o = n.xz;
+  if (n.y < 0.0) o = (1.0 - abs(o.yx)) * signNotZero(o);
+  return o;
+}
+#endif
+
+layout(location = 0) out vec4 color;
+#ifndef BLENDED
+layout(location = 1) out vec4 gbufferNormal;
+layout(location = 2) out vec4 gbufferAlbedo;
+#endif
 
 float distributionGgx(float nh, float a2) {
   float f = (nh * a2 - nh) * nh + 1.0;
@@ -108,9 +149,14 @@ void main() {
     result += surface(n, v, d * inversesqrt(dist2), albedo, f0, a2) *
         cb0.lightColor[i].rgb * falloff;
   }
-  float up = n.y * 0.5 + 0.5;
-  vec3 ambient = mix(cb0.groundColor.rgb, cb0.skyColor.rgb, up);
-  result += ambient * (albedo + f0 * 0.25);
   result += texture(sampler2D(emissiveMap, s0), uv).rgb * cb1.emissive.rgb;
+#ifdef BLENDED
+  vec3 diffuse, specular;
+  indirectTerms(worldPosition, n, v, base.rgb, metallic, roughness, 1.0, vec4(0.0), diffuse, specular);
+  result += diffuse + specular;
+#else
+  gbufferNormal = vec4(octEncode(n), roughness, metallic);
+  gbufferAlbedo = vec4(base.rgb, 1.0);
+#endif
   color = vec4(result, base.a);
 }

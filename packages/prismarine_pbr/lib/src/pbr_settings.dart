@@ -1,10 +1,13 @@
 import 'package:vector_math/vector_math_64.dart';
 
+import 'pbr_gi_settings.dart';
+
 /// The ids of the shaders of the renderer in its bundle.
 abstract final class PbrShaderIds {
   static const litVertex = 'Pbr/lit.vert',
       litPixel = 'Pbr/lit.frag',
       litMaskedPixel = 'Pbr/lit_masked.frag',
+      litBlendPixel = 'Pbr/lit_blend.frag',
       shadowVertex = 'Pbr/shadow.vert',
       shadowMaskedPixel = 'Pbr/shadow_masked.frag',
       nullPixel = 'Pbr/null.frag',
@@ -18,6 +21,7 @@ abstract final class PbrShaderIds {
     litVertex,
     litPixel,
     litMaskedPixel,
+    litBlendPixel,
     shadowVertex,
     shadowMaskedPixel,
     nullPixel,
@@ -101,4 +105,7 @@ class PbrSettings {
   /// The depth bias of the shadow test and the offset along the normal in
   /// world units.
   double shadowBias = 0.0008, normalOffset = 0.02;
+
+  /// The settings of the indirect light.
+  final gi = PbrGiSettings();
 }

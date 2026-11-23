@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:prismarine_debug/prismarine_debug.dart';
+import 'package:prismarine_pbr/prismarine_pbr.dart';
 
 import 'fly_camera.dart';
 import 'light_show.dart';
@@ -92,6 +93,109 @@ class _SamplePanelState extends State<SamplePanel> {
         ),
       ),
       SizedBox(width: 44, child: Text(value.toStringAsFixed(2), style: style)),
+    ],
+  );
+
+  Widget _switch(
+    String label,
+    bool value,
+    void Function(bool) set,
+    TextStyle s,
+  ) => SwitchListTile(
+    dense: true,
+    title: Text(label, style: s),
+    value: value,
+    onChanged: (v) => setState(() => set(v)),
+  );
+
+  Widget _choice<T extends Enum>(
+    String label,
+    List<T> values,
+    T now,
+    void Function(T) set,
+    TextStyle s,
+  ) => Row(
+    children: [
+      SizedBox(width: 110, child: Text(label, style: s)),
+      Expanded(
+        child: Wrap(
+          children: [
+            for (final v in values)
+              TextButton(
+                onPressed: () => setState(() => set(v)),
+                child: Text(
+                  v.name,
+                  style: s.copyWith(
+                    fontWeight: v == now ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  /// The section of the indirect light: the switches, the preset, the debug
+  /// view and the factors.
+  Widget _giSection(PbrGiSettings gi, PanelContext p) => PanelSection(
+    'Indirect light',
+    open: p.open,
+    children: [
+      _switch('Sky', gi.sky, (v) => gi.sky = v, p.small),
+      _switch('Probes', gi.probes, (v) => gi.probes = v, p.small),
+      _switch(
+        'Ambient occlusion',
+        gi.ambientOcclusion,
+        (v) => gi.ambientOcclusion = v,
+        p.small,
+      ),
+      _switch(
+        'Reflections',
+        gi.reflections,
+        (v) => gi.reflections = v,
+        p.small,
+      ),
+      _choice('Quality', GiQuality.values, gi.quality, (q) {
+        gi.quality = q;
+      }, p.small),
+      _choice('View', GiDebugView.values, gi.debugView, (v) {
+        gi.debugView = v;
+      }, p.small),
+      _slider('Indirect', gi.intensity, 0, 3, (v) => gi.intensity = v, p.small),
+      _slider(
+        'Sky light',
+        gi.skyIntensity,
+        0,
+        3,
+        (v) => gi.skyIntensity = v,
+        p.small,
+      ),
+      _slider('Bounce', gi.bounce, 0, 1, (v) => gi.bounce = v, p.small),
+      _slider(
+        'Hysteresis',
+        gi.hysteresis,
+        0,
+        0.98,
+        (v) => gi.hysteresis = v,
+        p.small,
+      ),
+      _slider(
+        'AO radius',
+        gi.aoRadius,
+        0.1,
+        3,
+        (v) => gi.aoRadius = v,
+        p.small,
+      ),
+      _slider(
+        'AO strength',
+        gi.aoIntensity,
+        0,
+        3,
+        (v) => gi.aoIntensity = v,
+        p.small,
+      ),
     ],
   );
 
@@ -218,6 +322,7 @@ class _SamplePanelState extends State<SamplePanel> {
               ),
             ],
           ),
+          _giSection(r.builder.settings.gi, p),
           PanelSection(
             'Camera',
             open: p.open,

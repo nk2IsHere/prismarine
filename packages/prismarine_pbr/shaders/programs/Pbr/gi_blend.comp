@@ -1,0 +1,68 @@
+#version 460 core
+// Weighs the rays of each probe of this frame into the inner texels of its
+// tiles and blends them with the old values. One group of 16 by 16 is one
+// probe. The irradiance holds pi times the cosine-weighted mean radiance with
+// the share of the sky in alpha. The distance holds the mean distance to a
+// hit and its square, weighted towards each texel's direction.
+precision highp float;
+precision highp int;
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+#include "Pbr/bodies/indirect_block.glsl"
+
+uniform textureBuffer giProbes; // t0
+uniform texture2D giRays; // t1
+uniform sampler s1;
+#define giRays_S s1
+uniform texture2D giIrradiance; // t2
+#define giIrradiance_S s1
+uniform texture2D giDistance; // t3
+#define giDistance_S s1
+layout(rgba16f) uniform writeonly image2D giIrradianceNext;
+layout(rgba16f) uniform writeonly image2D giDistanceNext;
+
+void main() {
+  int row = int(gl_WorkGroupID.x);
+  if (float(row) >= cb2.trace.y) return;
+  ivec2 t = ivec2(gl_LocalInvocationID.xy);
+  if (any(lessThan(t, ivec2(1))) || any(greaterThan(t, ivec2(14)))) return;
+  ivec3 pc = ivec3(cb2.probeCounts.xyz);
+  int listed = (int(cb2.trace.x) + row) % int(cb2.trace.z);
+  int probe = int(texelFetch(giProbes, pc.x * pc.y * pc.z + listed).x);
+  int tiles = int(cb2.probeCounts.w);
+  ivec2 tile = ivec2(probe % tiles, probe / tiles);
+  bool irradiance = all(lessThanEqual(t, ivec2(6)));
+  vec3 di = octDecode((vec2(t - 1) + 0.5) / 6.0 * 2.0 - 1.0);
+  vec3 dd = octDecode((vec2(t - 1) + 0.5) / 14.0 * 2.0 - 1.0);
+  int rays = int(cb2.trace.w);
+  mat3 rotation = rayRotation();
+  float far = cb2.voxelCounts.w;
+  vec4 sum = vec4(0.0);
+  float weights = 0.0;
+  vec2 moments = vec2(0.0);
+  float distanceWeights = 0.0;
+  for (int r = 0; r < rays; r++) {
+    vec4 ray = texelFetch(sampler2D(giRays, s1), ivec2(r, row), 0);
+    vec3 d = rotation * fibonacci(r, rays);
+    float miss = ray.a < 0.0 ? 1.0 : 0.0;
+    if (irradiance) {
+      float w = max(dot(di, d), 0.0);
+      sum += vec4(ray.rgb, miss) * w;
+      weights += w;
+    }
+    float wd = pow(max(dot(dd, d), 0.0), 50.0);
+    float dist = ray.a < 0.0 ? far : min(ray.a, far);
+    moments += vec2(dist, dist * dist) * wd;
+    distanceWeights += wd;
+  }
+  float h = cb2.probeParams.x;
+  if (irradiance) {
+    ivec2 at = tile * 8 + t;
+    vec4 now = weights > 0.0 ? vec4(sum.rgb * PI, sum.a) / weights : vec4(0.0);
+    vec4 old = texelFetch(sampler2D(giIrradiance, s1), at, 0);
+    imageStore(giIrradianceNext, at, mix(now, old, h));
+  }
+  ivec2 at = tile * 16 + t;
+  vec2 now = distanceWeights > 0.0 ? moments / distanceWeights : vec2(far, far * far);
+  vec2 old = texelFetch(sampler2D(giDistance, s1), at, 0).rg;
+  imageStore(giDistanceNext, at, vec4(mix(now, old, h), 0.0, 1.0));
+}

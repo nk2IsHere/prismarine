@@ -62,6 +62,7 @@ Future<int> runSmoke(
       view.yfov = cams[i].yfov;
     }
     fly.step(0, _noPad, view);
+    if (i == 0) await r.warmProbes(view, smokeWidth, smokeHeight);
     // The second frame runs with the shadow pass kept from the first.
     await r.submit(view, smokeWidth, smokeHeight);
     await r.submit(view, smokeWidth, smokeHeight);
