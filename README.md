@@ -36,12 +36,23 @@ gets collections at idle points of the frame and heap figures for the debug tool
 
 ## Platforms
 
-prismarine draws through Metal on macOS and through Vulkan on Linux and Windows. OpenGL ES is not supported.
+prismarine renders through Metal on macOS and through Vulkan on Linux and Windows. OpenGL ES is not supported.
+
+| Platform | Graphics | Lowest tested version | Tested on |
+|---|---|---|---|
+| macOS | Metal | macOS 27.2 | Apple M2 Pro |
+| Linux | Vulkan | Ubuntu 26.04 LTS | NVIDIA GeForce RTX 4060 Ti, driver 610 |
+| Windows | Vulkan 1.1 | Windows 10 21H2 | Intel UHD Graphics 620 |
 
 ## Tools
 
-The repository carries the lints that keep frames free of allocation, a heap and allocation profiler, a GPU smoke
-tool that checks the features of the engine on a machine and the release scripts of the engine.
+| Tool | Purpose |
+|---|---|
+| Allocation lint | Finds code on the frame path that allocates memory |
+| Code checks | Runs the analyzer, the formatters and checks of file size and comments against a baseline |
+| Heap and allocation profiler | Compares heap snapshots and shows the places that allocate |
+| GPU smoke tool | Checks the Flutter GPU features of the engine on a machine |
+| Engine release scripts | Build, package and fetch the patched engine for each platform |
 
 ## Licence
 
