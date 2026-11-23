@@ -1,0 +1,15 @@
+# The cook of the sample, read by the prismarine command and by hook/build.dart.
+shaders:
+  pbr:
+    package: prismarine_pbr
+    programs: shaders/programs
+    out: shaders_generated
+    shard: 100
+    impellerc-args: [--metal-version=2.3]
+assets:
+  sponza:
+    run: [dart, tool/fetch.dart, '--out={out}']
+    out: '{data}/sample'
+    out-env: PRISMARINE_SAMPLE_DATA
+    inputs: [tool/fetch.dart, tool/src, package:prismarine_assets]
+    exists: [prepared/main/scene.gltf, prepared/curtains/scene.gltf]

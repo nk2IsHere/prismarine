@@ -11,9 +11,12 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
+  hooks: ^2.0.0
   image: ^4.5.0
   prismarine_assets:
     path: ../../packages/prismarine_assets
+  prismarine_cook:
+    path: ../../packages/prismarine_cook
   prismarine_debug:
     path: ../../packages/prismarine_debug
   prismarine_loop:
@@ -42,7 +45,7 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
-  # The shaders of prismarine_pbr, built by tool/shaders.sh before a build.
+  # The shaders of prismarine_pbr, cooked by hook/build.dart from prismarine.yaml.
   assets:
     - shaders_generated/records.json
     - path: shaders_generated/bundle/metal/

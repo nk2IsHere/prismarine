@@ -36,7 +36,7 @@ class SampleDataMissing implements Exception {
 
   @override
   String toString() =>
-      'No prepared scene in $dir. Run `dart tool/fetch.dart` in '
+      'No prepared scene in $dir. Run `prismarine cook` in '
       'apps/prismarine_sample to download and prepare it there, or pass '
       '--data=<dir> with a prepared scene.';
 }

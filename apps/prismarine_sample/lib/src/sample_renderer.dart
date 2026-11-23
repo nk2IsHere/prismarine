@@ -15,11 +15,12 @@ import 'sample_data.dart';
 class SampleRenderer {
   SampleRenderer._(this.scenes, this.builder, this.runner, this.credits);
 
-  /// Loads every prepared package in `<dataDir>/prepared` and the shader
-  /// bundle of the app's assets, then reads every texture. It builds the
-  /// voxel copy of the scenes for the probes and the paths of the lights
-  /// meanwhile.
+  /// Checks the engine, then loads every prepared package in
+  /// `<dataDir>/prepared` and the shader bundle of the app's assets, then
+  /// reads every texture. It builds the voxel copy of the scenes for the
+  /// probes and the paths of the lights meanwhile.
   static Future<SampleRenderer> load(String dataDir) async {
+    requireEngine(pbrEngineFeatures);
     final root = Directory('$dataDir/prepared');
     if (!root.existsSync()) throw SampleDataMissing(dataDir);
     // The base scene first, then the add-ons in name order.

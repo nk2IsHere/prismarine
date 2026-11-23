@@ -139,7 +139,7 @@ packages:
     source: sdk
     version: "0.0.0"
   hooks:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: hooks
       sha256: eaac480a35ec0814146c2c48d96aaa829e0e44a7662c88ae84c9edf4bc35651f
@@ -245,6 +245,13 @@ packages:
     dependency: transitive
     description:
       path: "../../packages/prismarine_cargo"
+      relative: true
+    source: path
+    version: "0.0.0"
+  prismarine_cook:
+    dependency: "direct main"
+    description:
+      path: "../../packages/prismarine_cook"
       relative: true
     source: path
     version: "0.0.0"
