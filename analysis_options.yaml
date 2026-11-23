@@ -12,3 +12,4 @@ analyzer:
     # Flutter packages: `flutter analyze` covers them, against the Flutter SDK.
     - apps/prismarine_sample/**
     - packages/prismarine_loop/**
+    - packages/prismarine_scene/**
