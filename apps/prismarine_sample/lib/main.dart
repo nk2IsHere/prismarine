@@ -187,7 +187,8 @@ class _SampleAppState extends State<SampleApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: ColoredBox(color: Colors.black, child: home),
+      // The Material gives every text of the app its text style.
+      home: Material(color: Colors.black, child: home),
     );
   }
 

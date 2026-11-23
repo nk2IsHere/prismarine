@@ -305,8 +305,6 @@ class _CreditLineState extends State<CreditLine> {
       style: const TextStyle(
         color: Color(0xCCFFFFFF),
         fontSize: 12,
-        decoration: TextDecoration.none,
-        fontWeight: FontWeight.normal,
         shadows: [Shadow(blurRadius: 3)],
       ),
     );
