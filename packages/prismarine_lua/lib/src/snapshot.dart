@@ -1,12 +1,13 @@
-// Snapshot codecs for a Lua state (see formats/port/snapshot.md): tables,
-// closures, natives, threads, userdata, upvalues, prototypes (by their chunk,
-// loaded again) and the VM's own state. Every object keeps its id (table
-// order hashes by it).
+// Snapshot codecs for a Lua state. They cover tables, closures, natives,
+// threads, userdata, upvalues, prototypes and the state of the VM. A
+// prototype is written as its chunk, which the reader loads again. Every
+// object keeps its id, which orders the keys of a table.
 //
-// A Lua state's boot objects — everything made while its owner built it:
-// the libraries, the engine's natives and their tables — are named by their
-// creation order and taken from the fresh state the reader built the same
-// way; the rest are made new.
+// The boot objects of a state are the objects that its owner made while it
+// built the state, such as the libraries, the natives of the host and their
+// tables. A snapshot refers to them by creation order, and the reader takes
+// them from a fresh state that it built the same way. The reader makes the
+// other objects new.
 import 'dart:typed_data';
 
 import 'package:prismarine_snap/prismarine_snap.dart';
@@ -19,9 +20,9 @@ import 'state.dart';
 import 'table.dart';
 import 'value.dart';
 
-/// One Lua state as a snapshot sees it: its VM, its boot objects (creation
-/// order) and the owner's flags for it (the reader gets them back when it
-/// makes the state again).
+/// A Lua state of a snapshot with its VM, its boot objects in creation order
+/// and the flags of its owner. The reader gets the flags back when it makes
+/// the state again.
 class LuaSnapState {
   LuaSnapState(this.vm, this.boot, {this.flags = 0});
   final LuaVm vm;
@@ -29,28 +30,28 @@ class LuaSnapState {
   final int flags;
 }
 
-/// The Lua state a snapshot covers, shared by the codecs through
-/// [SnapWriter.env] / [SnapReader.env]: the current one. The writer also
-/// knows the owner's closed states: a snapshot that reaches one of their
-/// objects (an engine cache still holding a closed state's function) shows
-/// a port bug, and the write fails naming it rather than carrying the dead
-/// state along.
+/// The current Lua state of a snapshot, which the codecs get through
+/// [SnapWriter.env] and [SnapReader.env]. The writer also knows the closed
+/// states of the owner. A write that reaches an object of a closed state,
+/// such as a function in a cache of the host, fails with the path to it.
 class LuaSnapEnv {
-  /// The writer's: [current], and the owner's [closed] states.
+  /// The environment of a writer with the [current] state and the [closed]
+  /// states of the owner.
   LuaSnapEnv.writer(
     LuaSnapState current, {
     List<LuaSnapState> closed = const [],
   }) : _states = [current, ...closed];
 
-  /// The reader's: [current].
+  /// The environment of a reader with the [current] state.
   LuaSnapEnv.reader(LuaSnapState current) : _states = [current];
 
   final List<LuaSnapState> _states;
 
-  /// The current state's VM.
+  /// The VM of the current state.
   LuaVm get vm => _states.first.vm;
 
-  // Writer: object → (state, boot index); state 0 is the current one.
+  // The state and the boot index of each boot object. State 0 is the
+  // current one.
   late final Map<LuaObject, (int, int)> _index = () {
     final m = Map<LuaObject, (int, int)>.identity();
     for (var s = _states.length - 1; s >= 0; s--) {
@@ -69,8 +70,9 @@ class LuaSnapEnv {
     for (final e in luaSharedNatives.entries) e.value: e.key,
   };
 
-  /// Writes [o]'s boot reference: 0 when it isn't a boot object, else the
-  /// state's reference (1, the current one) and its index.
+  /// Writes the boot reference of [o]. The reference is 0 for an object that
+  /// is not a boot object, else the reference of the state, 1 for the
+  /// current one, and the index.
   bool _writeBoot(SnapWriter w, LuaObject o) {
     final at = _index[o];
     if (at == null) {
@@ -113,7 +115,7 @@ class LuaSnapEnv {
 LuaSnapEnv _envW(SnapWriter w) => w.env[LuaSnapEnv]! as LuaSnapEnv;
 LuaSnapEnv _envR(SnapReader r) => r.env[LuaSnapEnv]! as LuaSnapEnv;
 
-// The head of every Lua object: its id and its boot reference.
+// The head of every Lua object is its id and its boot reference.
 bool _head(SnapWriter w, LuaObject o) {
   w.uint(o.id);
   return _envW(w)._writeBoot(w, o);
@@ -122,9 +124,9 @@ bool _head(SnapWriter w, LuaObject o) {
 T? _boot<T extends LuaObject>(SnapReader r, String what) =>
     _envR(r)._readBoot<T>(r, what);
 
-/// Runs [build] (which makes a Lua state) and returns its result with the
-/// Lua objects it made, in creation order: the state's boot objects. The
-/// process-wide natives are made first, so they're never among them.
+/// Runs [build], which makes a Lua state. Returns its result with the boot
+/// objects of the state, the Lua objects that it made in creation order. The
+/// natives that the isolate shares are made first and are not among them.
 (T, List<LuaObject>) luaWithBoot<T>(T Function() build) {
   luaSharedNatives;
   final boot = <LuaObject>[];
@@ -137,13 +139,13 @@ T? _boot<T extends LuaObject>(SnapReader r, String what) =>
   }
 }
 
-/// The host resource a chunk name names (`@file` as the loaders name a
-/// file's chunk).
+/// The host resource of a chunk name. The loaders give a chunk of a file the
+/// name `@file`.
 String _resourceOf(String chunkName) =>
     chunkName.startsWith('@') ? chunkName.substring(1) : chunkName;
 
-/// FNV-1a over [b] (a chunk's identity check), computed once per byte
-/// list (a chunk's bytes don't change).
+/// The FNV-1a hash of the bytes [b] of a chunk, computed once for each byte
+/// list.
 int luaChunkHash(Uint8List b) => _chunkHashes[b] ??= _fnv(b);
 
 final _chunkHashes = Expando<int>('lua chunk hash');
@@ -173,7 +175,7 @@ void registerLuaSnap(SnapRegistry reg) {
     ..codec<LuaClosure>(
       'lua.Closure',
       writeNew: (w, o) {
-        // Closures are always made new (none is an engine root).
+        // A closure is not a boot object and is made new.
         w.uint(o.id);
         w.ref(o.p);
         w.list(o.upvals, w.ref);

@@ -1,5 +1,6 @@
-// Ported from Lua 5.2.3 ldebug.c, lobject.c (luaO_chunkid) and lauxlib.c
-// (luaL_argerror, luaL_traceback, pushglobalfuncname) (MIT; see LICENSE-lua).
+// Ported from Lua 5.2.3 ldebug.c, `luaO_chunkid` of lobject.c and
+// `luaL_argerror`, `luaL_traceback` and `pushglobalfuncname` of lauxlib.c
+// (MIT, see LICENSE-lua).
 
 import 'opcodes.dart';
 import 'proto.dart';
@@ -7,7 +8,8 @@ import 'state.dart';
 import 'table.dart';
 import 'value.dart';
 
-/// "No location" for an operand in error messages (a constant or temporary).
+/// The location of an operand without a register or upvalue in error
+/// messages, such as a constant or a temporary.
 const noLoc = -1 << 40;
 
 const _idSize = 60;
@@ -39,7 +41,8 @@ String _upvalName(LuaProto p, int uv) =>
 
 int _filterPc(int pc, int jmptarget) => pc < jmptarget ? -1 : pc;
 
-/// `findsetreg`: the last instruction before [lastpc] that changed [reg].
+/// `findsetreg`. Returns the last instruction before [lastpc] that changed
+/// [reg].
 int _findSetReg(LuaProto p, int lastpc, int reg) {
   var setreg = -1;
   var jmptarget = 0;
@@ -79,7 +82,8 @@ String _kname(LuaProto p, int pc, int c) {
   return '?';
 }
 
-/// `getobjname`: (kind, name) of register [reg] at [lastpc], or null.
+/// `getobjname`. Returns the kind and the name of register [reg] at
+/// [lastpc], or null.
 (String, String)? getObjName(LuaProto p, int lastpc, int reg) {
   final local = p.localName(reg + 1, lastpc);
   if (local != null) return ('local', local);
@@ -117,8 +121,8 @@ const _tmNames = [
   '__concat', '__call', //
 ];
 
-/// `getfuncname`: (namewhat, name) of the function the Lua frame [ci] is
-/// calling, from its current instruction.
+/// `getfuncname`. Returns the namewhat and the name of the function that the
+/// current instruction of the Lua frame [ci] calls.
 (String, String)? _getFuncName(CallInfo ci) {
   final p = ci.cl!.p;
   final pc = ci.savedPc - 1;
@@ -167,8 +171,9 @@ const _tmNames = [
   return ('metamethod', _tmNames[tm]);
 }
 
-/// The `"n"` part of `lua_getinfo` for the frame at index [ciIdx]:
-/// (namewhat, name) from the calling Lua instruction, unless tail-called.
+/// The `"n"` part of `lua_getinfo` for the frame at index [ciIdx]. Returns
+/// the namewhat and the name from the calling Lua instruction, or null for a
+/// tail call.
 (String, String)? frameName(LuaThread L, int ciIdx) {
   if (ciIdx <= 0) return null;
   final ci = L.cis[ciIdx];
@@ -219,7 +224,8 @@ void _funcInfo(LuaDebugInfo ar, Object? f) {
   ar.shortSrc = chunkId(ar.source);
 }
 
-/// `lua_getstack` + `lua_getinfo(L, "Slnutf")` for stack [level], or null.
+/// `lua_getstack` and `lua_getinfo(L, "Slnutf")` for stack [level], or
+/// null.
 LuaDebugInfo? getStackInfo(LuaThread L, int level) {
   final idx = L.ciIndex - level;
   if (level < 0 || idx <= 0) return null;
@@ -243,8 +249,9 @@ LuaDebugInfo getFunctionInfo(Object? f) {
   return ar;
 }
 
-/// The variable description of an operand at [loc] (`varinfo`): register
-/// index ≥ 0, `~upvalue` index, or [noLoc]; null when nothing is known.
+/// `varinfo`, the description of the operand at [loc]. [loc] is a register
+/// index of 0 or more, the complement of an upvalue index or [noLoc].
+/// Returns null when nothing is known.
 (String, String)? varInfo(LuaThread L, int loc) {
   final ci = L.ci;
   if (!ci.isLua || loc == noLoc) return null;
@@ -271,8 +278,8 @@ Never orderError(LuaThread L, Object? p1, Object? p2) {
   L.runError('attempt to compare $t1 with $t2');
 }
 
-/// `findfield`: a "key" or "key.key" path in [t] (string keys, `next`
-/// order, [level] deep) whose value is [obj].
+/// `findfield`. Returns the path "key" or "key.key" in [t] whose value is
+/// [obj], over string keys in `next` order and [level] tables deep.
 String? _findField(Object? t, Object? obj, int level) {
   if (level == 0 || t is! LuaTable) return null;
   Object? k;

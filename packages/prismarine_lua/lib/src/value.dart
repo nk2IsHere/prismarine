@@ -1,38 +1,38 @@
-// Lua values in Dart (lobject.h). nil is `null`, booleans are `bool`, numbers
-// are `double`s holding float32 values, strings are `String`s whose code units
-// are bytes; collectable objects extend [LuaObject].
+// Lua values in Dart, after lobject.h. nil is `null`, a boolean is a `bool`
+// and a number is a `double`. A string is a `String` whose code units are
+// bytes. Collectable objects extend [LuaObject].
 
 import 'table.dart';
 
 int _nextId = 1;
 
-/// The id the next [LuaObject] gets (snapshots save and restore it).
+/// The id of the next [LuaObject]. Snapshots save and restore it.
 int get luaNextId => _nextId;
 set luaNextId(int v) => _nextId = v;
 
-/// While set, every [LuaObject] made is added to it (a Lua state's boot
-/// objects, which a snapshot names by their creation order).
+/// Receives every [LuaObject] made while it is set. A state's boot objects
+/// are collected this way, and a snapshot refers to them by creation order.
 List<LuaObject>? luaCollect;
 
-/// A collectable Lua object. [id] stands in for its address wherever Lua
-/// hashes pointers (table keys) or prints them (`tostring`).
+/// A collectable Lua object. [id] takes the place of its address where Lua
+/// hashes a pointer, as for a table key, or prints it, as `tostring` does.
 abstract class LuaObject {
   LuaObject() {
     luaCollect?.add(this);
   }
 
-  /// Set once at creation; a snapshot's restore gives the object its id
-  /// from the snapshot.
+  /// Set once at creation. A snapshot's restore gives the object the id of
+  /// the snapshot.
   int id = _nextId++;
 }
 
 /// Closures and natives.
 abstract class LuaFunction extends LuaObject {}
 
-/// Lua threads (coroutines and script threads).
+/// A Lua thread, which is a coroutine or a script thread of the host.
 abstract class LuaThreadBase extends LuaObject {}
 
-/// Full userdata: engine objects and library handles (`io.stdout`).
+/// Full userdata, such as an object of the host or the handle `io.stdout`.
 class LuaUserdata extends LuaObject {
   LuaUserdata([this.payload]);
   Object? payload;
@@ -53,8 +53,8 @@ String luaTypeName(Object? v) => switch (v) {
   _ => throw StateError('not a Lua value: ${v.runtimeType}'),
 };
 
-/// `luaV_rawequalobj`: same type and value (numbers by value, strings by
-/// content, objects by identity).
+/// `luaV_rawequalobj`. Numbers compare by value, strings by content and
+/// objects by identity.
 bool luaRawEquals(Object? a, Object? b) {
   if (identical(a, b)) return true;
   if (a is double) return b is double && a == b;

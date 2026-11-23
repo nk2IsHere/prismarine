@@ -12,7 +12,7 @@ void main() {
       .where((f) => f.path.endsWith('.luac'))
       .toList();
 
-  test('every oracle-compiled fixture re-dumps byte-identically', () {
+  test('every fixture of the reference build re-dumps byte-identically', () {
     expect(goldens, isNotEmpty);
     for (final f in goldens) {
       final bytes = f.readAsBytesSync();

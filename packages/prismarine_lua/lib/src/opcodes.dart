@@ -1,4 +1,4 @@
-// Ported from Lua 5.2.3 lopcodes.h / lopcodes.c (MIT; see LICENSE-lua).
+// Ported from Lua 5.2.3 lopcodes.h and lopcodes.c (MIT, see LICENSE-lua).
 // ignore_for_file: constant_identifier_names
 
 import 'dart:typed_data';
@@ -34,7 +34,7 @@ enum OpMode { iABC, iABx, iAsBx, iAx }
 /// Argument kinds.
 enum OpArg { n, u, r, k }
 
-/// `luaP_opmodes`: (test, setsA, B kind, C kind, format).
+/// `luaP_opmodes` as records of test, sets A, B kind, C kind and format.
 const List<(bool, bool, OpArg, OpArg, OpMode)> opModes = [
   (false, true, OpArg.r, OpArg.n, OpMode.iABC), // MOVE
   (false, true, OpArg.k, OpArg.n, OpMode.iABx), // LOADK
@@ -83,11 +83,11 @@ const maxArgBx = (1 << 18) - 1,
     maxArgSBx = maxArgBx >> 1,
     maxArgAx = (1 << 26) - 1;
 
-/// Bit 8 of a B/C argument marks a constant index (`BITRK`).
+/// Bit 8 of a B or C argument marks a constant index, `BITRK`.
 const bitRK = 1 << 8;
 const maxIndexRK = bitRK - 1;
 
-/// Fields per OP_SETLIST flush (`LFIELDS_PER_FLUSH`).
+/// The fields per flush of OP_SETLIST, `LFIELDS_PER_FLUSH`.
 const lFieldsPerFlush = 50;
 
 /// The standard opcode of instruction [i].
@@ -106,13 +106,13 @@ int createABC(int o, int a, int b, int c) =>
 int createABx(int o, int a, int bx) => o | (a << 6) | (bx << 14);
 int createAx(int o, int ax) => o | (ax << 6);
 
-/// The specialised opcodes of the float32 mode: `ADD` to `POW`, then
-/// `FORLOOP` and `FORPREP`, which the float32Single mode shares.
+/// The specialised opcodes of the float32 mode. They are `ADD` to `POW`,
+/// then `FORLOOP` and `FORPREP`, which the float32Single mode shares.
 const opFloat32 = 40;
 const opSub32 = 41, opMul32 = 42, opDiv32 = 43, opMod32 = 44, opPow32 = 45;
 const opForLoop32 = 46, opForPrep32 = 47;
 
-/// The specialised opcodes of the float32Single mode: `ADD` to `POW`.
+/// The specialised opcodes `ADD` to `POW` of the float32Single mode.
 const opSingle = 48;
 const opSubSingle = 49, opMulSingle = 50, opDivSingle = 51;
 const opModSingle = 52, opPowSingle = 53;

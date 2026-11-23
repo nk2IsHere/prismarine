@@ -1,10 +1,11 @@
-// Ported from Lua 5.2.3 lcorolib.c (MIT; see LICENSE-lua).
+// Ported from Lua 5.2.3 lcorolib.c (MIT, see LICENSE-lua).
 
 import '../state.dart';
 import '../table.dart';
 
-/// `auxresume`: resumes [co] with the [narg] top values of [L]; returns the
-/// number of results moved to [L], or -1 with the error message on top.
+/// `auxresume`. Resumes [co] with the [narg] values on the top of [L].
+/// Returns the count of results moved to [L], or -1 with the error message
+/// on the top.
 int _auxResume(LuaThread L, LuaThread co, int narg) {
   if (co.status == luaOk && co.top - (co.ci.func + 1) == 0) {
     L.push('cannot resume dead coroutine');

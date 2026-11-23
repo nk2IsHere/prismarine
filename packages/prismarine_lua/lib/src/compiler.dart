@@ -1,10 +1,11 @@
 import 'proto.dart';
 
-/// Compiles Lua source text (Script nodes, visibility conditions, `DoString`,
-/// `.lua` scripts). The implementation is stock Lua 5.2.3's own compiler
-/// (mcsm_lua_native); `mcsm_lua` itself only runs bytecode.
+/// Compiles Lua source text into a prototype. A VM without a compiler loads
+/// binary chunks only. `prismarine_lua_native` has the compiler of stock Lua
+/// 5.2.3.
 abstract interface class LuaCompiler {
-  /// The main function of [source] (bytes as code units) named [chunkName].
-  /// Throws [LuaLoadError] with Lua's message on a syntax error.
+  /// Returns the main function of [source], whose code units are bytes, as
+  /// the chunk [chunkName]. Throws [LuaLoadError] with Lua's message on a
+  /// syntax error.
   LuaProto compile(String source, String chunkName);
 }

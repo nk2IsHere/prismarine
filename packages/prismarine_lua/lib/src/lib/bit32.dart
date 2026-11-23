@@ -1,5 +1,5 @@
-// Ported from Lua 5.2.3 lbitlib.c (MIT; see LICENSE-lua). Results are pushed
-// as numbers, i.e. float32 (`bit32.bnot(0)` is 4294967296).
+// Ported from Lua 5.2.3 lbitlib.c (MIT, see LICENSE-lua). A result is a
+// number of the VM's mode. In a float mode `bit32.bnot(0)` is 4294967296.
 
 import '../state.dart';
 import '../table.dart';
@@ -50,7 +50,7 @@ int _fieldArgs(LuaThread L, int farg, List<int> width) {
   return f;
 }
 
-/// `luaopen_bit32` into [t] (`bitlib` order).
+/// `luaopen_bit32` into [t] in the order of `bitlib`.
 LuaTable openBit32(LuaTable t) {
   for (final (name, f) in <(String, LuaCFunction)>[
     (

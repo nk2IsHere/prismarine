@@ -1,7 +1,7 @@
-// Ported from Lua 5.2.3 lvm.c and ltm.c (MIT; see LICENSE-lua). Lua→Lua
-// calls (CALL, TAILCALL, __call, and TFORCALL's Lua iterators) push frames in
-// this loop; metamethods run as nested non-yieldable calls (a ruling: 5.2.3
-// can yield inside them through luaV_finishOp; no shipped script does).
+// Ported from Lua 5.2.3 lvm.c and ltm.c (MIT, see LICENSE-lua). A call from
+// Lua to Lua pushes a frame in the execute loop. CALL, TAILCALL, `__call` and
+// the Lua iterators of TFORCALL do so. A metamethod runs as a nested call
+// that cannot yield, where stock Lua can yield through `luaV_finishOp`.
 
 import 'config.dart';
 import 'debug.dart';
@@ -27,7 +27,8 @@ abstract final class TM {
   ];
 }
 
-/// `fasttm` (events up to `__eq`, cached absence in the metatable's flags).
+/// `fasttm` for the events up to `__eq`, with absence cached in the flags of
+/// the metatable.
 Object? fastTM(LuaTable? mt, int event) {
   if (mt == null || mt.flags & (1 << event) != 0) return null;
   final tm = mt.getStr(TM.names[event]);
@@ -51,8 +52,8 @@ double? toNumberValue(Object? v, LuaNumberMode mode) {
   return null;
 }
 
-/// `callTM`: calls [f] on the operands as a nested non-yieldable call; with
-/// a result, stores it at stack index [res].
+/// `callTM`. Calls [f] on the operands as a nested call that cannot yield.
+/// Stores a result at stack index [res].
 void callTM(
   LuaThread L,
   Object? f,
@@ -80,8 +81,9 @@ bool _callBinTM(LuaThread L, Object? p1, Object? p2, int res, int event) {
   return true;
 }
 
-/// `luaV_gettable` into stack index [val]. [loc] locates [t] for error
-/// messages (register index ≥ 0, ~upvalue index, or [noLoc]).
+/// `luaV_gettable` into stack index [val]. [loc] is the location of [t] for
+/// error messages, a register index of 0 or more, the complement of an
+/// upvalue index or [noLoc].
 void getTable(LuaThread L, Object? t, Object? key, int val, int loc) {
   for (var loop = 0; loop < _maxTagLoop; loop++) {
     Object? tm;
@@ -141,7 +143,7 @@ Object? _getEqualTM(LuaTable? mt1, LuaTable? mt2) {
   return luaRawEquals(tm1, tm2) ? tm1 : null;
 }
 
-/// `equalobj` (luaV_equalobj_ with the same-type test).
+/// `equalobj`, which is `luaV_equalobj_` with the test of the types.
 bool equalObj(LuaThread L, Object? a, Object? b) {
   if (a is double && b is double) return a == b;
   if (identical(a, b)) return true;
@@ -153,8 +155,8 @@ bool equalObj(LuaThread L, Object? a, Object? b) {
   } else if (a is LuaUserdata && b is LuaUserdata) {
     tm = _getEqualTM(a.metatable, b.metatable);
   } else if (L.vm.mixedTypeEquality && luaTypeName(a) != luaTypeName(b)) {
-    // Different type tags take operand 1's __eq, else operand 2's; no
-    // metamethod is unequal.
+    // Different types take the __eq of the first operand, else of the
+    // second. Without one the values are not equal.
     tm =
         fastTM(L.vm.metatableOf(a), TM.eq) ??
         fastTM(L.vm.metatableOf(b), TM.eq);
@@ -237,7 +239,8 @@ double arithVm(LuaVm vm, int event, double a, double b) =>
       LuaNumberMode.float32Single => arithSingle(event, a, b, vm.runtime),
     };
 
-/// `luaV_arith`: [rb]/[rc] with their locations [lb]/[lc] for errors.
+/// `luaV_arith` on [rb] and [rc], with their locations [lb] and [lc] for
+/// errors.
 void arith(
   LuaThread L,
   int ra,
@@ -253,7 +256,7 @@ void arith(
   if (b != null && c != null) {
     L.stack[ra] = arithVm(L.vm, event, b, c);
   } else if (!_callBinTM(L, rb, rc, ra, event)) {
-    // luaG_aritherror: blame the operand that is not a number.
+    // luaG_aritherror blames the operand that is not a number.
     if (toNumberValue(rb, mode) == null) {
       typeError(L, rb, 'perform arithmetic on', lb);
     }
@@ -299,7 +302,7 @@ void concat(LuaThread L, int total) {
     final a = s[top - 2];
     if (!(a is String || a is double) || !_toStr(L, top - 1)) {
       if (!_callBinTM(L, s[top - 2], s[top - 1], top - 2, TM.concat)) {
-        // luaG_concaterror: blame the operand that is not a string.
+        // luaG_concaterror blames the operand that is not a string.
         final p1 = s[top - 2];
         if (p1 is String || p1 is double) {
           typeError(L, s[top - 1], 'concatenate', top - 1);
@@ -317,7 +320,7 @@ void concat(LuaThread L, int total) {
       }
       n = i;
       if (i == 2) {
-        // Two strings: one concatenation (perf: a buffer and its parts).
+        // Two strings take one concatenation and no buffer.
         s[top - 2] = (s[top - 2] as String) + (s[top - 1] as String);
       } else {
         final sb = StringBuffer();
@@ -364,8 +367,8 @@ LuaClosure _pushClosure(LuaThread L, LuaProto p, List<UpVal> encup, int base) {
   return ncl;
 }
 
-/// `luaV_execute`: runs the current Lua frame (and the Lua frames it calls)
-/// until a frame that was not entered by reentry returns.
+/// `luaV_execute`. Runs the current Lua frame and the Lua frames that it
+/// calls until a frame returns that was not entered by reentry.
 void execute(LuaThread L) {
   final stack = L.stack;
   final mode = L.vm.numberMode;

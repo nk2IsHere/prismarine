@@ -1,5 +1,5 @@
-// Ported from Lua 5.2.3 loadlib.c (MIT; see LICENSE-lua), with GameApp.exe's
-// engine searcher (docs/formats/lua-runtime.md).
+// Ported from Lua 5.2.3 loadlib.c (MIT, see LICENSE-lua). Modules are
+// resources of the host.
 
 import '../state.dart';
 import '../table.dart';
@@ -30,7 +30,7 @@ int _searcherPreload(LuaThread L) {
 List<String> _templates(String path) =>
     path.split(';').where((t) => t.isNotEmpty).toList();
 
-/// `searcher_Lua` over the host's resources (the oracle reads files).
+/// `searcher_Lua` over the resources of the host.
 LuaCFunction _searcherLua(LuaTable package) => (L) {
   final name = L.checkString(1);
   final path = package.get('path');
@@ -55,7 +55,8 @@ LuaCFunction _searcherLua(LuaTable package) => (L) {
   return 1;
 };
 
-/// `searcher_C` / `searcher_Croot`: no C modules here; their messages.
+/// `searcher_C` and `searcher_Croot`. No C module loads, and the searchers
+/// give their messages.
 LuaCFunction _searcherC(LuaTable package, {required bool root}) => (L) {
   var name = L.checkString(1);
   if (root) {
@@ -99,7 +100,8 @@ LuaCFunction _require(LuaTable package) => (L) {
     if (m is String || m is double) msg.write(L.toStr(-2));
     L.pop(2);
   }
-  // loader, extra are on top: call loader(name, extra).
+  // The loader and its extra value are on the top. Calls
+  // loader(name, extra).
   L.push(name);
   L.insert(-2);
   L.call(2, 1);
@@ -110,7 +112,8 @@ LuaCFunction _require(LuaTable package) => (L) {
   return 1;
 };
 
-/// `luaopen_package`: the `package` table, and `require` in the globals.
+/// `luaopen_package`. Returns the `package` table and sets `require` in the
+/// globals.
 LuaTable openPackage(LuaVm vm) {
   final package = LuaTable(0, 2)
     ..set(

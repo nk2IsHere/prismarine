@@ -1,5 +1,6 @@
-// Ported from Lua 5.2.3 lstrlib.c (pattern matching) (MIT; see LICENSE-lua).
-// Strings are byte strings; positions past the end read as NUL, as C does.
+// Ported from the pattern matching of Lua 5.2.3 lstrlib.c (MIT, see
+// LICENSE-lua). Strings are byte strings. A position past the end reads as
+// NUL, as in C.
 
 import 'dart:typed_data';
 
@@ -12,7 +13,7 @@ const _maxCCalls = 200;
 const _lEsc = 0x25; // '%'
 const specials = r'^$*+?.([%-';
 
-// C-locale ctype on bytes.
+// The ctype functions of the C locale on bytes.
 bool cIsAlpha(int c) => (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A);
 bool cIsDigit(int c) => c >= 0x30 && c <= 0x39;
 bool cIsLower(int c) => c >= 0x61 && c <= 0x7A;
@@ -34,8 +35,8 @@ class MatchState {
   final String pat;
   int matchDepth = _maxCCalls;
   int level = 0;
-  // Made when a pattern first opens a capture, as typed lists (perf: two
-  // lists of 32 per match; most patterns the scripts run have none).
+  // Made as typed lists when a pattern first opens a capture. Most patterns
+  // have none.
   late final List<int> capInit = Int32List(_maxCaptures);
   late final List<int> capLen = Int32List(_maxCaptures);
 
@@ -207,7 +208,8 @@ class MatchState {
   int _matchCapture(int si, int l) {
     l = _checkCapture(l);
     final len = capLen[l];
-    // A position capture has len -2: (size_t)-2 never fits, so no match.
+    // A position capture has the length -2. As a size_t it does not fit, and
+    // the back-reference does not match.
     if (len >= 0 &&
         srcEnd - si >= len &&
         src.substring(capInit[l], capInit[l] + len) ==
@@ -217,7 +219,8 @@ class MatchState {
     return -1;
   }
 
-  /// `match`: the end of the match of the pattern from [pi] at [si], or -1.
+  /// `match`. Returns the end of the match of the pattern from [pi] at [si],
+  /// or -1.
   int match(int si, int pi) {
     if (matchDepth-- == 0) L.luaError('pattern too complex');
     init:
@@ -271,7 +274,7 @@ class MatchState {
                 break init;
             }
         }
-        // default: a pattern class plus an optional suffix.
+        // A pattern class with an optional suffix.
         final ep = _classEnd(pi);
         final epc = p(ep);
         if (!_singleMatch(si, pi, ep)) {
@@ -309,8 +312,8 @@ class MatchState {
     return si;
   }
 
-  /// `push_onecapture`: the value of capture [i] (whole match [s0]..[e]
-  /// when there are none).
+  /// `push_onecapture`. Returns the value of capture [i], or the whole match
+  /// from [s0] to [e] when there are no captures.
   Object? capture(int i, int s0, int e) {
     if (i >= level) {
       if (i == 0) return src.substring(s0, e);
@@ -322,8 +325,8 @@ class MatchState {
     return src.substring(capInit[i], capInit[i] + l);
   }
 
-  /// `push_captures`: pushes the captures (or the whole match) and returns
-  /// their count; [s0] < 0 means "no whole match" (find).
+  /// `push_captures`. Pushes the captures or the whole match and returns
+  /// their count. A negative [s0] pushes no whole match, as `find` needs.
   int pushCaptures(int s0, int e) {
     final n = (level == 0 && s0 >= 0) ? 1 : level;
     L.checkStack(n);

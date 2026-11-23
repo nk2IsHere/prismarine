@@ -1,5 +1,4 @@
-// Ported from Lua 5.2.3 ltablib.c (MIT; see LICENSE-lua), plus GameApp.exe's
-// table.getn/find/contains (docs/formats/lua-runtime.md).
+// Ported from Lua 5.2.3 ltablib.c (MIT, see LICENSE-lua).
 
 import '../state.dart';
 import '../table.dart';
@@ -200,7 +199,7 @@ int _sort(LuaThread L) {
   return 0;
 }
 
-/// `luaopen_table` into [t] (`tab_funcs` order).
+/// `luaopen_table` into [t] in the order of `tab_funcs`.
 LuaTable openTable(LuaTable t) {
   for (final (name, f) in <(String, LuaCFunction)>[
     ('concat', _concat),

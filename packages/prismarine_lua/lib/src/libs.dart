@@ -1,5 +1,4 @@
-// Ported from Lua 5.2.3 linit.c (MIT; see LICENSE-lua): the standard
-// libraries in luaL_openlibs order, then the configuration's patches.
+// Ported from Lua 5.2.3 linit.c (MIT, see LICENSE-lua).
 
 import 'lib/base.dart';
 import 'lib/bit32.dart';
@@ -13,11 +12,9 @@ import 'lib/table.dart';
 import 'state.dart';
 import 'table.dart';
 
-/// Opens the libraries into [vm]'s globals in `luaL_openlibs` order (each
-/// also stored in `package.loaded`), then applies the configuration's
-/// patches.
-/// Libraries this plan has not reached yet are empty tables, so the globals
-/// table is laid out as in the oracle.
+/// Opens the standard libraries into the globals of [vm] in the order of
+/// `luaL_openlibs` and stores each in `package.loaded`. Then applies the
+/// patches of the configuration.
 void openLibs(LuaVm vm) {
   final loaded = LuaTable();
   vm.registry.set('_LOADED', loaded);

@@ -1,8 +1,7 @@
-// Ported from Lua 5.2.3 ltable.c and lstring.c (luaS_hash) (MIT; see
-// LICENSE-lua). Number keys hash with the generic frexp `luai_hashnum` in
-// float arithmetic, as in GameApp.exe (docs/formats/lua-runtime.md), in every
-// number mode; string keys with `luaS_hash` and the fixed seed
-// [luaHashSeed]; objects with their id.
+// Ported from Lua 5.2.3 ltable.c and `luaS_hash` of lstring.c (MIT, see
+// LICENSE-lua). A number key hashes with the frexp form of `luai_hashnum` in
+// float arithmetic in every number mode. A string key hashes with `luaS_hash`
+// and the fixed seed [luaHashSeed], and an object with its id.
 
 import 'dart:typed_data';
 
@@ -11,8 +10,9 @@ import 'package:prismarine_snap/prismarine_snap.dart';
 import 'number.dart';
 import 'value.dart';
 
-/// The string-hash seed. The exe seeds from time and addresses (a random
-/// `pairs` order per launch); we and the reference oracle use 0.
+/// The seed of the string hash. Stock Lua seeds from the time and addresses,
+/// which gives another `pairs` order on each run. The seed 0 gives the same
+/// order on every run.
 const int luaHashSeed = 0;
 
 const _maxBits = 30;
@@ -35,7 +35,8 @@ int luaStringHash(String s, int seed) {
   return h;
 }
 
-/// A table error that the VM reports with position info (`luaG_runerror`).
+/// A table error that the VM reports with its position, as `luaG_runerror`
+/// does.
 class LuaTableKeyError implements Exception {
   LuaTableKeyError(this.message);
   final String message;
@@ -43,14 +44,13 @@ class LuaTableKeyError implements Exception {
   String toString() => message;
 }
 
-/// `_ftol2`: truncation; NaN or out of int32 → 0x80000000.
+/// Truncation to int32. A NaN or a value outside int32 gives 0x80000000.
 int _ftol(double x) {
   if (x.isNaN || x >= 2147483648.0 || x <= -2147483649.0) return -2147483648;
   return x.truncate();
 }
 
-/// `luai_hashnum` + the sign fix of `hashnum` (see
-/// formats/telltale/lua-runtime.md, "Number conversions").
+/// `luai_hashnum` with the sign fix of `hashnum`.
 int _hashNum(double n) {
   final (m, e) = frexp(n);
   var i = _ftol(f32(f32(m) * 2147482624.0)) + e;
@@ -61,14 +61,14 @@ int _hashNum(double n) {
 
 int _ceilLog2(int x) => (x - 1).bitLength;
 
-/// An integer key as a Lua number: a float value beyond 2^24 when the
-/// isolate's numbers are floats.
+/// An integer key as a Lua number. A key beyond 2^24 is a float value when
+/// the numbers of the isolate are floats.
 double _keyNumber(int key) => key >= -0x1000000 && key <= 0x1000000
     ? key.toDouble()
     : (luaFloatKeys ? f32(key.toDouble()) : key.toDouble());
 
-/// `lua_number2int` + `luai_numeq`: the int value of an integral number key
-/// in int32 range, or null.
+/// `lua_number2int` and `luai_numeq`. Returns the int value of an integral
+/// number key in the int32 range, or null.
 int? _intKey(double n) {
   if (n >= 2147483648.0 || n < -2147483648.0) return null;
   final k = n.truncate();
@@ -76,8 +76,8 @@ int? _intKey(double n) {
 }
 
 class LuaTable extends LuaObject {
-  /// `luaH_new`, then `luaH_resize(narray, nhash)` when either is non-zero
-  /// (OP_NEWTABLE, `lua_createtable`).
+  /// `luaH_new`, then `luaH_resize(narray, nhash)` when either is not zero,
+  /// as OP_NEWTABLE and `lua_createtable` do.
   LuaTable([int narray = 0, int nhash = 0]) {
     _setNodeVector(0);
     if (narray != 0 || nhash != 0) resize(narray, nhash);
@@ -85,8 +85,9 @@ class LuaTable extends LuaObject {
 
   LuaTable? metatable;
 
-  /// Absent-metamethod cache (`flags` in ltm.c `fasttm`): bit e set = event e
-  /// known absent. Any raw set clears it.
+  /// The cache of absent metamethods, `flags` of `fasttm` in ltm.c. Bit e is
+  /// set when the metamethod of event e is known to be absent. A raw set
+  /// clears it.
   int flags = 0xFF;
 
   List<Object?> _arr = List<Object?>.filled(0, null);
@@ -100,8 +101,8 @@ class LuaTable extends LuaObject {
 
   int get sizeArray => _sizeArray;
 
-  /// A snapshot of the table's raw state: the metatable, the array part and
-  /// the node vector as they are (iteration order is node order).
+  /// Writes the raw state of the table, the metatable, the array part and
+  /// the node vector as they are. The node order is the iteration order.
   void snapWrite(SnapWriter w) {
     w.ref(metatable);
     w.uint(flags);
@@ -136,8 +137,6 @@ class LuaTable extends LuaObject {
   }
 
   int get _sizeNode => 1 << _lsize;
-
-  // --- lookup -----------------------------------------------------------
 
   int _mainPosition(Object? key) {
     final size = _sizeNode;
@@ -196,19 +195,20 @@ class LuaTable extends LuaObject {
     }
   }
 
-  /// `luaH_get` (raw).
+  /// `luaH_get`, a raw read.
   Object? get(Object? key) => _load(_slotOf(key));
 
-  /// `luaH_getint` (raw).
+  /// `luaH_getint`, a raw read.
   Object? getInt(int key) {
     if (key - 1 >= 0 && key - 1 < _sizeArray) return _arr[key - 1];
     return _load(_slotOfInt(key));
   }
 
-  /// `luaH_getstr` (raw).
+  /// `luaH_getstr`, a raw read.
   Object? getStr(String key) => _load(_slotOfStr(key));
 
-  /// [getStr] with [key]'s [luaStringHash] given ([LuaProto.constHash]).
+  /// [getStr] with the [luaStringHash] of [key] given, as
+  /// [LuaProto.constHash] has it.
   Object? getStrH(String key, int hash) {
     var n = hash & (_sizeNode - 1);
     do {
@@ -219,8 +219,8 @@ class LuaTable extends LuaObject {
     return null;
   }
 
-  /// `luaH_set` + assignment (raw): creates the key even when [value] is
-  /// nil, as `luaV_settable` and `lua_rawset` do. Clears [flags].
+  /// `luaH_set` and the assignment, a raw write. Creates the key also for a
+  /// nil [value], as `luaV_settable` and `lua_rawset` do. Clears [flags].
   void set(Object? key, Object? value) {
     var s = _slotOf(key);
     if (s == _none) s = _newKey(key);
@@ -228,14 +228,13 @@ class LuaTable extends LuaObject {
     flags = 0;
   }
 
-  /// `luaH_setint` + assignment (raw; OP_SETLIST, `lua_rawseti`).
+  /// `luaH_setint` and the assignment, a raw write of OP_SETLIST and
+  /// `lua_rawseti`.
   void setInt(int key, Object? value) {
     var s = _slotOfInt(key);
     if (s == _none) s = _newKey(_keyNumber(key));
     _store(s, value);
   }
-
-  // --- insertion ----------------------------------------------------------
 
   int _getFreePos() {
     while (_lastFree > 0) {
@@ -245,8 +244,8 @@ class LuaTable extends LuaObject {
     return -1;
   }
 
-  /// `luaH_newkey`: the slot for a new [key] (the colliding-node move, or a
-  /// rehash when no free node is left).
+  /// `luaH_newkey`. Returns the slot for a new [key]. Moves a colliding node,
+  /// or rehashes when no free node is left.
   int _newKey(Object? key) {
     if (key == null) throw LuaTableKeyError('table index is nil');
     if (key is double && key.isNaN) {
@@ -281,8 +280,6 @@ class LuaTable extends LuaObject {
     return mp;
   }
 
-  // --- resizing -----------------------------------------------------------
-
   void _setArrayVector(int size) {
     final a = List<Object?>.filled(size, null);
     for (var i = 0; i < _sizeArray && i < size; i++) {
@@ -294,9 +291,8 @@ class LuaTable extends LuaObject {
 
   void _setNodeVector(int size) {
     if (size == 0) {
-      // The shared dummy node, as Lua's `dummynode`: never written (a new
-      // key finds no free position and rehashes; perf: three lists per
-      // empty table).
+      // The shared dummy node, as `dummynode` of Lua. It is not written. A
+      // new key finds no free position and rehashes.
       _nk = _dummyKeys;
       _nv = _dummyValues;
       _nn = _dummyNext;
@@ -342,7 +338,7 @@ class LuaTable extends LuaObject {
     }
   }
 
-  /// `luaH_resizearray` (OP_SETLIST).
+  /// `luaH_resizearray` of OP_SETLIST.
   void resizeArray(int nasize) => resize(nasize, _dummy ? 0 : _sizeNode);
 
   int _arrayIndex(Object? key) {
@@ -412,7 +408,7 @@ class LuaTable extends LuaObject {
   static final _dummyValues = List<Object?>.filled(1, null);
   static final _dummyNext = Int32List(1)..[0] = -1;
 
-  /// [_rehash]'s counts per size class, kept (perf: a list per rehash).
+  /// The counts of [_rehash] per size class, kept between calls.
   static final _nums = List<int>.filled(_maxBits + 1, 0);
 
   void _rehash(Object? ek) {
@@ -428,9 +424,7 @@ class LuaTable extends LuaObject {
     resize(size, totaluse - na);
   }
 
-  // --- length and traversal -------------------------------------------------
-
-  /// `luaH_getn`: a border (the raw `#`).
+  /// `luaH_getn`. Returns a border, the raw `#`.
   int length() {
     var j = _sizeArray;
     if (j > 0 && _arr[j - 1] == null) {
@@ -486,8 +480,8 @@ class LuaTable extends LuaObject {
     }
   }
 
-  /// [next] with the pair in [nextKey] and [nextValue] (read at once);
-  /// false at the end (perf: a record per step of every `pairs` loop).
+  /// [next] with the pair in [nextKey] and [nextValue], which the caller
+  /// reads at once. Returns false at the end.
   bool nextInto(Object? key) {
     var i = _findIndex(key);
     for (i++; i < _sizeArray; i++) {
@@ -512,7 +506,8 @@ class LuaTable extends LuaObject {
 
   static Object? nextKey, nextValue;
 
-  /// `luaH_next`: the pair after [key] (null = first), or null at the end.
+  /// `luaH_next`. Returns the pair after [key], the first pair for a null
+  /// [key], or null at the end.
   (Object?, Object?)? next(Object? key) {
     var i = _findIndex(key);
     for (i++; i < _sizeArray; i++) {

@@ -1,7 +1,8 @@
-// Ported from Lua 5.2.3 lstate.c, ldo.c, lfunc.c and parts of lapi.c /
-// lauxlib.c (MIT; see LICENSE-lua). A LuaThread is a lua_State: its own
-// stack and CallInfo list; Lua→Lua calls push frames in the dispatch loop
-// (vm.dart), natives are Dart functions with a C-API-like view of the stack.
+// Ported from Lua 5.2.3 lstate.c, ldo.c, lfunc.c and parts of lapi.c and
+// lauxlib.c (MIT, see LICENSE-lua). A LuaThread is a lua_State with its own
+// stack and CallInfo list. A call from Lua to Lua pushes a frame in the
+// execute loop of vm.dart. A native is a Dart function with a view of the
+// stack in the style of the C API.
 
 import 'dart:typed_data';
 
@@ -22,7 +23,7 @@ import 'vm.dart';
 
 const luaMultRet = -1;
 
-// Thread and call status codes (lua.h).
+// The status codes of threads and calls, from lua.h.
 const luaOk = 0, luaYield = 1, luaErrRun = 2, luaErrSyntax = 3;
 const luaErrMem = 4, luaErrGcmm = 5, luaErrErr = 6;
 
@@ -36,7 +37,7 @@ const _basicStackSize = 2 * luaMinStack;
 const _errorStackSize = luaMaxStack + 200;
 const luaMaxCCalls = 200;
 
-// CallInfo status bits (lstate.h).
+// The status bits of a CallInfo, from lstate.h.
 const cistLua = 1 << 0;
 const cistHooked = 1 << 1;
 const cistReentry = 1 << 2;
@@ -45,14 +46,15 @@ const cistYPcall = 1 << 4;
 const cistStat = 1 << 5;
 const cistTail = 1 << 6;
 
-/// A Lua error in flight (`luaD_throw`): the error value and its status.
+/// A Lua error in flight, as `luaD_throw` raises it, with its value and
+/// status.
 class LuaError implements Exception {
   LuaError(this.value, {this.status = luaErrRun, this.traceback});
   Object? value;
   final int status;
 
-  /// `debug.traceback` text captured where the error was raised (before the
-  /// stack unwound), for diagnostics.
+  /// The `debug.traceback` text at the place of the error, taken before the
+  /// stack unwound.
   String? traceback;
 
   String get message => switch (value) {
@@ -66,7 +68,8 @@ class LuaError implements Exception {
   String toString() => 'LuaError: $message';
 }
 
-/// An upvalue: open (a live stack slot of [thread]) or closed (its own value).
+/// An upvalue. An open upvalue is a live stack slot of [thread], and a
+/// closed one holds its own value.
 class UpVal {
   UpVal.open(LuaThread this.thread, this.index);
   UpVal.closed([this.value]);
@@ -94,15 +97,16 @@ class LuaClosure extends LuaFunction {
   final List<UpVal> upvals;
 }
 
-/// A native function (`lua_CFunction`): reads its arguments from the
-/// thread's stack, pushes its results and returns how many it pushed.
+/// A native function, `lua_CFunction`. It reads its arguments from the stack
+/// of the thread, pushes its results and returns their count.
 typedef LuaCFunction = int Function(LuaThread L);
 
 class LuaNative extends LuaFunction {
   LuaNative(this.fn, [this.name]);
   final LuaCFunction fn;
 
-  /// For diagnostics only; Lua names functions from the call site.
+  /// The name for diagnostics. Lua gives a function the name of its call
+  /// site.
   final String? name;
 }
 
@@ -120,8 +124,8 @@ class CallInfo {
   bool get isLua => callStatus & cistLua != 0;
 }
 
-/// The global state: registry, globals, type metatables, configuration and
-/// host.
+/// The global state with the registry, the globals, the metatables of the
+/// types, the configuration and the host.
 class LuaVm {
   LuaVm({
     this.config = const LuaDefaultConfig(),
@@ -155,22 +159,21 @@ class LuaVm {
   final LuaCRuntime runtime;
   final bool mixedTypeEquality;
 
-  /// Compiles text chunks; without one, only binary chunks load.
+  /// Compiles text chunks. A VM without one loads binary chunks only.
   final LuaCompiler? compiler;
   final LuaTable registry = LuaTable(2, 0);
   late final LuaTable globals;
   late final LuaThread mainThread;
 
-  /// Metatables of the non-table, non-userdata types (`G(L)->mt`), by type
-  /// name; the string library sets `string`.
+  /// The metatables of the types other than table and userdata by type name,
+  /// `G(L)->mt`. The string library sets `string`.
   final typeMetatables = <String, LuaTable>{};
 
-  /// The random generator of `math.random`, which the host may share. It
-  /// can outlive a Lua state and pass to a successor VM (see
-  /// formats/telltale/lua-runtime.md, "The engine generator").
+  /// The random generator of `math.random`, which the host may share. It can
+  /// outlive a Lua state and pass to the next VM.
   final LuaRng rng;
 
-  /// Capture `debug.traceback` text into raised errors.
+  /// Raised errors carry the text of `debug.traceback`.
   bool captureTracebacks = true;
 
   LuaTable? metatableOf(Object? v) => switch (v) {
@@ -179,8 +182,8 @@ class LuaVm {
     _ => typeMetatables[luaTypeName(v)],
   };
 
-  /// Loads a chunk as a function whose first upvalue (`_ENV`) is [env] or
-  /// the globals (`lua_load`). Text chunks go through [compiler].
+  /// `lua_load`. Loads a chunk as a function whose first upvalue, `_ENV`, is
+  /// [env] or else the globals. A text chunk goes through [compiler].
   LuaClosure load(Uint8List chunk, String chunkName, {LuaTable? env}) {
     LuaProto p;
     if (chunk.isNotEmpty && chunk[0] == 0x1B) {
@@ -208,15 +211,17 @@ class LuaVm {
     return cl;
   }
 
-  /// `lua_newthread` with [fn] pushed as its body (`coroutine.create`).
+  /// `lua_newthread` with [fn] pushed as its body, as `coroutine.create`
+  /// does.
   LuaThread newThread([Object? fn]) {
     final t = LuaThread.child(this);
     if (fn != null) t.stack[t.top++] = fn;
     return t;
   }
 
-  /// Calls [fn] with [args] on the main thread (non-yieldable) and returns
-  /// its results. A Lua error is rethrown after the stack is restored.
+  /// Calls [fn] with [args] on the main thread, which cannot yield here, and
+  /// returns its results. A Lua error is rethrown after the stack is
+  /// restored.
   List<Object?> call(Object? fn, List<Object?> args) {
     final L = mainThread;
     final base = L.top;
@@ -244,7 +249,7 @@ class LuaThread extends LuaThreadBase {
 
   final LuaVm vm;
 
-  /// The stack; a growable list whose identity never changes.
+  /// The stack, a growable list that keeps its identity.
   final List<Object?> stack = <Object?>[];
   int stackSize = 0;
   int stackLast = 0;
@@ -258,10 +263,10 @@ class LuaThread extends LuaThreadBase {
   int nny = 1;
   int nCcalls = 0;
 
-  /// Stack index of the active error handler (`errfunc`), 0 = none.
+  /// The stack index of the active error handler, `errfunc`, or 0.
   int errFunc = 0;
 
-  /// Open upvalues, sorted by stack index (ascending).
+  /// The open upvalues in ascending order of stack index.
   final openUpvals = <UpVal>[];
 
   void _stackInit() {
@@ -277,8 +282,6 @@ class LuaThread extends LuaThreadBase {
     cis.add(base);
     ciIndex = 0;
   }
-
-  // --- stack ----------------------------------------------------------------
 
   void _reallocStack(int newSize) {
     stack.length = newSize;
@@ -307,7 +310,7 @@ class LuaThread extends LuaThreadBase {
     if (stackLast - top <= n) growStack(n);
   }
 
-  /// `luaD_shrinkstack` (after an error is caught).
+  /// `luaD_shrinkstack` after a caught error.
   void shrinkStack() {
     var lim = top;
     for (var i = 0; i <= ciIndex; i++) {
@@ -325,8 +328,6 @@ class LuaThread extends LuaThreadBase {
     if (ciIndex == cis.length) cis.add(CallInfo());
     return cis[ciIndex];
   }
-
-  // --- upvalues (lfunc.c) -----------------------------------------------------
 
   /// `luaF_findupval`.
   UpVal findUpval(int level) {
@@ -348,8 +349,6 @@ class LuaThread extends LuaThreadBase {
       uv.thread = null;
     }
   }
-
-  // --- calls (ldo.c) ------------------------------------------------------------
 
   int _adjustVarargs(LuaProto p, int actual) {
     final nfix = p.numParams;
@@ -375,8 +374,8 @@ class LuaThread extends LuaThreadBase {
     return func;
   }
 
-  /// `luaD_precall`: a native runs to completion (true); a Lua function gets
-  /// a new frame and returns false (the caller runs it).
+  /// `luaD_precall`. A native runs to completion and returns true. A Lua
+  /// function gets a new frame and returns false, and the caller runs it.
   bool precall(int func, int nresults) {
     final f = stack[func];
     if (f is LuaClosure) {
@@ -419,8 +418,8 @@ class LuaThread extends LuaThreadBase {
     return precall(_tryFuncTM(func), nresults);
   }
 
-  /// `luaD_poscall`: moves the results to the function's slot; true unless
-  /// the caller wanted all results.
+  /// `luaD_poscall`. Moves the results to the slot of the function. Returns
+  /// true unless the caller wanted all results.
   bool poscall(int firstResult) {
     final ci = this.ci;
     var res = ci.func;
@@ -437,7 +436,7 @@ class LuaThread extends LuaThreadBase {
     return wanted != luaMultRet;
   }
 
-  /// `luaD_call`: calls the function at [func] with the values above it.
+  /// `luaD_call`. Calls the function at [func] with the values above it.
   void callAt(int func, int nresults, {bool allowYield = false}) {
     if (++nCcalls >= luaMaxCCalls) {
       if (nCcalls == luaMaxCCalls) {
@@ -452,9 +451,9 @@ class LuaThread extends LuaThreadBase {
     nCcalls--;
   }
 
-  /// Runs [body] like `luaD_pcall`/`luaD_rawrunprotected`: on a Lua error
-  /// the stack, frames, upvalues and counters return to their state at
-  /// entry ([oldTop] becomes the top) and the error is rethrown.
+  /// Runs [body] as `luaD_pcall` and `luaD_rawrunprotected` do. On a Lua
+  /// error the stack, frames, upvalues and counters return to their state at
+  /// entry with [oldTop] as the top, and the error is rethrown.
   void protectedCall(void Function() body, int oldTop) {
     final oldCi = ciIndex;
     final oldNny = nny;
@@ -463,7 +462,8 @@ class LuaThread extends LuaThreadBase {
     try {
       body();
     } catch (_) {
-      // Lua errors and Dart exceptions from natives alike: restore, rethrow.
+      // A Lua error and a Dart exception of a native alike restore the state
+      // and rethrow.
       closeUpvals(oldTop);
       top = oldTop;
       ciIndex = oldCi;
@@ -476,10 +476,8 @@ class LuaThread extends LuaThreadBase {
     errFunc = oldErrFunc;
   }
 
-  // --- errors (ldebug.c luaG_runerror / luaG_errormsg) --------------------------
-
-  /// `luaG_errormsg`: calls the error handler (if any) on the value, then
-  /// throws.
+  /// `luaG_errormsg`. Calls the error handler on the value when there is one
+  /// and throws.
   Never throwError(Object? value) {
     if (errFunc != 0) {
       final h = stack[errFunc];
@@ -497,7 +495,8 @@ class LuaThread extends LuaThreadBase {
     );
   }
 
-  /// `luaG_runerror`: [msg] with the current Lua frame's `chunk:line:`.
+  /// `luaG_runerror`. Raises [msg] after the `chunk:line:` of the current Lua
+  /// frame.
   Never runError(String msg) {
     final ci = this.ci;
     if (ci.isLua) {
@@ -506,8 +505,6 @@ class LuaThread extends LuaThreadBase {
     }
     throwError(msg);
   }
-
-  // --- coroutines (ldo.c lua_resume / lua_yieldk) ---------------------------------
 
   Never _resumeError(String msg, int firstArg) {
     top = firstArg;
@@ -527,10 +524,10 @@ class LuaThread extends LuaThreadBase {
       status = luaOk;
       final c = ci;
       c.func = c.extra;
-      // A native yielded (no continuations): the resume arguments are its
-      // results.
+      // A native yielded without a continuation. The arguments of the resume
+      // are its results.
       poscall(firstArg);
-      // unroll: finish the interrupted CALL/TFORCALL and run on.
+      // The unroll finishes the interrupted CALL or TFORCALL and runs on.
       while (ciIndex != 0) {
         final lc = ci;
         final inst = lc.cl!.p.code[lc.savedPc - 1];
@@ -543,10 +540,10 @@ class LuaThread extends LuaThreadBase {
     }
   }
 
-  /// `lua_resume`: starts or continues this thread with the [nargs] values
-  /// on its stack top. Returns [luaOk] (finished), [luaYield], or an error
-  /// status (the error object is then on the top and the thread is dead,
-  /// unless the resume itself was invalid).
+  /// `lua_resume`. Starts or continues this thread with the [nargs] values on
+  /// the top of its stack. Returns [luaOk] when the thread finished, or
+  /// [luaYield], or an error status. After an error the error object is on
+  /// the top, and the thread is dead unless the resume itself was invalid.
   int resumeRaw(LuaThread? from, int nargs) {
     final oldNny = nny;
     nCcalls = from != null ? from.nCcalls + 1 : 1;
@@ -568,7 +565,7 @@ class LuaThread extends LuaThreadBase {
           : e.value;
       ci.top = top;
     } catch (_) {
-      // A Dart exception from a native: the thread is dead; propagate.
+      // A Dart exception of a native kills the thread and propagates.
       status = luaErrRun;
       nny = oldNny;
       nCcalls--;
@@ -579,8 +576,8 @@ class LuaThread extends LuaThreadBase {
     return result;
   }
 
-  /// Resumes with [args] from Dart: the yielded or returned values, or the
-  /// error ([LuaResume.error]).
+  /// Resumes with [args] from Dart. Returns the yielded or returned values,
+  /// or the error in [LuaResume.error].
   LuaResume resume(List<Object?> args, {LuaThread? from}) {
     checkStack(args.length);
     for (final a in args) {
@@ -599,10 +596,10 @@ class LuaThread extends LuaThreadBase {
 
   bool get isYieldable => nny == 0;
 
-  /// `lua_yield`: suspends the running coroutine with the [nresults] top
-  /// values. Only natives called directly from Lua code can yield; call it
-  /// as `return L.yield(n);`. On the next resume its arguments become the
-  /// native's results.
+  /// `lua_yield`. Suspends the running coroutine with the [nresults] values
+  /// on the top. Only a native that Lua code calls directly can yield, with
+  /// `return L.yield(n);`. The arguments of the next resume become the
+  /// results of the native.
   int yield(int nresults) {
     if (nny > 0) {
       if (!identical(this, vm.mainThread)) {
@@ -614,8 +611,8 @@ class LuaThread extends LuaThreadBase {
     final c = ci;
     c.extra = c.func;
     c.func = top - nresults - 1;
-    // Control flow, not an error: no stack trace to collect (a plain throw
-    // builds one each yield; the game's threads yield every frame).
+    // A yield is control flow and collects no stack trace. Script threads
+    // of a host may yield every frame.
     Error.throwWithStackTrace(const _LuaYield(), StackTrace.empty);
   }
 
@@ -629,8 +626,6 @@ class LuaThread extends LuaThreadBase {
     }
     return 'dead';
   }
-
-  // --- the native API (lapi.c / lauxlib.c) --------------------------------------
 
   /// `lua_gettop`.
   int getTop() => top - (ci.func + 1);
@@ -653,8 +648,9 @@ class LuaThread extends LuaThreadBase {
     }
   }
 
-  /// The value at [idx] (1-based from the native's base, negative from the
-  /// top); null beyond the top. [luaRegistryIndex] is the registry.
+  /// The value at [idx], counted from 1 at the base of the native and from
+  /// -1 at the top. Returns null beyond the top. [luaRegistryIndex] is the
+  /// registry.
   Object? arg(int idx) {
     if (idx == luaRegistryIndex) return vm.registry;
     if (idx > 0) {
@@ -664,7 +660,7 @@ class LuaThread extends LuaThreadBase {
     return stack[top + idx];
   }
 
-  /// True when [idx] is beyond the top (`lua_isnone`).
+  /// `lua_isnone`, true when [idx] is beyond the top.
   bool isNone(int idx) => idx > 0 && ci.func + idx >= top;
 
   void set(int idx, Object? v) => stack[_index(idx)] = v;
@@ -678,7 +674,7 @@ class LuaThread extends LuaThreadBase {
 
   void pop([int n = 1]) => top -= n;
 
-  /// `lua_insert`: moves the top value to [idx].
+  /// `lua_insert`. Moves the top value to [idx].
   void insert(int idx) {
     final p = _index(idx);
     final v = stack[top - 1];
@@ -697,22 +693,22 @@ class LuaThread extends LuaThreadBase {
     top--;
   }
 
-  /// `lua_replace`: pops the top value into [idx].
+  /// `lua_replace`. Pops the top value into [idx].
   void replace(int idx) {
     stack[_index(idx)] = stack[top - 1];
     top--;
   }
 
-  /// `lua_call`: calls the function below the [nargs] top values.
+  /// `lua_call`. Calls the function below the [nargs] values on the top.
   void call(int nargs, int nresults) {
     final func = top - (nargs + 1);
     callAt(func, nresults);
     if (nresults == luaMultRet && ci.top < top) ci.top = top;
   }
 
-  /// `lua_pcall`: calls the function below the [nargs] top values; on an
-  /// error the error object replaces the function and the status is returned.
-  /// [msgh] is the stack index of a message handler, or 0.
+  /// `lua_pcall`. Calls the function below the [nargs] values on the top. On
+  /// an error the error object replaces the function, and the status is
+  /// returned. [msgh] is the stack index of a message handler, or 0.
   int pcall(int nargs, int nresults, int msgh) {
     final func = top - (nargs + 1);
     final oldErr = errFunc;
@@ -734,8 +730,9 @@ class LuaThread extends LuaThreadBase {
       shrinkStack();
       return e.status;
     } catch (_) {
-      // A Dart exception from a native is a bug, not a Lua error: restore the
-      // thread to its state at the pcall and let it propagate.
+      // A Dart exception of a native is a bug and not a Lua error. The
+      // thread returns to its state at the pcall and the exception
+      // propagates.
       closeUpvals(func);
       top = func;
       ciIndex = oldCi;
@@ -750,10 +747,11 @@ class LuaThread extends LuaThreadBase {
   /// `lua_copy`.
   void copy(int from, int to) => stack[_index(to)] = arg(from);
 
-  /// `lua_error`: raises the value on top.
+  /// `lua_error`. Raises the value on the top.
   Never error() => throwError(stack[top - 1]);
 
-  /// `luaL_where(L, 1)`: the calling Lua function's `chunk:line: ` or ''.
+  /// `luaL_where(L, 1)`. Returns the `chunk:line: ` of the calling Lua
+  /// function, or ''.
   String where(int level) {
     final c = callInfoAt(level);
     if (c != null && c.isLua) {
@@ -764,16 +762,16 @@ class LuaThread extends LuaThreadBase {
     return '';
   }
 
-  /// `luaL_error`: [msg] with `where(1)`.
+  /// `luaL_error`. Raises [msg] after `where(1)`.
   Never luaError(String msg) => throwError('${where(1)}$msg');
 
-  /// The CallInfo at stack [level] (0 = the running function), or null.
+  /// The CallInfo at stack [level], 0 for the running function, or null.
   CallInfo? callInfoAt(int level) {
     final i = ciIndex - level;
     return i > 0 ? cis[i] : null;
   }
 
-  // luaL_check*/opt* helpers.
+  // The luaL_check and luaL_opt functions.
 
   Never argError(int narg, String extramsg) =>
       argErrorImpl(this, narg, extramsg);
@@ -786,7 +784,8 @@ class LuaThread extends LuaThreadBase {
     );
   }
 
-  /// `lua_tonumberx`: numbers and numeric strings, else null.
+  /// `lua_tonumberx`. Returns a number or a numeric string as a number, else
+  /// null.
   double? toNumber(int idx) {
     final v = arg(idx);
     if (v is double) return v;
@@ -794,7 +793,8 @@ class LuaThread extends LuaThreadBase {
     return null;
   }
 
-  /// `lua_tolstring`: strings, and numbers converted in place; else null.
+  /// `lua_tolstring`. Returns a string, or a number converted in place, else
+  /// null.
   String? toStr(int idx) {
     final v = arg(idx);
     if (v is String) return v;
@@ -810,12 +810,12 @@ class LuaThread extends LuaThreadBase {
 
   double? optNumber(int i, double? d) => arg(i) == null ? d : checkNumber(i);
 
-  /// `luaL_checkinteger`: the configuration's `lua_Integer`.
+  /// `luaL_checkinteger` with the `lua_Integer` of the configuration.
   int checkInteger(int i) => luaToInteger(checkNumber(i), vm.integer64);
 
   int optInteger(int i, int d) => arg(i) == null ? d : checkInteger(i);
 
-  /// `luaL_checkint`: `(int)luaL_checkinteger`.
+  /// `luaL_checkint`, the `(int)` of `luaL_checkinteger`.
   int checkInt(int i) => luaToCInt(checkNumber(i), vm.integer64);
 
   int optInt(int i, int d) => arg(i) == null ? d : checkInt(i);
@@ -831,21 +831,21 @@ class LuaThread extends LuaThreadBase {
     return v is LuaTable ? v : typeErrorArg(i, 'table');
   }
 
-  /// `lua_getglobal`: pushes `_G[name]` (honouring `_G`'s metatable).
+  /// `lua_getglobal`. Pushes `_G[name]` through the metatable of `_G`.
   void getGlobal(String name) {
     push(null);
     getTable(this, vm.globals, name, top - 1, noLoc);
   }
 
-  /// `lua_getfield`: pushes `t[k]` (with metamethods) for the value at [idx].
+  /// `lua_getfield`. Pushes `t[k]` with metamethods for the value at [idx].
   void getField(int idx, String k) {
     final t = arg(idx);
     push(null);
     getTable(this, t, k, top - 1, noLoc);
   }
 
-  /// `lua_gettable`: replaces the key on top with `t[key]` (with
-  /// metamethods) for the table at [idx].
+  /// `lua_gettable`. Replaces the key on the top with `t[key]` with
+  /// metamethods for the table at [idx].
   void getTableAt(int idx) {
     final t = arg(idx);
     final k = stack[top - 1];
@@ -853,8 +853,8 @@ class LuaThread extends LuaThreadBase {
     getTable(this, t, k, top - 1, noLoc);
   }
 
-  /// `lua_setfield`: `t[k] = v` (with metamethods) for the value at [idx]
-  /// and the value on top, which is popped.
+  /// `lua_setfield`. Sets `t[k] = v` with metamethods for the value at [idx]
+  /// and pops the value on the top.
   void setField(int idx, String k) {
     final t = arg(idx);
     final v = arg(-1);
@@ -862,10 +862,11 @@ class LuaThread extends LuaThreadBase {
     setTable(this, t, k, v, noLoc);
   }
 
-  /// `lua_rawgeti`: pushes `t[n]` (raw) of the table at [idx].
+  /// `lua_rawgeti`. Pushes the raw `t[n]` of the table at [idx].
   void rawGetI(int idx, int n) => push((arg(idx) as LuaTable).getInt(n));
 
-  /// `lua_rawseti`: pops the top value into `t[n]` (raw) of the table at [idx].
+  /// `lua_rawseti`. Pops the top value into the raw `t[n]` of the table at
+  /// [idx].
   void rawSetI(int idx, int n) {
     final t = arg(idx) as LuaTable;
     final v = stack[top - 1];
@@ -873,7 +874,7 @@ class LuaThread extends LuaThreadBase {
     t.setInt(n, v);
   }
 
-  /// `luaL_len`: `#` of the value at [idx] (with `__len`), as an int.
+  /// `luaL_len`. Returns `#` of the value at [idx] with `__len` as an int.
   int lenOf(int idx) {
     final v = arg(idx);
     push(null);
@@ -884,11 +885,12 @@ class LuaThread extends LuaThreadBase {
     return luaToCInt(n, vm.integer64);
   }
 
-  /// `luaL_getmetafield`: the raw field [event] of the value's metatable.
+  /// `luaL_getmetafield`. Returns the raw field [event] of the metatable of
+  /// the value.
   Object? getMetaField(int obj, String event) =>
       vm.metatableOf(arg(obj))?.get(event);
 
-  /// `luaL_callmeta`: pushes `mt[event](obj)` and returns true, or false.
+  /// `luaL_callmeta`. Pushes `mt[event](obj)` and returns true, else false.
   bool callMeta(int obj, String event) {
     final f = getMetaField(obj, event);
     if (f == null) return false;
@@ -899,7 +901,7 @@ class LuaThread extends LuaThreadBase {
     return true;
   }
 
-  /// The text `%p` prints for an object (`lua_topointer`).
+  /// The text of `%p` for an object, `lua_topointer`.
   String pointerText(Object? v) =>
       vm.runtime.pointerText(v is LuaObject ? v.id : 0);
 
@@ -907,9 +909,9 @@ class LuaThread extends LuaThreadBase {
   @pragma('vm:prefer-inline')
   double number(double x) => luaNumber(x, vm.float32);
 
-  /// `luaL_tolstring`: pushes the value's text (`__tostring`, or the
-  /// default) and returns it (`lua_tolstring` of the result; null if that
-  /// is neither a string nor a number).
+  /// `luaL_tolstring`. Pushes the text of the value from `__tostring` or the
+  /// default and returns it as `lua_tolstring` of the result. Returns null
+  /// when the result is neither a string nor a number.
   String? toLString(int idx) {
     if (!callMeta(idx, '__tostring')) {
       final v = arg(idx);
@@ -942,9 +944,9 @@ class LuaThread extends LuaThreadBase {
   }
 }
 
-/// Whether [e], thrown through a native function, is the VM's own control
-/// flow (a Lua error, a yield, a resume error, a bad table key) that a
-/// native must let pass, as opposed to a host-side failure.
+/// True when [e], thrown through a native function, is control flow of the
+/// VM that a native must let pass, such as a Lua error, a yield, a resume
+/// error or a bad table key. Returns false for a failure of the host.
 bool isLuaSignal(Object e) =>
     e is LuaError ||
     e is _LuaYield ||
@@ -961,8 +963,8 @@ class _ResumeError implements Exception {
   final String message;
 }
 
-/// The outcome of [LuaThread.resume]: [status] is [luaOk] (finished),
-/// [luaYield], or an error status with [error] set.
+/// The outcome of [LuaThread.resume]. [status] is [luaOk] for a finished
+/// thread, [luaYield] or an error status with [error] set.
 class LuaResume {
   LuaResume(this.status, this.values, {this.error});
   final int status;

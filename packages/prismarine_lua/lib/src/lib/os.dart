@@ -1,6 +1,6 @@
-// Ported from Lua 5.2.3 loslib.c (MIT; see LICENSE-lua). Time comes from
-// the host; local time is UTC (a ruling: no time zones), and nothing runs
-// outside the VM (execute/exit/remove/rename are refused and logged).
+// Ported from Lua 5.2.3 loslib.c (MIT, see LICENSE-lua). The time comes
+// from the host, and the local time is UTC. Nothing runs outside the VM.
+// `execute`, `exit`, `remove` and `rename` are refused and logged.
 
 import '../number.dart';
 import '../state.dart';
@@ -33,8 +33,8 @@ int _daysFromCivil(int y, int m, int d) {
 }
 
 class _Tm {
-  /// [t] broken down in UTC; [floor] counts days before 1970 down (the
-  /// UCRT's gmtime), where the 32-bit build's port took them towards zero.
+  /// [t] broken down in UTC. [floor] counts the days before 1970 down, and
+  /// else towards zero.
   _Tm.fromEpoch(int t, {bool floor = false}) {
     var days = t ~/ 86400;
     var rem = t % 86400;
@@ -145,7 +145,8 @@ int _date(LuaThread L) {
   var s = L.optString(1, '%c')!;
   final tn = L.arg(2) == null ? L.vm.host.time().toDouble() : L.checkNumber(2);
   if (!tn.isFinite) {
-    // (time_t) of inf/NaN is undefined in C; gmtime then fails: nil.
+    // The time_t of inf or NaN is undefined in C. gmtime then fails and the
+    // result is nil.
     L.push(null);
     return 1;
   }
@@ -249,7 +250,7 @@ int _refuse(LuaThread L, String what) {
   return 3;
 }
 
-/// `luaopen_os` into [t] (`syslib` order).
+/// `luaopen_os` into [t] in the order of `syslib`.
 LuaTable openOs(LuaTable t) {
   for (final (name, f) in <(String, LuaCFunction)>[
     (

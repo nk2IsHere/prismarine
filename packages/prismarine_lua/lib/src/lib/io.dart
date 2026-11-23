@@ -1,12 +1,12 @@
-// A minimal stand-in for Lua 5.2.3 liolib.c (MIT; see LICENSE-lua): output
-// goes to the host; files can't be opened (the game's io use is dev-only).
+// A minimal form of Lua 5.2.3 liolib.c (MIT, see LICENSE-lua). Output goes
+// to the host, and no file opens.
 
 import '../state.dart';
 import '../table.dart';
 import '../value.dart';
 
-/// Whether [o] is an io library file handle (a userdata payload a snapshot
-/// leaves as the fresh state made it: stdin, stdout, stderr).
+/// True when [o] is a file handle of the io library, stdin, stdout or
+/// stderr. A snapshot keeps the payload that a fresh state made.
 bool luaIsIoHandle(Object? o) => o is _File;
 
 class _File {
@@ -16,8 +16,8 @@ class _File {
   bool closed = false;
 }
 
-/// `luaopen_io` into [t]: io functions, stdin/stdout/stderr, and the file
-/// methods.
+/// `luaopen_io` into [t] with the io functions, stdin, stdout, stderr and
+/// the file methods.
 LuaTable openIo(LuaVm vm, LuaTable t) {
   final mt = LuaTable();
   final methods = LuaTable();

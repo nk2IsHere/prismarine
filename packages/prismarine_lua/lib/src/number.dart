@@ -1,6 +1,6 @@
-// Ported from Lua 5.2.3 lobject.c (luaO_str2d, lua_strx2number) and the
-// luaconf.h/llimits.h number macros (MIT; see LICENSE-lua), for the three
-// number modes of config.dart.
+// Ported from `luaO_str2d` and `lua_strx2number` of Lua 5.2.3 lobject.c and
+// the number macros of luaconf.h and llimits.h (MIT, see LICENSE-lua), for
+// the three number modes of config.dart.
 
 import 'dart:typed_data';
 
@@ -10,8 +10,8 @@ import 'config.dart';
 
 final _f32 = Float32List(1);
 
-/// The NaN that invalid operations give on x86-64: the sign set, quiet.
-/// Every NaN result of a mode without NaN pass-through is this one.
+/// The NaN that an invalid operation gives on x86-64, quiet with the sign
+/// set. Every NaN result of a mode without NaN pass-through is this one.
 final double luaNaN = (ByteData(
   8,
 )..setUint64(0, 0xFFF8000000000000)).getFloat64(0);
@@ -37,9 +37,8 @@ void luaClaimNumberMode(LuaNumberMode mode) {
   luaFloatKeys = f;
 }
 
-/// Rounds [x] to the nearest float32, as storing a C `float`, with the
-/// canonical NaN. Inlined: a call takes its argument boxed in an AOT build
-/// at some call sites.
+/// Rounds [x] to the nearest float32, as a store to a C `float` does, with
+/// the canonical NaN.
 @pragma('vm:prefer-inline')
 double f32(double x) {
   _f32[0] = x;
@@ -59,15 +58,16 @@ double r32(double x) {
 @pragma('vm:prefer-inline')
 double f64(double x) => x.isNaN ? luaNaN : x;
 
-/// A C double result as a `lua_Number` of a float mode when [float32].
+/// The C double result [x] as a `lua_Number`, a float when [float32].
 @pragma('vm:prefer-inline')
 double luaNumber(double x, bool float32) => float32 ? f32(x) : f64(x);
 
-/// `luai_nummod` in the float32 mode: a/b in double, its floor stored as
-/// float, the product and the difference in double, stored as float.
+/// `luai_nummod` in the float32 mode. The quotient is in double and its
+/// floor is stored as a float. The product and the difference are in double,
+/// and the result is stored as a float.
 double luaMod(double a, double b) => f32(a - f32((a / b).floorToDouble()) * b);
 
-/// `luai_numpow` in the float32 mode: double `pow`, stored as float.
+/// `luai_numpow` in the float32 mode, the double `pow` stored as a float.
 double luaPow(double a, double b) => f32(libm.dpow(a, b));
 
 /// `luai_nummod` in the float64 mode.
@@ -76,8 +76,8 @@ double luaMod64(double a, double b) => f64(a - (a / b).floorToDouble() * b);
 /// `luai_numpow` in the float64 mode.
 double luaPow64(double a, double b) => f64(libm.dpow(a, b));
 
-/// A NaN result of a single-precision operation on [a] and [b]: the first
-/// NaN operand, made quiet, else the canonical NaN.
+/// The NaN result of a single-precision operation on [a] and [b]. Returns
+/// the first NaN operand made quiet, else the canonical NaN.
 double nanResult(double a, double b) => a.isNaN
     ? r32(a)
     : b.isNaN
@@ -89,7 +89,7 @@ double nanResult(double a, double b) => a.isNaN
 double singleOp(double r, double a, double b) =>
     r.isNaN ? nanResult(a, b) : r32(r);
 
-/// `luai_nummod` in the float32Single mode: `a - floorf(a / b) * b` with
+/// `luai_nummod` in the float32Single mode, `a - floorf(a / b) * b` with
 /// every operation in float.
 double luaModSingle(double a, double b) {
   final q = singleOp(a / b, a, b);
@@ -99,7 +99,7 @@ double luaModSingle(double a, double b) {
   return singleOp(a - m, a, m);
 }
 
-/// `tonumber(s, base)`'s digit step `n = n * base + d` in [mode].
+/// The digit step `n = n * base + d` of `tonumber(s, base)` in [mode].
 double baseStep(double n, int base, int digit, LuaNumberMode mode) =>
     switch (mode) {
       LuaNumberMode.float64 => n * base + digit,
@@ -107,9 +107,8 @@ double baseStep(double n, int base, int digit, LuaNumberMode mode) =>
       LuaNumberMode.float32Single => f32(f32(base.toDouble() * n) + digit),
     };
 
-/// `lua_pushinteger` of a 64-bit value in a float mode: one rounding to
-/// float, as `cvtsi2ss` does. A double in between would round twice above
-/// 2^53.
+/// `lua_pushinteger` of a 64-bit value in a float mode. Rounds once to
+/// float, as `cvtsi2ss` does.
 double int64ToF32(int v) {
   if (v == -0x8000000000000000) return -9223372036854775808.0;
   final m = v.abs();
@@ -134,8 +133,8 @@ int _hexValue(int c) {
 
 bool _isHex(int c) => _isDigit(c) || ((c | 0x20) >= 0x61 && (c | 0x20) <= 0x66);
 
-/// `luaO_str2d`: [s] as a number of [mode], or null unless all of it is one.
-/// Spaces around it are allowed.
+/// `luaO_str2d`. Returns [s] as a number of [mode], or null unless all of
+/// [s] is a number. Spaces around it are allowed.
 double? parseLuaNumber(String s, LuaNumberMode mode) {
   final f = mode.isFloat32;
   if (s.contains('n') || s.contains('N')) return null;
@@ -144,7 +143,7 @@ double? parseLuaNumber(String s, LuaNumberMode mode) {
   double r;
   int end;
   if (s.contains('x') || s.contains('X')) {
-    // lua_strx2number: hexadecimal, accumulated in lua_Number.
+    // lua_strx2number, hexadecimal and accumulated in lua_Number.
     while (i < len && luaIsSpace(s.codeUnitAt(i))) {
       i++;
     }
@@ -244,14 +243,14 @@ double? parseLuaNumber(String s, LuaNumberMode mode) {
   return end == len ? r : null;
 }
 
-/// `lua_number2int`: truncation. A NaN or a value outside int32 gives
+/// `lua_number2int`, a truncation. A NaN or a value outside int32 gives
 /// 0x80000000, as the x86 conversion instructions do.
 int luaToInt32(double n) {
   if (n.isNaN || n >= 2147483648.0 || n < -2147483648.0) return -2147483648;
   return n.truncate();
 }
 
-/// `lua_number2integer`: truncation to the `lua_Integer` of 64 bits when
+/// `lua_number2integer`, a truncation to the `lua_Integer` of 64 bits when
 /// [integer64], else of 32 bits. A NaN or a value outside the range gives
 /// the smallest integer.
 int luaToInteger(double n, bool integer64) {
@@ -267,20 +266,20 @@ int luaToInteger(double n, bool integer64) {
 int luaToCInt(double n, bool integer64) =>
     integer64 ? luaToInteger(n, true).toSigned(32) : luaToInt32(n);
 
-/// `lua_number2unsigned` (llimits.h `SUPUNSIGNED` formula): n − floor(n /
-/// 2³²) · 2³², truncated to 64 bits, with its low 32 bits kept.
+/// `lua_number2unsigned` with the `SUPUNSIGNED` formula of llimits.h. Returns
+/// the low 32 bits of n − floor(n / 2³²) · 2³² truncated to 64 bits.
 int numberToUnsigned(double n) {
   if (!n.isFinite) return 0;
   final r = n - (n / 4294967296.0).floorToDouble() * 4294967296.0;
   return r.truncate() & 0xFFFFFFFF;
 }
 
-/// C `frexp`: (m, e) with [x] = m·2^e and 0.5 ≤ |m| < 1. Returns m = x and
-/// e = 0 for 0, inf and NaN.
+/// C `frexp`. Returns m and e with [x] = m·2^e and 0.5 ≤ |m| < 1, or m = x
+/// and e = 0 for 0, inf and NaN.
 @pragma('vm:prefer-inline')
 (double, int) frexp(double x) {
   if (x == 0 || !x.isFinite) return (x, 0);
-  // One shared 8-byte buffer: Lua hashes every number key with it.
+  // One shared 8-byte buffer. Lua hashes every number key with it.
   _frexpF[0] = x;
   final bits = _frexpBits[0];
   final exp = (bits >> 52) & 0x7FF;

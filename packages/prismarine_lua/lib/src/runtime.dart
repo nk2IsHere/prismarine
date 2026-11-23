@@ -1,6 +1,7 @@
-// The C library under a Lua build: printf's number text, `long` and `size_t`
-// widths, `%p`, strftime and gmtime. Ported from the C library behaviour that
-// Lua 5.2.3's lobject.c, lstrlib.c and loslib.c call (MIT; see LICENSE-lua).
+// The C library under a Lua build, with the number text of printf, the
+// widths of `long` and `size_t`, `%p`, strftime and gmtime. Ported from the
+// behaviour of the C library that Lua 5.2.3 lobject.c, lstrlib.c and
+// loslib.c call (MIT, see LICENSE-lua).
 
 import 'dart:typed_data';
 
@@ -31,8 +32,9 @@ class LuaCRuntime {
   /// The decimal exponent that `%g` takes for zero.
   int get zeroExponent => 0;
 
-  /// The decimal digits of a finite non-zero [v] that printf works from:
-  /// value = 0.`digits` × 10^`point`, without leading or trailing zeros.
+  /// The decimal digits of a finite non-zero [v] that printf works from,
+  /// with value = 0.`digits` × 10^`point` and without leading or trailing
+  /// zeros.
   (String, int) digits(double v) => exactDigits(v);
 
   /// The text of inf or NaN for `%e`, `%f`, `%g` and `%a`.
@@ -100,7 +102,7 @@ class LuaCRuntime {
   /// `powf`, the single-precision `pow`.
   double powf(double a, double b) => f32(libm.dpow(a, b));
 
-  /// `lua_number2str`: C `"%.14g"`.
+  /// `lua_number2str`, the C `"%.14g"`.
   String numberToString(double n) {
     if (n == n.truncateToDouble() && n.abs() < 1e14) {
       if (n == 0) return _signBit(n) ? '-0' : '0';
@@ -117,7 +119,7 @@ class LuaCRuntime {
       ? ' '
       : '';
 
-  /// C `%.<prec>e` without width: the mantissa and an exponent of at least
+  /// C `%.<prec>e` without width. The exponent has at least
   /// [exponentDigits] digits.
   String formatE(
     double v,
@@ -239,8 +241,8 @@ String stripZeros(String s) {
   return s.substring(0, end);
 }
 
-/// The exact decimal digits of a finite non-zero [v]: value =
-/// 0.`digits` × 10^`point`, without leading or trailing zeros.
+/// The exact decimal digits of a finite non-zero [v], with value =
+/// 0.`digits` × 10^`point` and without leading or trailing zeros.
 (String, int) exactDigits(double v) {
   _bits.setFloat64(0, v.abs());
   final bits = _bits.getUint64(0);
@@ -274,8 +276,9 @@ String stripZeros(String s) {
 }
 
 /// Keeps the first [keep] digits of [d], which may be 0 or less, and rounds
-/// the rest: half to even on the exact value, or half up on the digit string.
-/// Returns the kept digits and 1 when a carry added a leading digit.
+/// the rest half to even on the exact value when [halfEven], else half up on
+/// the digit string. Returns the kept digits and 1 when a carry added a
+/// leading digit.
 (String, int) roundDigits(String d, int keep, bool halfEven) {
   if (keep >= d.length) return (d, 0);
   bool up;

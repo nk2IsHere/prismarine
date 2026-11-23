@@ -1,6 +1,6 @@
-// Ported from Lua 5.2.3 lmathlib.c (MIT; see LICENSE-lua). `math.random`
-// draws from the VM's xorshift128 generator (docs/formats/lua-runtime.md,
-// "`math.random`"). Results are rounded to the VM's number mode.
+// Ported from Lua 5.2.3 lmathlib.c (MIT, see LICENSE-lua). `math.random`
+// draws from the xorshift128 generator of the VM. A result is rounded to the
+// number mode of the VM.
 
 import 'dart:math' as m;
 
@@ -25,7 +25,7 @@ double _tanh(double x) {
   return (e2 - 1) / (e2 + 1);
 }
 
-double _fmod(double a, double b) {
+double _truncRemainder(double a, double b) {
   if (b == 0 || a.isInfinite || a.isNaN || b.isNaN) return double.nan;
   if (b.isInfinite) return a;
   return a.remainder(b);
@@ -39,8 +39,8 @@ const _radiansPerDegree64 = _piDouble / 180.0;
 double _perDegree(LuaThread L) =>
     L.vm.float32 ? _radiansPerDegree : _radiansPerDegree64;
 
-int _fmodN(LuaThread L) {
-  L.push(L.number(_fmod(L.checkNumber(1), L.checkNumber(2))));
+int _luaTruncRemainder(LuaThread L) {
+  L.push(L.number(_truncRemainder(L.checkNumber(1), L.checkNumber(2))));
   return 1;
 }
 
@@ -119,8 +119,9 @@ int _max(LuaThread L) {
   return 1;
 }
 
-/// `math.random` on the VM's xorshift128 generator (see
-/// formats/telltale/lua-runtime.md, "`math.random`").
+/// `math.random` on the xorshift128 generator of the VM. Without arguments
+/// it returns the next value over 2^32. `random(n)` returns `next % n + 1`
+/// and `random(m, n)` maps the next value onto the range.
 int _random(LuaThread L) {
   final rng = L.vm.rng;
   switch (L.getTop()) {
@@ -144,8 +145,7 @@ int _random(LuaThread L) {
   return 1;
 }
 
-/// `math.randomseed`: 0 resets the default state (see
-/// formats/telltale/lua-runtime.md, "Seeding").
+/// `math.randomseed`. The seed 0 restores the default state.
 int _randomseed(LuaThread L) {
   final n = L.checkUnsigned(1);
   if (n == 0) {
@@ -156,19 +156,17 @@ int _randomseed(LuaThread L) {
   return 0;
 }
 
-/// `luaopen_math` into [t] (`mathlib` order, then pi and huge) for [vm].
-/// [random] and [randomseed] replace the functions on the VM's generator.
-///
-/// The libm functions are called from closures, never torn off: a tear-off
-/// keeps the compiler from passing their double argument unboxed at every
-/// other call site (the chore engine's slerps called them with a boxed
-/// double each; perf).
+/// `luaopen_math` into [t] for [vm] in the order of `mathlib`, then pi and
+/// huge. [random] and [randomseed] replace the functions on the generator of
+/// the VM.
 LuaTable openStandardMath(
   LuaVm vm,
   LuaTable t, {
   LuaCFunction? random,
   LuaCFunction? randomseed,
 }) {
+  // The libm functions are called from closures and not torn off. A tear-off
+  // makes the compiler pass a boxed double at the other call sites.
   for (final (name, f) in <(String, LuaCFunction)>[
     ('abs', _f1((x) => x.abs())),
     ('acos', _f1((x) => libm.acos(x))),
@@ -187,7 +185,7 @@ LuaTable openStandardMath(
     ('deg', _deg),
     ('exp', _f1((x) => libm.exp(x))),
     ('floor', _f1((x) => x.floorToDouble())),
-    ('fmod', _fmodN),
+    ('fmod', _luaTruncRemainder),
     ('frexp', _frexp),
     ('ldexp', _ldexp),
     ('log', _log),

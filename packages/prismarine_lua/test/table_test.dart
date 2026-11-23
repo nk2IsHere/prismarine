@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 /// The scenarios of test/corpus/tbl_len.lua and tbl_next.lua, done directly on
 /// [LuaTable] exactly as their bytecode does them (NEWTABLE sizes, SETTABLE =
 /// luaH_set, SETLIST = setInt from the highest index down), printed like
-/// `print` and compared with the reference oracle's output.
+/// `print` and compared with the output of the reference build.
 void main() {
   String show(Object? v) => switch (v) {
     null => 'nil',
@@ -31,7 +31,7 @@ void main() {
     return out;
   }
 
-  test('luaH_getn matches the oracle (tbl_len.lua)', () {
+  test('luaH_getn matches the reference build (tbl_len.lua)', () {
     final out = <String>[];
     var t = LuaTable();
     for (var i = 1; i <= 10; i++) {
@@ -87,7 +87,7 @@ void main() {
     expect(out, golden('tbl_len'));
   });
 
-  test('next order matches the oracle with the fixed seed (tbl_next.lua)', () {
+  test('next order matches the reference build with the fixed seed (tbl_next.lua)', () {
     final out = <String>[];
     var t = LuaTable();
     for (final k in ['alpha', 'beta', 'gamma', 'delta', 'x', 'y', 'z']) {
@@ -144,7 +144,7 @@ void main() {
     expect(out, golden('tbl_next'));
   });
 
-  test('the fixed-seed order recorded with the oracle (lua-runtime.md)', () {
+  test('the fixed-seed order recorded with the reference build', () {
     final t = LuaTable();
     for (final k in ['alpha', 'beta', 'gamma', 'delta', 'x', 'y', 'z']) {
       t.set(k, 1.0);

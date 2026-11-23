@@ -1,5 +1,5 @@
-// The build configuration of a Lua VM, as luaconf.h and the C library give
-// it to a C build of Lua.
+// The build configuration of a Lua VM, which luaconf.h and the C library
+// give a C build of Lua.
 
 import 'lib/math.dart' show openStandardMath;
 import 'runtime.dart';
@@ -26,7 +26,8 @@ enum LuaNumberMode {
 /// The configuration of a [LuaVm]. Every member has a default. A class or an
 /// enum mixes it in and overrides the members it changes.
 abstract mixin class LuaConfig {
-  /// The number mode. All VMs of an isolate share one mode.
+  /// The number mode. The VMs of an isolate all have float numbers or all
+  /// have doubles.
   LuaNumberMode get numberMode => LuaNumberMode.float64;
 
   /// The width of `lua_Integer` is 64 bits, or 32 bits when false.

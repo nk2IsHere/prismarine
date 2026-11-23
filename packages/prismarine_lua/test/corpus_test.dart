@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 
 import 'support/corpus.dart';
 
-/// Every corpus program prints what the reference oracle printed.
+/// Every corpus program prints what the reference build printed.
 void main() {
   for (final name in corpusPrograms()) {
     test(name, () {

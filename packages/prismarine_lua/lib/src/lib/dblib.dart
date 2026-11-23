@@ -1,12 +1,13 @@
-// Ported from Lua 5.2.3 ldblib.c and ldebug.c (findlocal) (MIT; see
-// LICENSE-lua). Hooks are not supported (sethook is a no-op).
+// Ported from Lua 5.2.3 ldblib.c and `findlocal` of ldebug.c (MIT, see
+// LICENSE-lua). Hooks are not supported, and `sethook` does nothing.
 
 import '../debug.dart';
 import '../state.dart';
 import '../table.dart';
 import '../value.dart';
 
-/// `findlocal`: (name, stack index) of local [n] of the frame at [ciIdx].
+/// `findlocal`. Returns the name and the stack index of local [n] of the
+/// frame at [ciIdx].
 (String, int)? _findLocal(LuaThread th, int ciIdx, int n) {
   final ci = th.cis[ciIdx];
   String? name;
@@ -33,7 +34,8 @@ import '../value.dart';
   return (name, base + (n - 1));
 }
 
-/// (thread, first argument index) for functions with an optional thread.
+/// The thread and the index of the first argument of a function with an
+/// optional thread argument.
 (LuaThread, int) _thread(LuaThread L) {
   final t = L.arg(1);
   if (t is LuaThread) return (t, 1);
@@ -192,7 +194,7 @@ int _traceback(LuaThread L) {
   return 1;
 }
 
-/// `luaopen_debug` into [t] (`dblib` order).
+/// `luaopen_debug` into [t] in the order of `dblib`.
 LuaTable openDebug(LuaTable t) {
   for (final (name, f) in <(String, LuaCFunction)>[
     ('debug', (L) => 0),

@@ -1,4 +1,4 @@
-// Ported from Lua 5.2.3 lbaselib.c (MIT; see LICENSE-lua).
+// Ported from Lua 5.2.3 lbaselib.c (MIT, see LICENSE-lua).
 
 import 'dart:typed_data';
 
@@ -160,7 +160,8 @@ const _gcOptions = [
   'setmajorinc', 'isrunning', 'generational', 'incremental', //
 ];
 
-/// Memory is Dart's: no GC introspection (a ruling).
+/// Memory belongs to Dart. `collectgarbage` reports no counts and collects
+/// nothing.
 int _collectgarbage(LuaThread L) {
   final o = _gcOptions[L.checkOption(1, 'collect', _gcOptions)];
   L.optInt(2, 0);
@@ -198,7 +199,7 @@ int _next(LuaThread L) {
     L.push(null);
     return 1;
   }
-  // Out of the statics at once; cleared so they hold no value alive.
+  // Taken out of the statics at once and cleared. They keep no value alive.
   final k = LuaTable.nextKey, v = LuaTable.nextValue;
   LuaTable.nextKey = LuaTable.nextValue = null;
   L.push(k);
@@ -208,8 +209,8 @@ int _next(LuaThread L) {
 
 final _nextNative = LuaNative(_next, 'next');
 
-/// The natives shared by every Lua state (made once per process), by name
-/// (a snapshot names them so).
+/// The natives that every Lua state of the isolate shares by name, made
+/// once. A snapshot refers to them by name.
 Map<String, LuaNative> get luaSharedNatives => {
   'next': _nextNative,
   'ipairs_aux': _ipairsAuxNative,
@@ -257,7 +258,8 @@ int _loadAux(LuaThread L, LuaClosure? f, String? err, int envIdx) {
   return 2;
 }
 
-/// `luaD_protectedparser` from Dart: a loaded function, or the error text.
+/// `luaD_protectedparser` from Dart. Returns a loaded function, or the error
+/// text.
 (LuaClosure?, String?) loadBytes(
   LuaThread L,
   Uint8List chunk,
@@ -313,9 +315,8 @@ int _load(LuaThread L) {
   return _loadAux(L, f, err, env);
 }
 
-/// Stock `loadfile`/`dofile` read through the host as files; the exe reads
-/// resources (its replacements: see formats/telltale/lua-runtime.md,
-/// "Environment patches at boot"; the messages are [INF]).
+/// The file of `loadfile` and `dofile` as a resource of the host. The
+/// message for a missing file comes from the configuration.
 (LuaClosure?, String?) _loadFile(LuaThread L, String? fname, String? mode) {
   if (fname == null) return (null, 'cannot read stdin');
   final bytes = L.vm.host.readResource(fname);
@@ -398,7 +399,7 @@ int _tostring(LuaThread L) {
   return 1;
 }
 
-/// `luaopen_base` into the globals, then the profile's overrides.
+/// `luaopen_base` into the globals.
 void openBase(LuaVm vm) {
   final g = vm.globals;
   g.set('_G', g);

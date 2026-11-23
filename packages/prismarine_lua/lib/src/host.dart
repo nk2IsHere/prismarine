@@ -2,23 +2,26 @@
 
 import 'dart:typed_data';
 
-/// The engine side of the runtime: output, logs, resources, clock.
+/// The output, logs, resources and clocks that a VM gets from its host.
 abstract class LuaHost {
-  /// Standard output (stock `print`, `io.write`).
+  /// Writes [s] to the standard output of `print` and `io.write`.
   void write(String s);
 
-  /// Diagnostic channels: `ScriptError`, `print` (the exe's no-op print).
+  /// Writes [message] to the diagnostic [channel].
   void log(String channel, String message);
 
-  /// A script resource by name (`require`, `dofile`, `loadfile`), or null.
+  /// Returns the resource [name] for `require`, `dofile` and `loadfile`, or
+  /// null.
   Uint8List? readResource(String name);
 
-  /// `os.clock` seconds and `os.time` seconds.
+  /// The seconds of `os.clock`.
   double clock();
+
+  /// The seconds of `os.time`.
   int time();
 }
 
-/// A host that collects output in memory; resources come from [resources].
+/// A host that collects output in memory and has the [resources] given.
 class MemoryLuaHost implements LuaHost {
   MemoryLuaHost({Map<String, Uint8List>? resources})
     : resources = resources ?? {};

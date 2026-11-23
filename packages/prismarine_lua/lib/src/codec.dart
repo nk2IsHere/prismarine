@@ -1,13 +1,14 @@
-// Ported from Lua 5.2.3 lundump.c / ldump.c (MIT; see LICENSE-lua).
+// Ported from Lua 5.2.3 lundump.c and ldump.c (MIT, see LICENSE-lua).
 
 import 'dart:typed_data';
 
 import 'opcodes.dart';
 import 'proto.dart';
 
-/// `luaU_header` for a `size_t` of [sizeT] bytes and float or double
-/// numbers: "\x1bLua", 5.2, format 0, little-endian, 4-byte `int` and
-/// instructions, not integral, LUAC_TAIL.
+/// `luaU_header` for a `size_t` of [sizeT] bytes and float numbers when
+/// [float32], else doubles. The header has the signature, version 5.2,
+/// format 0, little endian, a 4-byte `int` and instruction, no integral
+/// numbers and LUAC_TAIL.
 List<int> luaHeader({int sizeT = 8, bool float32 = false}) => [
   0x1B, 0x4C, 0x75, 0x61, 0x52, 0x00, 0x01, 0x04, sizeT, 0x04, //
   float32 ? 4 : 8, 0x00, 0x19, 0x93, 0x0D, 0x0A, 0x1A, 0x0A,
@@ -72,7 +73,7 @@ class _Loader {
   void header() {
     final h = luaHeader(sizeT: sizeT, float32: float32);
     need(1);
-    // The loader has already seen the first byte (LUA_SIGNATURE[0]).
+    // The loader has already seen the first byte, LUA_SIGNATURE[0].
     final got = List<int>.filled(h.length, 0)..[0] = h[0];
     pos = 1;
     for (var i = 1; i < h.length; i++) {
@@ -164,10 +165,10 @@ class _Loader {
   }
 }
 
-/// `luaU_undump`: the main function of a binary chunk with a `size_t` of
-/// [sizeT] bytes and float numbers when [float32]. [chunkName] is the name
-/// that `load` got. It names errors: "@x" and "=x" give "x", a binary string
-/// gives "binary string".
+/// `luaU_undump`. Returns the main function of a binary chunk with a
+/// `size_t` of [sizeT] bytes and float numbers when [float32]. [chunkName]
+/// is the name that `load` got. An error message gives "x" for "@x" and
+/// "=x", and "binary string" for a binary string.
 LuaProto undumpLua(
   Uint8List bytes,
   String chunkName, {
@@ -284,9 +285,9 @@ class _Dumper {
   }
 }
 
-/// `luaU_dump` (strip = false) of a main function, with a `size_t` of
-/// [sizeT] bytes and float numbers when [float32]. A specialised opcode is
-/// written as its standard one.
+/// `luaU_dump` without stripping. Returns the chunk of [main] with a
+/// `size_t` of [sizeT] bytes and float numbers when [float32]. A specialised
+/// opcode is written as its standard one.
 Uint8List dumpLua(LuaProto main, {int sizeT = 8, bool float32 = false}) {
   final d = _Dumper(sizeT, float32);
   for (final b in luaHeader(sizeT: sizeT, float32: float32)) {

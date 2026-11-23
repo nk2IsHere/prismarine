@@ -1,4 +1,4 @@
-// Ported from Lua 5.2.3 lstrlib.c (MIT; see LICENSE-lua). `format` follows C
+// Ported from Lua 5.2.3 lstrlib.c (MIT, see LICENSE-lua). `format` follows C
 // printf in the VM's C runtime.
 
 import 'dart:typed_data';
@@ -141,19 +141,19 @@ int _findAux(LuaThread L, bool find) {
   } else {
     final anchor = p.isNotEmpty && p.codeUnitAt(0) == 0x5E;
     final ms = MatchState(L, s, anchor ? p.substring(1) : p);
-    var s1 = init - 1;
+    var from = init - 1;
     do {
       ms.level = 0;
-      final res = ms.match(s1, 0);
+      final res = ms.match(from, 0);
       if (res != -1) {
         if (find) {
-          L.push((s1 + 1).toDouble());
+          L.push((from + 1).toDouble());
           L.push(res.toDouble());
           return ms.pushCaptures(-1, 0) + 2;
         }
-        return ms.pushCaptures(s1, res);
+        return ms.pushCaptures(from, res);
       }
-    } while (s1++ < ms.srcEnd && !anchor);
+    } while (from++ < ms.srcEnd && !anchor);
   }
   L.push(null);
   return 1;
@@ -270,8 +270,6 @@ int _gsub(LuaThread L) {
   L.push(n.toDouble());
   return 2;
 }
-
-// --- format -------------------------------------------------------------------
 
 const _flags = '-+ #0';
 
@@ -402,7 +400,7 @@ int _format(LuaThread L) {
       continue;
     }
     if (++arg > top) L.argError(arg, 'no value');
-    // scanformat
+    // scanformat.
     final sp = _Spec();
     final start = i;
     while (at(i) != 0 && _flags.codeUnits.contains(at(i))) {
@@ -486,8 +484,8 @@ int _format(LuaThread L) {
   return 1;
 }
 
-/// `luaopen_string`: the library table (in `strlib` order) and the string
-/// metatable (`__index` = the table).
+/// `luaopen_string`. Fills the library table in the order of `strlib` and
+/// sets the string metatable, whose `__index` is the table.
 LuaTable openString(LuaVm vm, LuaTable t) {
   for (final (name, f) in <(String, LuaCFunction)>[
     ('byte', _byte),

@@ -1,5 +1,4 @@
-// GameApp.exe's random generator: Marsaglia's xorshift128 on four uint32s
-// (see formats/telltale/lua-runtime.md, "The engine generator").
+// Marsaglia's xorshift128 generator on four 32-bit words.
 
 class LuaRng {
   LuaRng() {
@@ -8,7 +7,7 @@ class LuaRng {
 
   int x = 0, y = 0, z = 0, w = 0;
 
-  /// The default state.
+  /// Restores the default state.
   void reset() {
     x = 123456789;
     y = 362436069;
@@ -16,7 +15,8 @@ class LuaRng {
     w = 88675123;
   }
 
-  /// Seed(a, b, c, d): a zero argument is derived from `a`.
+  /// Seeds the generator with [a] to [d]. An argument of 0 is derived from
+  /// [a].
   void seed(int a, [int b = 0, int c = 0, int d = 0]) {
     a &= 0xFFFFFFFF;
     x = a;
@@ -25,7 +25,7 @@ class LuaRng {
     w = d != 0 ? d & 0xFFFFFFFF : (z * a) & 0xFFFFFFFF;
   }
 
-  /// Step: the next uint32.
+  /// Returns the next 32-bit value.
   int next() {
     final t = (x ^ (x << 11)) & 0xFFFFFFFF;
     x = y;
