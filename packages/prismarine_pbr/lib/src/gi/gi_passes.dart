@@ -5,6 +5,7 @@ import 'package:prismarine_frame/prismarine_frame.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import '../pbr_gi_settings.dart';
+import '../pbr_point_shadows.dart' show pointShadowAtlas;
 import '../pbr_settings.dart';
 import 'gi_block.dart';
 import 'gi_volume.dart';
@@ -245,6 +246,7 @@ class GiPasses {
             'giDistance': const TargetTexture(GiTargets.giDistance),
             'skyEnv': const TargetTexture(GiTargets.skyEnv, mips: _skyMips),
             'shadowMap': TargetTexture(shadowMap),
+            'pointShadowAtlas': const TargetTexture(pointShadowAtlas),
           },
           samplers: const {5: _linearClamp, 6: _equirect, 4: _shadowCompare},
           storage: {

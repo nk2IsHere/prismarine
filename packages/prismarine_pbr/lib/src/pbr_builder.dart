@@ -262,9 +262,7 @@ class PbrBuilder {
           label: m.name,
         );
         shadow.add(caster);
-        casters.add(
-          PbrCaster(caster, d.center, d.radius, doubleSided: m.doubleSided),
-        );
+        casters.add(PbrCaster(caster, d.center, d.radius));
       }
     }
     opaque.sort((a, b) => a.$1.compareTo(b.$1));

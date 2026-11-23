@@ -39,7 +39,15 @@ Future<int> runSmoke(
     r.builder.boundsMin,
     r.builder.boundsMax,
     r.lamps,
+    volume: r.builder.giVolume,
   )..place(7.5);
+  for (final (i, l) in lights.lights.indexed) {
+    final p = l.position;
+    stdout.writeln(
+      'SMOKE light $i at ${p.x.toStringAsFixed(3)}, '
+      '${p.y.toStringAsFixed(3)}, ${p.z.toStringAsFixed(3)}',
+    );
+  }
   r.builder.lights
     ..clear()
     ..addAll(lights.lights.take(lightCount ?? lights.lights.length));

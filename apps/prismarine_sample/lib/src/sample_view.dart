@@ -57,6 +57,7 @@ class _SampleViewState extends State<SampleView>
       _r.builder.boundsMin,
       _r.builder.boundsMax,
       _r.lamps,
+      volume: _r.builder.giVolume,
     );
     final cams = _r.cameras;
     if (cams.isNotEmpty) {

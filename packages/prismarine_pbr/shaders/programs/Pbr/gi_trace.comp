@@ -24,6 +24,7 @@ uniform sampler s6;
 uniform texture2D shadowMap; // t4
 uniform samplerShadow s4;
 #define shadowMap_S s4
+#include "Pbr/bodies/point_shadow.glsl"
 layout(rgba16f) uniform writeonly image2D giRays;
 
 #include "Pbr/bodies/gi_probes.glsl"
@@ -43,7 +44,8 @@ float sunVisible(vec3 p) {
 }
 
 // The light that reaches a point p with normal n from the sun and the point
-// lights. A double-sided cell takes light from both sides.
+// lights with their shadows. A double-sided cell takes light from both
+// sides.
 vec3 directLight(vec3 p, vec3 n, bool twoSided) {
   vec3 sun = cb0.sunDirection.xyz;
   float ns = dot(n, sun);
@@ -60,7 +62,9 @@ vec3 directLight(vec3 p, vec3 n, bool twoSided) {
     float falloff = clamp(1.0 - r * r, 0.0, 1.0) / dist2;
     float nl = dot(n, d) * inversesqrt(dist2);
     if (twoSided) nl = abs(nl);
-    if (falloff > 0.0 && nl > 0.0) light += cb0.lightColor[i].rgb * falloff * nl;
+    if (falloff > 0.0 && nl > 0.0) {
+      light += cb0.lightColor[i].rgb * falloff * nl * pointShadow(i, p, n);
+    }
   }
   return light;
 }

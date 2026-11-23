@@ -56,6 +56,7 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
       _r.builder.boundsMin,
       _r.builder.boundsMax,
       _r.lamps,
+      volume: _r.builder.giVolume,
     );
     _r.builder.lights.addAll(_lights.lights);
     _r.onFrame = () => _repaint.value++;

@@ -11,8 +11,10 @@ Each entry is wanted work that no plan covers yet. A done entry is removed. The 
 
 ## Renderer
 
-- **Global illumination and reflections.** Image-based light, reflections and a form of global illumination for the
-  generic renderer.
+- **Shadowed point lights in the probes for every light.** The rays of the probes see the shadows of the point lights
+  that have a slot in the atlas, two by default. The light of the others reaches the probes through walls.
+- **Moving geometry in the indirect light.** The voxel copy is made once at load. Moving objects need a copy that the
+  GPU updates.
 - **Cheaper point light shadows.** A shadowed point light draws the large chunks of a scene into six faces, about
   1.5 ms on the GPU of an M2 Pro. Faces redrawn in turns while the lights move, or casters split into smaller
   clusters, would lower it.

@@ -2,8 +2,9 @@
 
 The package is a forward renderer of glTF scenes. It builds the frame plan of a scene for
 [prismarine_render](render.md), with glTF metallic-roughness materials and normal maps, alpha masks and alpha blending,
-emission, a sun with a shadow map, up to 16 point lights with shadows from a cube atlas, fog lit by the sun and the
-point lights, temporal anti-aliasing, auto exposure, bloom and a choice of tone maps. Its shaders are its own GLSL,
+emission, a sun with a shadow map, up to 16 point lights with shadows from a cube atlas, indirect light from a
+procedural sky and irradiance probes with ambient occlusion and reflections, fog lit by the sun and the point lights,
+temporal anti-aliasing, auto exposure, bloom and a choice of tone maps. Its shaders are its own GLSL,
 built with [prismarine_shaders](shaders.md). It is a Flutter package. `package:prismarine_pbr/builder.dart` holds the
 builder without Flutter.
 
@@ -19,9 +20,13 @@ with the prefix that its stems start with. Each frame you set the fields of a `P
 final assets = PbrAssets(shaders, {'hall': scene});
 final runner = FrameRunner(assets, pbrRunnerShaders);
 final builder = PbrBuilder([PbrScene('hall', scene.model)]);
+builder.giVolume = await loadGiVolume(['hall/scene.gltf']);
 camera.view.setFrom(view);
 await runner.run(builder.frame(camera, 1920, 1080), present: PbrTargets.backbuffer);
 ```
+
+The probes of the indirect light need the voxel copy of the scenes that `loadGiVolume` builds in an isolate from the
+glTF files, about two seconds for Sponza. The frames before it lack the probes and light the scene from the sky.
 
 The builder makes the plan once for a view size and shadow map size and returns the same plan in later frames. A
 frame writes the camera, the sun and the lights into the bytes of its frame roles and sorts the blended draws from
@@ -34,7 +39,15 @@ runner leaves the pass out while the sun holds still.
 |---|---|---|
 | `shadow` | `shadowMap`, D32_FLOAT | Every opaque and masked draw from the sun, with an orthographic projection around the scenes. Masked draws test alpha. |
 | `pointShadows` | `pointShadowAtlas`, D32_FLOAT | Six cube faces for each point light with a shadow slot, a row of the atlas each. |
-| `opaque` | `hdr`, R16G16B16A16_FLOAT and `depth`, D32_FLOAT | Opaque draws, then masked draws, by material, with a jittered camera when TAA is on. The target clears to `settings.background`. |
+| `gi.brdf`, `gi.sky`, `gi.skyMip<n>`, `gi.skySpecular<n>`, `gi.skyIrradiance` | `brdfLut`, `skyEnv`, `skySpecular`, `skyIrradiance` | Computes of the BRDF table, run once, and of the sky maps, run when the sun moves. |
+| `gi.trace`, `gi.blend`, `gi.copy` | `giRays`, `giIrradiance`, `giDistance` | Computes of the probes of this frame. |
+| `opaque` | `hdr`, R16G16B16A16_FLOAT, `gbufferNormal`, R16G16B16A16_FLOAT, `gbufferAlbedo`, R8G8B8A8_UNORM and `depth`, D32_FLOAT | Opaque draws, then masked draws, by material, with a jittered camera when TAA is on. `hdr` gets the direct light and clears to `settings.background`, the other two the normal, roughness, metallic value and base colour. |
+| `sky` | `hdr` | The sky where `depth` is 1. |
+| `ao`, `aoBlur` | `aoRaw`, `ao`, R8_UNORM at half size | Ambient occlusion and its filter. |
+| `ssr`, `ssrBlur` | `ssr`, `ssrBlur` at half size | Screen-space reflections and their filter. |
+| `giResolve` | `giDiffuseHalf`, `giSpecularHalf` at half size | The light of the probes and the sky at each pixel. |
+| `indirect` | `hdr` | The indirect light, added. |
+| `history`, `historyMip<n>` | `history` at half size with 5 mips | The light of this frame for the reflections of the next. |
 | `blend` | `hdr` and `depth` | Blended draws from back to front, with depth tested and not written. |
 | `markers` | `hdr` and `depth` | A disc in the colour of each point light at its place, added to the light. |
 | `volumeInject`, `volumeIntegrate` | froxel volumes | Computes of the fog. |
@@ -48,7 +61,7 @@ An effect that is off leaves its passes and targets out and the next pass reads 
 uses a GGX distribution, Smith height-correlated visibility, Schlick Fresnel and a Lambert diffuse term. The specular
 lobe widens where the normal turns within a pixel, which keeps the highlights of normal maps from sparkling. The sun's
 shadow is a 3 by 3 filter of comparison samples with a depth bias and an offset along the normal. A point light falls
-off with the range rule of `KHR_lights_punctual`. A sky and a ground colour stand in for indirect light. A material
+off with the range rule of `KHR_lights_punctual`. A material
 without a texture reads a constant texture. A primitive must have `POSITION`, `NORMAL`, `TANGENT` and `TEXCOORD_0`, as
 the prepare step of [prismarine_assets](assets.md) writes them. The draws have the default winding of a draw state,
 which makes the counter-clockwise faces of glTF the front.
@@ -63,6 +76,30 @@ and of the exposure. A new plan resets them too.
 
 Auto exposure counts the luminance of the frame into a histogram, takes the mean without the darkest half and the
 brightest 2 % and adapts towards a grey card at 0.18 with the compensation.
+
+## Indirect light
+
+`buildGiVolume` marks the cells of a grid of about two million cells, 0.2 m for Sponza, that the triangles of the
+scenes touch. Each cell gets the base colour of its triangles from a small mip of their textures and their normal.
+The empty cells get their distance to the next marked cell and the closed parts inside walls are filled. Probes on a
+grid of at most 8,192 move away from the surfaces, and a probe that sees the backs of surfaces is off. Each frame
+`gi.trace` sends `raysPerProbe` rays from `probesPerFrame` probes through the grid by the distances. A hit is lit by
+the sun through its shadow map, by the point lights with the shadows of the atlas and by the probes of the last
+update, which
+gives several bounces. A miss sees the sky. The irradiance and the distances of the rays blend into octahedral tiles
+of each probe. A pixel reads the eight probes around it, weighed by the side of the surface and a visibility test on
+the distances, as in DDGI.
+
+The sky is single scattering in an atmosphere of Rayleigh and Mie particles for the sun's direction, in units of the
+sun's light. It is filtered for six roughness values and convolved for diffuse light. The reflections march the
+depth buffer at half size and read the light of the last frame. The rest of the specular light comes from the probes
+in the reflected direction, mixed towards the filtered sky by the share of the sky that the probe sees there. The
+ambient occlusion is the scalable estimate of McGuire, Mara and Luebke at half size.
+
+`probeIrradiance(position, direction, view)` of `shaders/programs/Pbr/bodies/gi_probes.glsl` gives any stage the
+irradiance of the probes, with a zero `view` for a point without a surface. It needs the `Indirect` block, the textures
+`giIrradiance` and `giDistance` with the sampler s5 and the texel buffer `giProbes`. The fog reads its ambient light
+from it. `settings.gi.debugView` shows the diffuse light, the occlusion, the reflections or the probes as spheres.
 
 ## Point light shadows
 
@@ -83,8 +120,8 @@ column from near to far. The apply pass lays the sum over the scene by the depth
 ## Timed parts
 
 `PbrBuilder.partLabels` and `timedPasses` split the plan into parts for `FrameRunner.timedParts`. The parts are
-`shadows`, `point shadows`, `scene`, `fog`, `taa`, `exposure and bloom` and `tone map`, each present when its passes
-are. `lastPartGpuMs` of the runner then holds the GPU time of each part by the index of its label.
+`shadows`, `point shadows`, `probes and sky`, `scene`, `indirect light`, `fog`, `taa`, `exposure and bloom` and
+`tone map`, each present when its passes are. `lastPartGpuMs` of the runner then holds the GPU time of each part by the index of its label.
 
 ## Settings
 
@@ -110,8 +147,19 @@ are. `lastPartGpuMs` of the runner then holds the GPU time of each part by the i
 | `volume.density`, `volume.heightFalloff`, `volume.base` | The extinction per metre, 0.006, its falloff per metre of height, 0.08 and the height of the full density, 0. |
 | `volume.anisotropy`, `volume.range` | The forward scattering, 0.5 and the far end of the grid, 60 m. |
 | `volume.sun`, `volume.points`, `volume.ambient`, `volume.history` | The factors of the light in the fog, 1, 1 and 0.5 and the share of the last frame in each froxel, 0.9. |
+| `gi.sky`, `gi.probes`, `gi.ambientOcclusion`, `gi.reflections` | The sky with its image-based light, the probes, the occlusion and the reflections, each on by default. Without the sky, the flat colours `sky` and `ground` light the scene. Without the probes, the sky lights it without occlusion. |
+| `gi.quality` | `medium` by default. It sets the counts below. |
+| `gi.raysPerProbe`, `gi.probesPerFrame` | 64 and 256 at low, 96 and 512 at medium, 192 and 1,024 at high. |
+| `gi.aoDirections`, `gi.aoSteps` | The samples of the occlusion, 2 by 4, 2 by 6 or 4 by 8. |
+| `gi.ssrSteps`, `gi.ssrFullSize` | The steps of a reflected ray, 16, 32 or 64, and reflections at full size at high. |
+| `gi.intensity`, `gi.skyIntensity`, `gi.bounce` | The factors of the indirect light, of the sky and of each bounce, 1 by default. |
+| `gi.hysteresis` | The weight of a probe's old value in an update, 0.85 by default. |
+| `gi.aoRadius`, `gi.aoIntensity` | The radius of the occlusion in metres and its strength, 1 and 1. |
+| `gi.ssrMaxRoughness`, `gi.ssrThickness` | The roughness above which the screen is not reflected, 0.6, and the depth of a hit behind the depth buffer, 0.4 m. |
+| `gi.debugView` | `none` by default, or `diffuse`, `occlusion`, `reflections` or `probes`. |
 
-A change of a switch, a quality or the point shadow budget makes a new plan. The other values apply to the next frame.
+A change of a switch, a quality, the point shadow budget, `gi.raysPerProbe`, `gi.probesPerFrame` or `gi.debugView`
+makes a new plan. The other values apply to the next frame.
 
 ## Costs
 
