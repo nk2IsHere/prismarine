@@ -14,9 +14,11 @@ private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`
 `prismarine_jobs`, `prismarine_cargo`, `prismarine_pad`, `prismarine_frame` and `prismarine_render`, each with a page
 in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
 with its own config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both
-repositories use. The first half of step 9 and step 10 are done. `prismarine_loop`, `prismarine_scene` and
-`prismarine_render` are Flutter packages outside the pub workspace. Step 8 adds `prismarine_audio` and
-`prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of `prismarine_audio_out` and links it.
+repositories use. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
+`prismarine_render` are Flutter packages outside the pub workspace. Step 9 adds `prismarine_debug`, the debug tools of
+the player of mcsm with the shell of its debug panel. mcsm adds its own sections to the shell. Step 8 adds
+`prismarine_audio` and `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of
+`prismarine_audio_out` and links it.
 Step 11 brings the patched engine with its git history from mcsm: `third_party/flutter_engine` at release mcsm11,
 `third_party/flutter_gpu` and `tools/gpu_smoke`, described in [engine](../areas/engine.md). mcsm reads the release and
 flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bundle build with its shard cache, the
