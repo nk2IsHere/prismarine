@@ -13,7 +13,9 @@ use prismarine_audio_out::mix::*;
 
 /// The decoded f32 file, the channels and the rate of each path, from the
 /// pcm.tsv of the session.
-static PCM: Mutex<Option<HashMap<String, (String, i32, i32)>>> = Mutex::new(None);
+type PcmFiles = HashMap<String, (String, i32, i32)>;
+
+static PCM: Mutex<Option<PcmFiles>> = Mutex::new(None);
 
 /// Loads the PCM of the session that the Dart render played, in place of the
 /// vendored decoders.

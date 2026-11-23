@@ -12,8 +12,8 @@ pub(crate) struct EqBand {
     c: [f64; 5],
     to: [f64; 5],
     gliding: bool,
-    s1: [f64; 24],
-    s2: [f64; 24],
+    z1: [f64; 24],
+    z2: [f64; 24],
 }
 
 pub(crate) const D_MBEQ: &[f64] = &[
@@ -28,8 +28,8 @@ impl EqBand {
             c: [1.0, 0.0, 0.0, 0.0, 0.0],
             to: [1.0, 0.0, 0.0, 0.0, 0.0],
             gliding: false,
-            s1: [0.0; 24],
-            s2: [0.0; 24],
+            z1: [0.0; 24],
+            z2: [0.0; 24],
         }
     }
 
@@ -127,8 +127,8 @@ impl EqBand {
             if self.sections == 0 {
                 self.c = [1.0, 0.0, 0.0, 0.0, 0.0];
             }
-            self.s1 = [0.0; 24];
-            self.s2 = [0.0; 24];
+            self.z1 = [0.0; 24];
+            self.z2 = [0.0; 24];
         }
         self.sections = n;
         self.to = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
@@ -154,16 +154,16 @@ impl EqBand {
         for s in 0..self.sections {
             for k in 0..ch {
                 let j = s * 6 + k;
-                let (mut s1, mut s2) = (self.s1[j], self.s2[j]);
+                let (mut z1, mut z2) = (self.z1[j], self.z2[j]);
                 for i in 0..frames {
                     let x = buf[i * ch + k] as f64;
-                    let y = b0 * x + s1;
-                    s1 = b1 * x - a1 * y + s2;
-                    s2 = b2 * x - a2 * y;
+                    let y = b0 * x + z1;
+                    z1 = b1 * x - a1 * y + z2;
+                    z2 = b2 * x - a2 * y;
                     buf[i * ch + k] = y as f32;
                 }
-                self.s1[j] = s1;
-                self.s2[j] = s2;
+                self.z1[j] = z1;
+                self.z2[j] = z2;
             }
         }
     }
@@ -180,9 +180,9 @@ impl EqBand {
                 for k in 0..ch {
                     let j = s * 6 + k;
                     let x = buf[i * ch + k] as f64;
-                    let y = k0[0] * x + self.s1[j];
-                    self.s1[j] = k0[1] * x - k0[3] * y + self.s2[j];
-                    self.s2[j] = k0[2] * x - k0[4] * y;
+                    let y = k0[0] * x + self.z1[j];
+                    self.z1[j] = k0[1] * x - k0[3] * y + self.z2[j];
+                    self.z2[j] = k0[2] * x - k0[4] * y;
                     buf[i * ch + k] = y as f32;
                 }
             }

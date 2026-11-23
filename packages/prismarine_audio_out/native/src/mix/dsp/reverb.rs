@@ -59,7 +59,7 @@ fn rv_solve_damp(rho: f64, w: f64) -> f64 {
     let d1 = (-b + disc.sqrt()) / (2.0 * a);
     let d2 = (-b - disc.sqrt()) / (2.0 * a);
     for d in [d1, d2] {
-        if d >= 0.0 && d < 1.0 {
+        if (0.0..1.0).contains(&d) {
             return d;
         }
     }
@@ -70,8 +70,8 @@ pub(crate) fn rv_update(r: &mut Reverb, p: &[f64]) {
     let density = dclamp(p[6], 0.0, 100.0) / 100.0;
     let ratio = dclamp(p[4], 10.0, 100.0) / 100.0;
     let w = 2.0 * PI * dclamp(p[3], 20.0, 20000.0) / RATE_F;
-    for i in 0..RV_LINES {
-        let len = dround(RV_BASE[i] as f64 * (0.6 + 0.4 * density));
+    for (i, &base) in RV_BASE.iter().enumerate().take(RV_LINES) {
+        let len = dround(base as f64 * (0.6 + 0.4 * density));
         r.line_len[i] = len;
         let g = dpow(10.0, (-3 * len) as f64 / (t60 * RATE_F));
         r.gain[i] = g;

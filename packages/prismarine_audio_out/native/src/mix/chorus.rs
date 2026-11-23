@@ -224,9 +224,9 @@ impl Chorus {
                 let (i0, i1) = (rf as i64, r1 as i64);
                 let fr = f(rf - i0 as f64);
                 let s0 = self.line[(i0.rem_euclid(n) * 2) as usize + c] as f64;
-                let s1 = self.line[(i1.rem_euclid(n) * 2) as usize + c] as f64;
+                let sn = self.line[(i1.rem_euclid(n) * 2) as usize + c] as f64;
                 let a = f(f(s0 * (1.0 / 16384.0)) * f(1.0 - fr));
-                let b = f(f(s1 * (1.0 / 16384.0)) * fr);
+                let b = f(f(sn * (1.0 / 16384.0)) * fr);
                 let dry = f(buf[i * 2 + c] as f64 * self.dry);
                 buf[i * 2 + c] = (f(f(a + b) * self.w[c]) + dry) as f32;
             }

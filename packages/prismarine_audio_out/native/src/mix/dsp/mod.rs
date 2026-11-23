@@ -32,6 +32,8 @@ pub const MBEQ: i32 = 13;
 pub const CHANMIX: i32 = 14;
 pub const OBJPAN: i32 = 15;
 
+// The render keeps the state of each DSP inline and allocates nothing for it.
+#[allow(clippy::large_enum_variant)]
 enum State {
     Lowpass([Biquad; 2]),
     ThreeEq {

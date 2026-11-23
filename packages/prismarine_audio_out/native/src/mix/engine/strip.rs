@@ -16,6 +16,8 @@ pub(crate) trait Sink {
     fn no51(&mut self, fx: &'static Fx);
 }
 
+// The render keeps every stage inline and allocates nothing for it.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Stage {
     Fader,
     Effect {
@@ -469,8 +471,8 @@ impl Strip {
                     if g == 0.0 {
                         continue;
                     }
-                    for i in 0..n2 {
-                        scratch[i] = (self.output[i] as f64 * g) as f32;
+                    for (d, &o) in scratch[..n2].iter_mut().zip(&self.output[..n2]) {
+                        *d = (o as f64 * g) as f32;
                     }
                     sink.send(fx, &scratch[..n2], m, 2);
                 }

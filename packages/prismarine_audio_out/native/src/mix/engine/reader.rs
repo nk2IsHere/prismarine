@@ -255,6 +255,8 @@ fn src_read(sh: &Shared, rd: &mut Reader, out: Option<&mut [f32]>, frame: i64, c
 #[allow(clippy::too_many_arguments)]
 /// Adds frames as SourceReader.addInto. Returns false once the source has
 /// ended.
+// The test keeps a NaN position playing, as Dart's does.
+#[allow(clippy::nonminimal_bool)]
 pub(crate) fn reader_add(
     sh: &Shared,
     chunk: &mut [f32],

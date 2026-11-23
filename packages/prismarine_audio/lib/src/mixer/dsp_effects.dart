@@ -416,9 +416,9 @@ class Chorus extends Dsp {
         }
         final i0 = rf.truncate(), i1 = r1.truncate();
         final fr = _f32(rf - i0);
-        final s0 = _line[(i0 % n) * 2 + c], s1 = _line[(i1 % n) * 2 + c];
+        final s0 = _line[(i0 % n) * 2 + c], sn = _line[(i1 % n) * 2 + c];
         final a = _f32(_f32(s0 * (1 / 16384)) * _f32(1 - fr));
-        final b = _f32(_f32(s1 * (1 / 16384)) * fr);
+        final b = _f32(_f32(sn * (1 / 16384)) * fr);
         final dry = _f32(buf[i * 2 + c] * _dry);
         buf[i * 2 + c] = _f32(_f32(_f32(a + b) * _w[c]) + dry);
       }

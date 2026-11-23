@@ -84,8 +84,8 @@ impl Dsp {
                 if self.kind == PARAMEQ && p[2] == 0.0 {
                     return mono;
                 }
-                for i in 0..frames * 2 {
-                    buf[i] = b.tick(i & 1, buf[i] as f64) as f32;
+                for (i, v) in buf[..frames * 2].iter_mut().enumerate() {
+                    *v = b.tick(i & 1, *v as f64) as f32;
                 }
                 mono
             }

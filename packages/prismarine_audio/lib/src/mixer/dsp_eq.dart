@@ -69,8 +69,8 @@ class EqBand {
   final _from = Float64List(5), _k = Float64List(5);
   bool _gliding = false;
 
-  /// The TDF2 state s1 and s2 by section and channel.
-  final _s1 = Float64List(4 * 6), _s2 = Float64List(4 * 6);
+  /// The TDF2 state z1 and z2 by section and channel.
+  final _z1 = Float64List(4 * 6), _z2 = Float64List(4 * 6);
 
   /// Designs band [b] from the DSP's parameters [p] as the target.
   void design(List<double> p, int b) {
@@ -150,8 +150,8 @@ class EqBand {
     if (sections != n) {
       // A band coming on starts from a pass-through, with fresh sections.
       if (sections == 0) c.setAll(0, const [1.0, 0, 0, 0, 0]);
-      _s1.fillRange(0, _s1.length, 0);
-      _s2.fillRange(0, _s2.length, 0);
+      _z1.fillRange(0, _z1.length, 0);
+      _z2.fillRange(0, _z2.length, 0);
     }
     sections = n;
     to
@@ -181,16 +181,16 @@ class EqBand {
     for (var s = 0; s < sections; s++) {
       for (var k = 0; k < ch; k++) {
         final j = s * 6 + k;
-        var s1 = _s1[j], s2 = _s2[j];
+        var z1 = _z1[j], z2 = _z2[j];
         for (var i = 0; i < frames; i++) {
           final x = buf[i * ch + k];
-          final y = b0 * x + s1;
-          s1 = b1 * x - a1 * y + s2;
-          s2 = b2 * x - a2 * y;
+          final y = b0 * x + z1;
+          z1 = b1 * x - a1 * y + z2;
+          z2 = b2 * x - a2 * y;
           buf[i * ch + k] = y;
         }
-        _s1[j] = s1;
-        _s2[j] = s2;
+        _z1[j] = z1;
+        _z2[j] = z2;
       }
     }
   }
@@ -206,9 +206,9 @@ class EqBand {
         for (var k = 0; k < ch; k++) {
           final j = s * 6 + k;
           final x = buf[i * ch + k];
-          final y = k0[0] * x + _s1[j];
-          _s1[j] = k0[1] * x - k0[3] * y + _s2[j];
-          _s2[j] = k0[2] * x - k0[4] * y;
+          final y = k0[0] * x + _z1[j];
+          _z1[j] = k0[1] * x - k0[3] * y + _z2[j];
+          _z2[j] = k0[2] * x - k0[4] * y;
           buf[i * ch + k] = y;
         }
       }
