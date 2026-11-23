@@ -233,6 +233,35 @@ let s = r#"a "quoted" // not a comment"#; // real
       ]);
     });
 
+    test('several sets of name words, exempt paths and every path', () {
+      final c = LintConfig.parse('.', r'''
+code_shape:
+  rule_sets:
+    name-words:
+      check: season-name
+      word: '^_*s[12](?=[A-Z_]|$)'
+      exempt: [packages/math/]
+    name-words-game:
+      check: game-name
+      word: '[Mm]csm'
+      path: 'mcsm'
+      all_paths: true
+''');
+      final sets = RuleSet.fromConfig(c.ruleSets).cast<NameWordRules>();
+      final season = sets.firstWhere((s) => s.check == 'season-name');
+      final game = sets.firstWhere((s) => s.check == 'game-name');
+      final toks = lex('var s2 = mcsmEngine;', Lang.dart);
+      expect(season.codeHits('lib/a.dart', toks).map((h) => h.text), ['s2']);
+      expect(season.codeHits('packages/math/a.dart', toks), isEmpty);
+      expect(season.checksAllPaths, isFalse);
+      expect(season.pathHits('tools/s2/a.json'), isEmpty);
+      expect(game.codeHits('lib/a.dart', toks).map((h) => h.text), [
+        'mcsmEngine',
+      ]);
+      expect(game.checksAllPaths, isTrue);
+      expect(game.pathHits('tools/mcsm7.json').map((h) => h.rule), ['path']);
+    });
+
     test('a generic config has no rule sets and no agent names', () {
       final c = LintConfig.parse('.', 'code_roots: [packages/]');
       expect(RuleSet.fromConfig(c.ruleSets), isEmpty);

@@ -70,7 +70,15 @@ String repoRoot() {
 
 /// Files under the code roots that git tracks or would track (new files not
 /// yet added count; ignored ones don't), relative to [root].
-List<String> trackedCodeFiles(String root) {
+List<String> trackedCodeFiles(String root) =>
+    _listed(root, (p) => excludedBecause(p) == null);
+
+/// The files under the code roots that the lint does not read since they are
+/// no source files, such as JSON files and compute shaders.
+List<String> trackedOtherFiles(String root) =>
+    _listed(root, (p) => excludedBecause(p) == 'not a source file');
+
+List<String> _listed(String root, bool Function(String) keep) {
   final r = Process.runSync('git', [
     'ls-files',
     '-z',
@@ -81,7 +89,7 @@ List<String> trackedCodeFiles(String root) {
   ], workingDirectory: root);
   return (r.stdout as String)
       .split('\x00')
-      .where((p) => p.isNotEmpty && excludedBecause(p) == null)
+      .where((p) => p.isNotEmpty && keep(p))
       .where((p) => File('$root/$p').existsSync())
       .toSet()
       .toList()

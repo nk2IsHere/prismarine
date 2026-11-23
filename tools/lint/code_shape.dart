@@ -26,7 +26,8 @@ third_party/, runner scaffolding, golden files or generated files):
   exe-address   addresses of shipped binaries in comments or strings, when
                 code_shape.rule_sets in the config has this set
   name-words    words that identifiers and paths must not contain, when
-                code_shape.rule_sets in the config has this set
+                code_shape.rule_sets in the config has this set, once per
+                key that starts with name-words
 The rules and their heuristics are in src/rules.dart and src/rule_sets.dart.
 The lint's own files quote the patterns, so they get the size check only.
 
@@ -139,6 +140,16 @@ void main(List<String> args) {
       }
     }
     reports.add(r);
+  }
+  if (sets.any((s) => s.checksAllPaths)) {
+    for (final path in trackedOtherFiles(root)) {
+      if (paths.isNotEmpty && !paths.any(path.startsWith)) continue;
+      final r = FileReport(path, packageOf(path, pkgDirs), 0);
+      for (final s in sets) {
+        r.hits.addAll(s.pathHits(path));
+      }
+      if (r.hits.isNotEmpty) reports.add(r);
+    }
   }
   final commits = knownCommits(root, {for (final h in hashes) h.$4});
   for (final (r, line, text, h) in hashes) {
