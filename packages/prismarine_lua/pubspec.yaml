@@ -1,0 +1,14 @@
+name: prismarine_lua
+description: An embeddable Lua 5.2 virtual machine in pure Dart, with double or float32 numbers, the standard libraries, binary chunks and state snapshots.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+dependencies:
+  prismarine_math:
+    path: ../prismarine_math
+  prismarine_snap:
+    path: ../prismarine_snap
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

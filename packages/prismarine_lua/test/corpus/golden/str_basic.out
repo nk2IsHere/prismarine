@@ -1,0 +1,13 @@
+5	0	3	3
+ell	llo	ello	hello		he		el
+HELLO WORLD	hello world	cba	
+ababab	ab,ab,ab			x
+65	66	65	nil	67
+Hi		false	bad argument #1 to 'string.char' (value out of range)
+false	bad argument #1 to 'string.char' (value out of range)
+255	3	ÈA
+false	bad argument #1 to 'string.rep' (string expected, got no value)
+false	bad argument #1 to 'string.sub' (string expected, got no value)
+3 items	x
+abc		nil	2	2
+abc	abc		2

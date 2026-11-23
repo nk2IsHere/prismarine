@@ -1,0 +1,10 @@
+-- os (deterministic parts only).
+print(os.date("!%Y-%m-%d %H:%M:%S", 31536000))
+print(os.date("!%a %A %b %B %j %p %y %%", 86400 * 40 + 3600 * 15))
+local t = os.date("!*t", 0)
+print(t.year, t.month, t.day, t.hour, t.min, t.sec, t.wday, t.yday, t.isdst)
+print(os.time{year = 2000, month = 1, day = 2, hour = 0} - os.time{year = 2000, month = 1, day = 1, hour = 0})
+print(os.difftime(10, 4), os.difftime(5))
+print(type(os.clock()), type(os.time()), os.getenv("MCSM_SURELY_UNSET_VAR"))
+print(pcall(os.date, "%Q"))
+print(pcall(os.time, {year = 2000}))

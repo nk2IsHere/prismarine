@@ -1,0 +1,45 @@
+false	err_messages.lua:5: attempt to index global 'undefined_global' (a nil value)
+false	err_messages.lua:6: attempt to index local 'l' (a nil value)
+false	err_messages.lua:7: attempt to index upvalue 'up' (a nil value)
+false	err_messages.lua:8: attempt to index field 'a' (a nil value)
+false	err_messages.lua:9: attempt to call global 'undefined_fn' (a nil value)
+false	err_messages.lua:10: attempt to call field 'method' (a nil value)
+false	err_messages.lua:11: attempt to call method 'method' (a nil value)
+false	err_messages.lua:12: attempt to perform arithmetic on local 'l' (a table value)
+false	err_messages.lua:13: attempt to perform arithmetic on upvalue 't' (a table value)
+false	err_messages.lua:14: attempt to perform arithmetic on a string value
+false	err_messages.lua:15: attempt to perform arithmetic on a table value
+false	err_messages.lua:16: attempt to concatenate field 'missing' (a nil value)
+false	err_messages.lua:17: attempt to concatenate upvalue 't' (a table value)
+false	err_messages.lua:18: attempt to compare number with string
+false	err_messages.lua:19: attempt to compare two table values
+false	err_messages.lua:20: attempt to compare nil with number
+false	err_messages.lua:21: attempt to get length of a nil value
+false	err_messages.lua:22: attempt to get length of local 's' (a number value)
+false	err_messages.lua:23: table index is nil
+false	err_messages.lua:24: table index is NaN
+false	err_messages.lua:25: attempt to index upvalue 'up' (a nil value)
+false	err_messages.lua:26: attempt to index global 'undefined_global' (a nil value)
+false	err_messages.lua:27: 'for' initial value must be a number
+false	err_messages.lua:28: 'for' limit must be a number
+false	err_messages.lua:29: 'for' step must be a number
+false	err_messages.lua:30: attempt to call constant 'x' (a string value)
+false	err_messages.lua:31: attempt to index field 'b' (a nil value)
+false	msg
+false	msg
+false	err_messages.lua:2: msg
+false	42
+false	table
+false	nil
+false	err_messages.lua:38: deep
+false	caller
+false	obj
+false	assertion failed!
+false	custom
+true	1	2	3
+false	assertion failed!
+false	handled: err_messages.lua:45: x
+true	1	2
+false	H:err_messages.lua:47: attempt to index local 'y' (a nil value)
+true	false	e
+false	nil

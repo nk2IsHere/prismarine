@@ -1,0 +1,13 @@
+-- math library (no random, no modf: the float oracle's modf is broken).
+print(math.abs(-3.5), math.ceil(2.1), math.ceil(-2.1), math.floor(2.9), math.floor(-2.1))
+print(math.sqrt(2), math.sin(1), math.cos(1), math.tan(1))
+print(math.asin(0.5), math.acos(0.5), math.atan(1), math.atan2(1, -1))
+print(math.exp(1), math.log(10), math.log(8, 2), math.log(100, 10), math.log(27, 3))
+print(math.pow(2, 0.5), math.fmod(7, 3), math.fmod(-7, 3), math.fmod(7.5, 2))
+print(math.frexp(10), math.frexp(0.1), math.ldexp(0.75, 4))
+print(math.max(1, 5, 3), math.min(4, 2, 8), math.max(-1), math.min(1.5, 1.25))
+print(math.deg(math.pi), math.rad(180), math.pi, math.huge, -math.huge)
+print(math.sinh(1), math.cosh(1), math.tanh(1))
+print(pcall(math.max))
+print(pcall(math.floor, "x"))
+print(math.floor("3.7"), math.sqrt(-1) ~= math.sqrt(-1))

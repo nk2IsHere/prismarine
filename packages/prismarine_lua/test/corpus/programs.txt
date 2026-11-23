@@ -1,0 +1,24 @@
+# Our own Lua test programs with oracle goldens (tool/goldens.sh); corpus_test.dart runs these.
+tbl_len
+tbl_next
+vm_basic
+vm_calls
+vm_closures
+vm_varargs
+vm_loops
+vm_meta
+vm_concat
+vm_compare
+err_messages
+co_basic
+base_lib
+str_basic
+str_patterns
+str_gsub
+str_format
+str_dump
+lib_table
+lib_math
+lib_bit32
+lib_os
+lib_debug

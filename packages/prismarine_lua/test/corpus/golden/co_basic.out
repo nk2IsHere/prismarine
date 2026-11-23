@@ -1,0 +1,28 @@
+suspended
+start	1	2
+true	3
+suspended
+got	10
+true	20
+got2	x	y
+true	done	99
+dead
+false	cannot resume dead coroutine
+1	2	3
+false	co_basic.lua:19: attempt to index local 'x' (a nil value)
+dead
+false	cannot resume dead coroutine
+false	attempt to yield from outside a coroutine
+thread	true
+thread	false	running
+outer is	normal
+true	o
+suspended	suspended
+false	cannot resume non-suspended coroutine
+it1	it2	end
+false	co_basic.lua:42: boom
+false	table
+false	bad argument #1 to 'coroutine.create' (function expected, got number)
+false	bad argument #1 to 'coroutine.resume' (coroutine expected)
+3
+1	2	3

@@ -5,6 +5,7 @@ environment:
 workspace:
   - packages/prismarine_kept
   - packages/prismarine_snap
+  - packages/prismarine_lua
   - packages/prismarine_math
   - packages/prismarine_jobs
   - packages/prismarine_cargo

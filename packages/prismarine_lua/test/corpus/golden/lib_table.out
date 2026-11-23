@@ -1,0 +1,22 @@
+266	2	426	999
+0,1,2,3,11,12,16,18,20,22,23,25,29,30,33,34,35,36,37,38,38,46,47,49,50,52,54,54,56,58,60,60,62,62,66,69,69,69,71,74,82,84,90,91,91,92,92,94,96,97
+apple banana fig kiwi pear
+fig kiwi pear apple banana
+true
+false	attempt to compare string with number
+0,1,2,3,4	5
+false	bad argument #2 to 'table.insert' (position out of bounds)
+false	wrong number of arguments to 'insert'
+false	wrong number of arguments to 'insert'
+4	0	1,2,3
+nil	nil	false	bad argument #1 to 'table.remove' (position out of bounds)
+1-2.5-x		2,3	2,3
+false	invalid value (table) at index 2 in table for 'concat'
+false	invalid value (nil) at index 3 in table for 'concat'
+3	1	nil	3
+1	2	3
+2	3
+2	3	nil	nil
+0
+a,b	a	b
+z

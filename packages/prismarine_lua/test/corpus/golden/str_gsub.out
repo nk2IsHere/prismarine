@@ -1,0 +1,22 @@
+hell0 w0rld	2
+hell0 world	1
+-h-e-l-l-o-	6
+aabbcc	3
+<hello> <world>	2
+world hello	1
+Jesse is 15	2
+Jesse is $missing	2
+2 4 6	3
+x 2 x	3
+false	bad argument #3 to 'string.gsub' (string/function/table expected)
+false	invalid capture index
+false	invalid use of '%' in replacement string
+false	invalid replacement value (a table)
+false	invalid replacement value (a boolean)
+Xbc	1
+Xaa	1
+he55o	2
+x  	1
+a;b;,c	2
+%%%	3
+cbaabc	1
