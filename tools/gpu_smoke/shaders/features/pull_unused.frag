@@ -1,7 +1,7 @@
 #version 460
 // A pulled pixel stage that declares resources it never reads (the shared
 // pulled preamble does): Metal reflects them without an index, and binding
-// them crashed the driver before mcsm10.
+// them crashed the driver before release 10.
 layout(std430) readonly buffer RawPullRows {
   vec4 rows[];
 } pullRows;

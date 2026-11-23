@@ -112,10 +112,9 @@ Future<int> _smoke() async {
     'first draw done ${startup.elapsedMilliseconds} ms after init began '
     '(shader and pipeline compiles included)',
   );
-  // Read back through a Picture, as the player's captures do: on GLES
-  // (Linux, Windows/ANGLE) `asImage().toByteData()` straight on a Flutter GPU
-  // texture returns zeros, while drawing it into a picture and reading that
-  // gives the pixels.
+  // Read back through a Picture. On GLES (Linux, Windows/ANGLE)
+  // `asImage().toByteData()` straight on a Flutter GPU texture returns zeros,
+  // while drawing it into a picture and reading that gives the pixels.
   final recorder = ui.PictureRecorder();
   ui.Canvas(recorder).drawImage(target.asImage(), ui.Offset.zero, ui.Paint());
   final picture = recorder.endRecording();

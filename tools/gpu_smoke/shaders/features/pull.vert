@@ -1,5 +1,5 @@
 #version 460
-// A pulled vertex stage (our renderer's, mcsm10): no inputs, its positions
+// A pulled vertex stage of release 10: no inputs, its positions
 // from a storage buffer by vertex index, and the same buffer's colour handed
 // to the pixel stage by index.
 layout(std430) readonly buffer RawPullRows {

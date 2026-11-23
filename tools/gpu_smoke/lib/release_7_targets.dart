@@ -72,7 +72,7 @@ extension _Targets on _Smoke {
       0,
       0,
     ]);
-    final claimed = mixed; // Metal with the mixed-format pipelines (mcsm6+)
+    final claimed = mixed; // Metal with the mixed-format pipelines of release 6
     log(
       'SMOKE mrt ${ok0 && ok1 ? 'ok' : 'WRONG'} (RGBA8 + '
       '${mixed ? 'R32F' : 'RGBA32F'} in one pass) '
@@ -217,9 +217,9 @@ extension _Targets on _Smoke {
     if (mixed) allOk &= ok;
   }
 
-  // 2c. Pass reuse (mcsm8): the same colour targets in passes that differ in
-  // load actions and depth targets must each get their own load, clear and
-  // depth (Vulkan caches a render pass and framebuffer per target).
+  // 2c. Pass reuse of release 8: the same colour targets in passes that
+  // differ in load actions and depth targets must each get their own load,
+  // clear and depth (Vulkan caches a render pass and framebuffer per target).
   Future<void> passReuse() async {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;

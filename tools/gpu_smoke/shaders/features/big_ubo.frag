@@ -1,6 +1,6 @@
 #version 460
-// A 65,536-byte uniform block: Direct3D 11's largest constant buffer (S2's
-// light data is 12,288 bytes; impellerc's old limit was 6,208 in all).
+// A 65,536-byte uniform block, the largest constant buffer of Direct3D 11.
+// The limit of the stock impellerc is 6,208 bytes per shader.
 layout(set = 0, binding = 0) uniform LightData {
   vec4 rows[4096];
 } light_data;

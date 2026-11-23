@@ -90,7 +90,7 @@ extension _Instancing on _Smoke {
     allOk &= ok;
   }
 
-  // 1b. Draws from a first instance (G7; one leaf call on the mcsm7 engine,
+  // 1b. Draws from a first instance (G7; one leaf call on engine release 7,
   // bound again at the offset elsewhere): the whole instance buffer bound,
   // instances 2..3 drawn, and 1..3 indexed, each against the same instances
   // through an offset binding. The bytes must match.

@@ -1,6 +1,6 @@
 part of 'release_9.dart';
 
-// s2d2's interim list: texel buffers, storage texel buffers with atomics,
+// Texel buffers, storage texel buffers with atomics,
 // storage image formats, Metal's IEEE and invariance options, compute-written
 // vertex and indirect buffers, draw parameters, clip distances, textures and
 // samplers declared apart, a BC3 array.
@@ -177,12 +177,14 @@ Future<String?> _metalOptions(_Kit kit) async {
     p.bindUniform(f.getUniformSlot('Zero'), kit.floats([0, 0, 0, 0]));
   });
   final c = await centre(out);
-  // Red NaN, green Inf: what the translated shaders rely on. Blue: -0 + 0
+  // Red NaN, green Inf: what shaders may rely on. Blue: -0 + 0
   // came out +0; a driver that drops the addition (Intel's UHD 620 on
-  // Vulkan) does what spirv-opt does in the shipped bundles, so it is said,
+  // Vulkan) does what spirv-opt does in optimized bundles, so it is said,
   // not failed.
   if (c[0] < 128 || c[1] < 128) return 'NaN or Inf folded away: got $c';
-  if (c[2] < 128) kit.log('SMOKE mcsm9 -0 + 0 stays -0 on this driver: got $c');
+  if (c[2] < 128) {
+    kit.log('SMOKE release 9 -0 + 0 stays -0 on this driver: got $c');
+  }
   return null;
 }
 

@@ -1,6 +1,6 @@
-// mcsm10 checks, continued (release_10.dart): resources a pixel stage declares
-// but never reads, bindings changed and restored between draws, leaf
-// indirect draws and an sRGB view of a UNORM target.
+// The checks of release 10, continued from release_10.dart: resources a
+// pixel stage declares but never reads, bindings changed and restored between
+// draws, leaf indirect draws and an sRGB view of a UNORM target.
 import 'dart:typed_data';
 
 import 'package:flutter_gpu/gpu.dart' as gpu;

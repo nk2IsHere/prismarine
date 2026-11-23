@@ -1,5 +1,5 @@
-// mcsm10 checks: what our own renderer's pulled passes need from the engine
-// (the own-renderer design in docs/superpowers/specs):
+// The checks of engine release 10, for passes that pull their vertices from
+// storage buffers.
 //
 // - a vertex stage with no inputs, its vertices read from a storage buffer
 //   by vertex index;
@@ -25,10 +25,11 @@ import 'package:vector_math/vector_math.dart';
 
 import 'release_10_more.dart';
 
-/// Runs the mcsm10 checks with [log] for SMOKE lines; true when all pass.
+/// Runs the checks of release 10 with [log] for SMOKE lines. Returns true when
+/// all pass.
 Future<bool> release10Checks(void Function(String) log) async {
   if (!gpu.mcsmEngine10) {
-    log('SMOKE mcsm10 not on this engine or backend (no feature 4096)');
+    log('SMOKE release 10 not on this engine or backend (no feature 4096)');
     return true;
   }
   final ctx = gpu.gpuContext;
@@ -37,7 +38,7 @@ Future<bool> release10Checks(void Function(String) log) async {
   );
   final lib = await gpu.ShaderLibrary.fromBytes(bytes);
   if (lib == null) {
-    log('SMOKE mcsm10: no S2 shader bundle');
+    log('SMOKE release 10: no shader bundle of the features');
     return false;
   }
   var ok = true;
@@ -48,7 +49,7 @@ Future<bool> release10Checks(void Function(String) log) async {
     } on Object catch (e) {
       problem = '$e';
     }
-    log('SMOKE mcsm10 $name: ${problem ?? 'ok'}');
+    log('SMOKE release 10 $name: ${problem ?? 'ok'}');
     if (problem != null) ok = false;
   }
 
@@ -198,8 +199,8 @@ Future<bool> release10Checks(void Function(String) log) async {
 }
 
 /// Submits [cb], waits for the GPU and reads [target]'s centre pixel
-/// (RGBA8) through a picture, as mcsm9's checks do (GLES gives zeros for a
-/// raw texture's own read).
+/// (RGBA8) through a picture, as the checks of release 9 do. GLES gives zeros
+/// for a raw texture's own read.
 Future<List<int>> release10Centre(
   gpu.CommandBuffer cb,
   gpu.Texture target,

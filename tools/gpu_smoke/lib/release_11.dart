@@ -1,6 +1,6 @@
-// mcsm11 checks: command buffers and passes made again after their submit
-// (flutter_gpu G15 over the engine's McsmDetach), and the VM's collection at
-// the caller's idle point (mcsmGcIdle):
+// The checks of engine release 11: command buffers and passes made again
+// after their submit (flutter_gpu G15 over the engine's McsmDetach) and the
+// collection of the VM at the idle point of the caller (mcsmGcIdle).
 //
 // - after a submit, the next command buffer is the same Dart object on a new
 //   native one, and a pass made again draws as a new pass: a clear alone
@@ -17,10 +17,11 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:flutter_scene/scene.dart' show baseShaderLibrary;
 import 'package:vector_math/vector_math.dart';
 
-/// Runs the mcsm11 checks with [log] for SMOKE lines; true when all pass.
+/// Runs the checks of release 11 with [log] for SMOKE lines. Returns true when
+/// all pass.
 Future<bool> release11Checks(void Function(String) log) async {
   if (!gpu.mcsmGcIdleSupported) {
-    log('SMOKE mcsm11 not on this engine (no McsmDetach)');
+    log('SMOKE release 11 not on this engine (no McsmDetach)');
     return true;
   }
   final ctx = gpu.gpuContext;
@@ -85,7 +86,7 @@ Future<bool> release11Checks(void Function(String) log) async {
 
   var ok = true;
   void say(String name, String? problem) {
-    log('SMOKE mcsm11 $name: ${problem ?? 'ok'}');
+    log('SMOKE release 11 $name: ${problem ?? 'ok'}');
     if (problem != null) ok = false;
   }
 

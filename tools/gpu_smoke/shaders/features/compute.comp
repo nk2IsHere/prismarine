@@ -1,6 +1,6 @@
 #version 460
 // Storage buffers in and out, a uniform, an RGBA8 storage image and a uint 3D
-// storage image (S2's light grid), over 2 x 2 workgroups of 8 x 8.
+// storage image, over 2 x 2 workgroups of 8 x 8.
 layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(std430) readonly buffer Inputs {

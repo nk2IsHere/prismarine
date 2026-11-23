@@ -1,4 +1,4 @@
-// mcsm7 checks: what the next perf round builds on, proven on this engine.
+// The checks of engine release 7.
 //
 // - instancing: per-instance attributes, and a draw of a sub-range of the
 //   instances by binding the instance buffer at an offset (a base instance),
@@ -62,12 +62,12 @@ Future<bool> _done(gpu.CommandBuffer cb) {
 Future<bool> release7Checks(void Function(String) log) async {
   final ctx = gpu.gpuContext;
   final features = fs.mcsmEngineFeatures;
-  log('SMOKE mcsm features $features backend ${fs.mcsmBackend ?? 'unknown'}');
+  log('SMOKE engine features $features backend ${fs.mcsmBackend ?? 'unknown'}');
   final lib = await fs.loadShaderLibraryAsync(
     await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
   );
   if (lib == null) {
-    log('SMOKE mcsm7 FAILED: no smoke shader bundle');
+    log('SMOKE release 7 FAILED: no smoke shader bundle');
     return false;
   }
   final vInst = lib['SmokeInstancedVertex']!;

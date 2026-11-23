@@ -1,5 +1,5 @@
 #version 460
-// Storage images in S2's formats: RGBA16 unorm (2D, an array layer, a mip
+// Storage images in these formats: RGBA16 unorm (2D, an array layer, a mip
 // level), RGBA32UI 3D, RGBA16F 2D.
 layout(local_size_x = 4, local_size_y = 4) in;
 

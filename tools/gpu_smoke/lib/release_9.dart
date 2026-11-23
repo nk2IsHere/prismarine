@@ -1,4 +1,4 @@
-// mcsm9 checks: what S2's frame needs from the engine (Metal and Vulkan):
+// The checks of engine release 9, on Metal and Vulkan.
 //
 // - a 12,288-byte uniform block (impellerc's limit is per block there);
 // - a storage buffer read in a fragment shader;
@@ -13,7 +13,7 @@
 //   rates, layered passes and cube arrays.
 //
 // Each check prints a SMOKE line; the result is false when a check fails on
-// an engine that claims S2's features (bit 2048).
+// an engine that claims the features of release 9, bit 2048.
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -28,7 +28,7 @@ part 'release_9_targets.dart';
 part 'release_9_texel.dart';
 part 'release_9_views.dart';
 
-/// What every check uses: the context, the S2 bundle, a quad.
+/// The context, the shader bundle of the features and a quad of every check.
 class _Kit {
   _Kit(this.ctx, this.lib, this.quad, this.log);
 
@@ -106,10 +106,10 @@ bool near(List<int> a, List<int> b, [int tolerance = 2]) {
   return true;
 }
 
-/// Runs the checks; true when all pass or the engine lacks S2's features.
+/// Runs the checks. Returns true when all pass or the engine lacks bit 2048.
 Future<bool> release9Checks(void Function(String) log) async {
   if (!gpu.mcsmEngineSupportsS2) {
-    log('SMOKE mcsm9 not on this engine or backend (no feature 2048)');
+    log('SMOKE release 9 not on this engine or backend (no feature 2048)');
     return true;
   }
   final ByteData bytes;
@@ -117,13 +117,16 @@ Future<bool> release9Checks(void Function(String) log) async {
     bytes = await rootBundle.load('features_generated/features.shaderbundle');
   } catch (_) {
     log(
-      'SMOKE mcsm9 FAILED: no S2 shader bundle (built by the engine impellerc)',
+      'SMOKE release 9 FAILED: no shader bundle of the features. '
+      'tool/features_bundle.sh builds it.',
     );
     return false;
   }
   final lib = await gpu.ShaderLibrary.fromBytes(bytes);
   if (lib == null) {
-    log('SMOKE mcsm9 FAILED: the S2 shader bundle did not load');
+    log(
+      'SMOKE release 9 FAILED: the shader bundle of the features did not load',
+    );
     return false;
   }
   final ctx = gpu.gpuContext;
@@ -142,7 +145,7 @@ Future<bool> release9Checks(void Function(String) log) async {
     } catch (e) {
       failure = 'threw $e';
     }
-    log('SMOKE mcsm9 $name ${failure == null ? 'ok' : 'FAILED: $failure'}');
+    log('SMOKE release 9 $name ${failure == null ? 'ok' : 'FAILED: $failure'}');
     ok &= failure == null;
   }
 

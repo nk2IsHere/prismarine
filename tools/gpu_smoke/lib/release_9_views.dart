@@ -1,7 +1,7 @@
 part of 'release_9.dart';
 
 // Texture views: a mip level built from the level above in a render pass
-// (S2's MakeMipLevel), and one layer of an array rendered as a 2D target.
+// and one layer of an array rendered as a 2D target.
 
 Future<String?> _views(_Kit kit) async {
   final ctx = kit.ctx;

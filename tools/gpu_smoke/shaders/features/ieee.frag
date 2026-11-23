@@ -6,8 +6,8 @@
 spirv_execution_mode(extensions = ["SPV_KHR_float_controls"],
                      capabilities = [4466], 4461, 32);
 #endif
-// IEEE arithmetic survives: NaN (red) and Inf (green), which the translated
-// shaders rely on, and -0 + 0 = +0 (blue): a compiler may drop that addition
+// IEEE arithmetic survives: NaN (red) and Inf (green), which shaders may
+// rely on, and -0 + 0 = +0 (blue): a compiler may drop that addition
 // and keep -0 (spirv-opt does, Intel's Vulkan driver does whatever the float
 // controls say), which the check reports apart.
 uniform Zero {
