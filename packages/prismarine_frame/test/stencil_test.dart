@@ -14,7 +14,7 @@ DrawPlan _draw(int ref, Stencil? stencil) => DrawPlan(
   stencilRef: ref,
 );
 
-/// The G-buffer's stencil test. [ORACLE2 ep201 recap, cs_Enter_16 49.277 s]
+/// A G-buffer pass's stencil test.
 const _gbuffer = Stencil(passOp: 'replace', readMask: 0, writeMask: 0x7f);
 
 List<int> _held(StencilValues v) => [

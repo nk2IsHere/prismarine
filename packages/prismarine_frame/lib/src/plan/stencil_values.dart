@@ -2,11 +2,9 @@ import 'dart:typed_data';
 
 import 'package:prismarine_frame/prismarine_frame.dart';
 
-/// What a depth target's stencil can hold: its clear value under any
-/// sequence of the replacing writes since (each stores its reference under
-/// its write mask). Only replacing writes are followed, the one stencil
-/// operation the exe's frame writes with. [ORACLE2 ep201 recap, cs_Enter_16
-/// 49.277 s: the G-buffer's and SMAA's passes]
+/// The values that a depth target's stencil can hold: its clear value under
+/// any sequence of the replacing writes since the clear. Each write stores
+/// its reference under its write mask. Only replacing writes are followed.
 class StencilValues {
   int _clear = 0;
 

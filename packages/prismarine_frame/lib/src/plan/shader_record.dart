@@ -1,11 +1,11 @@
-/// A constant buffer a shader declares: its uniform block name (the exe's
-/// parameter name), parameter id, `cb#` register and size in 16-byte rows.
+/// A constant buffer a shader declares: its uniform block name, the id of
+/// its parameter, its `cb#` register and its size in 16-byte rows.
 class ShaderBlock {
   ShaderBlock(this.name, this.parameter, this.slot, this.rows);
   final String name;
 
-  /// The exe's parameter id; null for a block of the renderer's own shaders
-  /// (the slice's stencil copy).
+  /// The id of the parameter that the block holds. Null for a block of the
+  /// renderer's own shaders, such as the stencil copy's.
   final int? parameter;
   final int slot, rows;
 }
@@ -35,7 +35,9 @@ class Attribute {
   final String name;
 }
 
-/// One translated shader and where its bundle entry is.
+/// The interface of one shader and the place of its entry in a shader
+/// library. It reads the JSON form of a shader's reflection and the JSON of
+/// its build.
 class ShaderRecord {
   ShaderRecord(this.json, this.build)
     : stage = json['stage'] as String,
@@ -84,9 +86,8 @@ class ShaderRecord {
   final List<(int, bool)> samplers;
   final List<Attribute> attributes;
 
-  /// A vertex stage that clamps depth per vertex and leaves the per-pixel
-  /// clamp to the slice's depth-clamp pixel shader (Direct3D's depth clamp,
-  /// the key light's cascades).
+  /// A vertex stage that clamps depth per vertex and leaves the clamp per
+  /// pixel to a depth-clamp pixel shader, as Direct3D's depth clamp does.
   bool get depthClamp => json['depthClamp'] == true;
 
   /// Storage resources by name → `buffer` or the image type (`image2D`,
@@ -102,7 +103,8 @@ class ShaderRecord {
     for (final n in (json['readonly'] as List?) ?? const []) n as String,
   };
 
-  /// The bundle entry (`g<hash>`) and shard, when it bundled.
+  /// The entry in its shader library and the library, when it was built
+  /// into one.
   String? get entry =>
       build?['state'] == 'bundled' ? build!['entry'] as String : null;
   String? get shard =>
