@@ -1,10 +1,10 @@
-// Our renderer's cooked data on the GPU: the cooked scenes, their pools
-// and texture arrays, read on first use or ahead of it.
+// The cooked data on the GPU, with the cooked scenes and their pools and
+// texture arrays, read on first use or ahead of it.
 part of 'frame_runner.dart';
 
-/// The cooked data for the passes drawn in pulled form: a cooked directory
-/// with the programs in `shaders/` and per scene its pools, texture arrays
-/// and `cooked.json`, loaded on first use.
+/// The cooked data for the passes drawn in pulled form, a cooked directory with
+/// the programs in `shaders/` and per scene its pools, texture arrays and
+/// `cooked.json`, loaded on first use.
 class Pulled {
   Pulled(this.root, this.shaders, this.layout);
 
@@ -14,23 +14,23 @@ class Pulled {
   /// fill.
   final PulledLayout layout;
 
-  /// The render passes drawn in pulled form: the layout's, and its main
-  /// pass with `PRISMARINE_PULLED_MAIN=1`.
+  /// The render passes drawn in pulled form, those of the layout and its
+  /// main pass with `PRISMARINE_PULLED_MAIN=1`.
   late final Set<String> passes = {
     ...layout.passes,
     if (envVar('PULLED_MAIN') == '1') layout.mainPass,
   };
 
-  /// The pulled programs (`<root>/shaders`).
+  /// The pulled programs in `<root>/shaders`.
   final RenderAssets shaders;
 
-  /// Cooked scene by directory name, read on first use; let go once no
-  /// open scene asked for it since a close and no draw holds it.
+  /// The cooked scenes by directory name, read on first use. A scene is let
+  /// go once no open scene asked for it since a close and no draw holds it.
   final _scenes = LooseMap<String, _CookedSceneGpu>();
 
-  /// Each mesh stem's cooked scenes, in the listing's order (a mesh cooked
-  /// into two scenes is the same bytes in both), and each cooked scene by
-  /// its lower-case name.
+  /// The cooked scenes of each mesh stem in the order of the listing and each
+  /// cooked scene by its lower-case name. A mesh cooked into two scenes has the
+  /// same bytes in both.
   late final (Map<String, List<String>>, Map<String, String>) _cooked = () {
     final out = <String, List<String>>{}, names = <String, String>{};
     for (final d in Directory(root).listSync().whereType<Directory>()) {
@@ -38,7 +38,7 @@ class Pulled {
       if (!f.existsSync()) continue;
       final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
       if (j['version'] != cookVersion) continue;
-      // By the URI's segments: Windows lists with backslashes.
+      // By the segments of the URI, since Windows lists with backslashes.
       final name = d.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
       names[name.toLowerCase()] = name;
       for (final stem in (j['meshes']! as Map).keys) {
@@ -48,16 +48,17 @@ class Pulled {
     return (out, names);
   }();
 
-  /// The scene shown, a scene file's name: a new draw takes a
-  /// mesh cooked into it from its cooked scene before any other.
+  /// The name of the scene file shown. A new draw takes a mesh cooked into
+  /// it from its cooked scene before any other.
   String? shown;
 
   // alloc-cold: a draw's first pulled form.
-  /// Mesh [stem]'s cooked scene for a draw of [scene] (null: the scene
-  /// [shown]): that scene's own when the mesh is cooked into it, else one
-  /// already read, else the first listed. Each cooked scene holds every
-  /// pool its draws read. The first listed one in directory order would
-  /// make a scene's draws read and hold the pools of other scenes.
+  /// Returns the cooked scene of the mesh [stem] for a draw of [scene], or
+  /// of the scene [shown] when [scene] is null. It is the own cooked scene of
+  /// that scene when the mesh is cooked into it, else one already read, else
+  /// the first listed. Each cooked scene holds every pool that its draws
+  /// read. The first listed scene in directory order would make the draws of
+  /// a scene read and hold the pools of other scenes.
   String? _sceneFor(String stem, String? scene) {
     final at = _cooked.$1[stem];
     if (at == null) return null;
@@ -77,9 +78,9 @@ class Pulled {
     return at.first;
   }
 
-  /// The batch of mesh [stem] that starts at shipped index [start] with
-  /// [count] indices, in its cooked scene for a draw of [scene]
-  /// ([_sceneFor]), or null when not cooked.
+  /// Returns the batch of the mesh [stem] that starts at the shipped index
+  /// [start] with [count] indices, in its cooked scene for a draw of [scene]
+  /// ([_sceneFor]), or null when it is not cooked.
   (_CookedSceneGpu, CookedBatch)? batch(
     String stem,
     int start,
@@ -102,11 +103,12 @@ class Pulled {
     return b == null ? null : (s, b);
   }
 
-  /// The next step of reading cooked scene [name] (a scene file's stem)
-  /// ahead of its first frame: its JSON (read on the I/O thread), then a
-  /// pool a step (read on the I/O thread, copied to the GPU), then a
-  /// texture array a step, as sRGB when stored so (the view its colour
-  /// inputs ask for). Whether it is all read (or has no cooked data).
+  /// Runs the next step of reading the cooked scene [name], the stem of a
+  /// scene file, ahead of its first frame. The first step reads its JSON on
+  /// the I/O thread. Each next step reads a pool on the I/O thread and
+  /// copies it to the GPU, then each step reads a texture array, as sRGB
+  /// when it is stored so. Returns true when it is all read or has no cooked
+  /// data.
   Future<bool> sceneAhead(String name) async {
     final dir = '$root/$name';
     if (!_cooked.$2.containsValue(name)) return true;
@@ -133,15 +135,16 @@ class Pulled {
     return false;
   }
 
-  /// Each cooked scene's next [sceneAhead] step.
+  /// The next [sceneAhead] step of each cooked scene.
   final _aheadAt = <String, int>{};
 
   // alloc-cold: at a scene close's release.
-  /// Lets go at once of the cooked scenes a release loosened whose buckets
-  /// drew in no run since [before]: still alive, they are held only by
-  /// draws no frame draws (a closed scene's, waiting for a collection),
-  /// and their pools would stay on the GPU until an old-space collection.
-  /// A draw that names one again makes its form again. Their names.
+  /// Lets go at once of the cooked scenes that a release loosened and whose
+  /// buckets drew in no run since [before]. Such a scene is held only by
+  /// draws that no frame draws, such as those of a closed scene that wait
+  /// for a collection. Its pools would stay on the GPU until an old-space
+  /// collection. A draw that uses one again makes its form again. Returns
+  /// the names of the scenes.
   List<String> letGo(int before) {
     final out = <String>[];
     for (final (name, s) in _scenes.looseEntries) {
@@ -154,11 +157,11 @@ class Pulled {
     return out;
   }
 
-  /// Reads mesh [stem]'s cooked scene for a draw of [scene], if not read,
-  /// off the UI isolate's frame (the file read on the I/O thread), and its
-  /// batch's pool at [start] for [count] indices: what [batch] and the
-  /// pass read synchronously at a scene's first frame (a cooked scene's
-  /// JSON is up to ~1 MB, a pool up to ~22 MB).
+  /// Reads the cooked scene of the mesh [stem] for a draw of [scene], if not
+  /// read, away from the frame of the UI isolate with the file read on the
+  /// I/O thread. Reads the pool of its batch at [start] for [count] indices
+  /// too. [batch] and the pass would otherwise read them synchronously at the
+  /// first frame of a scene.
   Future<void> readAhead(
     String stem,
     int start,
@@ -231,7 +234,7 @@ class PulledLayout {
   /// All of [cascadesBuffer], made once.
   late final BufferRef cascadesRef = BufferRef(cascadesBuffer);
 
-  /// The six planes of a view, as the builder computes them: left, right,
+  /// The six planes of a view, as the builder computes them, left, right,
   /// bottom, top, near and far, each a unit normal and a distance, from the
   /// view-projection matrix of 16 floats in the camera block.
   final List<double> Function(List<double> viewProjection) frustumPlanes;
@@ -245,8 +248,8 @@ class PulledLayout {
   };
 }
 
-/// One cooked scene on the GPU: its pools' index and stream buffers and
-/// its texture arrays, made on first use.
+/// One cooked scene on the GPU with the index and stream buffers of its
+/// pools and its texture arrays, made on first use.
 class _CookedSceneGpu {
   _CookedSceneGpu(this.dir, Map<String, Object?> json, RenderAssets shaders)
     : scene = CookedScene.fromJson(json),
@@ -255,16 +258,17 @@ class _CookedSceneGpu {
   final String dir;
   final CookedScene scene;
 
-  /// The last run one of its buckets drew in ([_RunnerPulled]'s prepare).
+  /// The last run in which one of its buckets drew, set by the prepare of
+  /// [_RunnerPulled].
   int lastRun = 0;
 
-  /// Let go ([Pulled.letGo]): its buffers are gone, and a draw whose
-  /// pulled form names it makes its form again.
+  /// True after [Pulled.letGo]. Its buffers are gone. A draw whose pulled
+  /// form uses it makes its form again.
   bool dead = false;
 
   // alloc-cold: once per cooked scene let go.
-  /// Lets go of its pools' device buffers now (G17), not when a collection
-  /// finds the last draw that named it gone.
+  /// Lets go of the device buffers of its pools now (G17), not when a
+  /// collection finds the last draw that used it gone.
   void free() {
     dead = true;
     for (final p in _pools.values) {
@@ -282,15 +286,16 @@ class _CookedSceneGpu {
 
   _PoolGpu pool(int i) => _pools[i] ?? (_pools[i] = _makePool(i));
 
-  /// Pool [i] made, its file read on the I/O thread ([Pulled.readAhead]).
+  /// Makes the pool [i] with its file read on the I/O thread
+  /// ([Pulled.readAhead]).
   Future<void> poolAhead(int i) async {
     if (_pools.containsKey(i)) return;
     final bytes = await File('$dir/${scene.pools[i].file}').readAsBytes();
     _pools[i] ??= _makePool(i, bytes);
   }
 
-  // The miss path apart: an inline closure capturing the key gave every
-  // call a context, hits included (perf).
+  // The miss path is a method of its own. An inline closure that captures
+  // the key would allocate a context on every call.
   _PoolGpu _makePool(int i, [Uint8List? read]) {
     final parts = cookedPoolParts(
       read ?? File('$dir/${scene.pools[i].file}').readAsBytesSync(),
@@ -319,13 +324,13 @@ class _PoolGpu {
   _PoolGpu(this.indices, this.streams);
   final gpu.BufferView indices;
 
-  /// By stream name (`POSITION`, `UV5`, `_COLOR_1`, …).
+  /// The streams by name, such as `POSITION`, `UV5` and `_COLOR_1`.
   final Map<String, gpu.BufferView> streams;
 
-  /// [_poolStream]'s answers by storage name.
+  /// The results of [_poolStream] by storage name.
   final byStorage = <String, gpu.BufferView>{};
 }
 
-/// Vulkan's sRGB formats among the cooked arrays' (R8G8B8A8, B8G8R8A8,
-/// BC1 RGB and RGBA, BC2, BC3, BC7).
+/// The Vulkan sRGB formats among those of the cooked arrays, R8G8B8A8,
+/// B8G8R8A8, BC1 RGB and RGBA, BC2, BC3 and BC7.
 const _srgbFormats = {43, 50, 132, 134, 136, 138, 146};

@@ -1,16 +1,15 @@
 part of 'frame_runner.dart';
 
-/// What a recorded draw sets on its pass that follows from its plan alone:
-/// its state as the engine's values (a string's conversion was a lower-case
-/// copy and a switch per draw) and its mesh geometry's own vertex and index
-/// views (made once, not a view object per bind).
+/// The part of a recorded draw that follows from its plan alone, set on its
+/// pass. It holds the state as values of the engine and the own vertex and
+/// index views of its mesh geometry, made once.
 final class _DrawFixed {
   _DrawFixed(DrawPlan d, _DrawSetup setup)
     : cull = cullMode(d.state.cull),
-      // D3D's front faces wind clockwise unless FrontCounterClockwise; the
-      // engine's winding names the opposite sense (Impeller's NDC has y up
-      // where D3D's window y runs down), so D3D clockwise is the engine's
-      // counter-clockwise.
+      // The front faces of D3D wind clockwise unless FrontCounterClockwise.
+      // The winding of the engine has the opposite sense, since the NDC of
+      // Impeller has y up where the window y of D3D runs down. D3D clockwise
+      // is counter-clockwise in the engine.
       winding = d.state.frontCounterClockwise
           ? gpu.WindingOrder.clockwise
           : gpu.WindingOrder.counterClockwise,
@@ -40,22 +39,23 @@ final class _DrawFixed {
   final gpu.StencilConfig stencilConfig;
   final List<_FixedBlend> blends;
 
-  /// The draw's viewport as the engine sets it: one object per distinct
-  /// viewport, so a pass compares the one it set last by identity.
+  /// The viewport of the draw as the engine sets it, one object per distinct
+  /// viewport. A pass compares the viewport it set last by identity.
   final gpu.Viewport viewport;
 
-  /// The mesh's own vertex buffers' views, by slot.
+  /// The views of the own vertex buffers of the mesh, by slot.
   final List<gpu.BufferView> slotViews;
 
-  /// The mesh geometry's index view: its batch's indices, or the whole
-  /// buffer for an indirect draw, whose arguments' first index counts from
-  /// the buffer's start, as Direct3D binds the whole index buffer.
+  /// The index view of the mesh geometry with the indices of its batch. An
+  /// indirect draw gets the whole buffer, since the first index of its
+  /// arguments counts from the start of the buffer, as Direct3D binds the
+  /// whole index buffer.
   final gpu.BufferView? indexView;
 
-  /// The views of [g]'s streams in the plan buffers of each of the
-  /// runner's three frames, made once per frame slot while the buffers
-  /// stand (FrameRunner._bufferGen): a skinned mesh's streams are bound
-  /// every frame.
+  /// The views of the streams of the geometry in the plan buffers of each of
+  /// the three frames of the runner. They are made once per frame slot while
+  /// the buffers stand (FrameRunner._bufferGen). The streams of a skinned
+  /// mesh are bound every frame.
   final _streamViews = List<List<gpu.BufferView>?>.filled(3, null);
   int _streamGen = -1;
 
@@ -82,9 +82,8 @@ final class _DrawFixed {
   }
 }
 
-/// [v] as the engine's viewport, one object per distinct value list: a
-/// frame has a few, looked through in turn (a joined key was a string to
-/// build per draw made).
+/// Returns [v] as a viewport of the engine, one object per distinct value
+/// list. A frame has a few, which are searched in turn.
 gpu.Viewport _viewportOf(List<double> v) {
   for (var n = 0; n < _viewports.length; n++) {
     final (k, viewport) = _viewports[n];
@@ -111,9 +110,9 @@ gpu.Viewport _viewportOf(List<double> v) {
 
 final _viewports = <(List<double>, gpu.Viewport)>[];
 
-/// [b] as the engine sets it, one object per distinct blend (its switch,
-/// factors and operations), so a pass compares the one it set last by
-/// identity; a frame has a few, looked through in turn.
+/// Returns [b] as the engine sets it, one object per distinct blend with its
+/// switch, factors and operations. A pass compares the blend it set last by
+/// identity. A frame has a few, which are searched in turn.
 _FixedBlend _fixedBlend(Blend b) {
   for (var n = 0; n < _blendsByValue.length; n++) {
     final f = _blendsByValue[n];
@@ -134,7 +133,7 @@ final _blendsByValue = <_FixedBlend>[];
 bool _sameOps(List<String> a, List<String> b) =>
     a.length == b.length && a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
 
-/// One attachment's blend as the engine sets it.
+/// The blend of one attachment as the engine sets it.
 final class _FixedBlend {
   _FixedBlend(this.blend)
     : equation = blend.enabled
@@ -153,13 +152,13 @@ final class _FixedBlend {
   final gpu.ColorBlendEquation? equation;
 }
 
-/// A blend that is off sets these factors all the same: the engine keys a
-/// pipeline state on an attachment's factors whether or not it blends, and
-/// a pass keeps the factors the last draw set, so without them a draw's
-/// state would follow the draws before it in its pass, and the states made
-/// ahead on passes of their own (runner_warm.dart) would miss. The GPU
+/// The factors that a blend which is off sets all the same. The engine keys a
+/// pipeline state on the factors of an attachment whether or not it blends. A
+/// pass keeps the factors that the last draw set. Without these factors the
+/// state of a draw would follow the draws before it in its pass. The states
+/// made ahead on passes of their own (runner_warm.dart) would miss. The GPU
 /// reads no factor of a blend that is off. PRISMARINE_FIRST_FRAME=off leaves
-/// them unset (the before).
+/// them unset.
 final _unblended = gpu.ColorBlendEquation();
 
 extension _RunnerRecord on FrameRunner {
@@ -179,9 +178,9 @@ extension _RunnerRecord on FrameRunner {
         : -1;
     final fixed = cache.fixed ??= _DrawFixed(d, setup);
     final g = d.geometry;
-    // The engine keeps a pass's bindings until they are cleared: a draw
-    // with the last draw's shaders and vertex slots rebinds only what
-    // changed (state.bound), any other starts from none.
+    // The engine keeps the bindings of a pass until they are cleared. A draw
+    // with the shaders and vertex slots of the last draw binds again only
+    // what changed (state.bound). Any other draw starts from none.
     final vertexSlots = switch (g) {
       DrawMeshGeometry() => slots.length + g.streams.length,
       InlineGeometry() => 1,
@@ -220,8 +219,8 @@ extension _RunnerRecord on FrameRunner {
       _bind(pass, fs, d.pixel!, d.pixelResources, host, state.pixel);
     }
     if (g is DrawMeshGeometry) {
-      // A vertex or index view the pass holds already (the batches of one
-      // mesh share its buffers) is not sent again.
+      // A vertex or index view that the pass holds already is not sent
+      // again. The batches of one mesh share its buffers.
       final views = fixed.slotViews;
       for (var k = 0; k < views.length; k++) {
         if (state.newVertex(k, views[k])) {
@@ -230,7 +229,7 @@ extension _RunnerRecord on FrameRunner {
       }
       var k = views.length;
       if (g.streams.isNotEmpty) {
-        // By index (perf: an iterator per draw).
+        // By index, without an iterator.
         final streams = fixed.streamViewsFor(this, g);
         for (var n = 0; n < streams.length; n++) {
           final view = streams[n];
@@ -266,7 +265,8 @@ extension _RunnerRecord on FrameRunner {
     if (newState >= 0) {
       final us = _clock.elapsedMicroseconds - newState;
       _uses!.stateUs += us;
-      // Long enough to have made a pipeline state: why none was made ahead.
+      // A draw long enough to have made a pipeline state records the reason
+      // that none was made ahead.
       if (us > _FirstUses.stateMadeUs) _uses.missed(_warm.missOf(d), d, us);
     }
   }

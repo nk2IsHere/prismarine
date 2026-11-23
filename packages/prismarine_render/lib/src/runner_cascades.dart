@@ -1,18 +1,20 @@
 part of 'frame_runner.dart';
 
-/// The key light's shadow cascades in pulled form: the builder's cascade
-/// rows, culled per cascade on the GPU by the cascade culling stage of the
-/// cooked programs, which tests each caster as the builder does.
+// The shadow cascades of the key light in pulled form. The cascade rows of
+// the builder are culled per cascade on the GPU by the cascade culling stage
+// of the cooked programs, which tests each caster as the builder does.
 
-/// The cascade culling stage's shader id in the cooked programs.
+/// The shader id of the cascade culling stage in the cooked programs.
 const _pulledCascadeCull = 'PulledCull/cull_cascades.comp';
 
-/// The cascades a row may draw into: the cull tests four.
+/// The number of cascades that a row may draw into, all four tested by the
+/// cull.
 const _cascadeCount = 4;
 
-/// Row [i]'s [bounds] into the instance at byte [at] of [f]'s instances
-/// (its sphere the mesh's, as the caster test takes it) and its mesh
-/// box into [f]'s boxes, 8 floats an instance.
+/// Writes the [bounds] of row [i] into the instance at byte [at] of the
+/// instances of [f], with the sphere of the mesh as the caster test takes
+/// it. Writes the box of the mesh into the boxes of [f], 8 floats per
+/// instance.
 void _cascadeRow(
   _PulledFrame f,
   int at,
@@ -20,8 +22,7 @@ void _cascadeRow(
   int i,
   int sphere,
 ) {
-  // Through the kept views (perf: a view per row, and a box list with its
-  // buffer and view).
+  // Through the kept views, without a view per row.
   final data = f.instances._data;
   for (var k = 0; k < 4; k++) {
     data.setFloat32(at + sphere + k * 4, bounds[i * 10 + k], Endian.little);
@@ -29,15 +30,15 @@ void _cascadeRow(
   f.boxes.addFloats(bounds, i * 10 + 4, 6, 8);
 }
 
-/// The cascade cull's uniform block, kept: emplaced (copied) each call.
+/// The uniform block of the cascade cull, kept and copied by each call.
 final _cull = ByteData(64);
 final _cullBytes = _cull.buffer.asUint8List();
 
 extension _RunnerCascades on FrameRunner {
-  /// The cascade culling dispatch into [cb]: [params] are the light's
-  /// rotation rows, the view's rectangle and the cascades buffer's row
-  /// count (RowSet.params); [views] the pass's objects, instances,
-  /// indirect arguments, clusters and bucket bases.
+  /// Records the cascade culling dispatch into [cb]. [params] holds the
+  /// rotation rows of the light, the rectangle of the view and the row count
+  /// of the cascades buffer (RowSet.params). [views] holds the objects,
+  /// instances, indirect arguments, clusters and bucket bases of the pass.
   void _cascadeCull(
     gpu.CommandBuffer cb,
     UniformRing host,
@@ -74,8 +75,8 @@ extension _RunnerCascades on FrameRunner {
       ..bindPipeline(pipeline)
       ..bindUniform(
         _uniformSlot(shader, 'BufferPulledCascadeCull'),
-        // Copied into this frame's ring, never cached by the block (it is
-        // written again each call).
+        // Copied into the ring of this frame and not cached by the block,
+        // since each call writes it again.
         host.emplace(_cullBytes),
       )
       ..bindStorageBuffer(_bufferSlot(shader, 'RawPulledObjects'), objects)

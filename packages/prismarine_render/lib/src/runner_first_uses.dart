@@ -1,10 +1,10 @@
-// PRISMARINE_FRAME_LOG runs: what a run did for the first time in any run, and
-// where a slow run's record went, as log lines on the frame log's clock.
+// Runs with PRISMARINE_FRAME_LOG log the first uses of each run and the
+// record time of a slow run by pass, on the clock of the frame log.
 part of 'frame_runner.dart';
 
-/// What the runs used first (textures, meshes, pipelines in a pass and
-/// their state variants), the first-recorded draws' time, and each pass's
-/// record time in the run.
+/// The first uses of the runs, such as textures, meshes, pipelines in a pass
+/// and their state variants, with the time of the first-recorded draws and
+/// the record time of each pass in the run.
 final class _FirstUses {
   final _usedOnce = Set<Object>.identity();
   final _usedIn = <(Object, String)>{};
@@ -12,13 +12,13 @@ final class _FirstUses {
   int _newVariants = 0, _textures = 0, _meshes = 0, _pipelines = 0;
   int _draws = 0, _texels = 0;
 
-  /// The first-recorded draws' time, and their engine draw calls' where
-  /// the state was new (the pipeline state objects made there; µs).
+  /// The time in µs of the first-recorded draws and of their draw calls in
+  /// the engine where the state was new, which made pipeline state objects.
   int drawUs = 0, stateUs = 0;
   String passName = '';
   final _passes = <(String, int)>[];
 
-  /// A run's record over this long names its slowest passes (µs).
+  /// The record time in µs past which a run logs its slowest passes.
   static const _slowUs = 30000;
 
   void use(Object o) {
@@ -31,8 +31,9 @@ final class _FirstUses {
     }
   }
 
-  /// [d] recorded for the first time: when its state is new to its
-  /// pipeline and pass, the clock's time ([stateUs] runs from it), else -1.
+  /// Notes the first record of [d]. Returns the time of the clock when its
+  /// state is new to its pipeline and pass, else -1. [stateUs] counts from
+  /// that time.
   int draw(
     DrawPlan d,
     gpu.RenderPipeline pipeline,
@@ -42,8 +43,9 @@ final class _FirstUses {
     _draws++;
     if (mesh != null) use(mesh);
     if (_usedIn.add((pipeline, passName))) _pipelines++;
-    // The engine's pipeline state object is per pipeline, pass formats
-    // and state (blends, depth, stencil): a variant first made here.
+    // The engine has one pipeline state object per pipeline, pass formats
+    // and state, such as blends, depth and stencil. A new variant is made
+    // here.
     final st = d.state;
     final variant =
         '${identityHashCode(pipeline)}|$passName|${st.depthTest}'
@@ -57,12 +59,13 @@ final class _FirstUses {
 
   void pass(String name, int us) => _passes.add((name, us));
 
-  /// A first-recorded draw this long in the engine made a pipeline state
-  /// (µs): a lookup of one made before takes a few.
+  /// The time in µs past which a first-recorded draw in the engine counts
+  /// as one that made a pipeline state. A lookup of a state made before
+  /// takes a few µs.
   static const stateMadeUs = 300;
 
-  /// The run's draws that made a pipeline state, by why the states made
-  /// ahead missed it (_Warm.missOf), and a few of each.
+  /// The draws of the run that made a pipeline state, by the reason that
+  /// the states made ahead missed them (_Warm.missOf), with a few of each.
   final _missed = <String, (int, int)>{};
   final _missedSome = <String>[];
 
@@ -77,8 +80,8 @@ final class _FirstUses {
     }
   }
 
-  /// The run's lines: its first uses, and its slowest passes when its
-  /// record took over [_slowUs].
+  /// Logs the first uses of the run to [warn] and its slowest passes when
+  /// its record of [recordUs] took over [_slowUs].
   void ran(void Function(String)? warn, int recordUs) {
     final now = Timeline.now;
     if (_draws > 0) {

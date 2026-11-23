@@ -10,18 +10,20 @@ part of 'frame_runner.dart';
 /// each testing for its value and writing it. The values it can hold follow
 /// from the passes since the stencil's clear (StencilValues).
 extension _RunnerStencil on FrameRunner {
-  /// The stencil writes of a render pass with depth attachment [d] go here;
-  /// a stencil clear starts them over.
+  /// Returns the values that the stencil of the depth attachment [d] can
+  /// hold, which take the stencil writes of a render pass. A stencil clear
+  /// starts them over.
   StencilValues _stencilWrites(Attachment d) {
     final v = _stencilValues[d.target] ??= StencilValues();
     if (d.clearStencil case final clear?) v.reset(clear);
     return v;
   }
 
-  /// Before a pass of one draw [c] (a full-screen pass of ours: the depth
-  /// reduction's first step): the stencil copies of the depth targets its
-  /// pixel stage reads through a uint view, when their stencil changed
-  /// since the last copy. The answer per shader is kept: most read none.
+  /// Records into [cb], before a pass of the one draw [c], the stencil
+  /// copies of the depth targets that its pixel stage reads through a uint
+  /// view, when their stencil changed since the last copy. Such a pass is a
+  /// full-screen pass, such as the first step of a depth reduction. The
+  /// answer per shader is kept, since most shaders read none.
   void _stencilDraw(gpu.CommandBuffer cb, DrawPlan c, UniformRing host) {
     final shader = c.pixel;
     if (shader == null) return;
@@ -45,8 +47,9 @@ extension _RunnerStencil on FrameRunner {
     }
   }
 
-  /// Before dispatch [c]: the stencil copies of the depth targets it reads
-  /// through a uint view, when their stencil changed since the last copy.
+  /// Records into [cb], before the dispatch [c], the stencil copies of the
+  /// depth targets that it reads through a uint view, when their stencil
+  /// changed since the last copy.
   void _stencilCompute(gpu.CommandBuffer cb, DispatchPlan c, UniformRing host) {
     final info = assets.shaderRecord(c.shader);
     if (info == null) return;
@@ -82,7 +85,8 @@ extension _RunnerStencil on FrameRunner {
         enableShaderReadUsage: true,
       );
     }
-    // Recorded between dispatches: the next one opens its own compute pass.
+    // A copy recorded between dispatches makes the next dispatch open its own
+    // compute pass.
     _copies++;
     _passLog?.add('render stencilCopy $target');
     final pass = cb.createRenderPass(
@@ -112,7 +116,8 @@ extension _RunnerStencil on FrameRunner {
     }
   }
 
-  /// The copy's draw of stencil value [v] over a [w] × [h] target.
+  /// Returns the draw of the copy for the stencil value [v] over a [w] × [h]
+  /// target.
   DrawPlan _stencilCopyDraw(int v, int w, int h) {
     final had = _stencilDraws[v];
     if (had != null && had.viewport[2] == w && had.viewport[3] == h) {
@@ -142,7 +147,7 @@ extension _RunnerStencil on FrameRunner {
   }
 }
 
-/// The copy's triangle: clip-space corners that cover the target.
+/// The triangle of the copy, with clip-space corners that cover the target.
 final _copyTriangle = InlineGeometry(
   Float32List.fromList([-1, -1, 3, -1, -1, 3]).buffer.asUint8List(),
   8,
