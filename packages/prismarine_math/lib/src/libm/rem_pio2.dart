@@ -107,6 +107,7 @@ void _remPio2(double x) {
   }
   // Large arguments: z = scalbn(|x|, -ilogb(x) + 23).
   var z = _fromWords((_hi(x) & 0x000fffff) | ((0x3ff + 23) << 20), _lo(x));
+  // alloc: arguments of 2^20 times pi/2 and more only.
   final tx = Float64List(3);
   for (var i = 0; i < 2; i++) {
     tx[i] = z.toInt().toDouble();
@@ -117,6 +118,7 @@ void _remPio2(double x) {
   while (i != 0 && tx[i] == 0.0) {
     i--;
   }
+  // alloc: arguments of 2^20 times pi/2 and more only.
   final ty = Float64List(3);
   final n = _remPio2Large(tx, i + 1, ty, (ix >> 20) - (0x3ff + 23), 1);
   if (sign != 0) return _set(-n, -ty[0], -ty[1]);
@@ -150,6 +152,7 @@ const _pio2 = [
   2.16741683877804819444e-51,
 ];
 
+// alloc-cold: arguments of 2^20 times pi/2 and more only.
 int _remPio2Large(Float64List x, int nx, Float64List y, int e0, int prec) {
   final x1p24 = _pow2(1023 + 24);
   final x1p_24 = _pow2(1023 - 24);
