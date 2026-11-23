@@ -24,7 +24,7 @@ The scripts read these settings from the environment. Each one is also read in i
 
 | Setting | Meaning |
 |---|---|
-| `PRISMARINE_ENGINE_DIR` | The engine directory, with the fetched targets in `<dir>/<target>` and a built engine in `<dir>/flutter`. The default of the fetch scripts is `~/.prismarine/engine`, the engine directory of the toolchain. |
+| `PRISMARINE_ENGINE_DIR` | The engine directory, with the fetched targets in `<dir>/<target>` and a built engine in `<dir>/flutter`. The default of the fetch scripts is `~/.prismarine/engine`, the engine directory of the toolchain, or `$MCSM_DATA/engine` when `MCSM_DATA` is set. |
 | `PRISMARINE_FLUTTER` | The Flutter SDK. The default is the `flutter` on `PATH`. |
 | `PRISMARINE_ENGINE_REPO` | The GitHub repository of the releases, as owner/name. The default is its value in a `private/config/*.env` above this directory. Releases from prismarine1 on are in the repository of prismarine, the older ones in the one of `MCSM_ENGINE_REPO`. |
 | `PRISMARINE_ENGINE_ARCHIVE` | A downloaded archive with its `.sha256` beside it, which `fetch.sh` unpacks in place of the download. |

@@ -8,6 +8,7 @@
 #
 # The settings below are also read in their MCSM_ form.
 #   PRISMARINE_ENGINE_DIR      the engine directory, by default
+#                              $MCSM_DATA/engine when MCSM_DATA is set, else
 #                              ~/.prismarine/engine, the one of the toolchain
 #   PRISMARINE_FLUTTER         the Flutter SDK, by default the flutter on PATH
 #   PRISMARINE_ENGINE_REPO     owner/name of the release repository, by default
@@ -34,7 +35,8 @@ setting() {
     d=$(dirname "$d")
   done
 }
-dest=${PRISMARINE_ENGINE_DIR:-$HOME/.prismarine/engine}
+dest=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
+dest=${dest:-$HOME/.prismarine/engine}
 flutter_sdk=${PRISMARINE_FLUTTER:-${MCSM_FLUTTER:-}}
 if [[ -z $flutter_sdk ]]; then
   command -v flutter >/dev/null || { echo "fetch.sh: no Flutter SDK. Set PRISMARINE_FLUTTER or put flutter on PATH." >&2; exit 1; }

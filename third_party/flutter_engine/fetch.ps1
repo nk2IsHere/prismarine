@@ -5,7 +5,8 @@
 # the Flutter SDK and prints the flags for `flutter build windows`.
 #
 # The engine directory is <Data>\engine when -Data is given, else
-# $env:PRISMARINE_ENGINE_DIR, else .prismarine\engine in the home folder. The
+# $env:PRISMARINE_ENGINE_DIR, else $env:MCSM_DATA\engine, else
+# .prismarine\engine in the home folder. The
 # Flutter SDK is $env:PRISMARINE_FLUTTER or
 # $env:MCSM_FLUTTER, else the flutter on PATH. The release repository, as
 # owner/name, is PRISMARINE_ENGINE_REPO or MCSM_ENGINE_REPO from the
@@ -50,6 +51,8 @@ if ($Data) {
   $dest = Join-Path $Data 'engine'
 } elseif ($env:PRISMARINE_ENGINE_DIR) {
   $dest = $env:PRISMARINE_ENGINE_DIR
+} elseif ($env:MCSM_DATA) {
+  $dest = Join-Path $env:MCSM_DATA 'engine'
 } else {
   $dest = Join-Path $env:USERPROFILE '.prismarine\engine'
 }
