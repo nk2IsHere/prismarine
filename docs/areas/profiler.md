@@ -26,8 +26,10 @@ under the first classes of own code on its path from the roots. `--ours` selects
 ## Allocation sites
 
 `alloc_sites` needs the Dart patch `dart/0001` of the engine fork in a profile engine and a profile build of the app.
-With `--profiler`, `--no-inline-alloc` and `--heap_sample_traces=<bytes>` as Dart flags, the VM records one
-allocation per that many bytes as an allocation trace with its weight in bytes. AOT code must be compiled with
+With `--no-inline-alloc` and `--heap_sample_traces=<bytes>` as Dart flags, the VM records one allocation per that many
+bytes as an allocation trace with its weight in bytes. A Flutter app takes its Dart flags in one `dart-flags` engine
+switch with commas between them, such as `--no-inline-alloc,--heap_sample_traces=65536`. The engine refuses
+`--profiler` there, and `alloc_sites` turns the profiler on through the VM service. AOT code must be compiled with
 `--no-inline-alloc` too, through `--extra-gen-snapshot-options` of `flutter build`. The tool prints the bytes per
 frame by class, by site and by function and writes every stack to its JSON. `alloc_flame` draws these stacks as a flame
 graph, where the many small allocations of one piece of code add up.
