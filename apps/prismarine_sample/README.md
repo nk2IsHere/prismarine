@@ -14,9 +14,11 @@ needs the patched engine and the model.
 
 ### The model
 
-The model is not part of the repository. `tool/fetch.dart` downloads it from Intel into `data/sample` of the
-repository, or into the directory in `PRISMARINE_SAMPLE_DATA`, and prepares it for the GPU with `prepareGltf` of
-[prismarine_assets](../../docs/areas/assets.md). The script reads only the glTF part of each archive.
+The model is not part of the repository. `tool/fetch.dart` downloads it from Intel into the data directory and
+prepares it for the GPU with `prepareGltf` of [prismarine_assets](../../docs/areas/assets.md). The script reads only
+the glTF part of each archive. The data directory is the one in `--out=<dir>` of the script or `--data=<dir>` of the
+app, else the one in `PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on
+Windows. The app and the script use the same default. An app without a prepared scene shows the fetch command.
 
 | Package | Download | Prepared | Default |
 |---|---|---|---|
@@ -50,7 +52,7 @@ frame and the title of each effect gives its GPU time.
 
 | Option | Effect |
 |---|---|
-| `--data=<dir>` | The data directory. The default is `PRISMARINE_SAMPLE_DATA`, else `data/sample` of the repository. |
+| `--data=<dir>` | The data directory. The default is `PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on Windows. |
 | `--smoke` | Renders 24 frames from each camera of the scene at 1280 by 720, after a reset of the temporal passes and compares the last with the reference in `smoke/<os>` of the data directory. A frame passes with the same hash, or with at most 0.1 % of its pixels more than 2 levels away. Prints one `SMOKE` line per frame and exits with 0 when every frame passed. |
 | `--record` | With `--smoke`, writes the frames as the new references. |
 | `--perf=<seconds>` | Flies a fixed path at 1920 by 1080 and writes the frame times into `--out`. Prints a `PERF` line with the frame interval, the build, record and GPU times. |
@@ -65,15 +67,16 @@ frame and the title of each effect gives its GPU time.
 | `--exposure=<e>` | `auto`, or a fixed factor such as `1.5`. Auto by default. |
 | `--ev=<ev>` | The compensation of auto exposure in EV, -0.5 by default. |
 | `--tonemap=<t>` | `agx`, `aces`, `acesFit` or `neutral`. AgX by default. |
-| `--point-shadows=<n>[,<q>]` | The point lights that cast shadows and their quality, such as `4,high`. 2 at medium by default, 0 on macOS. |
+| `--point-shadows=<n>[,<q>]` | The point lights that cast shadows and their quality, such as `4,high`. 2 at medium by default. |
 | `--fog=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
 | `--fog-density=<d>`, `--fog-anisotropy=<g>` | The extinction of the fog per metre, 0.006 by default and its forward scattering, 0.5. |
 
-At 1920 by 1080 with the default effects the scene holds 120 Hz on a Mac with an M2 Pro, with about 6.6 ms on the GPU,
-and 60 Hz on Linux with an RTX 4060 Ti, with about 5.6 ms on the GPU. A frame has about 920 draws and 670 more for the
-two shadowed point lights on Linux. It records the shadow pass of the sun only when the sun moves and the pass of the
-point shadows only when the lights move. Each shadowed point light costs about 1.2 to 1.5 ms of the GPU of the Mac,
-which is why the Mac starts without them. The costs of the effects are on [the pbr page](../../docs/areas/pbr.md#costs).
+At 1920 by 1080 with the default effects the scene holds 60 Hz on Linux with an RTX 4060 Ti, with about 5.6 ms on the
+GPU. A Mac with an M2 Pro needs about 8.8 ms on the GPU, a little more than a frame of 120 Hz. Each of the two
+shadowed point lights costs about 1.2 to 1.5 ms of it. Without them the Mac holds 120 Hz with about 6.6 ms. A frame
+has about 920 draws and 670 more for the two shadowed point lights. It records the shadow pass of the sun only when the
+sun moves and the pass of the point shadows only when the lights move. The costs of the effects are on
+[the pbr page](../../docs/areas/pbr.md#costs).
 
 ## Example
 

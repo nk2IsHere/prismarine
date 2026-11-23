@@ -3,12 +3,14 @@
 //   dart tool/fetch.dart [--out=<dir>] [--ivy] [--no-curtains]
 //       [--texture-size=1024] [--jobs=<n>] [--keep-source]
 //
-// The default directory is PRISMARINE_SAMPLE_DATA, else data/sample of the
-// repository. Only the glTF part of each archive is downloaded.
+// The default directory is the one of the app, PRISMARINE_SAMPLE_DATA, else
+// ~/.prismarine/sample or %LOCALAPPDATA%\prismarine\sample on Windows. Only
+// the glTF part of each archive is downloaded.
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:prismarine_assets/prismarine_assets.dart';
+import 'package:prismarine_sample/src/sample_data.dart';
 
 import 'src/remote_zip.dart';
 
@@ -32,7 +34,7 @@ Future<void> main(List<String> args) async {
     return null;
   }
 
-  final out = opt('out') ?? defaultDataDir();
+  final out = sampleDataDir(opt('out'));
   final textureSize = int.parse(opt('texture-size') ?? '1024');
   final jobs = int.parse(
     opt('jobs') ?? '${(Platform.numberOfProcessors ~/ 2).clamp(1, 8)}',
@@ -73,15 +75,6 @@ Future<void> main(List<String> args) async {
     }
   }
   stdout.writeln('fetch: done, the scene is in $out/prepared');
-}
-
-/// The data directory of the sample: PRISMARINE_SAMPLE_DATA, else
-/// data/sample of the repository that holds this tool.
-String defaultDataDir() {
-  final env = Platform.environment['PRISMARINE_SAMPLE_DATA'];
-  if (env != null && env.isNotEmpty) return env;
-  final tool = File.fromUri(Platform.script).parent;
-  return '${tool.parent.parent.parent.path}/data/sample';
 }
 
 /// Downloads the glTF of package [name], its credits, its buffers and its

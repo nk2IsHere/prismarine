@@ -7,6 +7,8 @@ import 'package:prismarine_pbr/prismarine_pbr.dart';
 import 'package:prismarine_render/prismarine_render.dart';
 import 'package:prismarine_scene/prismarine_scene.dart';
 
+import 'sample_data.dart';
+
 /// The scene of the sample on the GPU with its renderer: the prepared
 /// packages of the data directory, the shaders, the builder and the frame
 /// runner.
@@ -18,12 +20,7 @@ class SampleRenderer {
   /// builds the voxel copy of the scenes for the probes meanwhile.
   static Future<SampleRenderer> load(String dataDir, {bool gi = true}) async {
     final root = Directory('$dataDir/prepared');
-    if (!root.existsSync()) {
-      throw StateError(
-        'No prepared scene in $dataDir. Run `dart tool/fetch.dart` in '
-        'apps/prismarine_sample first, or set PRISMARINE_SAMPLE_DATA.',
-      );
-    }
+    if (!root.existsSync()) throw SampleDataMissing(dataDir);
     // The base scene first, then the add-ons in name order.
     final dirs =
         root
@@ -37,6 +34,7 @@ class SampleRenderer {
             if (bn == 'main') return 1;
             return an.compareTo(bn);
           });
+    if (dirs.isEmpty) throw SampleDataMissing(dataDir);
     final paths = [for (final d in dirs) '${d.path}/scene.gltf'];
     final volume = gi ? loadGiVolume(paths) : null;
     final scenes = <String, GpuScene>{
@@ -79,9 +77,6 @@ class SampleRenderer {
         '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
       );
     }
-    // Each shadowed point light costs about 1.5 ms of the GPU of an M2 Pro
-    // at 1920 by 1080, more than the frame of 120 Hz leaves.
-    if (Platform.isMacOS) builder.settings.pointShadows.budget = 0;
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
     final credits = [

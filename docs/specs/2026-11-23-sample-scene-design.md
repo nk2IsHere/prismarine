@@ -32,8 +32,8 @@ The page of the samples states "Downloads are available under the Creative Commo
 International Public License. The README of the sample and the panel of the app quote its credit lines exactly, with
 the line on use that comes before the licence, and link the source page and the licence.
 
-Nothing of the model enters git. A fetch script downloads it into a directory that git ignores, by default
-`data/sample` of the repository, or the directory in `PRISMARINE_SAMPLE_DATA`. Each package is a zip archive with
+Nothing of the model enters git. A fetch script downloads it into the data directory, the one in
+`PRISMARINE_SAMPLE_DATA`, else `~/.prismarine/sample`, or `%LOCALAPPDATA%\prismarine\sample` on Windows. Each package is a zip archive with
 every format of the scene. The script reads the central directory of the archive with HTTP range requests and
 downloads only the glTF, its buffer and the textures that the glTF uses.
 
@@ -49,8 +49,8 @@ sided. The tests of the builder cover the alpha masks with a small generated glT
 ## Data flow
 
 ```
-fetch.dart  ->  data/sample/source/<package>/       the glTF, its buffer and PNG textures as shipped
-prepare     ->  data/sample/prepared/<package>/     scene.gltf, scene.bin, textures/<n>.ktx2
+fetch.dart  ->  <data>/source/<package>/       the glTF, its buffer and PNG textures as shipped
+prepare     ->  <data>/prepared/<package>/     scene.gltf, scene.bin, textures/<n>.ktx2
 app         ->  prismarine_scene loads each prepared glTF onto the GPU
 ```
 

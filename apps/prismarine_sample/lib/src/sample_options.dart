@@ -8,7 +8,7 @@ const renderOptions = {
   'exposure': 'auto, or a fixed factor such as 1.5. Auto by default.',
   'tonemap': 'acesFit, aces, agx or neutral. agx by default.',
   'point-shadows':
-      'The lights that cast shadows and the quality, such as 4,high. 2,medium by default, 0 on macOS.',
+      'The lights that cast shadows and the quality, such as 4,high. 2,medium by default.',
   'fog': 'off, low, medium or high. Medium by default.',
   'fog-density': 'The extinction of the fog per metre.',
   'fog-anisotropy': 'The forward scattering of the fog, from -1 to 1.',
