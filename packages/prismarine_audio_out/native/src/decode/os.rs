@@ -92,7 +92,8 @@ const FEEDER_SLICE_NS: u64 = 1_000_000;
 ///
 /// On Linux the threads belong to this library and serve no other work. A nice raised for good is
 /// fine. A feeder requests a short slice and goes above the process only where RLIMIT_NICE allows
-/// it. It does not go down. The I/O priority is the highest or lowest level of the best-effort class.
+/// it. It does not go lower. The I/O priority is the highest or lowest level of the best-effort
+/// class.
 pub fn calls(os: Os, role: Role, nice: Nice) -> [Option<Call>; 2] {
     match (os, role) {
         (Os::Mac, Role::Feeder) => [Some(Call::MacQos(QOS_CLASS_USER_INTERACTIVE)), None],
