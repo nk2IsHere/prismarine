@@ -1,6 +1,7 @@
-// The mouse-look class of the macOS runner through the Objective-C runtime: synchronous calls on the UI isolate, which runs on
-// the main thread with Flutter's merged platform and UI threads, so a read
-// costs two message sends and waits for no answer.
+// The mouse-look class of the macOS runner through the Objective-C runtime:
+// synchronous calls on the UI isolate, which runs on the main thread with
+// Flutter's merged platform and UI threads, so a read costs two message
+// sends and waits for no answer.
 import 'dart:ffi';
 
 import 'mouse_look.dart';

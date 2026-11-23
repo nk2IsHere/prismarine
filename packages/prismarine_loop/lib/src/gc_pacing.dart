@@ -37,9 +37,9 @@ class GcPacing {
   final int budget;
   final int reliefFrames;
 
-  /// The VM's collections at an idle point (flutter_gpu `mcsmGcIdle`: the
-  /// time left in microseconds, the least and the most new-space bytes);
-  /// what ran (0: nothing). Null on an engine without it.
+  /// The VM's collections at an idle point (the GC idle call of
+  /// flutter_gpu: the time left in microseconds, the least and the most
+  /// new-space bytes); what ran (0: nothing). Null on an engine without it.
   final int Function(int budgetMicros, int minBytes, int maxBytes)? collect;
 
   /// Whether a picture is on its way (its plan asked for and not recorded):
@@ -55,11 +55,11 @@ class GcPacing {
   /// given, in ms (the profile).
   final void Function(int ran, double ms, double budgetMs)? onIdle;
 
-  /// Old-space work now (flutter_gpu `mcsmOldSpace`: 2 compacts); null on
-  /// an engine without it.
+  /// Old-space work now (the old-space call of flutter_gpu: 2 compacts);
+  /// null on an engine without it.
   final int Function(int request)? oldSpace;
 
-  /// The heap's figures (flutter_gpu `mcsmHeap`: 0 old space used, 1 its
+  /// The heap's figures (the heap call of flutter_gpu: 0 old space used, 1 its
   /// capacity, in bytes); null on an engine without it.
   final int Function(int which)? heap;
 
