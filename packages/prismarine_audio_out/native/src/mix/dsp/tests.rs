@@ -95,7 +95,7 @@ fn surround_matches_the_oracle() {
     }
 }
 
-/// The peaking band of the multiband EQ gives +12 dB at its centre, and a
+/// The peaking band of the multiband EQ gives +12 dB at its centre and a
 /// 0 dB band passes the input untouched.
 #[test]
 fn mbeq_peak_and_bypass() {

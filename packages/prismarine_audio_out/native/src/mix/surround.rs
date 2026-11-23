@@ -1,6 +1,6 @@
 //! The surround panning onto 5.1 of the pan DSP in surround mode with a 5.1
 //! target, as prismarine_audio's `Surround` in the same float order. The
-//! channels have the order FL FR C LFE SL SR, and the speakers are at −30,
+//! channels have the order FL FR C LFE SL SR and the speakers are at −30,
 //! 30, 0, −110 and 110 degrees.
 
 use std::f64::consts::{FRAC_1_SQRT_2, PI};

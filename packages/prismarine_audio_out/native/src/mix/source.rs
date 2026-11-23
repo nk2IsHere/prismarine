@@ -37,7 +37,7 @@ pub struct View {
     /// The format of the decode replaced the format of the model, or the
     /// decode failed.
     taken: AtomicBool,
-    /// The frames that each stream tap read last, and when.
+    /// The frames that each stream tap read last and when.
     pub tstart: [AtomicI64; TAPS],
     pub tend: [AtomicI64; TAPS],
     pub tused: [AtomicI64; TAPS],
@@ -202,11 +202,11 @@ mod tests {
         let a = src("x", &g.handle());
         let b = a.clone();
         drop(a);
-        // A share is left, and nothing is queued.
+        // A share is left and nothing is queued.
         g.collect();
         assert_eq!(g.alloc_count(), 1);
         assert_eq!(b.path, "x");
-        // The last share queues it, and the source stays until the collector
+        // The last share queues it and the source stays until the collector
         // runs.
         drop(b);
         assert_eq!(g.alloc_count(), 1);

@@ -7,7 +7,7 @@ impl Inst {
     /// with everything that it can use while it plays. [pitch] is the most
     /// semitones by which the instrument of a parent raises its pitch. It
     /// does not run on the render thread. The poster builds the instance of a
-    /// start, and an instance builds those of its nested events.
+    /// start and an instance builds those of its nested events.
     pub fn build(b: &Build, def: &'static Event, outer: usize, pitch: f64) -> Inst {
         let np = def.params.len();
         let mut slot = vec![0usize; np];

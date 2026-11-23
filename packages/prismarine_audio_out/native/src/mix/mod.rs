@@ -11,9 +11,9 @@
 //! the render thread let go.
 //!
 //! The render allocates and frees nothing. Its storage is built before it
-//! runs, within the limits of engine/cmd.rs, and what it lets go goes to the
+//! runs, within the limits of engine/cmd.rs and what it lets go goes to the
 //! collector. In debug builds the global allocator is the checking wrapper
-//! of `assert_no_alloc`, and an allocation or free inside a render aborts.
+//! of `assert_no_alloc` and an allocation or free inside a render aborts.
 //!
 //! `unsafe` is only at the FFI edge, in the `extern "C"` functions here.
 
@@ -198,7 +198,7 @@ fn bind(sh: &Shared, p: &mut Posters, w: usize, gen: i64) {
     let s = make_src(sh, w, gen);
     let mut c = Cmd::new(engine::OP_BIND, w as i32, -1);
     c.src = Some(s.clone());
-    // A full ring keeps the binding of the render, and the next start tries
+    // A full ring keeps the binding of the render and the next start tries
     // again.
     if sh.ring.push(c).is_ok() {
         p.bound[w] = Some(s);
@@ -367,7 +367,7 @@ impl Engine {
                     -1
                 };
                 if c.event >= 0 {
-                    // The poster builds the instance, and the render only
+                    // The poster builds the instance and the render only
                     // starts it.
                     let b = engine::Build {
                         m,
@@ -612,7 +612,7 @@ pub unsafe extern "C" fn prismarine_mix_destroy(e: *mut Engine) {
 
 /// Posts a command from any thread. For START [name] is the event path and
 /// [sound] the sound file or null. For SET_PARAM and SET_SNAP_PARAM [name] is
-/// the lower-cased parameter name, and for START_SNAPSHOT the path. For
+/// the lower-cased parameter name and for START_SNAPSHOT the path. For
 /// SET_VOLUME and STOP [keep_tail] is the tail that a one-shot keeps, below
 /// 0 for none. For STOP [flag] stops at once and [via] is the lower-cased
 /// parameter that a fading stop sets, or null. Returns 0, or −1 when the
@@ -722,7 +722,7 @@ pub unsafe extern "C" fn prismarine_mix_problem(e: *const Engine, out: *mut u8, 
 /// Starts the service thread and the output device for real time. Returns
 /// 0, or −1 without an output device, −3 without a service thread, −4 when
 /// started already, −5 when the stream does not open and −6 when it does
-/// not play. The engine is silent after an error, and its problems give the
+/// not play. The engine is silent after an error and its problems give the
 /// cause.
 ///
 /// # Safety
@@ -845,7 +845,7 @@ mod tests {
             n += 1;
         }
         assert_eq!(n, 32);
-        // A full ring refuses, and the sources of refused commands are let
+        // A full ring refuses and the sources of refused commands are let
         // go.
         for i in 0..64 {
             assert!(ring.push(Cmd::new(engine::OP_STOP, 0, i)).is_ok());

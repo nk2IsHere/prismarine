@@ -42,8 +42,8 @@ impl Inst {
     }
 
     /// Stops sound [k] for a polyphony limit at block frame [at], as Dart's
-    /// `_Sound.steal`. A voice fades out, and one that has not started does
-    /// not sound. A nested event stops at once, and a scatterer stops
+    /// `_Sound.steal`. A voice fades out and one that has not started does
+    /// not sound. A nested event stops at once and a scatterer stops
     /// spawning.
     pub(crate) fn steal_sound(&mut self, k: usize, at: i64) {
         let pass = self.pass;

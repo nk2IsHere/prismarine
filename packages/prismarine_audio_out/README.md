@@ -18,7 +18,7 @@ it is ready. `StreamingPcmSource` decodes an Ogg Vorbis file while it plays.
 source exists. `PcmCache.sceneChanged` lets the cache drop the entries that nobody wanted since the scene before.
 
 `NativeAudioEngine.fromBlob` makes the native engine from the bytes of `projectBlob`. `startDevice` plays it in real
-time, and `NativeMixerPort` posts commands to it from any isolate. In lockstep `render` renders on the calling thread
+time and `NativeMixerPort` posts commands to it from any isolate. In lockstep `render` renders on the calling thread
 with the same bits as the Dart `AudioEngine`.
 
 `PcmPushStream.start` opens the default output device at 48 kHz stereo and throws a `StateError` on a machine without

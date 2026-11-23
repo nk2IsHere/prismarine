@@ -172,7 +172,7 @@ fn rv_row(r: usize, j: usize) -> f64 {
 }
 
 /// The 5.1 form as Dart's `Reverb.process51`. The sum of the six channels
-/// goes in, and six uncorrelated outputs at the 5.1 level come out, with dry
+/// goes in and six uncorrelated outputs at the 5.1 level come out, with dry
 /// per channel.
 pub(crate) fn rv_process51(r: &mut Reverb, p: &[f64], buf: &mut [f32], frames: usize) {
     let (wet, dry) = (db_gain(p[11]), db_gain(p[12]));

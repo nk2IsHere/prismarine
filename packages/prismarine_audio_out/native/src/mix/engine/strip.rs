@@ -140,7 +140,7 @@ fn create_dsp(b: &Build, fx: &'static Fx, keys: &[(i32, i64, Prop)]) -> Option<D
 }
 
 /// Returns how many parameters of an effect automation and mix states can
-/// address. A compressor with up to 6 stored parameters has 5, and its
+/// address. A compressor with up to 6 stored parameters has 5 and its
 /// sidechain and link parameters count only when the model stores them.
 /// Dart's lookups of the others find nothing.
 pub(crate) fn props_of(fx: &Fx, dsp: &Dsp) -> usize {
@@ -232,7 +232,7 @@ impl Strip {
         let surround = pre
             .iter()
             .position(|s| matches!(s, Stage::Effect { dsp, .. } if dsp.surround()));
-        // The DSPs that run 5.1 get their twins now, and Dart's at first use.
+        // The DSPs that run 5.1 get their twins now and Dart's at first use.
         let from = if wide { Some(0) } else { surround };
         if let Some(from) = from {
             for st in pre.iter_mut().skip(from) {

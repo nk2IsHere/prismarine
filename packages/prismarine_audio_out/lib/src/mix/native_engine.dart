@@ -8,7 +8,7 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 import 'native.dart';
 
 /// Posts [AudioCommand]s into a native engine from any isolate. It holds the
-/// address of the engine and the directory of the sounds of starts, and it
+/// address of the engine and the directory of the sounds of starts and it
 /// can be sent to another isolate.
 class NativeMixerPort {
   const NativeMixerPort(this.address, this.soundDir);
@@ -176,7 +176,7 @@ class NativeMixerPort {
 
 /// The native render of the audio engine as an [AudioRenderer], with the
 /// same bits as [AudioEngine]. In lockstep [render] runs on the caller's
-/// thread, and every sample is decoded before its start is posted. In real
+/// thread and every sample is decoded before its start is posted. In real
 /// time [startDevice] renders in the callback of the output device.
 class NativeAudioEngine implements AudioRenderer {
   NativeAudioEngine._(this._e, this.soundDir, this._problems);

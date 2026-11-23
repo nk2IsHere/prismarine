@@ -3,8 +3,8 @@
 //! the same bits as the Dart render with them. Rust does not fuse
 //! multiply-adds and has no fast maths. `sin`, `cos`, `exp`, `log` and `pow`
 //! come from the `libm` crate, musl's fdlibm code, in place of the C library
-//! of the platform, and every target computes the same bits. prismarine_math's
-//! lib/libm.dart is the same code in Dart, and a change here is made there
+//! of the platform and every target computes the same bits. prismarine_math's
+//! lib/libm.dart is the same code in Dart and a change here is made there
 //! too. clippy.toml forbids the maths of the platform in this crate.
 
 pub const RATE: i64 = 48000;
@@ -186,7 +186,7 @@ pub fn one_pole(ms: f64) -> f64 {
 }
 
 /// A value that the optimizer cannot see. A maths call on a constant runs at
-/// run time, as in Dart, and is not folded at compile time.
+/// run time, as in Dart and is not folded at compile time.
 #[inline]
 pub fn opaque(x: f64) -> f64 {
     std::hint::black_box(x)
@@ -202,7 +202,7 @@ mod tests {
     pub const LIBM_SWEEP: u64 = 0x06f9_0047_c6d9_745b;
 
     fn fnv(h: &mut u64, v: f64) {
-        // The bits of a NaN depend on the CPU, and every NaN counts as one.
+        // The bits of a NaN depend on the CPU and every NaN counts as one.
         let b = if v.is_nan() {
             0x7ff8_0000_0000_0000
         } else {

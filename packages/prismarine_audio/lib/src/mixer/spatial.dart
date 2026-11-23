@@ -4,7 +4,7 @@ import 'package:prismarine_math/libm.dart' as libm;
 
 /// The 3D panning onto a stereo output of the pan DSP in surround mode with
 /// a 3D pan blend. The distance attenuates the source by the rolloff and
-/// gives an extent, and the direction of the source pans across the extent.
+/// gives an extent and the direction of the source pans across the extent.
 abstract final class Spatial {
   /// Returns the attenuation of rolloff [rolloff] at distance [d], with a
   /// rolloff scale of 1. The rolloffs are 0 linear squared, 1 linear, 2
@@ -30,7 +30,7 @@ abstract final class Spatial {
 
   /// Returns the 3D extent in degrees at distance [d]. Extent mode [mode] 0
   /// takes a sound size of twice the minimum distance, 1 takes [size] with
-  /// at least [minExtent], and 2 is off.
+  /// at least [minExtent] and 2 is off.
   static double extent(
     int mode,
     double d,
@@ -54,7 +54,7 @@ abstract final class Spatial {
   /// Returns the left and right gains at constant power of a mono source
   /// at [direction] degrees, 0 ahead and +90 to the right, spread over
   /// [extent] degrees. The lateral position is the mean of sin over the
-  /// arc, s = sin(direction)·sinc(extent/2), and the gains are
+  /// arc, s = sin(direction)·sinc(extent/2) and the gains are
   /// (√(2 − s²) ∓ s)/2.
   static (double, double) mono(double direction, double extent) {
     var s = libm.sin(direction * math.pi / 180);

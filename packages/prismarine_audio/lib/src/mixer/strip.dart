@@ -42,7 +42,7 @@ const upmixGain = math.sqrt1_2;
 
 /// A bus with its input sum, its effect chain and its output. The chain has
 /// the pre-fader effects, the fader and the post-fader effects, with sends
-/// and sidechain taps at their places. Buffers are stereo, and a mono bus
+/// and sidechain taps at their places. Buffers are stereo and a mono bus
 /// holds its signal with equal channels. A 5.1 bus and the part of a strip
 /// after a surround pan run in 5.1.
 class BusStrip {

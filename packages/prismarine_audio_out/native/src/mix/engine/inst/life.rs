@@ -1,4 +1,4 @@
-//! Parameters, modulation, stopping and stealing, and the sound slots.
+//! Parameters, modulation, stopping and stealing and the sound slots.
 
 use super::*;
 
@@ -218,7 +218,7 @@ impl Inst {
     }
 
     /// Lets a sound go. The instance of a nested event goes back to its pool
-    /// with its own sounds let go, and anything else to the collector.
+    /// with its own sounds let go and anything else to the collector.
     pub(super) fn release(&mut self, s: Sound) {
         if let Body::Snapshot { key, .. } = s.body {
             if key >= 0 {

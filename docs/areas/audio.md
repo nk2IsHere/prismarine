@@ -2,20 +2,20 @@
 
 The package is an audio engine of events, buses with effect chains, voices and mix states, rendered in Dart. Its
 native render in [prismarine_audio_out](audio_out.md) gives the same bits. The package also holds the interfaces of
-decoded audio and a WAV writer. It has no native code and no Flutter, and you can use it from any isolate or tool.
+decoded audio and a WAV writer. It has no native code and no Flutter and you can use it from any isolate or tool.
 
 ## The project
 
-A project describes the sound of a game, and you build it in code from the classes of `model.dart`. An `EventDef` has
-a master track, tracks and returns, each a `StripDef` with effects, and an optional input bus that feeds a bus of the
+A project describes the sound of a game and you build it in code from the classes of `model.dart`. An `EventDef` has
+a master track, tracks and returns, each a `StripDef` with effects and an optional input bus that feeds a bus of the
 mixer by path. Instruments play on a `TimelineDef` in 48 kHz frames or on the sheets of a `ParameterDef`. A
 `sample` instrument plays a waveform, a `playlist` picks one of its entries, a `scatterer` spawns entries at random
-intervals and positions, a `slot` plays the sound that a start passes, and an `event` instrument plays a nested event
+intervals and positions, a `slot` plays the sound that a start passes and an `event` instrument plays a nested event
 or applies a mix state. Automation curves and modulators move the properties of strips, effects and instruments.
 
 The `MixerDef` holds the buses of the mixer with one master bus and the path of each bus. A mix state is an
 `EventDef` of kind `mixState` whose `MixStateDef` pulls properties of the mixer toward values by its intensity.
-Volumes and the dB parameters of effects blend in linear gain, and a property that no mix state touches returns to its
+Volumes and the dB parameters of effects blend in linear gain and a property that no mix state touches returns to its
 stored value.
 
 Three fields set behaviour that differs between sound tools. `Placement.fill` repeats a timelocked waveform until its
@@ -52,17 +52,17 @@ signal of its strip into a return bus at its level.
 
 A game drives the engine with `AudioCommand`s, each with the id of an instance that the game picks. `StartEvent`
 starts an event, with the key of a sound for its slot instruments. `SetParameter`, `SetVolume`, `SetPaused` and
-`SetSpatial` change an instance, and `StopEvent` stops it with a fade, at once or through a parameter. `StartMixState`,
+`SetSpatial` change an instance and `StopEvent` stops it with a fade, at once or through a parameter. `StartMixState`,
 `SetMixStateParameter` and `StopMixState` do the same for mix states. Commands are plain values that you can send to
 another isolate.
 
 `AudioRules` holds the settings that hold for every command. `reportLag` makes the reported position of an instance
 trail its render, `lateStartMinimum` and `wholeMsLengths` shape a late start. The defaults are 0 and false.
 
-`AudioEngine` is the Dart render. `schedule` applies a command at a frame, `apply` before the next frame, and `render`
-returns the next stereo frames of the master bus. The render is deterministic. Its maths come from `prismarine_math`,
+`AudioEngine` is the Dart render. `schedule` applies a command at a frame, `apply` before the next frame and `render`
+returns the next stereo frames of the master bus. The render is deterministic. Its maths come from `prismarine_math`
 and it gives the same bits on every platform. `LockstepAudio` advances a renderer to the time of a game and applies
-commands at their frames, for captures. The native render is for real-time play, and `projectBlob` writes the project
+commands at their frames, for captures. The native render is for real-time play and `projectBlob` writes the project
 in the form that it reads.
 
 | Rule | Effect |
@@ -75,7 +75,7 @@ in the form that it reads.
 
 `PcmSource` is decoded audio as interleaved float32 frames, with its channel count, sample rate and length. A player
 reads frames from it at any position with `read`. `MemoryPcmSource` holds a whole decoded file in memory. A
-`LoadingPcmSource` is a source whose data is still loading on another thread, and `pcmReady` tells whether a source has
+`LoadingPcmSource` is a source whose data is still loading on another thread and `pcmReady` tells whether a source has
 its data. `WavWriter` streams 48 kHz stereo float32 frames into a WAV file and writes the sizes into its header on
 `close`.
 

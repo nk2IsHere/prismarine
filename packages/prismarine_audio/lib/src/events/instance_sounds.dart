@@ -111,7 +111,7 @@ class _Voice extends _Sound {
   @override
   bool render(EventInstance i, int frames) {
     if (ended) return false;
-    // The data is still loading, and the voice starts late from its first
+    // The data is still loading and the voice starts late from its first
     // sample.
     if (!pcmReady(reader.source)) {
       delay = math.max(0, delay - frames);
@@ -133,7 +133,7 @@ class _Voice extends _Sound {
         // A mono bus takes the distance gain only.
         k *= math.sqrt(l * l + r * r);
       } else {
-        // Mono sources pan at constant power, and stereo ones balance with
+        // Mono sources pan at constant power and stereo ones balance with
         // a factor of √2.
         final s = reader.source.channels == 1 ? 1.0 : math.sqrt2;
         k = 1;
@@ -292,7 +292,7 @@ class _Nested extends _Sound {
 
 /// A mix state instrument. The mix state applies to the mixer while the
 /// instrument plays, at the intensity of the instrument, with its stubs at
-/// their initial values and then their automation, and with its distance
+/// their initial values and then their automation and with its distance
 /// and cone parameters from the position of the event. It stops when the
 /// instrument is cut or its event ends.
 class _SnapshotSound extends _Sound {
@@ -375,7 +375,7 @@ class _Scatter extends _Sound {
   /// An AHDSR on its pitch, with its property and the pitch in semitones
   /// that it was played at. Then the seconds since the start and into the
   /// release, null while not releasing, the level that the release started
-  /// from, and the frames in scatterer time to the next spawn, null before
+  /// from and the frames in scatterer time to the next spawn, null before
   /// the start.
   ModulatorDef? env;
   PropertyDef? pitchProp;
@@ -436,10 +436,10 @@ class _Scatter extends _Sound {
 
   /// Advances a scatterer with a pitch AHDSR. The level is linear in percent
   /// of the UI span of the pitch, where −50 is −24 semitones. It adds to the
-  /// pitch that the scatterer played at, and the sum stays within the range
-  /// of the property. It moves the live spawns as they play, and the spawn
+  /// pitch that the scatterer played at and the sum stays within the range
+  /// of the property. It moves the live spawns as they play and the spawn
   /// clock runs at that pitch. Leaving its region releases the envelope from
-  /// its level to 0 over the release time while it spawns on, and then the
+  /// its level to 0 over the release time while it spawns on and then the
   /// scatterer stops.
   bool _renderEnv(EventInstance i, int frames) {
     final e = env!;
@@ -494,7 +494,7 @@ class _Scatter extends _Sound {
 }
 
 /// The output of an event played at a pitch ratio. The event renders ahead
-/// by the ratio, and each output, its bus and every send, is read back with
+/// by the ratio and each output, its bus and every send, is read back with
 /// linear interpolation.
 class _Pitched {
   _Pitched(this.ratio);

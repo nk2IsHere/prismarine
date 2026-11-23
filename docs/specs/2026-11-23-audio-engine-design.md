@@ -40,17 +40,17 @@ moves to prismarine and loses every FMOD and game word on the way. mcsm's output
 
 ## Two renders
 
-The engine has a Dart render and a native render, and both stay. They have different jobs. The native render plays in
-real time. It runs in the callback of the output device, outside the Dart heap, and a pause of an isolate or a
+The engine has a Dart render and a native render and both stay. They have different jobs. The native render plays in
+real time. It runs in the callback of the output device, outside the Dart heap and a pause of an isolate or a
 collection of its heap does not starve it. The Dart render is for offline and lockstep work. It renders on any isolate
 and on any platform without the native library, for captures that step with the game, for tools that render one event
-to a file and for tests. A capture can use either render, and both give the same bits. The Dart render is also the
-reference that the native one is checked against, and a change to one is made in the other in the same float order.
+to a file and for tests. A capture can use either render and both give the same bits. The Dart render is also the
+reference that the native one is checked against and a change to one is made in the other in the same float order.
 
 ## The native library
 
 The native engine joins the crate of `prismarine_audio_out`. The decoded-audio cache and the engine must be in one
-library. A separate crate would need the user defines that mcsm uses today, and every app would have to set them.
+library. A separate crate would need the user defines that mcsm uses today and every app would have to set them.
 `mcsm_audio_out` loses its crate and its user defines.
 
 `dmath.rs` moves into the crate beside `libm.dart` of `prismarine_math`. The rule that the mixer maths change in both
@@ -61,7 +61,7 @@ multiply-adds already holds for the crate.
 
 A project is the static description of the sound of a game. The engine reads it once. The Dart classes are immutable
 after load. `projectBlob` writes the binary form that the native engine reads. The events and mix states are maps by
-path, and a game that merges several sources keeps the first entry of a path.
+path and a game that merges several sources keeps the first entry of a path.
 
 | Part | Contents |
 |---|---|
@@ -74,7 +74,7 @@ path, and a game that merges several sources keeps the first entry of a path.
 | `Placement` and `SheetPlacement` | An instrument on the timeline in frames, with `timelocked` and `fill`, or on a parameter sheet in parameter units. |
 | `ParameterDef` | A game parameter, a distance or a cone angle, with its range and default. |
 | `TimelineDef` | Placements, tempo markers, loop regions and transitions with conditions and quantization. |
-| `MixStateDef` | A priority, an intensity, entries that pull properties of the mixer toward values, and their automation. |
+| `MixStateDef` | A priority, an intensity, entries that pull properties of the mixer toward values and their automation. |
 | `WaveformDef` | A key, a file path, `streamed`, the frame count, the rate and the channel count. |
 
 The engine uses enums where FMOD uses numbers: `ChannelLayout`, `EffectKind`, `PolyphonyMode` (`failNew`,
@@ -90,7 +90,7 @@ parameter. A parameter with nothing keeps its default and has no stored value fo
 
 ### Behaviour that is data
 
-FMOD 1.06 and 1.09 differ in a few places. Each one becomes a field of the model, and the adapter of mcsm sets it from
+FMOD 1.06 and 1.09 differ in a few places. Each one becomes a field of the model and the adapter of mcsm sets it from
 the version of the bank. A project built in code gives the field or takes its default.
 
 | Field | Meaning | 1.06 | 1.09 |
@@ -116,17 +116,17 @@ The engine takes `AudioCommand`s, each with the id of an instance that the game 
 | `StopEvent(id, mode:, keepTail:, viaParameter:)` | Stops with a fade, at once, or by setting a parameter to 1 when the event has it. |
 | `StartMixState(id, name)`, `SetMixStateParameter`, `StopMixState(id)` | The same for mix states. |
 
-`keepTail` is a time in seconds. A one-shot event with less time left than `keepTail` ignores a stop, and a zero volume
+`keepTail` is a time in seconds. A one-shot event with less time left than `keepTail` ignores a stop and a zero volume
 after its first block. The time left counts from the reported position, which trails the render by
 `AudioRules.reportLag` frames.
 
 `late` holds a tolerance in seconds. The engine starts at the wanted position only when the position is past the
-tolerance and past `AudioRules.lateStartMinimum`, and the event or its sound is longer than the tolerance. A start
+tolerance and past `AudioRules.lateStartMinimum` and the event or its sound is longer than the tolerance. A start
 whose wanted position is past the end of the event or of its sound does not play. With `AudioRules.wholeMsLengths`
 the length of a sound is rounded down to whole milliseconds.
 
 `AudioRules` holds these values for the whole engine. The defaults are zero and false. mcsm sets a lag of 1024 frames,
-a minimum of 0.1 s and whole milliseconds, and the command forms of its sound rules.
+a minimum of 0.1 s and whole milliseconds and the command forms of its sound rules.
 
 The commands are plain values that any isolate can send. `AudioRenderer` is the interface of a render with a frame
 position, `schedule`, `apply` and `render`. `AudioEngine` implements it in Dart and `NativeAudioEngine` implements it
@@ -139,7 +139,7 @@ mcsm.
 
 The crate keeps the layout of mcsm's mixer crate with prismarine names. The render runs in the callback of the
 device at 48 kHz stereo, in blocks of 1024 frames. Posters on any isolate build the instance of a start, with its
-strips, effects, sound slots and nested pools, and push the command into a lock-free queue. The render applies
+strips, effects, sound slots and nested pools and push the command into a lock-free queue. The render applies
 commands at their frames, renders and lets go of finished instances through `basedrop`'s collector. Debug builds abort
 on an allocation inside the render.
 
@@ -148,7 +148,7 @@ engine class of mcsm. The poster resolves the sound key of a start against a sou
 
 ## Bits and checks
 
-The move changes no arithmetic. Every function keeps its float order, and the render code changes only where the
+The move changes no arithmetic. Every function keeps its float order and the render code changes only where the
 model gives typed values in place of FMOD records. The checks:
 
 - The parity writer of `package:prismarine_audio/testing.dart` renders a project and a command script in Dart and
@@ -187,7 +187,7 @@ strips and effects, carry `// alloc: <reason>`. The rewrite is a step of its own
 
 ## Steps
 
-1. In mcsm: the typed model, the adapter and the generic commands in `mcsm_audio`, and the same model in the crate,
+1. In mcsm: the typed model, the adapter and the generic commands in `mcsm_audio` and the same model in the crate,
    with the parity checksums unchanged. This cut can land on its own.
 2. The move: the Dart engine to `prismarine_audio`, the crate's engine to `prismarine_audio_out`, with prismarine
    names and comments. mcsm imports them and deletes its copies and its crate.
@@ -200,7 +200,7 @@ strips and effects, carry `// alloc: <reason>`. The rewrite is a step of its own
 
 - **Summing order.** The engine sums instances into buses in the order in which they first reach a bus in a block.
   Kept buffers must keep that order, or the bits change.
-- **Stored values.** A parameter with a switch value has no stored value for mix states today, and a parameter with
+- **Stored values.** A parameter with a switch value has no stored value for mix states today and a parameter with
   nothing keeps its default. The model keeps both cases apart.
 - **Snapshot bytes.** The bridge's codec must write the same bytes for the same commands.
 - **Two repositories.** The move lands in prismarine first. mcsm's pin bump deletes its crate and changes its pubspecs

@@ -25,10 +25,10 @@ pub const NAME: usize = 160;
 // ---------------------------------------------------------------- limits
 
 // The render does not allocate or free. Its storage is built before it
-// runs, the buses and pools of the mixer with the engine, and an event
+// runs, the buses and pools of the mixer with the engine and an event
 // instance with its buses, effects, sound slots and the nested events that
 // it can start by the thread that posts its start. A full pool refuses and
-// reports a problem, and nothing is allocated to make room. What the render
+// reports a problem and nothing is allocated to make room. What the render
 // lets go goes to the collector of basedrop.
 
 /// The frames of a pass, the mix block. A longer render call is split.
@@ -67,7 +67,7 @@ pub struct Cmd {
     /// The string id of the parameter that a fading STOP sets to 1, −1 for
     /// none.
     pub via: i32,
-    /// The index of the event or mix state, −1 for unknown, and the string id
+    /// The index of the event or mix state, −1 for unknown and the string id
     /// of a parameter name.
     pub event: i32,
     pub name_id: i32,
@@ -146,7 +146,7 @@ pub struct Rules {
 pub struct Shared {
     pub m: &'static Model,
     pub rules: Rules,
-    /// The engine plays in real time. Streamed waveforms stream, and failed
+    /// The engine plays in real time. Streamed waveforms stream and failed
     /// decodes play silence.
     pub streaming: bool,
     /// A streamed sound in real time starts once its stream holds its start
@@ -161,7 +161,7 @@ pub struct Shared {
     /// the collector of the engine.
     pub garbage: basedrop::Handle,
     /// Drops the queued sources on the service thread, on the lockstep caller
-    /// after a render or at the teardown, and not on the render thread.
+    /// after a render or at the teardown and not on the render thread.
     pub collector: std::sync::Mutex<basedrop::Collector>,
     /// The stream taps for the service thread to open, as a source and a
     /// tap.

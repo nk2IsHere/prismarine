@@ -9,7 +9,7 @@ pub(crate) struct Reader {
     pub(crate) src: SrcRef,
     one: [f32; 16],
     /// The tap that this reader reads of a stream in real time, [NO_TAP]
-    /// before its first read, and its id for the owner mark of the tap.
+    /// before its first read and its id for the owner mark of the tap.
     tap: usize,
     id: i64,
 }
@@ -43,7 +43,7 @@ impl Drop for Reader {
 }
 
 /// Returns the tap of a stream that reader [rd] reads at [frame]. A playing
-/// sound keeps a tap of its own with its own decoder, and layers of one
+/// sound keeps a tap of its own with its own decoder and layers of one
 /// waveform at different positions do not seek the rings of each other
 /// away. A jump that the engine cued with stream_cue moves the reader to the
 /// cued tap. With every tap owned, readers share by position.
@@ -91,7 +91,7 @@ fn reader_tap(sh: &Shared, rd: &mut Reader, frame: i64) -> usize {
         }
     }
     let Some(t) = pick else {
-        // Every tap has a reader, and readers share by position.
+        // Every tap has a reader and readers share by position.
         return stream_tap(sh, s, frame);
     };
     if mine {
@@ -123,7 +123,7 @@ fn stream_tap(sh: &Shared, s: &SrcRef, frame: i64) -> usize {
         }
     }
     if n < crate::mix::source::TAPS {
-        // The service thread opens it, and it reads silence until then, as a
+        // The service thread opens it and it reads silence until then, as a
         // stream that is still opening does.
         let _ = sh.requests.push((s.clone(), n));
         v.ntaps.store(n + 1, Ordering::Relaxed);
@@ -140,7 +140,7 @@ fn stream_tap(sh: &Shared, s: &SrcRef, frame: i64) -> usize {
 
 /// Gives a jump in real time that is about to reach source frame [frame] of
 /// stream [s] a tap of its own with the ring there. The read after the jump
-/// finds the destination decoded within the transition lookahead, and the
+/// finds the destination decoded within the transition lookahead and the
 /// jump plays without a gap. It does not allocate, since the service thread
 /// opens the tap.
 pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
@@ -157,7 +157,7 @@ pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
             return;
         }
     }
-    // The tap read last plays now, and the jump takes another.
+    // The tap read last plays now and the jump takes another.
     let mut now = 0;
     for i in 0..n {
         if g(&v.tused[i]) > g(&v.tused[now]) {
@@ -195,7 +195,7 @@ pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
 }
 
 /// Returns whether stream [s] can serve [frame] and the next block in real
-/// time, and cues a tap there with stream_cue when it cannot. A sound that
+/// time and cues a tap there with stream_cue when it cannot. A sound that
 /// starts in a stream waits for it.
 pub(crate) fn stream_ready_at(sh: &Shared, rd: &mut Reader, frame: i64) -> bool {
     if rd.src.kind != Kind::Stream || !sh.hold_streams {
@@ -286,7 +286,7 @@ pub(crate) fn reader_add(
     let end = if last < frames { last } else { frames - 1 };
     let span = if lp { 0 } else { end - first + 1 };
     // The chunk holds the frames from base to base + have. Dart reads the
-    // span at once, and a span longer than the chunk is read in pieces with
+    // span at once and a span longer than the chunk is read in pieces with
     // the same samples.
     let room = (chunk.len() as i64 / ch).max(2);
     let (mut base, mut have) = (first, 0i64);

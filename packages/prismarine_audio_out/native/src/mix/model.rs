@@ -1,5 +1,5 @@
 //! The model of the engine, read once from the blob that prismarine_audio's
-//! `projectBlob` writes. Strings are interned, and every list is in the
+//! `projectBlob` writes. Strings are interned and every list is in the
 //! order of the Dart model.
 
 use std::collections::HashMap;

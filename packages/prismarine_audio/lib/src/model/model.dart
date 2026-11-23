@@ -143,7 +143,7 @@ class StripDef {
   /// The master bus of the mixer.
   final bool master;
 
-  /// The id of the strip it feeds, and the path of the mixer bus that an
+  /// The id of the strip it feeds and the path of the mixer bus that an
   /// event's input bus feeds.
   final String? output, outputPath;
 
@@ -411,7 +411,7 @@ class InstrumentDef {
   final double mixStateIntensity;
 
   /// The seconds between the spawns of a scatterer, its spawns per trigger
-  /// with 0 for no limit, and its live spawns at most with the mode of a
+  /// with 0 for no limit and its live spawns at most with the mode of a
   /// spawn past them.
   final double spawnIntervalMin, spawnIntervalMax;
   final int spawnCount, maxSpawnPolyphony;

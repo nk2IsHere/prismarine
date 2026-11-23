@@ -117,7 +117,7 @@ class MixerGraph implements StripSink {
 
   List<MixStateInstance> get snapshots => List.unmodifiable(_active);
 
-  /// Renders [inputs], stereo by bus path, and [inputs51], 5.1 by bus path,
+  /// Renders [inputs], stereo by bus path and [inputs51], 5.1 by bus path,
   /// through the graph. Returns the stereo output of the master. A 5.1
   /// master is folded to stereo.
   Float32List render(

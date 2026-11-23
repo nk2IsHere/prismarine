@@ -123,7 +123,7 @@ extension _Strip51 on BusStrip {
       }
     }
     if (ch == 2) {
-      // A surround pan that did not run spreads stereo onto 5.1, and mono at
+      // A surround pan that did not run spreads stereo onto 5.1 and mono at
       // the upmix gain.
       final k = m ? upmixGain : 1.0;
       for (var i = 0; i < frames; i++) {

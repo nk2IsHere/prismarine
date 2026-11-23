@@ -10,7 +10,7 @@ import 'rng.dart';
 typedef SampleLoader = PcmSource? Function(WaveformDef w);
 
 /// Plays the events of a project, deterministically at 48 kHz. Each instance
-/// renders into the mixer bus of its input bus, and a [MixerGraph] mixes the
+/// renders into the mixer bus of its input bus and a [MixerGraph] mixes the
 /// buses.
 class EventPlayer {
   /// [events] are keyed by path. An instance without an input bus plays into
@@ -54,7 +54,7 @@ class EventPlayer {
 
   /// Starts [path] [seek] seconds into its timeline. [slot] is the sound that
   /// its slot instruments play. Returns null for an unknown event, with a
-  /// problem, and for a start that the polyphony limit refuses.
+  /// problem and for a start that the polyphony limit refuses.
   EventInstance? start(String path, {double seek = 0, PcmSource? slot}) {
     final hit = _events[path];
     if (hit == null) {

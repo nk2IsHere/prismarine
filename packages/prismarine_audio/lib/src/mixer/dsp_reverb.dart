@@ -13,7 +13,7 @@ import 'dsp.dart';
 /// The wet input is the sum of the channels. The early reflections start at
 /// the early delay. The late tail starts at the sum of both delays and
 /// decays at the decay time, scaled by the HF ratio at and above the HF
-/// reference. The early and late mix keeps the power, and each part carries
+/// reference. The early and late mix keeps the power and each part carries
 /// +4.5 dB of energy per channel for an impulse in both channels at every
 /// decay time. The two outputs are decorrelated.
 class Reverb extends Dsp {
@@ -71,7 +71,7 @@ class Reverb extends Dsp {
     // The high cut is a gentle one-pole low-pass.
     _cutA = 1 - libm.exp(-2 * math.pi * params[9].clamp(20, 20000) / mixRate);
     // The tail energy of the network is mean(g²/(1 − g²)) per unit input.
-    // The orthogonal feedback matrix keeps the energy, and each pass scales
+    // The orthogonal feedback matrix keeps the energy and each pass scales
     // line i by gᵢ. The tail carries a fixed energy at every decay time.
     var e = 0.0;
     for (final g in _gain) {
@@ -159,7 +159,7 @@ class Reverb extends Dsp {
   /// uncorrelated with the others, at [_wet51] of the level of the stereo
   /// form for the same input. The dry part is each channel times dry. The
   /// outputs are the lines of the network through rows 2 to 7 of the
-  /// 8-point Hadamard matrix, and the early taps a, b, a·sign b and their
+  /// 8-point Hadamard matrix and the early taps a, b, a·sign b and their
   /// alternations by tap.
   @override
   bool process51(Float32List buf, int frames) {

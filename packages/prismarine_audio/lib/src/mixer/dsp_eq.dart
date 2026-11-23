@@ -9,7 +9,7 @@ import 'dsp.dart';
 ///
 /// Every type is an RBJ cookbook biquad in transposed direct form II. The
 /// 24 and 48 dB low-passes and high-passes are 2 and 4 identical sections at
-/// Q^(1/2) and Q^(1/4). The shelves ignore Q with S = 1, and the peaking
+/// Q^(1/2) and Q^(1/4). The shelves ignore Q with S = 1 and the peaking
 /// filter uses A = 10^(gain/40). A shelf or peak at 0 dB and a disabled band
 /// pass the input untouched. A change of coefficients interpolates them
 /// linearly, sample by sample, over the next block.

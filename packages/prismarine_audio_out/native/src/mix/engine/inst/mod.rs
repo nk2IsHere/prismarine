@@ -20,7 +20,7 @@ enum Body {
     /// and at 0 in later passes, with [faded] frames of it done. [bend] is
     /// the semitones on top of [rate] in this block, from the pitch envelope
     /// of the scatterer that spawned it. [armed] tells that it has not
-    /// rendered, and the start hold of a stream applies.
+    /// rendered and the start hold of a stream applies.
     Voice {
         reader: Reader,
         rate: f64,
@@ -48,7 +48,7 @@ enum Body {
         env: Option<ScatEnv>,
     },
     /// A mix state instrument, as Dart's `_SnapshotSound`. [key] identifies
-    /// its mix state in the mixer once started, and [at] is the change of the
+    /// its mix state in the mixer once started and [at] is the change of the
     /// position of the instance that it last sent, from Inst::spatial_gen.
     Snapshot {
         inst: &'static crate::mix::model::Inst,
@@ -156,7 +156,7 @@ struct Locked {
     gain: f64,
     /// The start offset in source frames.
     seek: f64,
-    /// The sound has rendered, and the start hold of a stream is over.
+    /// The sound has rendered and the start hold of a stream is over.
     started: bool,
     /// The waveform repeats to fill its box, from Placement.fill.
     fill: bool,
@@ -343,19 +343,19 @@ pub struct Inst {
     /// and how many times it was set.
     spatial: Option<(f64, f64, f64)>,
     spatial_gen: u64,
-    /// The most frames that one render() is asked for, and of one raw pass,
+    /// The most frames that one render() is asked for and of one raw pass,
     /// which is more when its pitch can rise.
     outer: usize,
     cap: usize,
     /// The nested events that it can start.
     nested: Vec<Pool>,
-    /// The mix states that its mix state instruments can start, and their
+    /// The mix states that its mix state instruments can start and their
     /// requests in this pass, those of its nested events included.
     snaps: Vec<SnapPool>,
     pub(crate) snap_out: Vec<SnapOp>,
     /// The effects that the engine does not have, reported at the start.
     unsupported: Vec<&'static Fx>,
-    /// The send scratch and fade gains of a pass, and the buffer that the
+    /// The send scratch and fade gains of a pass and the buffer that the
     /// parent of a nested event renders it into.
     scratch: Vec<f32>,
     gains: Vec<f32>,

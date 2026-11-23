@@ -235,7 +235,7 @@ class Flange extends Dsp {
 
 /// The chorus, with the mix in percent (0), the rate in Hz (1) and the depth
 /// (2), by default 100, 0.8 and 3. The arithmetic is float32 except for the
-/// read position, which is double, and the delay line holds 16-bit
+/// read position, which is double and the delay line holds 16-bit
 /// samples.
 ///
 /// Tap c of 1 or 2 channels reads at the write position minus a delay that
@@ -386,7 +386,7 @@ class Chorus extends Dsp {
     const n = lineFrames;
     for (var i = 0; i < frames; i++) {
       // The reads go in 1,024-frame blocks from the effect's start, six
-      // per line. A block takes the parameters, and the read position adds
+      // per line. A block takes the parameters and the read position adds
       // the start of the block and the frame within it.
       final j = _pos & 1023;
       if (j == 0) _take();

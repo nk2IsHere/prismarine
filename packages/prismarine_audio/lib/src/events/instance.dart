@@ -90,7 +90,7 @@ class EventInstance implements StripSink {
 
   /// Draws or arms the modulators of the master track at the start. They
   /// are the random volume in dB and pitch in percent of the UI span, the
-  /// AHDSR on the volume, and random modulators on effect parameters in
+  /// AHDSR on the volume and random modulators on effect parameters in
   /// percent of their UI span, added to the UI position of the stored value.
   void _modulate() {
     final master = def.masterTrack;
@@ -185,7 +185,7 @@ class EventInstance implements StripSink {
   ModulatorDef? _env;
   PiecewiseMap? _envMap;
 
-  /// The seconds since the start, the clock of the AHDSR, and since the
+  /// The seconds since the start, the clock of the AHDSR and since the
   /// release began, null while not releasing.
   double _age = 0;
   double? _released;
@@ -779,11 +779,11 @@ class EventInstance implements StripSink {
 
   /// Returns the left and right gains of a spawned instrument from its
   /// direction, elevation and distance, each moved by its random modulator.
-  /// The direction maps UI 0 to 1 to ±180°, and the elevation is drawn
+  /// The direction maps UI 0 to 1 to ±180° and the elevation is drawn
   /// without effect in stereo. The random draw of the distance is a
   /// percentage of the 3D offset distance. The sound pans by direction at
   /// constant power, with sounds from behind folded to the sides, linear in
-  /// angle, and its level is 0.5·min(1, 1/distance). Null when the
+  /// angle and its level is 0.5·min(1, 1/distance). Null when the
   /// instrument has no 3D offset.
   (double, double)? _position(InstrumentDef inst) {
     final pd = inst.property(5), pe = inst.property(6), pr = inst.property(7);

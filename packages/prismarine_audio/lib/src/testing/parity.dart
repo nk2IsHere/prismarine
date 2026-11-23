@@ -8,7 +8,7 @@ import '../engine/engine.dart';
 /// of prismarine_audio_out, which replays it on the native engine and
 /// compares the bits. Schedules [script] on [engine], renders [total]
 /// frames, writes the project's [blob], the script, the decoded samples of
-/// [pcm], the render, the problems and the settings, and returns the FNV-1a
+/// [pcm], the render, the problems and the settings and returns the FNV-1a
 /// 64 checksum of the render's float32 bytes in hex.
 ///
 /// [script] is in time order. A start's sound key resolves to

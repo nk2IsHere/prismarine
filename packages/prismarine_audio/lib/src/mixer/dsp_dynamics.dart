@@ -13,7 +13,7 @@ import 'dsp.dart';
 /// L = R reads +3 dB over one channel, followed by a one-pole follower. The
 /// gain reduction above the threshold is
 /// (1 − 1/ratio)·(10·log10(env) − threshold). The follower's time constants
-/// are half the attack and release, and the gain is smoothed over 2 ms.
+/// are half the attack and release and the gain is smoothed over 2 ms.
 class Compressor extends Dsp {
   Compressor() : super([0, 2.5, 20, 100, 0, 0, 1]);
 
@@ -47,7 +47,7 @@ class Compressor extends Dsp {
     final s = 1 - 1 / math.max(1, params[1]);
     final thr = params[0], makeup = params[4];
     for (var i = 0; i < frames; i++) {
-      // The detector sums the power of every channel, and one gain applies
+      // The detector sums the power of every channel and one gain applies
       // to all six.
       var e = 0.0;
       for (var c = 0; c < 6; c++) {
@@ -194,7 +194,7 @@ class Limiter extends Dsp {
 /// the skew (3), the duty (4), the square (5), the phase (6) and the spread
 /// (7). The gain is 1 − depth + depth·lfo. At phase 0 the LFO starts its
 /// rise from 0. A duty d of 0.5 or more makes a trapezoid that rises over
-/// 1 − d of the period, holds at 1 for 2d − 1 and falls over 1 − d, and 0.5
+/// 1 − d of the period, holds at 1 for 2d − 1 and falls over 1 − d and 0.5
 /// is the triangle. A duty below 0.5 rises over d, falls over d and holds
 /// at 0. The shape bends the wave toward a sine. The spread puts L ahead
 /// and R behind by a quarter of the spread of the period.

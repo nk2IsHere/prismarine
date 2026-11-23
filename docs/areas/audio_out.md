@@ -50,10 +50,10 @@ outside the Dart heap.
 sound slots and nested pools and pushes the command into a lock-free queue. The render applies commands at their
 frames and lets go of finished instances through the collector of `basedrop`. The render does not allocate or free,
 and debug builds abort on an allocation inside it. A post does not allocate either. The limits are 256 instances, 64
-mix states, 64 sounds per instance and 2 instances per nested instrument, and a full pool refuses with a problem.
+mix states, 64 sounds per instance and 2 instances per nested instrument and a full pool refuses with a problem.
 
 The maths of the engine come from the `libm` crate in `mix/dmath.rs`, mirrored bit for bit by `libm.dart` of
-`prismarine_math`, and the two change together. The render gives the same bits as the Dart render on macOS, Linux and
+`prismarine_math` and the two change together. The render gives the same bits as the Dart render on macOS, Linux and
 Windows, arm64 and x86-64. The `parity` example replays a session that `package:prismarine_audio/testing.dart` wrote
 and compares the bits.
 

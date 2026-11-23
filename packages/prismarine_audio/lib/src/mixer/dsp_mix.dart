@@ -4,7 +4,7 @@ import 'dsp.dart';
 
 /// The channel mix, with the output grouping (0) and the gain in dB of
 /// channel n at 1 + n. Groupings 0 and 4 scale each channel of the buffer
-/// by its gain, where −80 dB is silence, and keep the channel count.
+/// by its gain, where −80 dB is silence and keep the channel count.
 /// Grouping 6 sends all to the LFE and leaves a stereo or mono input
 /// silent. Other groupings act as grouping 0. A gain change ramps linearly
 /// over the 64 samples from the start of its block.

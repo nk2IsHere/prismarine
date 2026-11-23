@@ -118,7 +118,7 @@ impl Inst {
     /// Cues in real time the timelocked streams that a jump in the next
     /// 0.5 s reaches, from a latched transition, a loop end or a transition
     /// marker, with stream_cue. They decode the destination now. It only
-    /// reads, and the render is unchanged.
+    /// reads and the render is unchanged.
     fn cue_jumps(&self, cx: &mut Cx) {
         let d = self.def;
         let c = self.cursor;

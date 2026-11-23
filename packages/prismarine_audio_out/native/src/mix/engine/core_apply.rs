@@ -116,7 +116,7 @@ impl Core {
     /// that a live instance or a queued start can still play. Their sounds
     /// take waveforms as they go, as the next entry of a playlist, a spawn or
     /// the next pass of a loop. The sources of a start are bound when it is
-    /// posted, up to 4,096 frames before it plays, and a sound started just
+    /// posted, up to 4,096 frames before it plays and a sound started just
     /// before a new generation keeps its samples. Streams stay bound.
     fn forget(&mut self, cx: &mut Cx, gen: i64) {
         let keep = &mut self.keep;

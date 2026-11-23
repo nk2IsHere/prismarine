@@ -140,7 +140,7 @@ fn defaults(kind: i32) -> Option<&'static [f64]> {
 
 /// The sidechain keys of the compressors, as MixerGraph.sidechain. The key
 /// of each compressor is a buffer of [pool] or none. As in Dart, one tap
-/// hands the same buffer to every target that has none yet, and a later tap
+/// hands the same buffer to every target that has none yet and a later tap
 /// adds into a shared buffer once per target.
 #[derive(Default)]
 pub struct Keys {
@@ -150,7 +150,7 @@ pub struct Keys {
 
 impl Keys {
     /// Makes [slots] keys, each with a buffer of [len] floats ready. A key
-    /// holds one buffer at most, and one per key is enough.
+    /// holds one buffer at most and one per key is enough.
     pub fn with(slots: usize, len: usize) -> Keys {
         Keys {
             slot: vec![None; slots],

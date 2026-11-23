@@ -1,4 +1,4 @@
-//! Processing a block through a DSP, and the tremolo's LFO.
+//! Processing a block through a DSP and the tremolo's LFO.
 
 use super::*;
 

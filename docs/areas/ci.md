@@ -7,7 +7,7 @@ start them. The landing gate on the Mac stays the check before every merge.
 | Workflow | Runners | Steps |
 |---|---|---|
 | `lints.yml` | Linux | The privacy check with its generic patterns, links, docs index, code shape, alloc, analyze and format |
-| `tests.yml` | Linux and Windows for a pull request. A run by hand picks Linux, macOS, Windows or all three | The tests of the lints, the test of the machine locks, the tests of the workspace packages and of the Flutter packages, the analysis of the Flutter packages on Linux, clippy and `cargo test` for every crate, and the parity of the audio engine's Dart and native renders on its synthetic project |
+| `tests.yml` | Linux and Windows for a pull request. A run by hand picks Linux, macOS, Windows or all three | The tests of the lints, the test of the machine locks, the tests of the workspace packages and of the Flutter packages, the analysis of the Flutter packages on Linux, clippy and `cargo test` for every crate and the parity of the audio engine's Dart and native renders on its synthetic project |
 
 `lints.yml` runs for every pull request. `tests.yml` runs for a pull request that changes a package, flutter_gpu, the
 lints, the machine scripts, the workspace pubspec or the workflow itself.

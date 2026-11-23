@@ -1,7 +1,7 @@
 # prismarine_audio
 
 prismarine_audio is an audio engine of events, buses with effects, voices and mix states. Its Dart render runs on any
-isolate and in command-line tools, and its native render in [prismarine_audio_out](../prismarine_audio_out/README.md)
+isolate and in command-line tools and its native render in [prismarine_audio_out](../prismarine_audio_out/README.md)
 plays in real time with the same bits. The package also holds the interfaces of decoded audio and a WAV writer. It has
 no native code and no Flutter. The details are on [the area page](../../docs/areas/audio.md).
 
@@ -9,7 +9,7 @@ no native code and no Flutter. The details are on [the area page](../../docs/are
 
 You build a project in code: a `MixerDef` with the buses of the mixer and `EventDef`s with their strips, effects and
 instruments. An `AudioEngine` over the project takes `AudioCommand`s at frames, such as `StartEvent`, `SetParameter`
-and `StopEvent`, and `render` returns the next stereo frames of the master bus. A `SampleLoader` gives the engine the
+and `StopEvent` and `render` returns the next stereo frames of the master bus. A `SampleLoader` gives the engine the
 decoded samples of each waveform as a `PcmSource`.
 
 `PcmSource` is decoded audio as interleaved float32 frames. `MemoryPcmSource` holds a whole decoded sound in memory, and

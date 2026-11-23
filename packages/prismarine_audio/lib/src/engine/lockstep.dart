@@ -5,7 +5,7 @@ import '../wav.dart';
 import 'engine.dart';
 
 /// An [AudioSink] in lockstep with a game. The renderer renders up to the
-/// game's time, and each command applies at the frame of its game time.
+/// game's time and each command applies at the frame of its game time.
 class LockstepAudio implements AudioSink {
   LockstepAudio(this.engine, {this.wav, this.record});
   final AudioRenderer engine;

@@ -10,7 +10,7 @@ pub struct Snap {
     pub(crate) priority: i64,
     pub(crate) stopped: bool,
     pub(crate) values: Vec<f64>,
-    /// The intensity from 0 to 1 of the instrument that started it, and the
+    /// The intensity from 0 to 1 of the instrument that started it and the
     /// key of its requests, −1 for a mix state that the game started.
     pub(crate) scale: f64,
     pub(crate) key: i64,

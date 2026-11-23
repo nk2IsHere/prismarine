@@ -7,7 +7,7 @@ import 'package:prismarine_math/libm.dart' as libm;
 /// with a 5.1 target.
 ///
 /// The channels have the order FL FR C LFE SL SR. The speakers are at −30,
-/// 30, 0, −110 and 110 degrees, and the LFE takes no part in panning.
+/// 30, 0, −110 and 110 degrees and the LFE takes no part in panning.
 abstract final class Surround {
   /// The speakers by angle with their channels, the ring of the panning.
   static const _angle = [-110.0, -30.0, 0.0, 30.0, 110.0];
@@ -18,7 +18,7 @@ abstract final class Surround {
   /// linear gain [lfe] times [gain].
   ///
   /// A point source pans between the two speakers around it by 2D VBAP at
-  /// unit power. An arc is cut at the speakers, and each piece pans as a point
+  /// unit power. An arc is cut at the speakers and each piece pans as a point
   /// at its middle, weighted by its share of its speaker pair's span, and
   /// the sum is brought back to unit power. An extent of 360 or more puts
   /// gain/√5 on every speaker.
@@ -94,7 +94,7 @@ abstract final class Surround {
   }
 
   /// Adds the gains of a stereo source in discrete mode, stereo mode 1. The
-  /// channels are points at [axis] ∓ separation/2, and direction, extent and
+  /// channels are points at [axis] ∓ separation/2 and direction, extent and
   /// rotation play no part. The LFE gets lfe·gain/√2 from each channel.
   static void stereoDiscrete(
     double axis,

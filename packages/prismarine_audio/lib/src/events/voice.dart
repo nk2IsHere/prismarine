@@ -37,7 +37,7 @@ class SourceReader {
     final ch = source.channels;
     // The span of the source that this call touches, read once. The loop
     // steps pos by rate, which can drift past pos + (n − 1)·rate by an ulp
-    // onto the next frame, and the span reaches one frame further.
+    // onto the next frame and the span reaches one frame further.
     final first = pos < 0 ? 0 : pos.floor();
     final last = (pos + n * rate).floor() + 1;
     final span = loop ? 0 : (last < frames ? last : frames - 1) - first + 1;

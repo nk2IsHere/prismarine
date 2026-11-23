@@ -3,7 +3,7 @@ part of 'instance.dart';
 extension _EventTimeline on EventInstance {
   /// Advances the cursor over [frames]. Loop regions, transition markers and
   /// quantized transition regions jump it. Timelocked instruments render
-  /// from its position, and the others start when it enters them.
+  /// from its position and the others start when it enters them.
   void _timeline(int frames) {
     final tl = def.timeline;
     // A timelocked instrument at the cursor whose data is still loading
@@ -141,7 +141,7 @@ extension _EventTimeline on EventInstance {
   }
 
   /// Jumps from [from] to [to]. The instruments that are not timelocked and
-  /// that the jump leaves are cut with cutoff, and they are armed again.
+  /// that the jump leaves are cut with cutoff and they are armed again.
   void _leaveAsync(int from, int to) {
     for (final (k, p) in def.timeline.placements.indexed) {
       if (p.timelocked || !_asyncInside[k]) continue;
