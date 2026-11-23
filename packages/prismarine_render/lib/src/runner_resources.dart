@@ -494,6 +494,7 @@ extension RunnerResources on FrameRunner {
       gpu.TextureRegion(rgba),
     );
     final done = Completer<bool>();
+    gpuSubmitted();
     cb.submit(completionCallback: done.complete);
     await done.future;
     final img = rgba.asImage();
