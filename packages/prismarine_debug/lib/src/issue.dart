@@ -38,7 +38,7 @@ class RingIndex {
 }
 
 /// What a frame in the ring was: its game time, game frame, wall time (the
-/// player's clock, s) and the 3D scene shown.
+/// app's clock, s) and the 3D scene shown.
 class HistoryMeta {
   const HistoryMeta({
     required this.frame,

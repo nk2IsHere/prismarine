@@ -169,7 +169,7 @@ class _GraphPainter extends CustomPainter {
     for (final ms in [1000 / 60, 1000 / 30]) {
       canvas.drawLine(Offset(0, y(ms)), Offset(size.width, y(ms)), _line);
     }
-    // The graph's own cost (`--profile --panel=on`).
+    // The graph's own cost, in a profile while the panel shows.
     final ms = _sw.elapsedMicroseconds / 1000;
     UiWork.add(ms, paint: true);
     state.profiler?.add('panel.graph', ms);

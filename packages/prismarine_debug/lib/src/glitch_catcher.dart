@@ -1,12 +1,13 @@
-// The glitch catcher (`--catch=on`): every frame the history ring keeps (the
+// The glitch catcher: every frame the history ring keeps (the
 // image the window was given: the 3D frame copied on the GPU right after it
 // was drawn, with the UI scenes blended over it) is read back and compared
 // with the frames shown before and after it. A frame with a bright patch
 // that neither neighbour has, while the neighbours agree with each other, is
 // a one-frame artefact (such as GPU-race triangles): the three frames
 // and a mask of the flagged pixels go to `<run>/caught/`, one line each in
-// `caught.jsonl`. F12 and F7 re-render or scrub what the game state gives;
-// this keeps what was actually drawn, GPU races included.
+// `caught.jsonl`. A dump re-renders what the game state gives and the
+// review scrubs the ring; this keeps what was actually drawn, GPU races
+// included.
 //
 // Off by default: a read-back (640 × 360, through the raster thread) a frame.
 import 'dart:async';
@@ -175,7 +176,7 @@ class GlitchCatcher {
 }
 
 /// Writes the history's newest [count] frames (the images the window was
-/// given) into [dir] as `shown_<k>_f<frame>.png` (k = 0 the newest): an F12
+/// given) into [dir] as `shown_<k>_f<frame>.png` (k = 0 the newest): a
 /// dump's re-rendered screenshot can't show a GPU glitch, these can.
 Future<void> writeShownFrames(
   FrameHistory history,

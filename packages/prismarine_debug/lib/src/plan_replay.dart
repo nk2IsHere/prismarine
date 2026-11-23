@@ -33,7 +33,7 @@ Future<void> replayPlan(
     ..keepBlocks = true
     // Its targets are read back after the runs.
     ..keepStores = true;
-  // Read-back buffers (an Enlighten duster pass's words) to
+  // Read-back buffers (a compute pass's words) to
   // `<dir>/readback/<name>.bin`, the name's bars as underscores.
   final reads = <Future<void>>[];
   runner.onReadBack = (name, bytes) => reads.add(

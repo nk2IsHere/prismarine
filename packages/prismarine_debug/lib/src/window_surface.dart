@@ -1,4 +1,4 @@
-// What the macOS window really shows (`--catch=on`): Flutter's macOS
+// What the macOS window really shows: Flutter's macOS
 // embedder presents each composited frame as an IOSurface set as a CALayer's
 // contents (FlutterSurfaceManager). Each UI frame this takes the surface the
 // window shows now (main thread: AppKit), keeps it from being reused

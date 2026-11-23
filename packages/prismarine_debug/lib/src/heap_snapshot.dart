@@ -2,10 +2,9 @@ import 'dart:developer' show NativeRuntime;
 import 'dart:io';
 
 /// `MCSM_HEAP_SNAPSHOT=<dir>:<t>,<t>…`: at the first tick at or past each
-/// game time t, the isolate group's heap (the sim, the build isolate and
-/// the UI alike) is written to `<dir>/heap-<t>.dartheap`, the VM service's
-/// snapshot format (`HeapSnapshotGraph.fromChunks`; `tools/profiler/bin/
-/// heap_diff.dart` reads and compares them). Profile and debug builds only:
+/// game time t, the isolate group's heap (every isolate of the group alike)
+/// is written to `<dir>/heap-<t>.dartheap`, the VM service's snapshot format
+/// (`HeapSnapshotGraph.fromChunks` reads it). Profile and debug builds only:
 /// a release (product) VM has no snapshot writer, so it logs that once.
 /// Diagnostics; the write holds every isolate for its seconds.
 final class HeapSnapshots {

@@ -1,4 +1,4 @@
-// The review (F7): scrub the frame history while the game is paused, mark what's wrong on
+// The review: scrub the frame history while the game is paused, mark what's wrong on
 // the frames (point, arrow, pen, box) with a note, and save it as an issue.
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -38,7 +38,7 @@ class ReviewView extends StatefulWidget {
   final ReviewSave onSave;
   final VoidCallback onClose;
 
-  /// `--review-at=<t>:save`: a test mark on the frame 10 back, then save.
+  /// An unattended check: a test mark on the frame 10 back, then save.
   final bool autoSave;
 
   /// The note of [autoSave]'s test mark.
@@ -401,7 +401,7 @@ class _ReviewViewState extends State<ReviewView> {
                         ),
                       ],
                     ),
-                    // Tools (wrap on a narrow window: the F1 panel takes
+                    // Tools (wrap on a narrow window: a debug panel takes
                     // room), then the note with save and close.
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,

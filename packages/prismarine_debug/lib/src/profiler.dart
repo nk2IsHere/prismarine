@@ -1,7 +1,7 @@
-// The player's per-frame profiler: `--profile=<dir>` writes frames.jsonl (one
+// A per-frame profiler: it writes into its directory frames.jsonl (one
 // object per frame: t, dt, rss every 30 frames, each timed section in ms),
 // timings.jsonl (Flutter FrameTiming), and, on close,
-// summary.txt (p50/p95/max per section over the acceptance stretches).
+// summary.txt (p50/p95/max per section over its windows).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -52,7 +52,7 @@ class FrameProfiler {
   final JsonLineWriter _frames, _timings;
   final IOSink _stalls;
 
-  /// The render isolate's audio trace (blocks, loads; output.dart).
+  /// The path of an audio trace beside the profile.
   String get audioTrace => '$dir/audio.jsonl';
 
   // A frame is a row of numbers by column (a section's name, numbered at
@@ -227,13 +227,14 @@ class FrameProfiler {
 }
 
 /// The UI isolate's own timed work (µs so far): the tick less its waits for
-/// the sim, the paint's sections and the panel's graph. [LoopMonitor] takes
-/// it out of the event loop's lateness.
+/// other isolates, the paint's sections and the panel's graph. [LoopMonitor]
+/// takes it out of the event loop's lateness.
 abstract final class UiWork {
   static int micros = 0;
 
   /// Of [micros], the paint's and the graph's: they can run while the tick
-  /// awaits the sim (a Flutter frame between the request and the reply).
+  /// awaits another isolate (a Flutter frame between the request and the
+  /// reply).
   static int paintMicros = 0;
 
   static void add(double ms, {bool paint = false}) {
@@ -247,9 +248,10 @@ abstract final class UiWork {
 /// the last take, the longest the loop was held (`loop.lag`: our own
 /// sections included, so it is about the longest synchronous section) and
 /// the time it was held outside our timed UI work ([UiWork]): a GC pause of
-/// the isolate group (the sim's allocation stops this isolate too), Flutter's
-/// own build, layout and compositing (the panel's rebuilds), timers and port
-/// messages, or the thread not scheduled by the OS while work was due.
+/// the isolate group (another isolate's allocation stops this one too),
+/// Flutter's own build, layout and compositing (the panel's rebuilds), timers
+/// and port messages, or the thread not scheduled by the OS while work was
+/// due.
 /// Lateness under 0.5 ms a tick is timer jitter, not counted.
 class LoopMonitor {
   LoopMonitor() {

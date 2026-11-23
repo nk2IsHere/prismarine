@@ -1,5 +1,5 @@
 // The frame history: the last few seconds of shown frames, each the 3D image with the UI
-// scenes drawn over it, downscaled on the GPU into a ring the review (F7)
+// scenes drawn over it, downscaled on the GPU into a ring the review
 // scrubs. Nothing is read back while playing.
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -17,9 +17,9 @@ abstract interface class FrameCopy {
 }
 
 class FrameHistory {
-  /// [seconds] of frames at up to 120 a second (the player draws a new
-  /// frame per display refresh, 120 Hz on ProMotion screens); textures are
-  /// made as the ring fills.
+  /// [seconds] of frames at up to 120 a second (a new frame per display
+  /// refresh, 120 Hz on ProMotion screens); textures are made as the ring
+  /// fills.
   FrameHistory({
     double seconds = 3,
     this.width = 640,
@@ -32,7 +32,7 @@ class FrameHistory {
   /// How many frames the ring holds (0: off).
   final int capacity;
 
-  /// The ring's frame size (16:9, as S1's viewport).
+  /// The ring's frame size (16:9 by default).
   final int width, height;
 
   bool get enabled => capacity > 0;
@@ -106,7 +106,7 @@ class FrameHistory {
     _blit(src, _textures[slot]!, blend: true);
   }
 
-  /// Frees the ring's textures (the player keeps one history for its life).
+  /// Frees the ring's textures.
   void clear() {
     _ring.clear();
     _textures.fillRange(0, capacity, null);
@@ -150,8 +150,6 @@ class FrameHistory {
     if (blend) pass.setColorBlendEquation(gpu.ColorBlendEquation());
     pass.bindVertexBuffer(_quad);
     pass.bindTexture(copy.source, src, sampler: _linear);
-    // Not drawCompat: the ring's blits stay out of flutter_scene's frame
-    // counters (the profile's draws).
     pass.draw(6);
     cb.submit();
   }

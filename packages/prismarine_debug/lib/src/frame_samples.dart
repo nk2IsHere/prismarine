@@ -95,7 +95,7 @@ abstract class FrameSamples {
   /// The graph's stacked groups, bottom to top.
   final List<FrameGroupStyle> groups;
 
-  /// `--profile`'s recorder (null without it).
+  /// The profiler that the panel's own timings go to (null without one).
   FrameProfiler? profiler;
 
   static const _frames = 240;
@@ -105,7 +105,7 @@ abstract class FrameSamples {
   /// frame) while the rest of the panel rebuilds at most every 250 ms.
   final graph = ValueNotifier<int>(0);
 
-  /// Whether the game runs on the UI isolate (`--sim=inline`).
+  /// Whether the game runs on the UI isolate.
   bool simInline = false;
 
   FrameSample? _open, _spare;
