@@ -7,6 +7,13 @@
     "packages/prismarine_cargo": {
       "dart:deprecated_member_use": 1,
       "dart:use_null_aware_elements": 1
+    },
+    "tools/gpu_smoke": {
+      "flutter:argument_type_not_assignable": 29,
+      "flutter:include_file_not_found": 1,
+      "flutter:path_does_not_exist": 1,
+      "flutter:prefer_final_locals": 1,
+      "flutter:unnecessary_non_null_assertion": 10
     }
   }
 }

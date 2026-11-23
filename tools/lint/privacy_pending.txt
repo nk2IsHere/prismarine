@@ -1,0 +1,7 @@
+# Paths with material that a later step removes or rewrites. privacy_check.dart
+# reports their hits as pending and fails on them only with --strict. A line
+# goes once its step has merged, and the list ends empty.
+#
+# gpu_smoke has the names of the engine exports and releases. The first engine
+# release of prismarine renames them.
+tools/gpu_smoke/

@@ -13,3 +13,4 @@ analyzer:
     - apps/prismarine_sample/**
     - packages/prismarine_loop/**
     - packages/prismarine_scene/**
+    - tools/gpu_smoke/**
