@@ -70,16 +70,11 @@ SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. `gh` must be logged
     export PRISMARINE_ENGINE_REPO=<owner>/prismarine
     third_party/flutter_engine/fetch.sh
 
-| Setting | Meaning |
-|---|---|
-| `PRISMARINE_ENGINE_REPO` | The repository of the releases, as owner and name. Without it the script reads the value from a file `private/config/*.env` above the checkout. |
-| `PRISMARINE_ENGINE_DIR` | The engine directory, `~/.prismarine/engine` by default. Every repository on the machine shares it. |
-| `PRISMARINE_FLUTTER` | The Flutter SDK, by default the `flutter` on your `PATH`. |
-| `PRISMARINE_ENGINE_ARCHIVE` | An archive that you downloaded, with its `.sha256` file beside it. The script unpacks it in place of a download. |
+`fetch.sh` picks the target of the machine it runs on. To fetch the engine for another target, give the target as its
+argument, for example `fetch.sh macos-x64`.
 
-`fetch.sh macos-x64` or another target fetches the engine of another machine. On Windows,
-`powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1` fetches into
-`%USERPROFILE%\.prismarine\engine`. The Windows script is not checked against a published release.
+On Windows, run `powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1`. It fetches into
+`%USERPROFILE%\.prismarine\engine`. The Windows script is not checked against a published release yet.
 
 You can check an archive yourself. Download it with `SHA256SUMS` and compare the checksums, with `sha256sum` in place
 of `shasum -a 256` on Linux.
