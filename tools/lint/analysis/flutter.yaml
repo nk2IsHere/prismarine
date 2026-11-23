@@ -1,0 +1,5 @@
+# Analysis options for our Flutter packages and apps:
+#   include: ../../tools/lint/analysis/flutter.yaml
+include:
+  - package:flutter_lints/flutter.yaml
+  - rules.yaml

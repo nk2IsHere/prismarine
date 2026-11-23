@@ -1,0 +1,19 @@
+# Lint rules every package and app adds to its base set (dart.yaml,
+# flutter.yaml). Each rule is here for a reason:
+linter:
+  rules:
+    # A Future nobody awaits loses its errors and its ordering; write
+    # `unawaited(...)` where fire-and-forget is meant.
+    - unawaited_futures
+    # Sinks and subscriptions left open keep isolates and ports alive.
+    - close_sinks
+    - cancel_subscriptions
+    # Guards that cost nothing today (no hits) and catch real mistakes.
+    - only_throw_errors
+    - throw_in_finally
+    - test_types_in_equals
+    - unnecessary_statements
+    # The tree's own conventions, kept by `dart fix --apply`.
+    - directives_ordering
+    - prefer_single_quotes
+    - prefer_final_locals

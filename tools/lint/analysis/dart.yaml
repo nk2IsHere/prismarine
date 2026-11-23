@@ -1,0 +1,5 @@
+# Analysis options for our pure-Dart packages:
+#   include: ../../tools/lint/analysis/dart.yaml
+include:
+  - package:lints/recommended.yaml
+  - rules.yaml

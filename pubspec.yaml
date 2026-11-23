@@ -1,0 +1,12 @@
+name: prismarine_workspace
+publish_to: none
+environment:
+  sdk: ^3.10.0
+workspace:
+  - packages/prismarine_kept
+  - packages/prismarine_snap
+  - packages/prismarine_math
+  - packages/prismarine_jobs
+  - packages/prismarine_cargo
+  - packages/prismarine_pad
+  - tools/lint

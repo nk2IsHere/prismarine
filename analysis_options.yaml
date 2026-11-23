@@ -1,0 +1,13 @@
+# The workspace root: `dart analyze` here covers every pure-Dart package
+# (each with its own options file) and the scripts under tools/ outside a
+# package. Flutter packages are analysed from their own directories.
+include: tools/lint/analysis/dart.yaml
+
+analyzer:
+  exclude:
+    - third_party/**
+    - data/**
+    - private/**
+    - "**/build/**"
+    # Flutter packages: `flutter analyze` covers them, against the Flutter SDK.
+    - apps/prismarine_sample/**
