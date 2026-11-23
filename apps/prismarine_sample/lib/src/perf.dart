@@ -46,6 +46,7 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
   int _frames = 0, _lastUs = 0;
   double _build = 0, _record = 0, _gpu = 0;
   final _parts = Float64List(16);
+  int _pointDraws = 0;
   bool _done = false;
 
   @override
@@ -100,6 +101,7 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
       }
     }
     _build += _r.lastBuildMs;
+    _pointDraws += _r.builder.pointShadowDraws;
     _record += runner.lastRecordMs;
     _gpu += runner.lastGpuOwnMs;
     // alloc: the end of the run, once.
@@ -140,7 +142,8 @@ class _PerfRunState extends State<PerfRun> with SingleTickerProviderStateMixin {
       '${(_build / frames).toStringAsFixed(2)} ms, record '
       '${(_record / frames).toStringAsFixed(2)} ms, GPU '
       '${(_gpu / frames).toStringAsFixed(2)} ms; ${_r.builder.drawCount} '
-      'draws; log in ${_profiler.dir}',
+      'draws and ${(_pointDraws / frames).round()} of point shadows; log in '
+      '${_profiler.dir}',
     );
     if (_r.timed) {
       final labels = _r.builder.partLabels;

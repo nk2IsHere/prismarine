@@ -6,6 +6,7 @@ import 'package:prismarine_debug/prismarine_debug.dart';
 
 import 'fly_camera.dart';
 import 'light_show.dart';
+import 'sample_effects.dart';
 import 'sample_renderer.dart';
 import 'sample_samples.dart';
 
@@ -19,7 +20,7 @@ const licenceLine =
 
 /// The debug panel of the sample on [DebugPanelShell]: the frame rate and
 /// the counts, the frame graph and the settings of the lights, the sun, the
-/// exposure, the shadow map and the camera, then the credits.
+/// shadow map and the camera, the effects of the renderer, then the credits.
 class SamplePanel extends StatefulWidget {
   const SamplePanel({
     super.key,
@@ -176,7 +177,7 @@ class _SamplePanelState extends State<SamplePanel> {
               ),
               SwitchListTile(
                 dense: true,
-                title: Text('Shadow map view', style: p.small),
+                title: Text('Shadow map views', style: p.small),
                 value: s.showShadowMap,
                 onChanged: (v) => setState(() => s.showShadowMap = v),
               ),
@@ -223,14 +224,6 @@ class _SamplePanelState extends State<SamplePanel> {
             open: p.open,
             children: [
               _slider(
-                'Exposure',
-                s.exposure,
-                0.1,
-                4,
-                (v) => s.exposure = v,
-                p.small,
-              ),
-              _slider(
                 'Speed',
                 widget.camera.speed,
                 0.1,
@@ -246,6 +239,7 @@ class _SamplePanelState extends State<SamplePanel> {
               ),
             ],
           ),
+          ...effectSections(p, r, (c) => setState(c)),
           PanelSection(
             'Credits',
             open: p.open,
