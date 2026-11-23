@@ -30,14 +30,15 @@ toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since
 
 `tools/toolchain/env.sh` sets up a shell for prismarine. It looks for the Flutter SDK at `~/.prismarine/flutter`, keeps
 the pub cache in `~/.prismarine/pub-cache` and the engine in `~/.prismarine/engine`, so every repository on the machine
-shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link, once per machine. Then source
+shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link. Then source
 `env.sh` in every bash or zsh shell that builds, tests or fetches; it puts that Flutter first on your `PATH`.
 
     mkdir -p ~/.prismarine/pub-cache
     ln -s ~/flutter ~/.prismarine/flutter
     source tools/toolchain/env.sh
 
-`PRISMARINE_FLUTTER`, `PRISMARINE_PUB_CACHE` and `PRISMARINE_ENGINE_DIR` move the three folders. The [toolchain
+To keep any of the three folders elsewhere, set `PRISMARINE_FLUTTER`, `PRISMARINE_PUB_CACHE` or
+`PRISMARINE_ENGINE_DIR` to its path before you source `env.sh`. The [toolchain
 README](../tools/toolchain/README.md) lists the details. Windows has no form of `env.sh`. Put the `bin` folder of the
 Flutter SDK on your `PATH` there.
 
