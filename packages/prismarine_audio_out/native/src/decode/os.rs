@@ -84,19 +84,15 @@ const IOPRIO_BACKGROUND: i32 = 0x4007;
 /// to 100 ms.
 const FEEDER_SLICE_NS: u64 = 1_000_000;
 
-/// Returns the calls that give a thread `role` on `os` with the limits
-/// `nice`.
+/// Returns the calls that give a thread `role` on `os` with the limits `nice`.
 ///
-/// On Windows the feeder runs at the highest normal priority with EcoQoS off.
-/// Background work runs below normal with EcoQoS on, as the background
-/// threads of the engine. Windows 11 puts EcoQoS threads on the efficiency
-/// cores. Background mode is not used, since its very low I/O priority would
+/// On Windows the feeder runs at the highest normal priority with EcoQoS off. Background work runs
+/// below normal with EcoQoS on. Background mode is not used, since its very low I/O priority would
 /// stall a decode that the render needs.
 ///
 /// On Linux the threads belong to this library and serve no other work. A nice raised for good is
-/// therefore fine. A feeder requests a short slice and goes above the process only where
-/// RLIMIT_NICE allows it. It does not go down. The I/O priority is the highest or lowest level of
-/// the best-effort class.
+/// fine. A feeder requests a short slice and goes above the process only where RLIMIT_NICE allows
+/// it. It does not go down. The I/O priority is the highest or lowest level of the best-effort class.
 pub fn calls(os: Os, role: Role, nice: Nice) -> [Option<Call>; 2] {
     match (os, role) {
         (Os::Mac, Role::Feeder) => [Some(Call::MacQos(QOS_CLASS_USER_INTERACTIVE)), None],

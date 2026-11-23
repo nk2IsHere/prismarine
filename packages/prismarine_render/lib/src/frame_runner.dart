@@ -128,30 +128,24 @@ class FrameRunner {
   final _standIns = <String, gpu.Texture>{};
   final _shaderSlots = Expando<_ShaderSlots>('shader slots by interface');
 
-  /// Raised whenever a texture that the input of a draw resolves to may
-  /// change, such as for a target made again or a new twin or stencil copy.
-  /// The resolved textures of the stages (_StageInputs.resolved) hold until
-  /// then.
+  /// Raised when a new target, twin or stencil copy may change the textures
+  /// of draw inputs, which _StageInputs.resolved holds until then.
   int _texGen = 0;
 
-  /// The constant blocks bound in recent runs with their place in the
-  /// uniform ring of the run that last wrote them, by block identity and
-  /// size.
+  /// The constant blocks bound in recent runs, by identity and size, with
+  /// their place in the uniform ring of the run that last wrote them.
   final _uniformViews = HashMap<Uint8List, _UniformView>.identity();
 
   /// The role blocks of the frame being recorded (FramePlan.frameBlocks).
   Map<Uint8List, Uint8List> _frameBlocks = const {};
 
-  /// The view of each frame role in the run that last bound it, by its
-  /// block.
+  /// The view of each frame role in the run that last bound it, by block.
   final _roleViews = HashMap<Uint8List, _RoleView>.identity();
 
   /// True when the byte blocks of the plans do not change once made, as in
-  /// plans read through the plan codec, whose blocks are its own copies. A
-  /// block bound in two runs in a row is then written once into the block
-  /// store and bound from there after that (runner_slots.dart _uniform). A
-  /// plan that the builder passes directly may change a block in place
-  /// between frames and must leave this false.
+  /// plans read through the plan codec. A block bound in two runs in a row
+  /// then goes once into the block store (runner_slots.dart _uniform). Plans
+  /// that change blocks in place between frames must leave this false.
   bool get keepBlocks => _store != null;
   set keepBlocks(bool on) {
     if (on == keepBlocks) return;
@@ -406,11 +400,8 @@ class FrameRunner {
   /// time from its submission to the completion on the GPU.
   double lastRecordMs = 0, lastGpuMs = 0;
 
-  /// The own GPU time in ms of the last frame. It runs from its submission
-  /// or the completion of the previous frame, whichever is later, to its
-  /// completion. The time from submission to completion also counts the
-  /// wait behind the frame before it, which is most of it with two frames on
-  /// the GPU.
+  /// The own GPU time in ms of the last frame, from its submission or the
+  /// completion of the previous frame, whichever is later, to its completion.
   double lastGpuOwnMs = 0;
   final _gpuClock = Stopwatch()..start();
   int _lastDoneUs = 0;
@@ -420,8 +411,7 @@ class FrameRunner {
   double lastLoadMs = 0, lastPipelineMs = 0;
 
   /// The record of the last frame in ms, split into targets and buffers,
-  /// render passes and dispatches. Targets and buffers count targets made
-  /// anew and buffers made or written.
+  /// render passes and dispatches.
   double lastSetupMs = 0, lastRenderMs = 0, lastComputeMs = 0;
 
   /// The submit of the last run on the timeline clock.
