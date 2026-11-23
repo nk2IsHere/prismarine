@@ -1,6 +1,5 @@
-/// The native mixer's entry points. The library is prismarine_audio_out's
-/// asset, which its build hook builds from native/mixer through the hooks
-/// section of the pubspecs.
+/// The C functions of the native audio engine, in the native library of
+/// prismarine_audio_out.
 @ffi.DefaultAsset('package:prismarine_audio_out/src/native.dart')
 library;
 

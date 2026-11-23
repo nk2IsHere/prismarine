@@ -7,9 +7,9 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import 'native.dart';
 
-/// Posts [AudioCommand]s into a native mixer from any isolate: the engine's
-/// address and the directory of the sounds that starts name are all it
-/// needs, so it is sendable.
+/// Posts [AudioCommand]s into a native engine from any isolate. It holds the
+/// address of the engine and the directory of the sounds of starts, and it
+/// can be sent to another isolate.
 class NativeMixerPort {
   const NativeMixerPort(this.address, this.soundDir);
 
@@ -20,8 +20,8 @@ class NativeMixerPort {
 
   ffi.Pointer<NativeMixer> get _e => ffi.Pointer.fromAddress(address);
 
-  /// Applies [c] at frame [at] (< 0: before the next frame). False when the
-  /// command ring was full (dropped).
+  /// Applies [c] at frame [at], or before the next frame when [at] is below
+  /// 0. Returns false when the command ring was full and dropped it.
   bool post(AudioCommand c, int at) => using((a) {
     ffi.Pointer<ffi.Char> s(String? v) =>
         v == null ? ffi.nullptr : v.toNativeUtf8(allocator: a).cast();
@@ -92,21 +92,23 @@ class NativeMixerPort {
     return r == 0;
   });
 
-  /// A scene change: sample bindings older than it are let go.
+  /// Starts a new generation of sample bindings and lets the older ones go.
   void sceneChanged() => mixScene(_e);
 
-  /// Audio frames handed to the output device so far.
+  /// The audio frames that the output device took so far.
   int get consumedFrames => mixConsumed(_e);
 }
 
-/// The native mixer as an [AudioRenderer]: mcsm_audio's [AudioEngine], ported to Rust, rendering the
-/// same bits. In lockstep ([realtime] false) [render] runs on the caller's
-/// thread and every sample is decoded before its start is posted; in real
-/// time [startDevice] renders in the output device's callback.
+/// The native render of the audio engine as an [AudioRenderer], with the
+/// same bits as [AudioEngine]. In lockstep [render] runs on the caller's
+/// thread, and every sample is decoded before its start is posted. In real
+/// time [startDevice] renders in the callback of the output device.
 class NativeAudioEngine implements AudioRenderer {
   NativeAudioEngine._(this._e, this.soundDir, this._problems);
 
-  /// From [projectBlob]'s bytes (written on another isolate).
+  /// Makes an engine from the bytes of [projectBlob], which another isolate
+  /// can write. A start's sound is the file `<soundDir>/<sound>`. With
+  /// [realtime] streamed waveforms stream and decodes are not waited for.
   factory NativeAudioEngine.fromBlob(
     Uint8List blob, {
     required String soundDir,
@@ -138,21 +140,21 @@ class NativeAudioEngine implements AudioRenderer {
   ffi.Pointer<ffi.Float> _buf = ffi.nullptr;
   int _bufFrames = 0;
 
-  /// The engine's address, for [NativeMixerPort]s on other isolates.
+  /// The address of the engine, for [NativeMixerPort]s on other isolates.
   int get address => _e.address;
 
   NativeMixerPort get port => NativeMixerPort(_e.address, soundDir);
 
-  /// Freed by [dispose]: every call after it is a no-op that answers what
-  /// the engine last said (the UI's audio clock can tick once more while the
-  /// session closes; the native side has no engine to read).
+  /// The engine was freed by [dispose]. Every call after it does nothing and
+  /// answers what the engine last said.
   bool get _gone => _e == ffi.nullptr;
 
   @override
   int get position => _gone ? _lastPosition : (_lastPosition = mixPosition(_e));
   int _lastPosition = 0;
 
-  /// Lockstep only (a running device owns the render head).
+  /// Moves the render head in lockstep only, since a running device owns
+  /// the render head.
   @override
   set position(int frames) {
     if (_gone) return;
@@ -186,7 +188,8 @@ class NativeAudioEngine implements AudioRenderer {
     return Float32List.fromList(_buf.asTypedList(frames * 2));
   }
 
-  /// Problems the mixer reported since the last call (each once).
+  /// Returns the problems that the engine reported since the last call, each
+  /// once.
   List<String> takeProblems() {
     final out = <String>[];
     if (_gone) return out;
@@ -208,20 +211,21 @@ class NativeAudioEngine implements AudioRenderer {
     return _problems;
   }
 
-  /// Real time: the service thread and the output device; 0, or the
-  /// platform's error.
+  /// Starts the service thread and the output device for real time. Returns
+  /// 0, or the error of the platform.
   int startDevice() => _gone ? -1 : mixStart(_e);
 
   set paused(bool v) => _gone ? null : mixSetPaused(_e, v ? 1 : 0);
   set muted(bool v) => _gone ? null : mixSetMuted(_e, v ? 1 : 0);
 
-  /// Frames handed to the device.
+  /// The frames that the device took.
   int get consumedFrames =>
       _gone ? _lastConsumed : (_lastConsumed = mixConsumed(_e));
   int _lastConsumed = 0;
 
-  /// Callback timing records since the last call: (wall µs since start,
-  /// frames, render µs, µs since the previous callback).
+  /// Returns the timing records of the callbacks since the last call, each
+  /// the wall µs since the start, the frames, the render µs and the µs since
+  /// the previous callback.
   List<(int, int, int, int)> takeStats() => _gone
       ? const []
       : using((a) {
@@ -239,10 +243,10 @@ class NativeAudioEngine implements AudioRenderer {
           return out;
         });
 
-  /// Frames streams read as silence since the last call.
+  /// Returns the frames that streams read as silence since the last call.
   int takeMissing() => _gone ? 0 : mixMissing(_e);
 
-  /// Stops the device and frees the engine (no isolate may post after this).
+  /// Stops the device and frees the engine. No isolate may post after it.
   void dispose() {
     if (_e == ffi.nullptr) return;
     mixDestroy(_e);
