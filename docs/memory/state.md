@@ -26,3 +26,6 @@ precompiled Metal libraries and a command line. mcsm keeps the settings of its s
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
 and texture arrays of the cook.
+Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
+its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
+setup and the build of the sample app for each platform, checked on macOS and Linux.

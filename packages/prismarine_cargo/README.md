@@ -1,7 +1,8 @@
 # prismarine_cargo
 
 prismarine_cargo builds the Rust crate of a package from the Dart build hook of the package. The library ships with your
-app as a code asset that `@Native` declarations bind to. The details are on [the area page](../../docs/areas/cargo.md).
+app as a code asset for the `@Native` declarations of the package. The details are on [the area
+page](../../docs/areas/cargo.md).
 
 ## Usage
 
@@ -10,9 +11,11 @@ directory of the crate, the name of the library in `[lib]` of `Cargo.toml` and t
 declarations use. The crate has `crate-type = ["cdylib"]`. Give the vendored C sources that the `build.rs` of the crate
 compiles as `extraSources`, which makes a change to them run the hook again.
 
-The hook finds cargo through `$CARGO`, `PATH` and `~/.cargo/bin`. Each target needs its Rust standard library. A macOS
-app build needs both `aarch64-apple-darwin` and `x86_64-apple-darwin`, which `rustup target add` installs. A crate that
-builds C with CMake, such as the SDL of `prismarine_pad`, also needs CMake and a C compiler.
+The hook finds cargo on `PATH` or in `~/.cargo/bin`. A build hook gets only some variables of the environment, such as
+`PATH` and `HOME`. It does not get `RUSTUP_HOME` or `CARGO_HOME`. Install rustup into its default folders, `~/.rustup`
+and `~/.cargo`. Each target needs its Rust standard library. A macOS app build needs both `aarch64-apple-darwin` and
+`x86_64-apple-darwin`, which `rustup target add` installs. A crate that builds C with CMake, such as the SDL of
+`prismarine_pad`, also needs CMake and a C compiler.
 
 ## Example
 

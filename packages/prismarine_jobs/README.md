@@ -11,7 +11,7 @@ their use. The details are on [the area page](../../docs/areas/jobs.md).
 without a copy. Queued jobs start by priority and then in order. A cancelled token fails a job that has not started with
 `JobCancelled`. A background job runs in the background role.
 
-`raiseThreadQos` gives the calling thread the frame role, for the work that a frame waits for, such as the tick of a
+`raiseThreadQos` gives the calling thread the frame role, for the work that holds up a frame, such as the tick of a
 simulation. `lowerThreadQos` gives it the background role and returns the value for `restoreThreadQos`. None of these
 calls needs privileges.
 

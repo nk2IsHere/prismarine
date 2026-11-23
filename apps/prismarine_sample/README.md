@@ -25,5 +25,6 @@ The code of the app is [`lib/main.dart`](lib/main.dart).
 
 ## Platforms
 
-The app runs on macOS with Metal and on Linux and Windows with Vulkan. The engine logs its renderer when the app starts,
-such as `Using the Impeller rendering backend` on macOS.
+The app builds on macOS and Linux and runs on macOS with Metal. Its runners for Linux and Windows do not turn Flutter
+GPU on. On Linux the app starts and then stops at its first call of Flutter GPU with an exception that Flutter GPU must
+be enabled. The Windows build is not checked.

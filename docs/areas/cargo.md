@@ -9,10 +9,13 @@ await buildCargoLibrary(input, output,
     crate: 'native', library: 'prismarine_pad', assetName: 'src/native.dart');
 ```
 
-Cargo comes from `$CARGO`, `PATH` or `~/.cargo/bin`. Each target needs its Rust standard library. A macOS app build
-needs both `aarch64-apple-darwin` and `x86_64-apple-darwin`. Windows builds use the MSVC toolchain. Crates that build C
-with CMake need CMake, which comes from `$CMAKE`, `PATH`, Homebrew or the CMake app on macOS and Visual Studio on
-Windows.
+Cargo comes from `PATH` or `~/.cargo/bin`. Each target needs its Rust standard library. A macOS app build needs both
+`aarch64-apple-darwin` and `x86_64-apple-darwin`. Windows builds use the MSVC toolchain. Crates that build C with CMake
+need CMake, which comes from `PATH`, Homebrew or the CMake app on macOS and Visual Studio on Windows.
+
+A build hook gets only some variables of the environment of the build, such as `PATH` and `HOME`. `CARGO`, `CMAKE`,
+`RUSTUP_HOME` and `CARGO_HOME` do not reach it. rustup must therefore have its default folders, `~/.rustup` and
+`~/.cargo`.
 
 The build runs `cargo rustc --release` in a clean environment with one target directory for every configuration of the
 package. On macOS the library is not stripped, since the strip of Xcode 27 leaves a dylib that dyld refuses.
