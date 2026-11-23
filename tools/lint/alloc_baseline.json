@@ -15,11 +15,29 @@
       "async": 1,
       "sdk": 7
     },
+    "packages/prismarine_lua": {
+      "new": 142,
+      "literal": 190,
+      "string": 205,
+      "closure": 127,
+      "box": 75,
+      "iterate": 7,
+      "sdk": 17
+    },
+    "packages/prismarine_lua_native": {
+      "new": 5,
+      "literal": 1,
+      "sdk": 11
+    },
+    "packages/prismarine_math": {
+      "new": 6,
+      "box": 5
+    },
     "packages/prismarine_snap": {
-      "new": 18,
+      "new": 19,
       "literal": 11,
       "string": 9,
-      "closure": 6,
+      "closure": 8,
       "box": 1,
       "iterate": 2
     }

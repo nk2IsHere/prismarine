@@ -36,3 +36,19 @@ packages/prismarine_frame/lib/src/plan/frame_plan.dart#FrameRole.new  a builder,
 packages/prismarine_frame/lib/src/plan/frame_plan.dart#StageResources.new  a builder, a draw's resources
 packages/prismarine_frame/lib/src/plan/float_bits.dart#sameFloat32Bits  a builder, comparing a draw's floats
 packages/prismarine_frame/lib/src/plan/float_bits.dart#scratchFloats  a builder, reading floats
+#
+# The Lua VM is reached from an app's frame: a script thread resumed, a Lua
+# function or a metamethod called, a table read or written by a native of the
+# host, and a snapshot of a Lua state between two frames. The standard
+# libraries are reached through their natives.
+packages/prismarine_lua/lib/src/state.dart#LuaVm.call  an app's frame, calling Lua
+packages/prismarine_lua/lib/src/state.dart#LuaThread.resume  an app's frame, resuming a script thread
+packages/prismarine_lua/lib/src/state.dart#LuaThread.resumeRaw  an app's frame, resuming a script thread
+packages/prismarine_lua/lib/src/state.dart#LuaThread.call  a native of the host, calling Lua
+packages/prismarine_lua/lib/src/state.dart#LuaThread.pcall  a native of the host, calling Lua
+packages/prismarine_lua/lib/src/state.dart#LuaThread.callAt  a native of the host, calling Lua
+packages/prismarine_lua/lib/src/table.dart#LuaTable.get  a native of the host, reading a table
+packages/prismarine_lua/lib/src/table.dart#LuaTable.set  a native of the host, writing a table
+packages/prismarine_lua/lib/src/table.dart#LuaTable.next  a native of the host, walking a table
+packages/prismarine_lua/lib/src/snapshot.dart#registerLuaSnap  an app's snapshot, its codecs
+packages/prismarine_lua/lib/src/libs.dart#openLibs  the natives of the standard libraries
