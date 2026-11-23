@@ -134,6 +134,26 @@ not state a fact in the introduction and again in its own section.
 A page for users does not describe internals, such as the layout of a cache directory, generated files or the order in
 which settings resolve. A spec under `docs/specs/` is the place for those.
 
+A page for users is read by one person on their own computer, who follows it step by step. These rules come from
+reviews of such pages.
+
+- Say what to do in concrete terms. "Each platform needs the tools of a Flutter desktop app" or "link your SDK there
+  once" leave the reader guessing; name the tools, or say which link to make from where to where.
+- Explain what a file or a setting is for before you give its name, as in "each version of prismarine works with one
+  engine release, and `RELEASE` holds its name".
+- Leave out what the reader does not act on: how a value is stored ("the array"), how a tool works inside ("compiles
+  each crate for both CPUs"), or which function prepares a file.
+- Speak of the reader's computer. "Each machine", "every machine" or "a machine that holds the tree" describe our own
+  setup, not the reader's.
+- Use a verb in its plain sense. A variable sets where a folder is; it does not "move" the folder.
+- Put every command into a fenced code block with its language, such as `sh` or `powershell`, never into an
+  indented block or into a sentence the reader has to copy from.
+- Give one topic one paragraph. A step that only one platform needs, such as Windows, gets its own paragraph.
+- Write what stays true. A state that is about to change, such as a repository that is private for now, does not go
+  into the steps.
+- Fix a fact that is no longer true as soon as you see it, such as a build failure that a later change fixed.
+- Check each sentence by asking whether a newcomer could act on it without the code. If not, rewrite it or drop it.
+
 The pages under `docs/memory/` are lists of rules, decisions and state. Their entries are short statements in the same
 wording.
 
