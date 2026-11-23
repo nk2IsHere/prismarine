@@ -90,23 +90,16 @@ class ShaderBundleReport {
   final Map<String, int> bytes;
 }
 
-/// Builds the shader bundles of the program tree in [root] with impellerc.
-/// Every file under `<root>/programs/<effect>/` is one entry with the id
-/// `<effect>/<file>`, except the files in a `bodies` folder, which programs
-/// include. Each effect is built in shards of [shard] entries, [jobs]
-/// impellerc runs at a time. Each shard is split into one gzip-compressed
-/// bundle per backend of [settings], at
-/// `<root>/bundle/<backend directory>/<effect>.<k>.shaderbundle.gz`. Its
-/// sources move to `<root>/programs/<effect>/<k>/`. A uniform block that the
-/// compiler drops becomes a plain struct in the source and the source then
-/// declares exactly the bindings of the shader. A failing shard is built
-/// again entry by entry. On macOS each Metal entry also carries its source
-/// compiled to a Metal library. The failures go to `<root>/build.log`.
-///
-/// [impellerc] is the compiler to run. With [effects], only the shards of
-/// these effects are built again and the other bundles stay. With
-/// [cacheDir], a shard whose sources and tools have not changed is copied
-/// from the [ShaderShardCache] in that directory.
+/// Builds the bundles of the program tree in [root] with [impellerc] and
+/// [settings]. Each `<root>/programs/<effect>/<file>` outside a `bodies`
+/// folder is one entry. Each effect is built in shards of [shard] entries
+/// with [jobs] impellerc runs at a time. A shard gives one gzip-compressed
+/// bundle per backend at
+/// `<root>/bundle/<directory>/<effect>.<k>.shaderbundle.gz` and its sources
+/// move to `<root>/programs/<effect>/<k>/`. The failures go
+/// to `<root>/build.log`. With [effects], only the shards of these effects
+/// are built again. With [cacheDir], a shard whose sources and tools have
+/// not changed comes from the [ShaderShardCache] in that directory.
 Future<ShaderBundleReport> buildShaderBundles(
   String root,
   ShaderBundleSettings settings, {
