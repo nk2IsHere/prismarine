@@ -49,7 +49,11 @@ Future<void> buildCargoLibrary(
   );
   // Every config of this package shares one cargo target directory. Cargo
   // keeps the targets apart in it.
-  final targetDir = input.outputDirectoryShared.resolve('cargo/');
+  final targetDir = cargoTargetDir(
+    input.outputDirectoryShared,
+    windows: Platform.isWindows,
+    environment: Platform.environment,
+  );
   final cargo = _findCargo();
   // The build runs in a clean environment. The variables of an Xcode build,
   // such as SDKROOT, LD, ARCHS and the deployment targets, break the link of
@@ -196,6 +200,42 @@ Future<void> buildCargoLibrary(
       output.dependencies.add(uri);
     }
   }
+}
+
+/// Returns the cargo target directory for the shared output directory
+/// [shared] of a hook.
+///
+/// It is `cargo/` in [shared], except on Windows. There the try-compiles of
+/// CMake under it exceed the path limit of 260 characters of MSBuild. On
+/// Windows it is `prismarine\cargo\<hash>\` in `LOCALAPPDATA`, else in
+/// `USERPROFILE\AppData\Local`, from [environment]. The hash of [shared]
+/// keeps the directories of two packages or two checkouts apart.
+Uri cargoTargetDir(
+  Uri shared, {
+  required bool windows,
+  required Map<String, String> environment,
+}) {
+  if (!windows) return shared.resolve('cargo/');
+  final local =
+      environment['LOCALAPPDATA'] ??
+      switch (environment['USERPROFILE']) {
+        final home? => '$home\\AppData\\Local',
+        null => null,
+      };
+  if (local == null) return shared.resolve('cargo/');
+  return Uri.directory(
+    '$local\\prismarine\\cargo\\${_hash(shared.toString())}',
+    windows: true,
+  );
+}
+
+/// The 32-bit FNV-1a hash of [s] in 8 hex digits.
+String _hash(String s) {
+  var h = 0x811c9dc5;
+  for (final c in s.codeUnits) {
+    h = ((h ^ c) * 0x01000193) & 0xffffffff;
+  }
+  return h.toRadixString(16).padLeft(8, '0');
 }
 
 /// Returns the Rust target triple of [os] and [arch].

@@ -7,6 +7,7 @@ workspace:
   - packages/prismarine_snap
   - packages/prismarine_lua
   - packages/prismarine_lua_native
+  - packages/prismarine_replay
   - packages/prismarine_math
   - packages/prismarine_jobs
   - packages/prismarine_cargo
@@ -17,3 +18,4 @@ workspace:
   - packages/prismarine_shaders
   - packages/prismarine_assets
   - tools/lint
+  - tools/profiler

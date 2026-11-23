@@ -1,6 +1,6 @@
-# The tests of the lints, the machine locks, the workspace packages and the
-# Flutter packages, with clippy and cargo test for every crate. Pull requests
-# run on Linux and Windows. A run by hand picks the runners, macOS included.
+# The tests of the lints, the profiler, the machine locks, the workspace
+# packages and the Flutter packages, with clippy and cargo test for every
+# crate. Pull requests run on Linux and Windows. A run by hand picks the runners, macOS included.
 # The landing gate runs the same steps on the Mac.
 #
 # The Flutter packages run their tests on the stock Flutter SDK with the
@@ -15,6 +15,7 @@ on:
       - third_party/flutter_gpu/**
       - tools/lint/**
       - tools/machine/**
+      - tools/profiler/**
       - pubspec.yaml
       - pubspec.lock
   workflow_dispatch:
@@ -91,6 +92,9 @@ jobs:
       - name: lint tests
         working-directory: tools/lint
         run: dart test
+      - name: profiler tests
+        working-directory: tools/profiler
+        run: dart test
       - name: machine locks test
         run: tools/machine/test/locks_test.sh
 
@@ -141,3 +145,12 @@ jobs:
             echo "== $d"
             cargo test -q --manifest-path "$c" --target-dir "build/cargo/${d//\//_}" || exit 1
           done
+      # The synthetic project of the audio engine rendered in Dart and
+      # replayed on the native engine in a debug build, where an allocation
+      # inside the render aborts. The two renders give the same bits.
+      - name: audio engine parity
+        run: |
+          d=packages/prismarine_audio_out/native
+          dart run packages/prismarine_audio/tool/synthetic_parity.dart "$RUNNER_TEMP/parity"
+          cargo run -q --example parity --manifest-path "$d/Cargo.toml" --target-dir "build/cargo/${d//\//_}" -- "$RUNNER_TEMP/parity" | tee "$RUNNER_TEMP/parity.txt"
+          grep -q '^IDENTICAL' "$RUNNER_TEMP/parity.txt"

@@ -122,8 +122,8 @@ extension _Replays on _Smoke {
         }
         await _done(cb);
         cb = ctx.createCommandBuffer();
-        final fsv = baseShaderLibrary['FullscreenVertex']!;
-        final fcopy = baseShaderLibrary['CopyFragment']!;
+        final fsv = ScreenCopy.loaded!.vertex;
+        final fcopy = ScreenCopy.loaded!.fragment;
         cb.createRenderPass(
             gpu.RenderTarget.singleColor(
               gpu.ColorAttachment(
@@ -183,8 +183,8 @@ extension _Replays on _Smoke {
       final wrote = fs.mcsmWriteTextureDirect(t, ByteData.sublistView(texel));
       final out = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
       final cb = ctx.createCommandBuffer();
-      final fsv = baseShaderLibrary['FullscreenVertex']!;
-      final fcopy = baseShaderLibrary['CopyFragment']!;
+      final fsv = ScreenCopy.loaded!.vertex;
+      final fcopy = ScreenCopy.loaded!.fragment;
       cb.createRenderPass(
           gpu.RenderTarget.singleColor(
             gpu.ColorAttachment(texture: out, clearValue: Vector4(0, 0, 0, 1)),
@@ -227,9 +227,7 @@ Future<bool> _viewportArrays(
   gpu.Texture Function(gpu.PixelFormat) rt,
 ) async {
   final supported = fs.mcsmViewportArrays;
-  final lib = await fs.loadShaderLibraryAsync(
-    await bundles.resolveShaderBundleKey('smoke', package: 'gpu_smoke'),
-  );
+  final lib = await gpu.ShaderLibrary.fromAsset(smokeBundle);
   if (lib == null) return false;
   final v = lib['SmokeTilesVertex']!, f = lib['SmokeTilesFragment']!;
   final layout = gpu.VertexLayout(

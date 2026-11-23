@@ -95,6 +95,13 @@ class LintConfig {
     return v is List ? [for (final e in v) '$e'] : null;
   }
 
+  /// The Flutter package directories outside the workspace that the
+  /// allocation lint also resolves, each through its own package config.
+  List<String> get allocFlutterPackages {
+    final v = _at('alloc.flutter_packages');
+    return v is List ? [for (final e in v) '$e'] : const [];
+  }
+
   /// The environment variable with the path of the private repo.
   String get privateEnv => _str('privacy.private_env', 'PRISMARINE_PRIVATE');
 

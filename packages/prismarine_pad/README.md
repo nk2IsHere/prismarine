@@ -9,6 +9,7 @@ details are on [the area page](../../docs/areas/pad.md).
 `HostPads` starts SDL on its first call. SDL then polls the pads on its own thread. Call `read` once a frame to get a
 `PadReading` of the pad in use, with its buttons, its sticks from -1 to 1 with y up and its triggers from 0 to 1.
 `pressed` tests a `PadButton`. `devices` lists the connected pads. Setting `chosen` to one of them reads only that pad.
+`readInto` fills a `PadState` in place, without the name of the pad, for a frame loop that allocates nothing.
 `unavailable` is true when SDL could not start. A machine without pad support then reads `PadReading.none`.
 
 The build hook builds SDL with CMake and a C compiler, which must be installed on every OS.

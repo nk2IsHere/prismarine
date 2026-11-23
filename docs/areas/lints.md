@@ -19,8 +19,8 @@ The ratcheted lints compare their counts with a baseline per package. A count ma
 
 ## Config
 
-The config lists the code roots, the baselines, the roots and SDK verdicts of the allocation lint, the variable of the
-private repo, the files that `check_links` reads and the doc folders that `docs_index` indexes. Under `code_shape` it
+The config lists the code roots, the baselines, the roots, SDK verdicts and Flutter packages of the allocation lint,
+the variable of the private repo, the files that `check_links` reads and the doc folders that `docs_index` indexes. Under `code_shape` it
 lists the agent words and pointer patterns of the history rule and the rule sets of the repository. The rule set
 `exe-address` counts addresses of shipped binaries in comments and strings. The rule set `name-words` counts words that
 identifiers and paths must not contain, under the check that its `check` setting gives. Each further key that starts
@@ -55,6 +55,10 @@ applies only to the files that the code lints check, outside the `comment_check_
 `alloc_roots.txt` lists the functions that a frame calls from outside the code that the lint can follow. The lint walks
 every call from these roots and counts each place that allocates. A place that must allocate carries
 `// alloc: <reason>`. A function that a steady frame does not run carries `// alloc-cold: <reason>`.
+
+The lint resolves the pure-Dart packages of the workspace. The Flutter packages in `alloc.flutter_packages` of the
+config resolve through their own package config, such as `prismarine_render` with its runner and the sample app. Run
+`flutter pub get` in each of them before the lint, else it stops with a message.
 
 ## Checks
 

@@ -52,3 +52,30 @@ packages/prismarine_lua/lib/src/table.dart#LuaTable.set  a native of the host, w
 packages/prismarine_lua/lib/src/table.dart#LuaTable.next  a native of the host, walking a table
 packages/prismarine_lua/lib/src/snapshot.dart#registerLuaSnap  an app's snapshot, its codecs
 packages/prismarine_lua/lib/src/libs.dart#openLibs  the natives of the standard libraries
+#
+# The audio engine is reached from an app's frame: the Dart render on a
+# render isolate or in lockstep, a command applied at its frame, and a post
+# to the native engine.
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.render  a render isolate or the lockstep step, once a block
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.apply  the render, a command at its frame
+packages/prismarine_audio/lib/src/engine/engine.dart#AudioEngine.schedule  an app's frame, a command
+packages/prismarine_audio/lib/src/engine/lockstep.dart#LockstepAudio.advanceTo  an app's frame in lockstep
+packages/prismarine_audio_out/lib/src/mix/native_engine.dart#NativeMixerPort.post  an app's frame, a command to the native engine
+#
+# The renderer of glTF scenes builds its plan each frame, and the sample
+# app steps its camera and lights and builds that plan in its ticker.
+packages/prismarine_pbr/lib/src/pbr_builder.dart#PbrBuilder.frame  an app's frame, building the plan
+apps/prismarine_sample/lib/src/sample_view.dart#_SampleViewState._tick  the ticker of the sample, each frame
+apps/prismarine_sample/lib/src/perf.dart#_PerfRunState._tick  the ticker of the performance run, each frame
+#
+# The runner records a frame plan each frame. The parts of the frame loop run
+# at the start and end of each frame.
+packages/prismarine_render/lib/src/frame_runner.dart#FrameRunner.run  an app's frame, recording its plan
+packages/prismarine_loop/lib/src/frame_pace.dart#FramePace.begin  an app's frame, at its start
+packages/prismarine_loop/lib/src/frame_pace.dart#FramePace.end  an app's frame, after its step
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.beginFrame  an app's frame, at its start
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.endFrame  an app's frame, after its Dart work
+packages/prismarine_loop/lib/src/gc_pacing.dart#GcPacing.idlePoint  an app's frame, at its idle point
+packages/prismarine_loop/lib/src/platform/metal_frames.dart#MetalFrameLimiter.beginFrame  an app's frame, at its start on macOS
+packages/prismarine_loop/lib/src/platform/mouse_look.dart#MouseLook  an app's frame, holding the pointer
+packages/prismarine_loop/lib/src/line_writer.dart#JsonLineWriter  a profiled frame, writing its line

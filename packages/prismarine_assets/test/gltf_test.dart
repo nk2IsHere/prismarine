@@ -294,4 +294,54 @@ void main() {
       contains(contains('skinned mesh node $meshNode is not a root')),
     );
   });
+
+  test('a sparse accessor replaces the elements at its indices', () {
+    final bytes = ByteData(28)
+      ..setFloat32(0, 1, Endian.little)
+      ..setFloat32(4, 2, Endian.little)
+      ..setFloat32(8, 3, Endian.little)
+      ..setUint16(12, 2, Endian.little)
+      ..setFloat32(16, 9, Endian.little)
+      ..setUint32(20, 7, Endian.little);
+    final buffer = bytes.buffer.asUint8List();
+    final doc = GltfDocument(
+      {
+        'bufferViews': [
+          {'buffer': 0, 'byteOffset': 0, 'byteLength': 12},
+          {'buffer': 0, 'byteOffset': 12, 'byteLength': 2},
+          {'buffer': 0, 'byteOffset': 16, 'byteLength': 12},
+        ],
+        'accessors': [
+          {
+            'bufferView': 0,
+            'componentType': 5126,
+            'count': 3,
+            'type': 'SCALAR',
+            'sparse': {
+              'count': 1,
+              'indices': {'bufferView': 1, 'componentType': 5123},
+              'values': {'bufferView': 2},
+            },
+          },
+          {
+            'componentType': 5125,
+            'count': 3,
+            'type': 'SCALAR',
+            'sparse': {
+              'count': 1,
+              'indices': {
+                'bufferView': 1,
+                'componentType': 5123,
+                'byteOffset': 0,
+              },
+              'values': {'bufferView': 2, 'byteOffset': 4},
+            },
+          },
+        ],
+      },
+      [buffer],
+    );
+    expect(doc.floats(0), [1, 2, 9]);
+    expect(doc.uints(1), [0, 0, 7]);
+  });
 }

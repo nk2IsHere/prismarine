@@ -4,7 +4,11 @@ The package records frame plans of `prismarine_frame` on Flutter GPU. A `FrameRu
 buffers, then records each pass on one command buffer with each shader's constant blocks, textures, samplers and texel
 buffers bound by name. It keeps what stays the same from frame to frame: a draw's pipeline and bindings, the blocks
 that do not change and the passes whose retained stamp is unchanged. It needs the engine fork's flutter_gpu, which the
-package's pubspec takes from `third_party/flutter_gpu`.
+package's pubspec takes from `third_party/flutter_gpu`. `onGpuSubmit` receives the number of each command buffer that
+the runner submits, before the submit, for a GPU pass log.
+
+A draw's `frontCounterClockwise` counts the winding on the render target with y down, as Direct3D does. The
+counter-clockwise front faces of glTF and OpenGL in clip space are clockwise there and need `false`, the default.
 
 ## Assets
 

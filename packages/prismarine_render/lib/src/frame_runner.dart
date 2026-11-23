@@ -13,6 +13,7 @@ import 'package:vector_math/vector_math.dart';
 
 import 'env.dart';
 import 'gpu_state.dart';
+import 'gpu_submit.dart';
 import 'load_tally.dart';
 import 'loose_map.dart';
 import 'render_assets.dart';
@@ -538,6 +539,7 @@ class FrameRunner {
     _store?.flush();
     final submitted = _gpuClock.elapsedMicroseconds;
     lastSubmitAt = Timeline.now;
+    gpuSubmitted();
     cb.submit(
       completionCallback: (ok) {
         final now = _gpuClock.elapsedMicroseconds;

@@ -23,6 +23,15 @@ source. The source then declares the same bindings as the compiled shader.
 `keepShaderBundleBackends` copies a bundle with only some of its backends. `decodeShaderBundle` reads a bundle as
 nested lists for checks.
 
+## Shader interfaces
+
+`shaderInterface` reads the interface of a GLSL source from its declarations, in the JSON form that `ShaderRecord` of
+[prismarine_frame](frame.md) reads. A uniform block has the form `uniform Frame { … } cb0;` and its rows are its
+std140 size. A texture has the form `uniform texture2D baseColor; // t0` with a separate `uniform sampler s0;`, or
+`uniform samplerShadow s4;` for a comparison sampler, and the line `#define baseColor_S s0` pairs them. A vertex input
+has the form `layout(location = 0) in vec3 vsi0_POSITION0;`, with its register, semantic and index in its name.
+`std140Rows` gives the rows of a block's members.
+
 ## Shard cache
 
 With a cache folder, a shard whose sources, includes, settings and tools have not changed is copied from the cache

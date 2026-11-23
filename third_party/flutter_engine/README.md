@@ -145,6 +145,7 @@ Pass the engine to `flutter build` of a release build.
 - An app built on the patched engine is for one CPU only. The Flutter tool sets `ARCHS` from the name of the engine, so
   `_arm64` gives arm64 and any other name x86_64. A universal macOS app needs one build per engine and a merge that
   runs `lipo` on every Mach-O file, merges `NativeAssetsManifest.json` and signs the result.
+  [`templates/scripts/universal_app.sh`](../../templates/scripts/universal_app.sh) does the merge.
 - The patched and stock engines can take turns in one build directory. The Flutter tool rebuilds what changed.
 - The runner of an app can set `--new_gen_semi_max_size` before the engine starts, through the Dart flags of patch
   0007. A `FLUTTER_ENGINE_SWITCHES` with `dart-flags=…` reaches release builds too.

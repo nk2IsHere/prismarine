@@ -14,7 +14,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
-import 'package:flutter_scene/scene.dart' show baseShaderLibrary;
+import 'package:prismarine_scene/prismarine_scene.dart' show ScreenCopy;
 import 'package:vector_math/vector_math.dart';
 
 /// Runs the checks of release 11 with [log] for SMOKE lines. Returns true when
@@ -25,9 +25,8 @@ Future<bool> release11Checks(void Function(String) log) async {
     return true;
   }
   final ctx = gpu.gpuContext;
-  final vertex =
-      (baseShaderLibrary['FullscreenVertex'] as Object) as gpu.Shader;
-  final fragment = (baseShaderLibrary['CopyFragment'] as Object) as gpu.Shader;
+  final vertex = ScreenCopy.loaded!.vertex;
+  final fragment = ScreenCopy.loaded!.fragment;
   final pipeline = ctx.createRenderPipeline(vertex, fragment);
   final quad = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(

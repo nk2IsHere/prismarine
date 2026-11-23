@@ -1,6 +1,6 @@
 // gpu_smoke checks that Flutter GPU works on this engine and platform. It
-// renders a texture through the base FullscreenVertex + CopyFragment of
-// flutter_scene into an offscreen target, reads it back, checks the pixel,
+// renders a texture through the ScreenCopy of prismarine_scene into an
+// offscreen target, reads it back, checks the pixel,
 // times draws and binds, prints one SMOKE line per result and exits. The exit
 // code is 0 when the pixel matches.
 //
@@ -12,7 +12,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_gpu/gpu.dart' as gpu;
-import 'package:flutter_scene/scene.dart' show Scene, baseShaderLibrary;
+import 'package:prismarine_scene/prismarine_scene.dart' show ScreenCopy;
 import 'package:vector_math/vector_math.dart';
 
 import 'release_10.dart';
@@ -58,11 +58,10 @@ Future<int> _smoke() async {
     '${Platform.version.split(' ').last}',
   );
   final startup = Stopwatch()..start();
-  await Scene.initializeStaticResources();
+  await ScreenCopy.load();
   final ctx = gpu.gpuContext;
-  final vertex =
-      (baseShaderLibrary['FullscreenVertex'] as Object) as gpu.Shader;
-  final fragment = (baseShaderLibrary['CopyFragment'] as Object) as gpu.Shader;
+  final vertex = ScreenCopy.loaded!.vertex;
+  final fragment = ScreenCopy.loaded!.fragment;
   final pipeline = ctx.createRenderPipeline(vertex, fragment);
   final quad = ctx.createDeviceBufferWithCopy(
     ByteData.sublistView(

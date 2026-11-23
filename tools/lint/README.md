@@ -32,6 +32,8 @@ These commands run the quick checks of prismarine, as its gate runs them:
     dart tools/lint/privacy_check.dart
     dart tools/lint/check_links.dart
     dart tools/lint/code_shape.dart
+    for p in packages/prismarine_render packages/prismarine_loop packages/prismarine_scene \
+        packages/prismarine_pbr apps/prismarine_sample; do (cd $p && flutter pub get); done
     dart tools/lint/alloc.dart
     dart tools/lint/analyze.dart --only=dart,format
     (cd tools/lint && dart test)

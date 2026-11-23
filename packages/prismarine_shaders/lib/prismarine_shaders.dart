@@ -6,3 +6,4 @@ export 'src/metal_compile.dart';
 export 'src/shader_bundle.dart';
 export 'src/shader_bundle_cache.dart';
 export 'src/shader_bundle_split.dart';
+export 'src/shader_interface.dart';

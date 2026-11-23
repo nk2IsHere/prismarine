@@ -13,8 +13,11 @@ Migration steps 1 to 5 are done. The workspace, the lints with their config, the
 private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`, `prismarine_math`,
 `prismarine_jobs`, `prismarine_cargo`, `prismarine_pad`, `prismarine_frame` and `prismarine_render`, each with a page
 in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
-with its own config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both
-repositories use. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
+with its own config. It runs the heap and allocation profiler of `tools/profiler`, the package `prismarine_profiler`,
+from the same checkout. `templates/scripts/` holds the first app script copied as a template, `universal_app.sh`.
+The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both repositories use.
+`tools/toolchain/env.sh` sets the Flutter SDK, pub cache and engine directory of the machine from `~/.prismarine`. The
+gate sources it. The allocation lint also walks `prismarine_render` and `prismarine_loop`. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
 `prismarine_render` are Flutter packages outside the pub workspace. Step 9 adds `prismarine_debug`, the debug tools of
 the player of mcsm with the shell of its debug panel. mcsm adds its own sections to the shell. Step 8 adds
 `prismarine_audio` and `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of
@@ -25,11 +28,25 @@ flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bun
 precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5 adds
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
-and texture arrays of the cook. GitHub workflows run the lints and the tests for a pull request and by hand, as
+and texture arrays of the cook.
+`prismarine_replay` follows [the replay design](../specs/2026-11-23-replay-design.md). It holds route recording and
+replay with the hash chain, snapshot files with the schedule and pruning, the snapshot shadow and the corpus runner.
+mcsm registers its route and snapshot formats and its game on it.
+GitHub workflows run the lints and the tests for a pull request and by hand, as
 [CI](../areas/ci.md) describes. They are not yet enabled on GitHub.
-The Lua of the later list is in: `prismarine_lua` is Lua 5.2.3 for Dart with double numbers by default and two float32
+`prismarine_lua` is Lua 5.2.3 for Dart with double numbers by default and two float32
 modes. `prismarine_lua_native` is its compiler in a double and a float32 build, as [lua](../areas/lua.md)
 describes. mcsm's exe profiles are configurations of it in mcsm.
+The audio engine of [its design](../specs/2026-11-23-audio-engine-design.md) is in `prismarine_audio`, with its Dart
+render and in `prismarine_audio_out`, with its native render. mcsm's FMOD bank adapter and sound rules drive it
+without a crate of their own. The Dart render without allocation is the next step of its plan.
 Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
 its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
 setup and the build of the sample app for each platform, checked on macOS and Linux.
+The sample app shows Intel's Sponza, which a script fetches outside git, through the new `prismarine_pbr`, a forward
+renderer on `prismarine_render`, with `prismarine_scene` loading the glTF that `prepareGltf` of `prismarine_assets`
+writes. Its `--smoke` mode is the smoke test of the gate and its `--perf` mode a performance scene, proven on macOS
+and on Linux. The design is in [the sample scene design](../specs/2026-11-23-sample-scene-design.md).
+The slim scene layer of [its design](../specs/2026-11-23-scene-layer-design.md) is in place. `prismarine_scene` has
+glTF scene nodes under `GltfModel`, the screen copy, the build hook for shader bundles and the backend of the engine.
+The runner of `prismarine_render` calls `onGpuSubmit` for the GPU pass log. mcsm and gpu_smoke use no flutter_scene.
