@@ -49,7 +49,7 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 | Tool | Purpose |
 |---|---|
 | Allocation lint | Finds code on the frame path that allocates memory |
-| Code checks | Runs the analyzer, the formatters and checks of file size and comments against a baseline |
+| Code checks | Runs the analyzer, the formatters and file size checks and comments against a baseline |
 | Heap and allocation profiler | Compares heap snapshots and shows the places that allocate |
 | GPU smoke tool | Checks the Flutter GPU features of the engine on a machine |
 | Engine release scripts | Build, package and fetch the patched engine for each platform |
@@ -57,8 +57,11 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 ## Licence
 
 prismarine is licensed under the [BSD-3 licence](LICENSE).
+<br>
+Built with stochastic parrots and human.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/logo/flutter/built_with_flutter_white.svg">
   <img alt="Built with Flutter" src="docs/logo/flutter/built_with_flutter.svg" height="40">
 </picture>
+
