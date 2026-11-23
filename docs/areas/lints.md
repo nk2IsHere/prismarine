@@ -25,6 +25,15 @@ lists the agent words and pointer patterns of the history rule and the rule sets
 `exe-address` counts addresses of shipped binaries in comments and strings. The rule set `name-words` counts words that
 identifiers and paths must not contain.
 
+## Use from another repository
+
+A repository that runs the lints from a pinned checkout depends on `prismarine_lint` through git with the path
+`tools/lint`, at the same commit as its other prismarine packages. It keeps its own `tools/lint/config.yaml` and
+baselines. Run a lint from the root of that repository with its package config, as in
+`dart --packages=.dart_tool/package_config.json <checkout>/tools/lint/code_shape.dart`. The `rootUri` of
+`prismarine_lint` in the package config gives the checkout. A small launcher in the repository can find it and set
+`PRISMARINE_LINT_CONFIG`.
+
 ## Private patterns
 
 `privacy_check` reads `config/privacy-patterns.txt` and `secrets/*.env` of the private repo. The repo is the

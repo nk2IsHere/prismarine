@@ -52,6 +52,7 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 | Code checks | Runs the analyzer, the formatters and file size checks and comments against a baseline |
 | Heap and allocation profiler | Compares heap snapshots and shows the places that allocate |
 | GPU smoke tool | Checks the Flutter GPU features of the engine on a machine |
+| Machine locks | Share one machine between the heavy jobs and the timed runs of every repository on it |
 | Engine release scripts | Build, package and fetch the patched engine for each platform |
 
 ## Licence
