@@ -2,9 +2,19 @@
 # reports their hits as pending and fails on them only with --strict. A line
 # goes once its step has merged, and the list ends empty.
 #
-# gpu_smoke has the names of the engine exports and releases. The first engine
-# release of prismarine renames them.
-tools/gpu_smoke/
+# These files of gpu_smoke call the engine exports and the shader output
+# mcsm_viewport_index, which have the mcsm forms. The first engine release of
+# prismarine renames them.
+tools/gpu_smoke/lib/release_7.dart
+tools/gpu_smoke/lib/release_7_instancing.dart
+tools/gpu_smoke/lib/release_7_replays.dart
+tools/gpu_smoke/lib/release_7_targets.dart
+tools/gpu_smoke/lib/release_9.dart
+tools/gpu_smoke/lib/release_9_more.dart
+tools/gpu_smoke/lib/release_9_texel.dart
+tools/gpu_smoke/lib/release_10.dart
+tools/gpu_smoke/lib/release_11.dart
+tools/gpu_smoke/shaders/smoke_tiles.vert
 # prismarine_render calls flutter_gpu's McsmSampler and mcsmRelease. The first
 # engine release of prismarine renames them.
 packages/prismarine_render/
