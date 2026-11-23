@@ -1,18 +1,17 @@
 part of 'frame_runner.dart';
 
-/// The key light's cascades in pulled form (the own-renderer design, R0d):
-/// the builder's cascade rows, culled per cascade on the GPU by the cook's
-/// cascade culling stage (pulled_program.dart pulledCascadeCullShader),
-/// which takes the exe's caster test and the builder's reach.
+/// The key light's shadow cascades in pulled form: the builder's cascade
+/// rows, culled per cascade on the GPU by the cascade culling stage of the
+/// cooked programs, which tests each caster as the builder does.
 
-/// The culling stage's shader id in the cooked tree.
+/// The cascade culling stage's shader id in the cooked programs.
 const _pulledCascadeCull = 'PulledCull/cull_cascades.comp';
 
-/// The cascades a row may draw into: CS_CullShadowCasters tests four.
+/// The cascades a row may draw into: the cull tests four.
 const _cascadeCount = 4;
 
 /// Row [i]'s [bounds] into the instance at byte [at] of [f]'s instances
-/// (its sphere the mesh's, as the exe's caster test takes it) and its mesh
+/// (its sphere the mesh's, as the caster test takes it) and its mesh
 /// box into [f]'s boxes, 8 floats an instance.
 void _cascadeRow(
   _PulledFrame f,

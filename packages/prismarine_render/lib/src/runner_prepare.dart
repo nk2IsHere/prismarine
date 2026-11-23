@@ -5,10 +5,10 @@ part of 'frame_runner.dart';
 
 extension RunnerPrepare on FrameRunner {
   /// Makes ready what [draws] need before a frame records them: their
-  /// shaders' shards, pipelines, meshes and slice textures (the builder's
-  /// potential draws, FrameBuilder.potentialDraws), so the frame that
-  /// first records one (a cut) does not stall on them. A draw the slice
-  /// can't feed is left to the frame, which names the problem.
+  /// shaders' libraries, pipelines, meshes and textures (a builder's
+  /// potential draws), so the frame that first records one (a cut) does
+  /// not stall on them. A draw that the assets cannot feed is left to the
+  /// frame, which names the problem.
   Future<void> prepare(List<DrawPlan> draws) async {
     if (draws.isEmpty) {
       lastPrepareMs = lastPrepareLoadMs = lastPreparePipelineMs = 0;
@@ -46,8 +46,8 @@ extension RunnerPrepare on FrameRunner {
     return bundled(d.vertex) && bundled(d.pixel ?? _depthOnly(d));
   }
 
-  /// Makes [d]'s pipeline, mesh and slice textures ready (its shards
-  /// loaded); the texture time ([sw]'s microseconds), whether the slice
+  /// Makes [d]'s pipeline, mesh and textures ready (its shader libraries
+  /// loaded); the texture time ([sw]'s microseconds), whether the assets
   /// could feed it, and its setup when made.
   (int, bool, _DrawSetup?) _prepareOne(DrawPlan d, Stopwatch sw) {
     if (!_bundled(d)) return (0, true, null);
@@ -95,9 +95,10 @@ extension RunnerPrepare on FrameRunner {
   /// [prepare] of the first of [draws] until [budgetMs] has passed (at
   /// least one): a scene added in the background is made ready a little
   /// each frame. Returns how many it took.
-  /// [tag]: the scene the game has not opened yet that [draws] are for
-  /// (RenderAssets.tag), whose loads alone can be forgotten; [owner]: the open
-  /// scene they are for (RenderAssets.warmFor), whose loads they are too.
+  /// [tag]: the scene that is not open yet that [draws] are for
+  /// (RenderAssets.tag), whose loads alone can be forgotten; [owner]: the
+  /// open scene they are for (RenderAssets.warmFor), whose loads they are
+  /// too.
   Future<int> prepareSome(
     List<DrawPlan> draws,
     double budgetMs, {
@@ -121,8 +122,7 @@ extension RunnerPrepare on FrameRunner {
       try {
         final (_, _, setup) = _prepareOne(d, sw);
         // Its first-frame work after the warm-up's (warmSome), newest
-        // first: the scene listed last is the one coming (the menu's own
-        // draws wait behind a new game's first scene).
+        // first: the scene listed last is the one coming.
         if (_Warm.on) _warm.queue.addFirst((d, setup, tag ?? owner));
       } finally {
         assets

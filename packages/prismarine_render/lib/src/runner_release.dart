@@ -1,7 +1,7 @@
 part of 'frame_runner.dart';
 
 /// What a closed scene alone held on the GPU, let go once the scenes open
-/// after it have had their frames and warm-ups (RenderHost's release).
+/// after it have had their frames and warm-ups.
 extension RunnerRelease on FrameRunner {
   /// A scene closed: what is asked for from now on is the open scenes';
   /// the epoch to give [release].
@@ -108,7 +108,7 @@ extension RunnerRelease on FrameRunner {
   }
 }
 
-/// The pipelines made for a scene the game has not opened yet (while
+/// The pipelines made for a scene that is not open yet (while
 /// RenderAssets.tag names it) and used by nothing else since: given back with
 /// the scene's prediction (RunnerRelease.forgetCooked), as its textures
 /// and meshes are.

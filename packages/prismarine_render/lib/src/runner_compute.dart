@@ -1,7 +1,7 @@
 part of 'frame_runner.dart';
 
-/// The runner's compute passes: a translated compute shader bound as the
-/// exe binds its own, dispatched directly or from GPU-written arguments.
+/// The runner's compute passes: a compute shader bound as Direct3D 11 binds
+/// it, dispatched directly or from GPU-written arguments.
 extension _RunnerCompute on FrameRunner {
   /// Records [c] into [into] when given (a pass the dispatches before it
   /// opened, nothing recorded since), else into a new compute pass; returns
@@ -157,7 +157,9 @@ extension _RunnerCompute on FrameRunner {
       }
     } on Exception catch (e) {
       // Reported once per shader; the frame goes on without its output.
-      if (_failed.add(c.shader)) warn?.call('S2 dispatch ${c.shader}: $e');
+      if (_failed.add(c.shader)) {
+        warn?.call('renderer: dispatch ${c.shader}: $e');
+      }
     }
     _sinceBarrier.add(access);
     return pass;

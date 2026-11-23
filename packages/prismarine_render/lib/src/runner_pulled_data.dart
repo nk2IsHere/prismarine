@@ -2,10 +2,9 @@
 // and texture arrays, read on first use or ahead of it.
 part of 'frame_runner.dart';
 
-/// Our renderer's cooked data for the passes it draws in pulled form
-/// (the own-renderer design in docs/superpowers/specs, R0): the cooked
-/// cache of a slice (`<slice>/cooked`: `shaders/`, and per scene its pools,
-/// texture arrays and `cooked.json`), loaded on first use.
+/// The cooked data for the passes drawn in pulled form: a cooked directory
+/// with the programs in `shaders/` and per scene its pools, texture arrays
+/// and `cooked.json`, loaded on first use.
 class Pulled {
   Pulled(this.root, this.shaders, this.layout);
 
@@ -49,7 +48,7 @@ class Pulled {
     return (out, names);
   }();
 
-  /// The scene shown (RenderHost, a scene file's name): a new draw takes a
+  /// The scene shown, a scene file's name: a new draw takes a
   /// mesh cooked into it from its cooked scene before any other.
   String? shown;
 
@@ -57,10 +56,8 @@ class Pulled {
   /// Mesh [stem]'s cooked scene for a draw of [scene] (null: the scene
   /// [shown]): that scene's own when the mesh is cooked into it, else one
   /// already read, else the first listed. Each cooked scene holds every
-  /// pool its draws read, so the first listed (the slice's directory
-  /// order) had Beacon Town's draws read the pools of seven other scenes,
-  /// all held while it was open (331 MB of pools at the end of Ep205's
-  /// playtest route, docs/areas/perf.md "Memory over an episode").
+  /// pool its draws read. The first listed one in directory order would
+  /// make a scene's draws read and hold the pools of other scenes.
   String? _sceneFor(String stem, String? scene) {
     final at = _cooked.$1[stem];
     if (at == null) return null;
@@ -143,10 +140,8 @@ class Pulled {
   /// Lets go at once of the cooked scenes a release loosened whose buckets
   /// drew in no run since [before]: still alive, they are held only by
   /// draws no frame draws (a closed scene's, waiting for a collection),
-  /// and their pools stayed on the GPU until an old-space collection
-  /// (five of the seven cooked scenes counted at the end of Ep205's route,
-  /// docs/areas/perf.md "Memory over an episode"). A draw that names one
-  /// again makes its form again. Their names.
+  /// and their pools would stay on the GPU until an old-space collection.
+  /// A draw that names one again makes its form again. Their names.
   List<String> letGo(int before) {
     final out = <String>[];
     for (final (name, s) in _scenes.looseEntries) {
@@ -280,7 +275,7 @@ class _CookedSceneGpu {
     _pools.clear();
   }
 
-  /// Loads the arrays as slice textures (`textures/<stem>.ktx2`).
+  /// Loads the arrays as textures of the cooked scene's directory.
   final RenderAssets textures;
   final _pools = <int, _PoolGpu>{};
 

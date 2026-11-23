@@ -2,12 +2,12 @@ import 'dart:typed_data';
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
 
-/// The S2 frame's constant-buffer data: a bump allocator over host-visible
+/// A frame's constant-buffer data: a bump allocator over host-visible
 /// blocks, four frames in turn (two frames on the GPU, one recording, one
 /// spare). It stands in for flutter_gpu's HostBuffer, which writes past a
 /// block's end when an emplacement doesn't fit its remainder (it checks the
-/// start, not the end) and grows a frame's block list on every overflow;
-/// S2's frames emplace 12 KB light blocks thousands of times.
+/// start, not the end) and grows a frame's block list on every overflow.
+/// A frame may emplace 12 KB blocks thousands of times.
 ///
 /// An emplacement copies into a CPU copy of its block, and [flush] writes
 /// each block's used bytes to the GPU once, before the frame is submitted:
@@ -83,7 +83,7 @@ class UniformRing {
       final n = _used[b];
       if (n == 0) continue;
       if (!list[b].overwrite(ByteData.sublistView(_staging[b], 0, n))) {
-        throw StateError('S2 uniform write of $n bytes failed');
+        throw StateError('uniform ring: writing $n bytes failed');
       }
     }
   }
@@ -98,9 +98,8 @@ class UniformRing {
 /// start over at the next run's start ([begin]: [epoch] moves on, and a
 /// view of an older epoch is placed again on its next use): blocks no
 /// frame binds any more are dropped with them, their arenas let go at
-/// once. Left to the collector, the dropped arenas had lived until an
-/// old-space mark-sweep (268 MB of them by the end of Ep205's playtest
-/// route, docs/areas/perf.md "Memory over an episode").
+/// once. Left to the collector, the dropped arenas would live until an
+/// old-space mark-sweep.
 class BlockStore {
   static const _arenaBytes = 4 << 20;
   static const _limit = 48 << 20;
@@ -177,7 +176,9 @@ class BlockStore {
         ByteData.sublistView(_staging[k]!, from, to),
         destinationOffsetInBytes: from,
       );
-      if (!ok) throw StateError('S2 block store write of ${to - from} bytes');
+      if (!ok) {
+        throw StateError('block store: writing ${to - from} bytes failed');
+      }
       _from[k] = _to[k] = 0;
       // A full arena takes no more: its CPU copy goes.
       if (k < _arenas.length - 1) _staging[k] = null;

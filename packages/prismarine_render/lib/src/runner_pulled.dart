@@ -129,8 +129,8 @@ class _PulledPrepared {
   final gpu.DeviceBuffer clusters;
 }
 
-/// Where InstanceRow.flags carries a skinned instance's output stride (in
-/// words) and its normal count (pulled_program.dart skinStrideShift).
+/// The bits of InstanceRow.flags that carry a skinned instance's output
+/// stride in words and its normal count, as the cooked programs read them.
 const _skinStrideShift = 8, _skinNormalsShift = 16;
 
 /// The culling stage's shader id in the cooked tree.
@@ -377,7 +377,7 @@ extension _RunnerPulled on FrameRunner {
         ..setFloat32(at + 12, 1, Endian.little);
     }
     // A skinned batch's output: its first word, its stride in words and
-    // its normal count (12 bytes and 4 a normal; pulled_program.dart), and
+    // its normal count (12 bytes and 4 a normal), and
     // no sphere test (its bind-pose sphere doesn't hold the pose; the
     // builder culled it).
     final skin = g.streams.isEmpty
@@ -496,8 +496,8 @@ extension _RunnerPulled on FrameRunner {
       ..cameraSource = null;
 
     // The rows' part as last frame made it while the reader's rows are the
-    // same draws (the own-renderer design, R0c): only the objects' bytes
-    // are read again (a moving agent's BufferObject is its role's).
+    // same draws: only the objects' bytes are read again (a moving
+    // object's block is its role's).
     final kept = f.kept;
     if (rows != null && kept != null && identical(kept.plans, rows.plans)) {
       kept.restore(
@@ -538,7 +538,7 @@ extension _RunnerPulled on FrameRunner {
     if (buckets.isEmpty || (camera == null && bounds == null)) return null;
     if (FrameRunner.trace) {
       warn?.call(
-        's2 pulled: $instanceCount draws in ${buckets.length} buckets, '
+        'renderer: pulled: $instanceCount draws in ${buckets.length} buckets, '
         '${rest.length} left to their records $why',
       );
     }
@@ -765,7 +765,7 @@ extension _RunnerPulled on FrameRunner {
           vs,
           fs,
           // A pulled vertex has no inputs: its place in its cluster is
-          // gl_VertexIndex (pulled_program.dart).
+          // gl_VertexIndex.
           vertexLayout: const gpu.VertexLayout(buffers: []),
         );
     return (
@@ -811,7 +811,7 @@ extension _RunnerPulled on FrameRunner {
     );
     for (var k = 0; k < names.length; k++) {
       final name = names[k];
-      // `Raw<Name>` (pulled_program.dart), as the shader index lists them.
+      // `Raw<Name>`, as the cooked programs declare them.
       final n = _storageKeys[name] ??= name.toLowerCase().replaceFirst(
         'raw',
         '',

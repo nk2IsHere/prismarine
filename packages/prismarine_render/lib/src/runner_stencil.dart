@@ -1,15 +1,14 @@
 part of 'frame_runner.dart';
 
-/// Stencil reads. The exe reads a depth target's stencil through a uint
-/// view (the depth reduction reads the G-buffer's: drawn pixels count,
-/// key-lit ones mark the range the cascades fit; formats/s2/frame.md "How
-/// the post passes bind"), which the engine can't make (the spec's engine
-/// gaps). So before a dispatch reads one, the runner copies the stencil into
-/// an R8G8_UINT texture, the value in .y as Direct3D's view of D32S8 has
-/// it (a uint read gives the same values as from Direct3D's 32-bit view, at
-/// a quarter of the bytes a full-window copy writes): one full-screen draw per value the stencil can hold, each testing for
-/// its value and writing it. Which values it can hold follows from the
-/// passes since the stencil's clear (StencilValues).
+/// Stencil reads. A plan may read a depth target's stencil through a uint
+/// view, such as a depth reduction that counts drawn pixels. The engine
+/// cannot make that view. Before a dispatch reads one, the runner therefore
+/// copies the stencil into an R8G8_UINT texture, the value in .y as
+/// Direct3D's view of D32S8 has it. A uint read gives the same values as
+/// Direct3D's 32-bit view, at a quarter of the bytes that a full-window copy
+/// writes. The copy is one full-screen draw per value the stencil can hold,
+/// each testing for its value and writing it. The values it can hold follow
+/// from the passes since the stencil's clear (StencilValues).
 extension _RunnerStencil on FrameRunner {
   /// The stencil writes of a render pass with depth attachment [d] go here;
   /// a stencil clear starts them over.

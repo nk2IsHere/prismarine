@@ -93,7 +93,7 @@ class _PulledStats {
     if (_us.length < 120) return;
     _us.sort();
     warn?.call(
-      's2 pulled stats: prepare p50 ${_us[60] / 1000} ms p90 '
+      'renderer: pulled stats: prepare p50 ${_us[60] / 1000} ms p90 '
       '${_us[108] / 1000} ms max ${_us.last / 1000} ms; $made forms made',
     );
     _us.clear();
@@ -144,7 +144,7 @@ extension _RunnerPulledAdd on FrameRunner {
       // loud, for the cook to take it.
       if (bounds != null && i < rowCount) {
         if (_failedDraws.add('${d.label}: cascade row not pulled: $r')) {
-          warn?.call('s2 cascade row not pulled: ${d.label}: $r');
+          warn?.call('renderer: cascade row not pulled: ${d.label}: $r');
         }
         return;
       }

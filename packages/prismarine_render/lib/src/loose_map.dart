@@ -16,13 +16,13 @@ class LooseMap<K extends Object, V extends Object> {
   final _asked = <K, int>{};
   final _askedBy = <K, int>{};
 
-  /// Bumped at each scene close (RenderHost): entries asked for after it
-  /// carry the new value.
+  /// Bumped at each scene close: entries asked for after it carry the new
+  /// value.
   int epoch = 0;
 
-  /// The scenes asking now, one bit each (RenderHost: the open 3D scenes,
-  /// and the predicted one while its draws are made ready); every ask adds
-  /// them to the entry's.
+  /// The scenes asking now, one bit each, such as the open 3D scenes and a
+  /// scene whose draws are made ready ahead. Every ask adds them to the
+  /// entry's.
   int owners = 0;
 
   /// [k]'s value if held, or loosened and still alive (held again).

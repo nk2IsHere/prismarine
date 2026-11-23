@@ -2,7 +2,7 @@ part of 'frame_runner.dart';
 
 /// sRGB views of 8-bit RGBA targets: a pass that draws or samples a target
 /// through an sRGB view uses a view of the same texture in the sRGB format
-/// (the mcsm10 engine's `Texture.makeView(format:)`), so the bytes are one
+/// (the engine fork's `Texture.makeView(format:)`), so the bytes are one
 /// texture's whichever way they are read or written.
 extension _RunnerSrgb on FrameRunner {
   bool _srgbCapable(String target) {

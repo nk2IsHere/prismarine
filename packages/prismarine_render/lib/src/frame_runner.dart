@@ -37,10 +37,10 @@ part 'runner_stencil.dart';
 part 'runner_stores.dart';
 part 'runner_warm.dart';
 
-/// Runs an [FramePlan] on the GPU: creates its targets, then each pass in
-/// order with the translated shaders bound as the exe binds its own
-/// (constant buffers by block, textures and samplers apart, texel buffers),
-/// on one command buffer.
+/// Runs a [FramePlan] on the GPU: creates its targets, then records each
+/// pass in order on one command buffer, with each shader's constant
+/// buffers bound by block and its textures, samplers and texel buffers
+/// apart, as Direct3D 11 binds them.
 class FrameRunner {
   FrameRunner(this.assets, this.shaders) {
     assets.onOwners = _pipelinesOwned;
@@ -90,22 +90,22 @@ class FrameRunner {
 
   /// An inline geometry's register map as its pipeline key names it, per
   /// map object (the post draws share a few).
-  final _registersKey = Expando<String>('S2 inline registers');
+  final _registersKey = Expando<String>('inline registers');
   final _constants = <String, gpu.Texture>{};
   final _views = <String, gpu.Texture>{};
 
   /// Each sRGB-viewed target's view, with the texture it was made of
   /// (runner_srgb.dart).
   final _srgbViews = <String, (gpu.Texture, gpu.Texture)>{};
-  final _slots = Expando<_SlotMaps>('S2 shader slots');
-  final _fileTextures = Expando<gpu.Texture>('S2 file textures');
+  final _slots = Expando<_SlotMaps>('shader slots');
+  final _fileTextures = Expando<gpu.Texture>('file textures');
   final _packed = Expando<Map<Object, (gpu.VertexLayout, Uint8List)>>(
-    'S2 packed inline vertices',
+    'packed inline vertices',
   );
   final _samplers = <String, gpu.McsmSampler>{};
-  final _samplerObjects = Expando<gpu.McsmSampler>('S2 samplers by state');
+  final _samplerObjects = Expando<gpu.McsmSampler>('samplers by state');
   final _constantObjects = Expando<Map<String, gpu.Texture>>(
-    'S2 constant textures by texel object',
+    'constant textures by texel object',
   );
 
   /// Each depth target's stencil copy, what its stencil can hold, and the
@@ -126,7 +126,7 @@ class FrameRunner {
   /// The constant textures standing in for an unreadable or missing input,
   /// by kind and shader type.
   final _standIns = <String, gpu.Texture>{};
-  final _shaderSlots = Expando<_ShaderSlots>('S2 shader slots by interface');
+  final _shaderSlots = Expando<_ShaderSlots>('shader slots by interface');
 
   /// Bumped whenever a texture a draw's input resolves to may change (a
   /// target made again, a twin or stencil copy made): the stages' resolved
@@ -497,7 +497,7 @@ class FrameRunner {
           _uses?.pass(r.name, record.elapsedMicroseconds - at);
         case final DispatchPlan c:
           final at = record.elapsedMicroseconds;
-          if (trace) warn?.call('s2 dispatch ${c.name} ${c.shader}');
+          if (trace) warn?.call('renderer: dispatch ${c.name} ${c.shader}');
           final copies = _copies;
           _stencilCompute(cb, c, host);
           if (_copies != copies) compute = null;
@@ -567,8 +567,8 @@ class FrameRunner {
       lastPrepareFailedMs = 0,
       lastPrepareTextureMs = 0;
 
-  /// The last [prepare]'s draws left to their frame (a draw the slice
-  /// can't feed).
+  /// The last [prepare]'s draws left to their frame (a draw that the
+  /// assets cannot feed).
   int lastPrepareErrors = 0;
 
   gpu.Texture _presentCopy(gpu.Texture t) {
@@ -635,15 +635,16 @@ class FrameRunner {
       final draw = draws[i];
       if (!pulledPass) stencil?.write(draw);
       if (trace) {
-        warn?.call('s2 draw ${draw.label} ${draw.vertex} ${draw.pixel}');
+        warn?.call('renderer: draw ${draw.label} ${draw.vertex} ${draw.pixel}');
       }
       try {
         _draw(pass, draw, host, state);
       } on StateError catch (e) {
-        // A draw the slice can't feed (a missing shader input or resource)
-        // drops out, named once, and the rest of the frame still draws.
+        // A draw that the assets cannot feed, for a missing shader input
+        // or resource, drops out, named once, and the rest of the frame
+        // still draws.
         if (_failedDraws.add('${draw.label}: ${e.message}')) {
-          warn?.call('s2 draw skipped: ${draw.label}: ${e.message}');
+          warn?.call('renderer: draw skipped: ${draw.label}: ${e.message}');
         }
       }
     }
@@ -653,7 +654,7 @@ class FrameRunner {
   final _passState = _PassState();
 
   /// The pixel stage of depth-only draw [d]: the depth-clamp one when its
-  /// vertex stage asks for it and the slice has it, else the empty one.
+  /// vertex stage asks for it and the assets have it, else the empty one.
   String _depthOnly(DrawPlan d) =>
       (assets.shaderRecord(d.vertex)?.depthClamp ?? false) &&
           assets.hasShader(shaders.depthClampPixel)
@@ -819,7 +820,7 @@ class FrameRunner {
     final last = bound.of(info);
     final blocks = c.blocks.length, textures = c.textures.length;
     for (var i = 0; i < blocks; i++) {
-      // The declared rows only: the exe's buffers may be longer.
+      // The declared rows only: a plan's blocks may be longer.
       final view = _stageUniform(host, c, i);
       if (identical(last[i], view)) continue;
       pass.bindUniform(
@@ -935,7 +936,7 @@ class FrameRunner {
 
   /// The run in which a draw's inline bytes were first bound
   /// (runner_resources.dart _drawBytes).
-  final _firstRun = Expando<int>('S2 inline bytes first run');
+  final _firstRun = Expando<int>('inline bytes first run');
 
   /// Each dispatch input's per-frame buffers (_frameInline), and the runs
   /// recorded so far (which run bound one last).

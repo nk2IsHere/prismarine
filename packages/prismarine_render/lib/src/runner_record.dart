@@ -10,7 +10,7 @@ final class _DrawFixed {
       // D3D's front faces wind clockwise unless FrontCounterClockwise; the
       // engine's winding names the opposite sense (Impeller's NDC has y up
       // where D3D's window y runs down), so D3D clockwise is the engine's
-      // counter-clockwise (checked against the exe's G-buffer pass).
+      // counter-clockwise.
       winding = d.state.frontCounterClockwise
           ? gpu.WindingOrder.clockwise
           : gpu.WindingOrder.counterClockwise,
@@ -49,7 +49,7 @@ final class _DrawFixed {
 
   /// The mesh geometry's index view: its batch's indices, or the whole
   /// buffer for an indirect draw, whose arguments' first index counts from
-  /// the buffer's start, as the exe binds the whole index buffer.
+  /// the buffer's start, as Direct3D binds the whole index buffer.
   final gpu.BufferView? indexView;
 
   /// The views of [g]'s streams in the plan buffers of each of the

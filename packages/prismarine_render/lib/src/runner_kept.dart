@@ -1,7 +1,7 @@
 part of 'frame_runner.dart';
 
-/// A pulled pass's rows' part as one frame made it (the own-renderer design,
-/// R0c: the runner keeps its tables while the rows hold): the instance,
+/// A pulled pass's rows' part as one frame made it (the runner keeps its
+/// tables while the rows hold): the instance,
 /// box and material bytes, each object row's block as bound, the buckets
 /// with their clusters, the rows left to records and why, and the camera
 /// block. Taken again when the reader's rows change, into the same

@@ -41,8 +41,8 @@ extension _RunnerPasses on FrameRunner {
     return made;
   }
 
-  /// The exe keeps its depth target bound through passes that never test
-  /// it (post passes read it as a texture meanwhile); Metal's tiles make a
+  /// A plan may keep its depth target bound through passes that do not
+  /// test it while post passes read it as a texture. Metal's tiles make a
   /// texture read while it is also an attachment undefined, so such a
   /// pass gets no depth attachment. A pass that clears its depth keeps it:
   /// a shadow map's face with no casters is only that clear.

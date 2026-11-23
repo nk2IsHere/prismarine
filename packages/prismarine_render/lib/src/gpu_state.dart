@@ -1,11 +1,9 @@
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:prismarine_frame/prismarine_frame.dart';
 
-/// The engine format for a DXGI-style format name as the exe's targets and
-/// views name them (RenderDoc's spelling: `R11G11B10_FLOAT`,
-/// `D32_SFLOAT_S8_UINT`, `BC1_SRGB`, …), or for a slice texture's
-/// `rawFormat` (`dxt1`, `rgba8`, …; formats/s2/shaders.md "Surface formats
-/// to DXGI").
+/// The engine format for a format name of the DXGI kind, in RenderDoc's
+/// spelling (`R11G11B10_FLOAT`, `D32_SFLOAT_S8_UINT`, `BC1_SRGB`, …), or for
+/// a texture file's raw format (`dxt1`, `rgba8`, …).
 gpu.PixelFormat pixelFormat(String name, {bool srgb = false}) {
   final n = name.toUpperCase();
   return switch (n) {
@@ -35,14 +33,13 @@ gpu.PixelFormat pixelFormat(String name, {bool srgb = false}) {
     'D32_SFLOAT_S8_UINT' ||
     'D32S8' ||
     'D32_FLOAT_S8X24_UINT' => .d32FloatS8UInt,
-    // Apple GPUs have no 24-bit depth; the exe's D24S8 is only its back
-    // buffer's depth, which no pass reads.
+    // Apple GPUs have no 24-bit depth. A D24S8 target gets 32-bit depth.
     'D24_UNORM_S8_UINT' || 'D24S8' => .d32FloatS8UInt,
     'BC1_UNORM' || 'DXT1' => srgb ? .bc1RGBAUNormIntSRGB : .bc1RGBAUNormInt,
     'BC1_SRGB' || 'BC1_UNORM_SRGB' => .bc1RGBAUNormIntSRGB,
     'BC3_UNORM' || 'DXT5' => srgb ? .bc3RGBAUNormIntSRGB : .bc3RGBAUNormInt,
     'BC3_SRGB' || 'BC3_UNORM_SRGB' => .bc3RGBAUNormIntSRGB,
-    _ => throw UnsupportedError('S2 format $name'),
+    _ => throw UnsupportedError('no engine format for $name'),
   };
 }
 
@@ -194,5 +191,5 @@ gpu.VertexFormat streamFormat(String format) => switch (format) {
   'R8G8B8A8_UINT' => gpu.VertexFormat.uint8x4,
   'R16G16_SNORM' => gpu.VertexFormat.snorm16x2,
   'R16G16B16A16_SNORM' => gpu.VertexFormat.snorm16x4,
-  _ => throw UnsupportedError('S2 stream format $format'),
+  _ => throw UnsupportedError('no vertex format for $format'),
 };

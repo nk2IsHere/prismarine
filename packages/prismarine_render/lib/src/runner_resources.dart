@@ -38,7 +38,7 @@ extension RunnerResources on FrameRunner {
         'R32G32B32_FLOAT' => (3, false),
         'R32G32B32A32_FLOAT' => (4, false),
         'R8G8B8A8_UNORM' => (4, true),
-        _ => throw UnsupportedError('S2 vertex format $f'),
+        _ => throw UnsupportedError('no vertex format for $f'),
       };
       final n = width(a.type);
       for (var v = 0; v < vertices; v++) {
@@ -75,8 +75,9 @@ extension RunnerResources on FrameRunner {
   }
 
   /// Fills the plan's targets that take texels from the CPU
-  /// (TargetSpec.initial: an Enlighten system's solve) from this frame's
-  /// bytes, layer by layer, through [host], before the frame's passes; a
+  /// (TargetSpec.initial, such as a lightmap solved on the CPU) from this
+  /// frame's bytes, layer by layer, through [host], before the frame's
+  /// passes; a
   /// target whose bytes are the object it took last (the codec gives an
   /// unchanged role's bytes again) into the same texture is left as it is.
   void _uploadTargets(gpu.CommandBuffer cb, FramePlan plan, UniformRing host) {
@@ -174,12 +175,14 @@ extension RunnerResources on FrameRunner {
     }
   }
 
-  /// A slice texture; one the slice lacks reads zeros, as an unbound
+  /// A texture file; one that the assets lack reads zeros, as an unbound
   /// Direct3D 11 view does, and is named once, so the frame still draws.
   gpu.Texture _file(FileTexture f, String type) {
     if (assets.hasTexture(f.stem)) return assets.texture(f.stem, srgb: f.srgb);
     if (_failedDraws.add('texture ${f.stem}')) {
-      warn?.call('renderer: no texture ${f.stem} in the slice; it reads zeros');
+      warn?.call(
+        'renderer: no texture ${f.stem} in the assets; it reads zeros',
+      );
     }
     return _constant(
       type.startsWith('u') ? 'R32G32B32A32_UINT' : 'R8G8B8A8_UNORM',
@@ -193,11 +196,9 @@ extension RunnerResources on FrameRunner {
     // (the frame builder keeps a draw's textures), so the lookup by name
     // runs once per object.
     final FileTexture f => _fileTextures[f] ??= _file(f, type),
-    // The exe reads its depth target's stencil through a uint view, which
-    // the engine can't make: the runner's copy of it (runner_stencil.dart),
-    // or, from a slice without the copy's shaders, a stand-in that reads 0
-    // in .y, where the depth reduction reads the stencil, so it finds no
-    // drawn pixel and the cascades fit an empty range (a known difference).
+    // A depth target's stencil through a uint view, which the engine cannot
+    // make: the runner's copy of it (runner_stencil.dart), or, from assets
+    // without the copy's shaders, a stand-in that reads 0 in .y.
     final TargetTexture t
         when type.startsWith('u') &&
             isDepth(pixelFormat(_specs[t.target]!.format)) =>
@@ -278,7 +279,7 @@ extension RunnerResources on FrameRunner {
     }();
   }
 
-  /// A [w] × [h] 2D texture of [texels] (a particle file's property map),
+  /// A [w] × [h] 2D texture of [texels] (a property map made from data),
   /// one per texel object (the plans keep each map's object).
   gpu.Texture _image(String format, Uint8List texels, int w, int h) {
     final t = gpu.gpuContext.createTexture(
@@ -364,7 +365,7 @@ extension RunnerResources on FrameRunner {
   /// makes anew each frame (a skinning palette) reuses its buffers instead
   /// of making one a frame. Three, as for the plan's buffers: two frames on
   /// the GPU at most and one recording. A name that comes twice in a frame
-  /// (an agent's casters share their cull's name) keeps the buffer to its
+  /// (an object's casters share their cull's name) keeps the buffer to its
   /// first: an overwrite would change what the first dispatch reads.
   gpu.BufferView _frameInline(String dispatch, String input, Uint8List bytes) {
     if (_inlineBuffers[bytes] != null) return _inline(bytes);
