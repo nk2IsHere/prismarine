@@ -66,7 +66,7 @@ base class DeviceBuffer extends NativeFieldWrapperClass1 {
   /// mcsm G17: lets go of the native buffer now, not when a collection
   /// finalizes this object: a buffer's GPU memory has no external size, so
   /// the VM's old space never felt it, and buffers the owner had dropped
-  /// waited for the next mark-sweep (hundreds of MB over an episode). The
+  /// waited for the next mark-sweep (hundreds of MB over a long run). The
   /// frames already submitted keep what they bound (Metal's command
   /// buffers retain their resources, Vulkan's track them). This object
   /// and every view of it must not be used again. Without McsmDetach (an

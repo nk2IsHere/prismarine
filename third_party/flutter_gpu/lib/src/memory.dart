@@ -1,5 +1,5 @@
 // mcsm G4: live GPU memory allocated through Flutter GPU, by kind, for the
-// player's memory profile. Not part of Flutter GPU.
+// memory profile of an app. Not part of Flutter GPU.
 
 part of flutter_gpu;
 

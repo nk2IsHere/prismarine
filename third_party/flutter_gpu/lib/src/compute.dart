@@ -2,12 +2,12 @@
 
 part of flutter_gpu;
 
-// mcsm G9: S2's additions on the mcsm9 engine (Metal and Vulkan): storage
+// mcsm G9: the additions of the mcsm9 engine (Metal and Vulkan): storage
 // buffers in render passes, compute pipelines and compute passes with
 // storage buffers and images (third_party/flutter_engine patch 0019 and
 // on).
 
-/// Whether the running engine and backend have S2's additions: layered
+/// Whether the running engine and backend have the additions of G9: layered
 /// textures, the added formats and 2x MSAA, storage buffers and compute.
 bool get mcsmEngineSupportsS2 =>
     _mcsmEngineS2 && (_mcsmFeaturesNative() & 2048) != 0;
@@ -15,7 +15,7 @@ bool get mcsmEngineSupportsS2 =>
 @Native<Int64 Function()>(symbol: 'InternalFlutterGpu_McsmFeatures')
 external int _mcsmFeaturesNative();
 
-/// Whether the running engine has mcsm10's additions for our renderer:
+/// Whether the running engine has the additions of mcsm10 for pulled passes:
 /// vertex stages without inputs, storage and unsigned texel buffers in pixel
 /// stages on Metal, more bindings per draw, leaf indirect draws and sRGB
 /// texture views ([Texture.makeView]'s `format`).

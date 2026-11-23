@@ -168,8 +168,7 @@ enum PixelFormat {
   /// HDR samples are linear floating point, so there is no sRGB variant.
   astc8x8HDR,
 
-  // mcsm G9: Minecraft: Story Mode S2's formats (Metal and Vulkan, engine
-  // feature 2048).
+  // mcsm G9: the formats of feature 2048 (Metal and Vulkan).
 
   /// Packed unsigned float red 11, green 11, blue 10 bits (the HDR scene
   /// colour).
@@ -203,7 +202,7 @@ enum PixelFormat {
   r32g32Float,
 
   // mcsm G9: the other formats Metal and Vulkan share (DXGI's, as a D3D11
-  // game binds them): integer, signed-normalized, 10-bit and shared-exponent
+  // app binds them): integer, signed-normalized, 10-bit and shared-exponent
   // formats, and the remaining BC formats (BC2, BC4, BC5 signed, BC6H).
   r8UInt,
   r8SNormInt,

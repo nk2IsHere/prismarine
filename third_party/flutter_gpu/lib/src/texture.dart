@@ -66,7 +66,7 @@ base class Texture extends NativeFieldWrapperClass1 {
     }
     if (mcsm9 && !_mcsmEngineS2) {
       throw Exception(
-        'Layered textures, the S2 pixel formats and 2x MSAA need the mcsm9 '
+        'Layered textures, the added pixel formats and 2x MSAA need the mcsm9 '
         'engine',
       );
     }

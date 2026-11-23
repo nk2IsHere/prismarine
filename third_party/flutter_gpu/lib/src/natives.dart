@@ -49,8 +49,8 @@ final bool _mcsmDrawInstanced = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_RenderPass_McsmDrawInstanced',
 );
 
-// mcsm G9: whether the engine has S2's additions (third_party/flutter_engine
-// mcsm9: layered textures, the added formats, storage buffers and compute).
+// mcsm G9: whether the engine has the additions of release mcsm9: layered
+// textures, the added formats, storage buffers and compute.
 final bool _mcsmEngineS2 = DynamicLibrary.process().providesSymbol(
   'InternalFlutterGpu_ComputePass_McsmDispatch',
 );
@@ -114,7 +114,7 @@ int mcsmHeap(int which) => _mcsmEngine12 ? _mcsmHeap(which) : -1;
 /// FFI passes a wrapper as its native field). Read once per object
 /// ([_mcsmSelf]): a wrapper passed to a native call becomes a new Pointer
 /// object each call when the generated call isn't inlined, which the
-/// player's AOT build doesn't: ~27,000 a frame in S2's heavy shots.
+/// AOT build of an app doesn't: ~27,000 a frame in a heavy scene.
 Pointer<Void> _mcsmPointerOf(NativeFieldWrapperClass1 o) =>
     _mcsmMemmove(o, o, 0);
 
