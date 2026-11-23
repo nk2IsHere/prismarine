@@ -56,6 +56,7 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 | [Heap and allocation profiler](tools/profiler/README.md) | Compares heap snapshots and shows the places that allocate |
 | [GPU smoke tool](tools/gpu_smoke/README.md) | Checks the Flutter GPU features of the engine on a machine |
 | [Machine locks](tools/machine/README.md) | Share one machine between the heavy jobs and the timed runs of every repository on it |
+| [Toolchain](tools/toolchain/README.md) | Sets the Flutter SDK, the pub cache and the engine directory of the machine in a shell |
 | [Engine release scripts](third_party/flutter_engine/README.md) | Build, package and fetch the patched engine for each platform |
 
 ## Workspace setup
