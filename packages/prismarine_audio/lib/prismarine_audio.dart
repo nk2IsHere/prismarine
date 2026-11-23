@@ -1,4 +1,4 @@
-/// Decoded audio: the PCM source interface, a source in memory and a WAV
+/// Decoded audio with the PCM source interface, a source in memory and a WAV
 /// writer.
 library;
 

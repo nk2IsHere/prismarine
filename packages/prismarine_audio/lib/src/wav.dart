@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-/// Streams 48 kHz stereo float32 frames into a WAV file (IEEE float); the
-/// sizes are patched on [close].
+/// Streams 48 kHz stereo float32 frames into a WAV file. [close] writes the
+/// sizes into the header.
 class WavWriter {
   WavWriter(String path, {this.rate = 48000})
     : _f = File(path).openSync(mode: FileMode.write) {
