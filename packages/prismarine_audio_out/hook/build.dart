@@ -9,14 +9,7 @@ import 'package:prismarine_cargo/prismarine_cargo.dart';
 /// its crate and `library` with the crate's library name. The hook then
 /// builds that crate in place of native/. Its C functions and those of
 /// native/ are in one library and share one decoded-audio cache.
-///
-/// ```yaml
-/// hooks:
-///   user_defines:
-///     prismarine_audio_out:
-///       crate: native/mixer
-///       library: mixer
-/// ```
+/// docs/areas/audio_out.md has an example.
 void main(List<String> args) async {
   await build(args, (input, output) async {
     final crate = input.userDefines.path('crate');
