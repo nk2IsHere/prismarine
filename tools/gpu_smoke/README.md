@@ -5,7 +5,7 @@ through the base `FullscreenVertex` and `CopyFragment` shaders of flutter_scene 
 and reads a pixel back. It times 2,000 draws with and without a texture bind per draw, prints `SMOKE` lines and exits
 with 0 when the pixel matched.
 
-The app uses `third_party/flutter_gpu`. On the patched engine it runs the slot binds and leaf draws, and on the prebuilt
+The app uses `third_party/flutter_gpu`. On the patched engine it runs the slot binds and leaf draws and on the prebuilt
 engine of Flutter it runs the stock calls. The runners turn Flutter GPU on, with `FLTEnableFlutterGPU` on macOS,
 `fl_dart_project_set_enable_flutter_gpu` and Impeller on Linux and `set_enable_flutter_gpu` on Windows.
 

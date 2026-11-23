@@ -2,9 +2,9 @@
 
 This is the Dart package of Flutter GPU, `engine/src/flutter/lib/gpu/lib` with its `pubspec.yaml`, at the engine
 revision `deb287481e` of the patched engine. It is BSD licensed, © The Flutter Authors, see `LICENSE`. An app uses it
-through `dependency_overrides`, and every package of the app then resolves to it. Its `@Native` functions resolve by
+through `dependency_overrides` and every package of the app then resolves to it. Its `@Native` functions resolve by
 symbol through the process, since Flutter GPU sets no native resolver. The copy therefore binds to the exports of the
-running engine, and on the prebuilt engine of Flutter every patched call takes the stock path.
+running engine and on the prebuilt engine of Flutter every patched call takes the stock path.
 
 `diff -ru <Flutter SDK>/bin/cache/pkg/flutter_gpu/lib third_party/flutter_gpu/lib` shows every change. Each patch is
 marked `mcsm G<n>` in the code. The engine patches are in [the engine README](../flutter_engine/README.md).
@@ -26,7 +26,7 @@ and every call below takes the stock path.
 ## G3: leaf calls
 
 - `drawIndexed` and `draw` first try the leaf call `_drawCached`, which draws when the pass already has the pipeline.
-  It returns 2 and does nothing otherwise, and the stock draw runs, which may wait for a Metal pipeline compile. A leaf
+  It returns 2 and does nothing otherwise and the stock draw runs, which may wait for a Metal pipeline compile. A leaf
   call does not block, so the safepoints of other isolates do not wait on it.
 - `_bindVertexBufferDevice`, `_bindIndexBufferDevice` and `_clearBindings` are leaf calls on every engine.
 
@@ -57,7 +57,7 @@ before the native call. This applies on the patched engine only, with the indexe
 ## G7: draws from a first instance
 
 - `draw` and `drawIndexed` of `render_pass.dart` take `firstInstance`, 0 by default. Every instance-rate vertex buffer
-  starts at that instance, and the instance index of the shader still counts from 0. Engine patch 0012
+  starts at that instance and the instance index of the shader still counts from 0. Engine patch 0012
   (`InternalFlutterGpu_RenderPass_McsmDrawInstanced`) makes it one leaf call. On other engines, or before the pass has
   built the pipeline, the instance-rate slots are bound again at the offset for that draw and then restored.
 - A `RenderPipeline` of `render_pipeline.dart` keeps the `VertexLayout` it was made with.
@@ -130,7 +130,7 @@ holds the list and throws otherwise.
   0028. `mcsmGcIdleSupported` and `mcsmGcIdle(budgetMicros, minNewBytes, maxNewBytes)` run the collections of the Dart
   VM at the idle point of the caller. On other engines they return 0 and do nothing.
 - At `submit` a command buffer of `command_buffer.dart` detaches its render and compute passes and itself from their
-  native objects with `_mcsmDetach`. The native objects are released there, and no weak handle is left for a
+  native objects with `_mcsmDetach`. The native objects are released there and no weak handle is left for a
   collection to finalize. The Dart objects go into the free lists of the context. `createCommandBuffer`,
   `createRenderPass` and `createComputePass` take one from there and initialize it again with `_mcsmAgain` and
   `_mcsmSetup`. `_mcsmSelf` is read again and is not final. A pass made again counts its clear number on, so the
@@ -142,10 +142,10 @@ holds the list and throws otherwise.
 - `natives.dart` has `_mcsmEngine12`, true when the process exports `InternalFlutterGpu_McsmOldSpace` of engine patch
   0029 with the Dart patch `dart/0003`. `mcsmOldSpace(request)` with 1 starts an old-space mark now and with 2 runs a
   young collection and a mark-compact with the page cache of the VM emptied. `mcsmHeap(which)` returns the old space
-  used, its capacity and its external size, and the new space used and its capacity, in bytes. On other engines they
-  return 0 and -1, and `mcsmOldSpaceSupported` is false.
+  used, its capacity and its external size and the new space used and its capacity, in bytes. On other engines they
+  return 0 and -1 and `mcsmOldSpaceSupported` is false.
 - The old space of the VM does not shrink without compaction. The incremental compactor moves at most a quarter of new
-  space per mark, from pages that are at most half full, and a release engine has no call that compacts or reads the
+  space per mark, from pages that are at most half full and a release engine has no call that compacts or reads the
   heap.
 
 ## G17: a device buffer released when its owner drops it
@@ -153,7 +153,7 @@ holds the list and throws otherwise.
 - `DeviceBuffer.mcsmRelease()` of `buffer.dart` detaches the wrapper from its native buffer at once with the export of
   G15, so the GPU memory goes now and not when a collection finalizes the object. `memory.dart` takes it off the tally
   of G4. The finalizer is attached with the object as its detach key. Without the export it does nothing.
-- The GPU memory of a buffer carries no external size. The VM does not see it, and dropped buffers waited for the next
+- The GPU memory of a buffer carries no external size. The VM does not see it and dropped buffers waited for the next
   old-space mark-sweep.
 - Frames already submitted keep what they bound. Metal command buffers retain their resources and Vulkan ones track
   them. The object and its views must not be used again.

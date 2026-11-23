@@ -22,7 +22,7 @@ the `--local-engine` flags of a release build.
 ## The engine directory
 
 A machine has one engine directory, `PRISMARINE_ENGINE_DIR`, for every repository that builds on the engine. `fetch.sh`
-unpacks each target into `<dir>/<target>`, and `build.sh` keeps its sources and out dirs in `<dir>/flutter`. The
+unpacks each target into `<dir>/<target>` and `build.sh` keeps its sources and out dirs in `<dir>/flutter`. The
 engine is data and is not in git. A repository that pins prismarine reads `RELEASE` and runs the scripts from its
 pinned checkout.
 

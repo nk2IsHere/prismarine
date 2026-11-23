@@ -1,14 +1,14 @@
 # The patched Flutter engine
 
 The patches here make Flutter GPU cheaper and wider. On the stock engine a draw costs about 0.9 µs of CPU before the
-code of the app runs, and the patches bring that to about 0.12 µs on a Mac. They load precompiled Metal shaders, cache
+code of the app runs and the patches bring that to about 0.12 µs on a Mac. They load precompiled Metal shaders, cache
 the compiled programs of ANGLE on Windows and let a render pass mix target formats. Release builds take the size of the
 Dart new generation as a flag. Windows and Linux run Impeller on Vulkan, see [Vulkan on Windows and
 Linux](#vulkan-on-windows-and-linux). Flutter GPU gains formats, texture arrays, 3D textures, compute, texel buffers and
-texture views. The passes of a frame are released at submit, and the Dart VM collects at an idle point that the app
+texture views. The passes of a frame are released at submit and the Dart VM collects at an idle point that the app
 picks.
 
-The patched engine is optional. Every app builds and runs on the stock engine of Flutter too, only slower, and the
+The patched engine is optional. Every app builds and runs on the stock engine of Flutter too, only slower and the
 frames are byte-identical on both. The patches apply to the engine of Flutter 3.47.7 stable, engine revision
 `deb287481e3ce9468f3434937ced4240a70539ca`. The patches are files in this directory. A downloaded or built engine is
 data in the engine directory, which is not in git.
@@ -59,15 +59,15 @@ the `dart-sdk` of the engine to the one of the Flutter SDK, which has the same D
 ## Building the engine
 
 Each build checks out Flutter at the engine revision and applies `patches/*.patch`. It fetches the dependencies of the
-engine with `gclient` of Chromium's depot_tools, which the scripts install, and builds only the release targets that the
+engine with `gclient` of Chromium's depot_tools, which the scripts install and builds only the release targets that the
 Flutter tool reads. Plan on several GB of disk and about an hour per machine. The Flutter SDK that builds the app must
 be 3.47.7.
 
 ### macOS, arm64 and x86_64
 
 You need Xcode 27 with its command-line tools and the Metal Toolchain, `xcodebuild -downloadComponent
-MetalToolchain`, about 0.8 GB. Xcode 27 ships without `metal`, and the shaders of the engine need it. The sources take
-13 GB in `<engine dir>/flutter`, a shared clone of the Flutter SDK, and each out dir takes 2.6 to 4.6 GB.
+MetalToolchain`, about 0.8 GB. Xcode 27 ships without `metal` and the shaders of the engine need it. The sources take
+13 GB in `<engine dir>/flutter`, a shared clone of the Flutter SDK and each out dir takes 2.6 to 4.6 GB.
 
     third_party/flutter_engine/build.sh all                            # arm64, out/host_release_arm64
     PRISMARINE_ENGINE_CPU=x64 third_party/flutter_engine/build.sh build  # Intel, out/host_release
@@ -87,7 +87,7 @@ MetalToolchain`, about 0.8 GB. Xcode 27 ships without `metal`, and the shaders o
 
 ### Linux, x64 native and arm64 cross-built
 
-You need an x86_64 Linux machine, with Ubuntu 24.04 and 26.04 tested, and `git`, `python3`, `curl`, `xz-utils` and
+You need an x86_64 Linux machine, with Ubuntu 24.04 and 26.04 tested and `git`, `python3`, `curl`, `xz-utils` and
 `pkg-config`. `gclient` brings the compiler and the Debian sysroots for both CPUs. The sources take about 11 GB, each
 release out dir about 1 GB and the optional test build 5.4 GB. The builds take about 10 minutes for x64 and 13 for
 arm64 on 16 cores after the download.
@@ -125,7 +125,7 @@ powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\windows.ps1 
 ```
 
 `windows.ps1` builds `out\host_release` for x64 and `out\host_release_arm64` for arm64, cross-built. `-Cpu
-x64|arm64|both` picks the CPUs, and the logs go to `<EngineDir>\logs`. A build takes about 25 minutes for x64 and 35 for
+x64|arm64|both` picks the CPUs and the logs go to `<EngineDir>\logs`. A build takes about 25 minutes for x64 and 35 for
 arm64 on 10 to 12 cores after a download of about 30 minutes. The arm64 engine is for arm64 Windows machines, since its
 `gen_snapshot.exe` is an arm64 program. The Flutter tool builds a Windows app only for the CPU of the machine.
 
@@ -158,15 +158,15 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
   fallback when no device works. `MCSM_RENDERER=gles` forces ANGLE.
 - Linux with GTK uses its own instance and device through `libvulkan.so.1`. Each frame reaches the GL context of GTK
   without a copy through the CPU, through `VK_KHR_external_memory_fd` and `GL_EXT_memory_object_fd` with semaphores, or
-  else through a read-back. `MCSM_RENDERER=gles` or `FLUTTER_LINUX_RENDERER=opengl` forces GL, and `software` gives the
+  else through a read-back. `MCSM_RENDERER=gles` or `FLUTTER_LINUX_RENDERER=opengl` forces GL and `software` gives the
   software renderer of Flutter.
 - The engine logs its choice once, as `renderer: Vulkan <device> (api …, driver …, multiViewport, vertex viewport
   index)` or `renderer: ANGLE/GLES (…)`.
 - Impeller keeps its Vulkan pipeline cache in `%LOCALAPPDATA%\<exe>\flutter_vk_cache` or
   `~/.cache/<exe>/flutter_vk_cache`. `FLUTTER_VK_CACHE_DIR=<dir>` moves it and `0` turns it off.
 - The feature bits of `InternalFlutterGpu_McsmFeatures` are those of the running backend, with bit 1024 set. Vulkan has
-  1, 2, 4, 8, 64 and 512, and 256 for viewport arrays where the device has `multiViewport` and a viewport index in the
-  vertex stage. GLES has 1, 2, 4, 8, 64, 128 and 512, and Metal 1, 2, 4, 8, 16, 64, 256 and 512.
+  1, 2, 4, 8, 64 and 512 and 256 for viewport arrays where the device has `multiViewport` and a viewport index in the
+  vertex stage. GLES has 1, 2, 4, 8, 64, 128 and 512 and Metal 1, 2, 4, 8, 16, 64, 256 and 512.
 - On ANGLE, with WARP and the UHD 620, a Flutter GPU texture read back from the UI thread right after its command buffer
   completes can come back empty. The stock engine does the same and the screen is not affected. gpu_smoke reads again
   once before it counts a read as wrong.
@@ -176,11 +176,11 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
 1. Set `RELEASE` to the new tag, of the form `engine-<engine revision, 12 characters>-<release name>`.
 2. Package each target on the machine that built it, with `package.sh <engine/src> <out dir> <target> <dest> [<host out
    dir>]` on macOS and Linux and `package.ps1 -Src … -Out … -Target … -Dest … [-HostOut …]` on Windows. Each makes the
-   archive and its `.sha256`, and records `PRISMARINE_ENGINE_REV`.
+   archive and its `.sha256` and records `PRISMARINE_ENGINE_REV`.
 3. Check each archive the way users get it. Run `fetch.sh` with `PRISMARINE_ENGINE_ARCHIVE=<file>`, or `fetch.ps1
    -Archive <file>`, into a scratch engine directory, then build an app or gpu_smoke on it.
 4. Run `gh release create <tag> -R "$PRISMARINE_ENGINE_REPO" --title … --notes-file … mcsm-engine-* SHA256SUMS`. An
-   asset must be under 2 GiB, and these are about 20 MB.
+   asset must be under 2 GiB and these are about 20 MB.
 
 ## Patches
 
@@ -196,13 +196,13 @@ first release with the patch.
   - A pass caches the Impeller pipeline per RenderPipeline and pipeline state. A version counter, bumped by the nine
     exports that set state, makes the common case one compare. Each draw copied, hashed and looked up a full pipeline
     descriptor before.
-  - On Metal, bindings go by metadata pointer, and only the bindings and vertex buffers that the encoder does not hold
+  - On Metal, bindings go by metadata pointer and only the bindings and vertex buffers that the encoder does not hold
     from the same entry are sent. A check of the last writer per index keeps the old semantics when two entries share
     an index. GLES and Vulkan keep the old path.
 - `0003-gpu-slot-binds-cached-draw.patch` changes `lib/gpu/{shader,render_pass}.{h,cc}`.
   `Shader_ResolveUniformStruct` and `Shader_ResolveUniformTexture` give a uniform name a small index, resolved again on
   a shader reload. `RenderPass_BindUniformIndexed` and `RenderPass_BindTextureIndexed` bind by that index without a
-  Dart string. `RenderPass_DrawCached` draws only when the pass already has the pipeline, and never blocks. Dart can
+  Dart string. `RenderPass_DrawCached` draws only when the pass already has the pipeline and never blocks. Dart can
   call all of these as leaf calls. The old exports are unchanged.
 - `0004-metal-precompiled-shader-libraries.patch` adds `BackendShader.compiled` to the shader bundle schema. Flutter GPU
   registers that `.metallib` with `newLibraryWithData` and compiles the source only when there is none or it does not
@@ -232,7 +232,7 @@ first release with the patch.
     pipelines it used lately by RenderPipeline, cull, winding, primitive and polygon mode while the rest of the state
     holds. The state version moves only when a setter changes something. A shader reloaded with new code drops its
     pipelines.
-  - Bindings are in arrays in bind order, and samplers come from a small cache per pass. A replayed draw sends only the
+  - Bindings are in arrays in bind order and samplers come from a small cache per pass. A replayed draw sends only the
     bindings and vertex buffers that differ from the draw replayed before it.
   - `Texture_McsmWriteDirect`, bit 16, writes the base level of a host-visible texture straight into its memory with
     the `replaceRegion` of Metal. The caller keeps the GPU off the texture meanwhile.
@@ -259,13 +259,13 @@ first release with the patch.
   the Impeller Vulkan surface renders nothing itself. It gets a pipeline cache directory on the desktop.
 - `0014-linux-vulkan.patch` (mcsm8) adds `McsmVulkanDevice` and `FlCompositorVulkan` to the Linux embedder with the
   renderer choice and its log line. The device has the features of Impeller, `multiViewport` and the vertex viewport
-  index where present, and one mutex for the queue. Frames reach GDK through three exportable RGBA8 images and
+  index where present and one mutex for the queue. Frames reach GDK through three exportable RGBA8 images and
   semaphores imported by fd, or through a read-back for several layers or without the GL extensions.
 - `0015-windows-vulkan.patch` (mcsm8) runs Impeller on Vulkan in `FlutterWindowsEngine` unless `MCSM_RENDERER=gles`
   is set or Impeller is off. `CompositorVulkan` presents through `McsmVulkanSwapchain`, a BGRA8 swapchain per view on
   its HWND with one frame in flight.
 - `0016-gpu-vulkan-features-viewport-arrays.patch` (mcsm8) reports feature bits per backend, bit 1024 and
-  `InternalFlutterGpu_McsmBackend`. On Vulkan creating a pass ends the previous pass of the command buffer, and viewport
+  `InternalFlutterGpu_McsmBackend`. On Vulkan creating a pass ends the previous pass of the command buffer and viewport
   arrays work with 16 viewports and scissors. A vertex shader writes `gl_ViewportIndex` under `#ifdef
   IMPELLER_TARGET_VULKAN` with `GL_ARB_shader_viewport_layer_array`.
 - `0017-impeller-vulkan-memory-render-pass-cache.patch` (mcsm8) fixes Vulkan correctness.
@@ -276,23 +276,23 @@ first release with the patch.
     stencil and colour attachments past the first start in their tracked layout. An attachment loaded before any write
     is moved to an attachment layout first.
   - A new colour texture is cleared to zero and leaves UNDEFINED at once, on a command buffer submitted right away.
-    Flutter GPU may sample a texture that nothing wrote yet, and the tracked layout of Impeller then disagreed with the
+    Flutter GPU may sample a texture that nothing wrote yet and the tracked layout of Impeller then disagreed with the
     image.
 - `0018-vulkan-cheaper-draws-submits.patch` (mcsm8) cuts the CPU cost of Vulkan. Bindings go to the pass without a
   `ShaderMetadata` copy each. A submit or a texture overwrite disposes the pools of the thread at most every 16 ms.
   Signalled fences are reset and reused. A pass skips pipeline, descriptor set, vertex and index buffer binds that it
-  already holds. Graphics pipelines take uniform buffers as dynamic descriptors, up to 8, and a pass keeps every set it
+  already holds. Graphics pipelines take uniform buffers as dynamic descriptors, up to 8 and a pass keeps every set it
   wrote by its writes. On an RTX 4060 Ti a bare draw went from 0.74 to 0.16 µs and a submit from 435 to 9 µs.
 - `0019-impeller-text-shadow-cache-by-content.patch` (mcsm9) makes `Canvas::AttemptBlurredTextOptimization` key a
   blurred text by the content of the text frame, its stroke and its transform without the whole-pixel translation.
-  Upstream keyed it by the heap address of the `TextFrame` and the scale of the transform, and a frame then depended on
+  Upstream keyed it by the heap address of the `TextFrame` and the scale of the transform and a frame then depended on
   the allocator and the frames before it.
 - `0020-impellerc-uniform-blocks-storage-targets.patch` (mcsm9) changes `impeller/compiler` and
   `impeller/shader_bundle/shader_bundle.fbs`.
   - Metal and Vulkan shaders limit each uniform block to 64 KB, the constant buffer size of Direct3D 11. Upstream
     limited all blocks of a shader together to 6,208 bytes, a GLES budget that GLES keeps.
-  - Bundles record storage buffers and storage images with name, Metal index, set, binding and read-only, and the
-    workgroup size of a compute shader. The new fields are at the end of `BackendShader`, and older bundles keep their
+  - Bundles record storage buffers and storage images with name, Metal index, set, binding and read-only and the
+    workgroup size of a compute shader. The new fields are at the end of `BackendShader` and older bundles keep their
     bytes.
   - A bundle entry may give its backends, as in `"targets": ["metal_desktop", "vulkan"]`. A vertex stage that writes
     `gl_Layer` needs `--metal-version=2.2` or later.
@@ -304,12 +304,12 @@ first release with the patch.
     folds of spirv-opt are not IEEE-exact.
 - `0021-impeller-s2-formats-layered-textures-compute.patch` (mcsm9) adds to Impeller on Metal and Vulkan. GLES refuses
   these features.
-  - Every uncompressed format that Metal and Vulkan share, D16 and D32 float, BC2, BC4, BC5 signed and BC6H, and 2x
+  - Every uncompressed format that Metal and Vulkan share, D16 and D32 float, BC2, BC4, BC5 signed and BC6H and 2x
     MSAA.
   - 2D arrays, 3D textures and cube arrays, uploaded per layer or depth slice. Texture views of a mip range and a layer
     range with `Context::McsmMakeTextureView`. Depth-only render targets and sampled depth, also multisampled.
-  - The attachment slice `kMcsmAllLayers` attaches every layer, and the vertex stage picks the layer of each primitive.
-    Indirect draws and dispatches with `McsmSetIndirect`, and storage images in compute passes.
+  - The attachment slice `kMcsmAllLayers` attaches every layer and the vertex stage picks the layer of each primitive.
+    Indirect draws and dispatches with `McsmSetIndirect` and storage images in compute passes.
   - Samplers with a comparison function, clamp-to-border, mirror-clamp-to-edge, LOD clamps and a LOD bias on Vulkan.
     Textures and samplers bind apart with `McsmBindSeparateTexture` and `McsmBindSeparateSampler`.
   - Texel buffers with `McsmBindTexelBuffer`, as texture-buffer views on Metal and texel buffer views on Vulkan.
@@ -329,36 +329,36 @@ first release with the patch.
 - `0024-impeller-unused-bindings-srgb-views-vulkan-bindings.patch` (mcsm10) changes `impeller/core` and
   `impeller/renderer/backend`.
   - The Metal binding caches take a bind at index 0xFFFFFFFF as a no-op. A resource that a stage declares and does not
-    read has that index, and binding it crashed the AGX driver.
+    read has that index and binding it crashed the AGX driver.
   - A texture view may take the sRGB twin format of its texture, for 8-bit RGBA or BGRA, on Metal and Vulkan. On
     Vulkan 8-bit colour render targets are created mutable-format.
-  - A Vulkan pipeline takes 128 bindings, and descriptor pools 256 storage buffers.
+  - A Vulkan pipeline takes 128 bindings and descriptor pools 256 storage buffers.
 - `0025-gpu-leaf-indirect-binding-resend-srgb-views.patch` (mcsm10) changes `lib/gpu`. A vertex stage without inputs
   loads. Storage buffers, texel buffers and separate textures and samplers go to the Metal encoder only when they
   changed or another binding took their index. `RenderPass_McsmDrawIndirectCached` is a leaf call that returns 2 when
   the pass has no pipeline yet. `Texture_McsmInitializeViewFormat` makes a view in the sRGB twin of the parent. Feature
   bit 4096 on Metal and Vulkan.
 - `0026-impellerc-gpu-unused-resources.patch` (mcsm10) marks a resource that its stage does not read as `mcsm_unused`
-  in the bundle. The field is written only when true, and other bundles keep their bytes. Flutter GPU leaves such a
+  in the bundle. The field is written only when true and other bundles keep their bytes. Flutter GPU leaves such a
   resource out of the descriptor layout of the pipeline and binds it as a no-op on every backend. On Vulkan its binding
   took the place of the first resource of the other stage before.
 - `0027-profile-heap-sample-traces-flag.patch` changes `shell/common/switches.cc` and
-  `FlutterVSyncWaiter.mm`. Profile builds accept `--heap_sample_traces`, and profile and release builds
+  `FlutterVSyncWaiter.mm`. Profile builds accept `--heap_sample_traces` and profile and release builds
   `--scavenge_census`, as Dart flags. macOS profile builds compile on the macOS 27 SDK. Release builds are unchanged.
 - `dart/0001-vm-heap-sample-traces.patch` changes `runtime/vm/object.cc` of the Dart SDK.
   `--heap_sample_traces=<bytes>` records about one allocation per that many bytes as a profiler allocation trace with
-  its Dart stack. With `--no-inline-alloc`, and AOT code compiled with it, every allocation passes the check, and
+  its Dart stack. With `--no-inline-alloc` and AOT code compiled with it, every allocation passes the check, and
   `getAllocationTraces` gives allocation by call site weighted by bytes. `--scavenge_census=<n>` prints, every n young
   collections, the bytes that they copied and promoted per class. Both are compiled out of release builds. `build.sh
-  patch` applies it, and `linux.sh` and `windows.ps1` do not.
+  patch` applies it and `linux.sh` and `windows.ps1` do not.
 - `0028-gpu-detach-gc-idle.patch` (mcsm11) changes `lib/gpu/context`. `InternalFlutterGpu_McsmDetach(wrapper)` detaches
-  a Flutter GPU wrapper from its native object at once, and the wrapper can be initialized again.
+  a Flutter GPU wrapper from its native object at once and the wrapper can be initialized again.
   `InternalFlutterGpu_McsmGcIdle(budget µs, min bytes, max bytes)` calls `Dart_McsmIdle`. Feature bit 8192 on every
   backend.
 - `dart/0002-vm-mcsm-idle.patch` (mcsm11) adds `Dart_McsmIdle(deadline, min_new_bytes, max_new_bytes)` to the Dart SDK,
   an idle point for the embedder in place of `Dart_NotifyIdle`. A young collection runs when new space holds the
   minimum and the estimate of the VM ends by the deadline, or when new space holds the maximum. A finished mark is
-  finalized, and a mark starts only at the soft threshold. No idle compaction runs, and the page cache is kept. While
+  finalized and a mark starts only at the soft threshold. No idle compaction runs and the page cache is kept. While
   such calls arrive, one in the last 100 ms, a finished mark waits for the next call. A VM whose embedder does not call
   it behaves as before.
 - `0029-gpu-old-space-heap-figures.patch` adds `InternalFlutterGpu_McsmOldSpace(request)` and
@@ -368,7 +368,7 @@ first release with the patch.
   its capacity, in bytes. No release has this patch yet.
 - `dart/0003-vm-mcsm-old-space.patch` adds `Dart_McsmOldSpace(request, figures)` to the Dart SDK. The VM does not
   compact on its own while the incremental compactor is on. That compactor moves at most a quarter of new space per
-  mark, only from pages at most half full, and the old space keeps the pages that its fragmentation holds. No release
+  mark, only from pages at most half full and the old space keeps the pages that its fragmentation holds. No release
   has this patch yet.
 
 ## Checks of the current release

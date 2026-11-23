@@ -6,7 +6,7 @@
 #          Fuchsia and runs gclient sync. This takes about 13 GB and 20 to 40
 #          minutes of downloads.
 #   patch  applies patches/*.patch on a fresh branch mcsm-engine at the
-#          revision, and patches/dart/*.patch to the Dart SDK at its DEPS
+#          revision and patches/dart/*.patch to the Dart SDK at its DEPS
 #          revision, uncommitted. The engine stamps its Dart SDK hash from the
 #          HEAD of that checkout, which must stay the revision that the kernel
 #          files of the Flutter tool carry.
@@ -19,7 +19,7 @@
 #   all    runs the three in order.
 # The Flutter SDK is PRISMARINE_FLUTTER, by default the flutter on PATH. The
 # build needs the Metal Toolchain, `xcodebuild -downloadComponent MetalToolchain`.
-# Every PRISMARINE_ setting is also read in its MCSM_ form, and the engine
+# Every PRISMARINE_ setting is also read in its MCSM_ form and the engine
 # directory defaults to $MCSM_DATA/engine or else data/engine of this checkout.
 set -e
 here=${0:A:h}
