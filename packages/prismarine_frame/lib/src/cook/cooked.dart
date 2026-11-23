@@ -113,14 +113,14 @@ class CookedBatch {
   /// The primitive's material index in its mesh's glTF.
   final int material;
 
-  /// The shipped batch's first index in its mesh's index buffer
-  /// (T3MeshBatch mStartIndex, the primitive's extras), by which a draw of
-  /// the shipped streams finds its batch; -1 when the extras lack it.
+  /// The first index of the batch in the index buffer of its source mesh.
+  /// A draw of the source streams finds its batch by this index. It is -1
+  /// when the source does not give it.
   final int startIndex;
 
-  /// The batch's bounding sphere in mesh space (centre xyz, radius; T3MeshBatch
-  /// mBoundingSphere), which the GPU's culling tests; a negative radius:
-  /// unknown, never culled.
+  /// The bounding sphere of the batch in mesh space as centre x, y, z and
+  /// radius. The culling on the GPU tests the batch against it. A negative
+  /// radius marks an unknown sphere. Such a batch is not culled.
   final List<double> sphere;
 
   List<Object?> toJson() => [

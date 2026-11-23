@@ -13,4 +13,5 @@ workspace:
   - packages/prismarine_audio
   - packages/prismarine_audio_out
   - packages/prismarine_shaders
+  - packages/prismarine_assets
   - tools/lint
