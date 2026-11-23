@@ -125,8 +125,9 @@ void main() {
   });
 
   test('a target filled from the CPU crosses with its role and bytes', () {
-    // An Enlighten map: its spec names a role, each frame gives the bytes.
-    final role = FrameRole('enlightenMap0');
+    // A lightmap from the CPU: its spec names a role, each frame gives the
+    // bytes.
+    final role = FrameRole('lightmap0');
     const spec = TargetSpec(2, 1, 'R8G8B8A8_UNORM', layers: 2);
     final w = PlanWriter(), r = PlanReader();
     for (var frame = 0; frame < 3; frame++) {

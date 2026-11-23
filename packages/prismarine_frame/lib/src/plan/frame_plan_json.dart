@@ -3,9 +3,8 @@ import 'dart:typed_data';
 import 'frame_plan.dart';
 
 /// [FramePlan] as JSON, with byte payloads (constant buffers, texel
-/// buffers, constant texels) kept apart as blobs by name: a frame written
-/// for a check (ours, or one built from an oracle capture by
-/// the research tool replay_plan.py) reads back through [planFromJson].
+/// buffers, constant texels) kept apart as blobs by name: a plan written for
+/// a check, or made by another tool, reads back through [planFromJson].
 Map<String, Object?> _ref(BufferRef r) => {
   'buffer': r.buffer,
   'offset': r.offset,

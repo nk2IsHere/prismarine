@@ -1,7 +1,7 @@
 /// The cook's output for one scene, as the renderer loads it: what the
-/// cooked files under `<slice>/cooked/<scene>/` hold and where each mesh
-/// batch and texture went. Derived from the editable slice and never edited
-/// (the own-renderer design in docs/superpowers/specs, "Data").
+/// cooked files under `<content>/cooked/<scene>/` hold and where each mesh
+/// batch and texture went. Derived from the editable content and never
+/// edited.
 library;
 
 /// Bumped when the cooked files' meaning changes; a cache of another
@@ -9,7 +9,7 @@ library;
 const cookVersion = 5;
 
 /// Material textures of one (width, height, format, levels) group, as one
-/// KTX2 2D array: layer i is [layers][i]'s image, bytes as the slice has
+/// KTX2 2D array: layer i is [layers][i]'s image, bytes as the content has
 /// them.
 class CookedArray {
   CookedArray({
@@ -188,8 +188,8 @@ class CookedScene {
 
   final String scene;
 
-  /// Each input file (slice-relative path) and its content hash: the cache
-  /// is stale when any differs.
+  /// Each input file, relative to the content directory, and its content
+  /// hash: the cache is stale when any differs.
   final Map<String, String> inputs;
   final List<CookedArray> arrays;
   final List<CookedPool> pools;

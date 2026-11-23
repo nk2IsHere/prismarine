@@ -80,7 +80,7 @@ const tagRenderRows = 31;
 
 /// Memory outside the Dart heap that a writer puts frame roles' bytes in,
 /// read in place by the reader on another isolate of the process: a role's
-/// bytes are new most frames (palettes, moved agents' objects, the camera),
+/// bytes are new most frames (palettes, the rows of moved objects, the camera),
 /// and as message bytes each was copied by the send (perf: the build
 /// isolate's largest allocation). Only plans name a role's block, so it
 /// stays until both tables dropped it and the reader's side ran every plan
@@ -101,7 +101,7 @@ abstract interface class PlanBlockStore {
 const planKeep = 30;
 
 /// The same for a byte block, swept every message: a block no draw names
-/// any more (a moving agent's BufferObject of a frame before) is dropped
+/// any more (the object block of a moving object in a frame before) is dropped
 /// before a collection can promote its copies on both sides (perf: they
 /// were most of what each young collection promoted).
 const planKeepBlocks = 4;

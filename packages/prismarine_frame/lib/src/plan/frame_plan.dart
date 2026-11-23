@@ -1,12 +1,9 @@
 import 'dart:collection';
 import 'dart:typed_data';
 
-/// What S2's frame draws, pass by pass, as plain data: built on the CPU from
-/// the session's state the way Minecraft2.exe fills its constant buffers
-/// (or, for checks, from an oracle capture), and run on the GPU by
-/// mcsm_look_scene's S2 frame. Keeping the plan apart from the GPU lets the
-/// CPU side be compared with the exe's own buffers without a GPU
-/// (formats/s2/frame.md).
+/// A frame's work, pass by pass, as plain data. A builder makes it on the
+/// CPU and a frame runner records it on the GPU. A plan can be checked and
+/// compared without a GPU.
 class FramePlan {
   FramePlan(
     this.targets,
@@ -21,8 +18,8 @@ class FramePlan {
   final Map<String, TargetSpec> targets;
   final List<PassPlan> passes;
 
-  /// GPU buffers the frame's passes write and read (the cascade and culling
-  /// computes' outputs, indirect arguments, skinned vertices), by name.
+  /// GPU buffers the frame's passes write and read (the outputs of culling
+  /// computes, indirect arguments, skinned vertices), by name.
   final Map<String, BufferSpec> buffers;
 
   /// The bytes of each frame role the draws bind this frame, by the role's
@@ -32,10 +29,9 @@ class FramePlan {
   /// Passes whose work a runner may leave out, by pass name: a stamp of
   /// what the pass makes (0: none). A pass with the stamp it last ran
   /// with, on targets not made again since, would write what its targets
-  /// already hold: a local light's shadow while nothing it sees changes
-  /// (perf: the sea temple's ten lights' maps, blurs and mips were 3.2 of
-  /// a frame's 14.9 ms of GPU). The plan is whole either way; a runner
-  /// that has not run a stamp runs the pass.
+  /// already hold: a local light's shadow while nothing it sees changes.
+  /// The plan is whole either way; a runner that has not run a stamp runs
+  /// the pass.
   final Map<String, int> retained;
 
   /// Constant block [b] of a draw as this frame binds it: a role's bytes
@@ -46,10 +42,11 @@ class FramePlan {
 /// A constant block a draw names by its role in the frame (the camera's,
 /// the scene's, a light group's) rather than by its bytes, which change
 /// from frame to frame: a draw that binds only roles and blocks kept from
-/// frame to frame stays the same object while its agent holds still, and
-/// the plan codec sends it once. In a draw's resources a role stands as
-/// [block], an empty block of its own; the plan gives its bytes for the
-/// frame ([FramePlan.frameBlocks]). One role per name in an isolate.
+/// frame to frame stays the same object while the object it draws holds
+/// still, and the plan codec sends it once. In a draw's resources a role
+/// stands as [block], an empty block of its own; the plan gives its bytes
+/// for the frame ([FramePlan.frameBlocks]). One role per name in an
+/// isolate.
 final class FrameRole {
   factory FrameRole(String name) => _roles[name] ??= FrameRole._(name);
   FrameRole._(this.name) {
@@ -66,10 +63,10 @@ final _roles = <String, FrameRole>{};
 final _roleBlocks = HashMap<Uint8List, FrameRole>.identity();
 
 /// A GPU buffer of [size] bytes, filled with [initial] at the start of the
-/// frame when given (the exe uploads it from the CPU), else left as the
-/// last frame left it; with [readBack] the runner hands its bytes as the
-/// frame left them to its reader once the GPU is done (an Enlighten duster
-/// pass's visibility words).
+/// frame when given (uploaded from the CPU), else left as the last frame
+/// left it; with [readBack] the runner hands its bytes as the frame left
+/// them to its reader once the GPU is done (a compute pass's visibility
+/// words).
 class BufferSpec {
   const BufferSpec(this.size, {this.initial, this.readBack = false});
   final int size;
@@ -96,8 +93,9 @@ class BufferTextureRef extends TextureRef {
   final BufferRef ref;
 }
 
-/// A render target (or a compute pass's storage image): size, format (the exe's DXGI name without the
-/// `DXGI_FORMAT_` prefix, e.g. `R11G11B10_FLOAT`), layers, mips and samples.
+/// A render target (or a compute pass's storage image): size, format (a
+/// DXGI name without the `DXGI_FORMAT_` prefix, e.g. `R11G11B10_FLOAT`),
+/// layers, mips and samples.
 class TargetSpec {
   const TargetSpec(
     this.width,
@@ -116,8 +114,8 @@ class TargetSpec {
   /// Texels the runner uploads into mip 0 at the start of each frame, layer
   /// after layer, rows top first, without padding (a frame role's block:
   /// FramePlan.block gives this frame's bytes); null: the target keeps
-  /// what passes draw into it. An Enlighten system's output is one
-  /// (formats/s2/enlighten.md "The renderer's contract").
+  /// what passes draw into it. A lightmap that the CPU computes each frame
+  /// is one.
   final Uint8List? initial;
 
   /// A 3D texture of [layers] depth slices rather than an array.
@@ -145,8 +143,8 @@ class Attachment {
   final int mip, layer;
 
   /// Drawn through an sRGB view of an 8-bit RGBA target: written values are
-  /// encoded (and blended linear), as the exe's sRGB render-target views
-  /// do.
+  /// encoded (and blended linear), as sRGB render-target views do in
+  /// Direct3D 11.
   final bool srgb;
 
   /// A colour clear (RGBA), or null to load.
@@ -168,10 +166,10 @@ class RenderPassPlan extends PassPlan {
   final Attachment? depth;
   final List<DrawPlan> draws;
 
-  /// The pass's kept rows (the own-renderer design, R0c), drawn before
-  /// [draws]: draws neither culled nor ordered on the CPU, which the codec
-  /// sends only when they change and the runner draws in pulled form,
-  /// culled on the GPU. Null for a pass of [draws] only.
+  /// The pass's kept rows, drawn before [draws]: draws neither culled nor
+  /// ordered on the CPU, which the codec sends only when they change and
+  /// the runner draws in pulled form, culled on the GPU. Null for a pass of
+  /// [draws] only.
   RowSet? rows;
 
   /// What a frame runner keeps with this pass (its attachments as the
@@ -213,8 +211,8 @@ class RowSet {
   /// row: the key light's casters, their mesh's bounding sphere and box).
   final Float32List? bounds;
 
-  /// The pass's culling values this frame (the cascades' light rotation
-  /// rows, the view's rectangle, the cascade rows).
+  /// The pass's culling values this frame (a shadow cascade's light
+  /// rotation rows, the view's rectangle, the cascade rows).
   final Float32List? params;
 
   /// [plans] then [draws] ([RenderPassPlan.allDraws]): a view over both,
@@ -285,8 +283,8 @@ sealed class TextureRef {
   const TextureRef();
 }
 
-/// A slice texture by stem (`textures/<stem>.json` and `.bin`), as sRGB
-/// when the exe's view is.
+/// A texture file by stem (`textures/<stem>.json` and `.bin`), read through
+/// an sRGB view when [srgb] is set.
 class FileTexture extends TextureRef {
   const FileTexture(this.stem, {this.srgb = false});
   final String stem;
@@ -371,7 +369,7 @@ sealed class StorageRef {
   const StorageRef();
 }
 
-/// A buffer holding [bytes] for this dispatch only (an input the exe filled
+/// A buffer holding [bytes] for this dispatch only (an input filled
 /// on the CPU, or a written buffer whose result nothing in the plan reads);
 /// [format] names the texel format of a storage texel buffer.
 class InlineBuffer extends StorageRef {
@@ -503,8 +501,8 @@ class DrawMeshGeometry extends DrawGeometry {
 
 /// A draw of vertices given inline: one vertex buffer of [stride]-byte
 /// vertices whose attributes are fed to the vertex shader's inputs by
-/// register ([registers]: input register → (DXGI format, byte offset)); the
-/// exe's post passes draw its four-vertex screen quad this way.
+/// register ([registers]: input register → (DXGI format, byte offset)), such
+/// as the four-vertex screen quad of a post pass.
 class InlineGeometry extends DrawGeometry {
   const InlineGeometry(
     this.bytes,
@@ -529,7 +527,7 @@ class ScreenGeometry extends DrawGeometry {
   final int vertexCount, instances;
 }
 
-/// One draw: its shaders (ids into the slice's `shaders/`), geometry,
+/// One draw: its shaders (ids into the shader library), geometry,
 /// state, viewport and each stage's resources.
 class DrawPlan {
   DrawPlan({

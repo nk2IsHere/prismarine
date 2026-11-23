@@ -182,7 +182,7 @@ class PlanReader {
 
   void _expect(int tag, int want) {
     if (tag != want) {
-      throw StateError('s2 plan message: tag $tag where $want belongs');
+      throw StateError('plan message: tag $tag where $want belongs');
     }
   }
 
@@ -495,7 +495,7 @@ class PlanReader {
     tagBufferTex => BufferTexture(_block()!, _string()),
     tagConstant => _constantTexture(),
     tagBufferTexRef => BufferTextureRef(_bufferRef()!),
-    _ => throw StateError('s2 plan message: tag $tag is no texture'),
+    _ => throw StateError('plan message: tag $tag is no texture'),
   };
 
   ConstantTexture _constantTexture() {
@@ -522,7 +522,7 @@ class PlanReader {
     tagBufferRef => _bufferRefFields(),
     tagInlineBuffer => InlineBuffer(_block()!, format: _stringOrNull()),
     tagImage => ImageRef(_string(), mip: _int(), layer: _int()),
-    _ => throw StateError('s2 plan message: tag $tag is no storage'),
+    _ => throw StateError('plan message: tag $tag is no storage'),
   };
 
   BufferRef? _bufferRef() {
@@ -649,7 +649,7 @@ class PlanReader {
     tagMesh => _mesh(),
     tagInline => _inlineGeometry(),
     tagScreen => ScreenGeometry(_int(), instances: _int()),
-    _ => throw StateError('s2 plan message: tag $tag is no geometry'),
+    _ => throw StateError('plan message: tag $tag is no geometry'),
   };
 
   InlineGeometry _inlineGeometry() {

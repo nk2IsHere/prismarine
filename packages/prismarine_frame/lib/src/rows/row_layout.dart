@@ -17,8 +17,8 @@ enum FieldType {
   uvec4(16, 'uvec4'),
 
   /// Three vec4 rows of a 3 × 4 affine matrix (row r holds column r of the
-  /// 4 × 4 storage: m[r], m[4+r], m[8+r], m[12+r]), as BufferObject's world
-  /// rows are laid out (formats/s2/shaders.md "BufferObject").
+  /// 4 × 4 storage: m[r], m[4+r], m[8+r], m[12+r]), the layout of the
+  /// world rows of a BufferObject block.
   rows3x4(48, 'vec4');
 
   const FieldType(this.size, this.glsl, {this.align = 16});

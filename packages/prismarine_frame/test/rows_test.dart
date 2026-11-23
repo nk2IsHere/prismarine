@@ -62,7 +62,7 @@ void main() {
         expect(l.stride % 16, 0, reason: l.name);
       }
       // The rows' leading members keep BufferObject's and BufferInstance's
-      // std140 offsets (effects/buffers.glsl), which std430 shares here.
+      // std140 offsets, which std430 shares here.
       expect(objectRow['sObjectDiffuseColor'], 128);
       expect(objectRow['sObjectRimBumpDepth'], 140);
       expect(objectRow['pad0'], 220);

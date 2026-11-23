@@ -11,7 +11,7 @@ export 'plan_codec_types.dart';
 
 part 'plan_codec_rows.dart';
 
-/// Writes S2 frame plans for an [PlanReader] on another isolate. The
+/// Writes frame plans for an [PlanReader] on another isolate. The
 /// objects the frame runner keys its GPU objects and lookups on (byte
 /// blocks, samplers, file and constant textures, inline register maps) are
 /// sent once and then named by id, so the reader's plan shares them as the
@@ -521,7 +521,7 @@ class PlanWriter {
 
   /// Role [role]'s bytes [b] this frame: the bytes last sent for the role
   /// again when [b] holds the same (the builder makes a role's bytes anew
-  /// each frame, the same while the camera or agent holds still), so the
+  /// each frame, the same while the camera or object holds still), so the
   /// reader's role keeps its bytes object; else [b] as a block.
   void _roleBytes(Uint8List role, Uint8List b) {
     if (store case final st? when b.isNotEmpty) {
@@ -615,28 +615,24 @@ class PlanWriter {
     final same =
         last != null && identical(last.rows, r.rows) && _samePass(last, r);
     if (!same) {
-      // Its draws and rows into the reader's same pass object (perf: the
-      // cascade pass, whose rows' culling values change each frame, went
-      // as a new pass every frame).
+      // Its draws and rows into the reader's same pass object. A pass whose
+      // rows' culling values change each frame takes this path.
       if (last != null && r.rows != null && _passRows(at, last, r)) {
         return true;
       }
-      // A kept pass with a few draws changed (a moved agent's): an edit,
-      // the reader's pass the same object (perf: the main and G-buffer
-      // passes went by value each frame for one or two draws).
+      // A kept pass with a few draws changed (the draws of a moved
+      // object): an edit, the reader's pass the same object.
       if (last != null && r.rows == null && _passEdit(at, last, r)) {
         return true;
       }
-      // Its draws whole into the reader's same pass object (perf: the main
-      // pass went by value whenever its draw count changed, a particle
-      // bucket or blended mesh in or out of view, and the UI views').
+      // Its draws whole into the reader's same pass object, for a pass
+      // whose draw count changed.
       if (last != null && r.rows == null && _passReshape(at, last, r)) {
         return true;
       }
       // Kept from its first frame, so the frames after send it as an edit
-      // or a reshape (a pass with rows as a rows reshape; perf: a pass that
-      // changed every frame, the main pass in a walk, was never kept and
-      // went whole every frame).
+      // or a reshape (a pass with rows as a rows reshape). A pass that
+      // changes every frame is kept as well.
       return _keepNew(at, r);
     }
     final id = _passIds[at];

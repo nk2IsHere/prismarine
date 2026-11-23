@@ -1,11 +1,10 @@
 import 'row_layout.dart';
 
-/// One per drawn agent. Its first members are S2's BufferObject member for
-/// member (effects/buffers.glsl; formats/s2/shaders.md "BufferObject"), so
-/// the effects' pulled form reads `Object.<member>` from this row unchanged;
-/// the renderer's own fields follow: the agent's light set, its flags and
-/// its render object's union box (formats/s2/frame.md "Which batches draw":
-/// the exe culls an agent's render object as a whole).
+/// One per drawn object. Its first members are the shaders' BufferObject
+/// block member for member, so the effects' pulled form reads
+/// `Object.<member>` from this row unchanged; the renderer's own fields
+/// follow: the object's light set, its flags and the union box of its
+/// meshes, culled as a whole.
 final objectRow = RowLayout('ObjectRow', const [
   RowField('sWorldMatrix', FieldType.rows3x4),
   RowField('sPrevWorldMatrix', FieldType.rows3x4),
@@ -38,21 +37,21 @@ final objectRow = RowLayout('ObjectRow', const [
 
 /// Object flags ([objectRow] `flags`).
 abstract final class ObjectFlags {
-  /// `Render Cull` off: never culled (formats/s2/frame.md).
+  /// Never culled.
   static const noCull = 1 << 0;
 
   /// Deformable (skinned): its batches skip the batch-sphere test.
   static const deformable = 1 << 1;
 
-  /// Shown this frame (`Runtime: Visible` and its scene shown).
+  /// Shown this frame (visible itself and its scene shown).
   static const visible = 1 << 2;
 
   /// Casts shadows.
   static const castsShadow = 1 << 3;
 }
 
-/// One per (agent, mesh batch). Its first members are S2's BufferInstance
-/// member for member (effects/buffers.glsl), read as `Instance.<member>` by
+/// One per (object, mesh batch). Its first members are the shaders'
+/// BufferInstance block member for member, read as `Instance.<member>` by
 /// the pulled effects; the position decode members stay at identity, as
 /// the cooked pools hold the editable form's float positions. The
 /// renderer's own fields follow: the object row, the material's words, the
