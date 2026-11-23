@@ -21,8 +21,8 @@ if [[ $step == setup || $step == all ]]; then
   [[ -d depot_tools ]] || git clone -q --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
   [[ -d flutter ]] || { git clone -q --filter=blob:none --no-checkout https://github.com/flutter/flutter.git flutter; git -C flutter checkout -q --detach $rev; }
   cd flutter
-  git checkout -q -B mcsm-engine $rev
-  git -c user.name=mcsm -c user.email=mcsm@localhost am -q $here/patches/*.patch
+  git checkout -q -B prismarine-engine $rev
+  git -c user.name=prismarine -c user.email=prismarine@localhost am -q $here/patches/*.patch
   cat > .gclient <<'G'
 solutions = [{"name": ".", "url": "https://github.com/flutter/flutter.git",
   "deps_file": "DEPS", "managed": False, "safesync_url": "", "custom_deps": {},
@@ -32,8 +32,9 @@ target_os = ["linux"]
 G
   gclient sync --no-history -j8
   # The patches of the Dart SDK, uncommitted at its DEPS revision as in the
-  # patch step of build.sh. Patch 0028 calls Dart_McsmIdle of dart/0002 and
-  # 0029 calls Dart_McsmOldSpace of dart/0003.
+  # patch step of build.sh. Patch 0028 calls the idle point of dart/0002 and
+  # 0029 calls the old-space call of dart/0003. Patch 0030 and dart/0004 give
+  # them their prismarine names.
   dart=engine/src/flutter/third_party/dart
   git -C $dart checkout -q -f --detach \
     $(sed -n "s/^  'dart_revision': '\([0-9a-f]*\)',/\1/p" DEPS)

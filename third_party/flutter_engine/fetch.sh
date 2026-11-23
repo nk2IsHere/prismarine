@@ -63,8 +63,8 @@ if [[ -z $target ]]; then
   esac
 fi
 sha256() { if command -v shasum >/dev/null; then shasum -a 256 "$@"; else sha256sum "$@"; fi; }
-asset=mcsm-engine-$target.tar.xz
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/mcsm-engine-fetch.XXXXXX")
+asset=prismarine-engine-$target.tar.xz
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/prismarine-engine-fetch.XXXXXX")
 trap 'rm -rf "${tmp:?}"' EXIT
 if [[ -n $archive ]]; then
   # A local copy (with its .sha256 beside it) instead of the download.
@@ -84,7 +84,9 @@ for out in "$dest/$target"/src/out/*/; do
   ln -sfn "$flutter_sdk/bin/cache/dart-sdk" "$out/dart-sdk"
   outs+=("$(basename "$out")")
 done
-want=$(sed -n 's/^engine_revision=//p' "$dest/$target/mcsm-engine.txt")
+info=$dest/$target/prismarine-engine.txt
+[[ -f $info ]] || info=$dest/$target/mcsm-engine.txt
+want=$(sed -n 's/^engine_revision=//p' "$info")
 have=$(cat "$flutter_sdk/bin/internal/engine.version" 2>/dev/null || true)
 [[ $want == "$have" ]] || echo "fetch.sh: warning: the engine is for Flutter engine $want and the Flutter SDK has ${have:-an unknown one}" >&2
 echo "fetch.sh: engine $target in $dest/$target ($(du -sh "$dest/$target" | cut -f1))"

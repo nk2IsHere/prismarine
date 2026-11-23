@@ -5,7 +5,7 @@
 #          engine revision, writes .gclient without Android, JDK, esbuild and
 #          Fuchsia and runs gclient sync. This takes about 13 GB and 20 to 40
 #          minutes of downloads.
-#   patch  applies patches/*.patch on a fresh branch mcsm-engine at the
+#   patch  applies patches/*.patch on a fresh branch prismarine-engine at the
 #          revision and patches/dart/*.patch to the Dart SDK at its DEPS
 #          revision, uncommitted. The engine stamps its Dart SDK hash from the
 #          HEAD of that checkout, which must stay the revision that the kernel
@@ -65,7 +65,7 @@ EOF
 fi
 
 if [[ $step == patch || $step == all ]]; then
-  git -C $E/flutter checkout -q -B mcsm-engine $rev
+  git -C $E/flutter checkout -q -B prismarine-engine $rev
   git -C $E/flutter -c user.name="$(git -C $here config user.name)" \
     -c user.email="$(git -C $here config user.email)" am -q $here/patches/*.patch
   dart=$src/flutter/third_party/dart

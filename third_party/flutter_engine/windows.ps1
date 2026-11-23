@@ -11,7 +11,7 @@
 # from an SSH session stop when it closes). The first build of each CPU takes
 # ~25–35 min on 10 cores.
 param(
-  [string] $EngineDir = (Join-Path $env:USERPROFILE 'mcsm-engine'),
+  [string] $EngineDir = (Join-Path $env:USERPROFILE 'prismarine-engine'),
   [ValidateSet('x64', 'arm64', 'both')] [string] $Cpu = 'both',
   [int] $Jobs = [Environment]::ProcessorCount,
   [string] $Revision = 'deb287481e3ce9468f3434937ced4240a70539ca'
@@ -33,8 +33,8 @@ if (!(Test-Path flutter)) {
   git -C flutter checkout -q --detach $Revision
 }
 Set-Location flutter
-git checkout -q -B mcsm-engine $Revision
-git -c user.name=mcsm -c user.email=mcsm@localhost -c core.autocrlf=false am -q (Get-ChildItem "$here\patches\*.patch" | Sort-Object Name | ForEach-Object FullName)
+git checkout -q -B prismarine-engine $Revision
+git -c user.name=prismarine -c user.email=prismarine@localhost -c core.autocrlf=false am -q (Get-ChildItem "$here\patches\*.patch" | Sort-Object Name | ForEach-Object FullName)
 @'
 solutions = [{
   "name": ".",
@@ -56,8 +56,9 @@ target_os = ["win"]
 "== $(Get-Date -Format T) gclient"
 gclient sync --no-history -j8
 # The patches of the Dart SDK, uncommitted at its DEPS revision as in the patch
-# step of build.sh. Patch 0028 calls Dart_McsmIdle of dart/0002 and 0029 calls
-# Dart_McsmOldSpace of dart/0003.
+# step of build.sh. Patch 0028 calls the idle point of dart/0002 and 0029 calls
+# the old-space call of dart/0003. Patch 0030 and dart/0004 give them their
+# prismarine names.
 $dart = 'engine\src\flutter\third_party\dart'
 $dartRev = (Select-String -Path DEPS -Pattern "^  'dart_revision': '([0-9a-f]+)'").Matches[0].Groups[1].Value
 git -C $dart checkout -q -f --detach $dartRev

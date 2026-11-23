@@ -1,10 +1,10 @@
-# The Windows engine build toolchain (logs to $env:TEMP\mcsm-toolchain\install.log): Git, Python,
+# The Windows engine build toolchain (logs to $env:TEMP\prismarine-toolchain\install.log): Git, Python,
 # VS 2022 Build Tools (MSVC x64 + ARM64, ATL, Windows SDK 22621) and the SDK's
 # Debugging Tools. Run elevated as the build user (a scheduled task: jobs
 # started from an SSH session die with it). Then windows.ps1. Long paths are
 # turned on too (the engine's sources need them).
 $ErrorActionPreference = 'Continue'
-$work = Join-Path $env:TEMP 'mcsm-toolchain'
+$work = Join-Path $env:TEMP 'prismarine-toolchain'
 New-Item -ItemType Directory -Force $work | Out-Null
 Start-Transcript -Path "$work\install.log" -Append
 $wg = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"

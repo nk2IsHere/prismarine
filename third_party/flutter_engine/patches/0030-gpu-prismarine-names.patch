@@ -1,0 +1,901 @@
+From 8523e286a6e200c7f307df7d7df0db7c7a5a8067 Mon Sep 17 00:00:00 2001
+From: prismarine <prismarine@localhost>
+Date: Mon, 23 Nov 2026 21:41:55 +0100
+Subject: [PATCH] flutter_gpu, linux, windows (prismarine): the exports
+ InternalFlutterGpu_*Mcsm* become InternalFlutterGpu_*Prismarine*, with the
+ feature bits unchanged; Dart_PrismarineIdle and Dart_PrismarineOldSpace of
+ the Dart patch vm-prismarine-names; PRISMARINE_RENDERER, with MCSM_RENDERER
+ as a fallback, and PRISMARINE_VK_DUMP
+
+---
+ engine/src/flutter/lib/gpu/command_buffer.cc  |  6 +--
+ engine/src/flutter/lib/gpu/command_buffer.h   |  8 ++--
+ engine/src/flutter/lib/gpu/compute_pass.cc    | 30 ++++++------
+ engine/src/flutter/lib/gpu/compute_pass.h     | 35 +++++++-------
+ engine/src/flutter/lib/gpu/context.cc         | 46 +++++++++----------
+ engine/src/flutter/lib/gpu/context.h          | 31 +++++++------
+ engine/src/flutter/lib/gpu/render_pass.cc     | 18 ++++----
+ engine/src/flutter/lib/gpu/render_pass.h      | 22 ++++-----
+ engine/src/flutter/lib/gpu/shader.cc          | 11 +++--
+ engine/src/flutter/lib/gpu/shader.h           |  6 +--
+ engine/src/flutter/lib/gpu/texture.cc         |  8 ++--
+ engine/src/flutter/lib/gpu/texture.h          | 10 ++--
+ .../platform/linux/fl_compositor_vulkan.cc    |  6 +--
+ .../flutter/shell/platform/linux/fl_engine.cc | 12 +++--
+ .../windows/flutter_windows_engine.cc         | 11 +++--
+ 15 files changed, 136 insertions(+), 124 deletions(-)
+
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.cc b/engine/src/flutter/lib/gpu/command_buffer.cc
+index b48e8d950c..0f90b63749 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.cc
++++ b/engine/src/flutter/lib/gpu/command_buffer.cc
+@@ -451,7 +451,7 @@ Dart_Handle InternalFlutterGpu_CommandBuffer_CopyTextureToTexture(
+   return Dart_Null();
+ }
+ 
+-Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
++Dart_Handle InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToTexture(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* source,
+     flutter::gpu::Texture* destination,
+@@ -478,7 +478,7 @@ Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
+   return Dart_Null();
+ }
+ 
+-Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
++Dart_Handle InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToBuffer(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* source,
+     int source_x,
+@@ -502,7 +502,7 @@ Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
+   return Dart_Null();
+ }
+ 
+-Dart_Handle InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap(
++Dart_Handle InternalFlutterGpu_CommandBuffer_PrismarineGenerateMipmap(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* texture) {
+   if (!texture || !wrapper->McsmGenerateMipmap(*texture)) {
+diff --git a/engine/src/flutter/lib/gpu/command_buffer.h b/engine/src/flutter/lib/gpu/command_buffer.h
+index efb34fa1a2..dc26ea7493 100644
+--- a/engine/src/flutter/lib/gpu/command_buffer.h
++++ b/engine/src/flutter/lib/gpu/command_buffer.h
+@@ -182,7 +182,8 @@ extern Dart_Handle InternalFlutterGpu_CommandBuffer_CopyTextureToTexture(
+ /// mcsm9: CommandBuffer::McsmCopyTextureToTexture; null on success, else an
+ /// error string.
+ FLUTTER_GPU_EXPORT
+-extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
++extern Dart_Handle
++InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToTexture(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* source,
+     flutter::gpu::Texture* destination,
+@@ -199,7 +200,8 @@ extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToTexture(
+ 
+ /// mcsm9: CommandBuffer::McsmCopyTextureToBuffer.
+ FLUTTER_GPU_EXPORT
+-extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
++extern Dart_Handle
++InternalFlutterGpu_CommandBuffer_PrismarineCopyTextureToBuffer(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* source,
+     int source_x,
+@@ -213,7 +215,7 @@ extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmCopyTextureToBuffer(
+ 
+ /// mcsm9: CommandBuffer::McsmGenerateMipmap.
+ FLUTTER_GPU_EXPORT
+-extern Dart_Handle InternalFlutterGpu_CommandBuffer_McsmGenerateMipmap(
++extern Dart_Handle InternalFlutterGpu_CommandBuffer_PrismarineGenerateMipmap(
+     flutter::gpu::CommandBuffer* wrapper,
+     flutter::gpu::Texture* texture);
+ 
+diff --git a/engine/src/flutter/lib/gpu/compute_pass.cc b/engine/src/flutter/lib/gpu/compute_pass.cc
+index 63defc45b0..ad391860fb 100644
+--- a/engine/src/flutter/lib/gpu/compute_pass.cc
++++ b/engine/src/flutter/lib/gpu/compute_pass.cc
+@@ -248,7 +248,7 @@ void ComputePass::Barrier() {
+ /// Exports
+ ///
+ 
+-Dart_Handle InternalFlutterGpu_ComputePipeline_McsmInitialize(
++Dart_Handle InternalFlutterGpu_ComputePipeline_PrismarineInitialize(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Shader* shader) {
+@@ -279,12 +279,12 @@ Dart_Handle InternalFlutterGpu_ComputePipeline_McsmInitialize(
+   return Dart_Null();
+ }
+ 
+-void InternalFlutterGpu_ComputePass_McsmInitialize(Dart_Handle wrapper) {
++void InternalFlutterGpu_ComputePass_PrismarineInitialize(Dart_Handle wrapper) {
+   auto res = fml::MakeRefCounted<flutter::gpu::ComputePass>();
+   res->AssociateWithDartWrapper(wrapper);
+ }
+ 
+-Dart_Handle InternalFlutterGpu_ComputePass_McsmBegin(
++Dart_Handle InternalFlutterGpu_ComputePass_PrismarineBegin(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::CommandBuffer* command_buffer) {
+   if (!wrapper->Begin(*command_buffer)) {
+@@ -293,13 +293,13 @@ Dart_Handle InternalFlutterGpu_ComputePass_McsmBegin(
+   return Dart_Null();
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindPipeline(
++bool InternalFlutterGpu_ComputePass_PrismarineBindPipeline(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::ComputePipeline* pipeline) {
+   return wrapper->SetPipeline(fml::Ref(pipeline));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindUniform(
++bool InternalFlutterGpu_ComputePass_PrismarineBindUniform(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+@@ -313,7 +313,7 @@ bool InternalFlutterGpu_ComputePass_McsmBindUniform(
+                               static_cast<size_t>(length_in_bytes));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
++bool InternalFlutterGpu_ComputePass_PrismarineBindStorageBuffer(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+@@ -327,7 +327,7 @@ bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
+                                     static_cast<size_t>(length_in_bytes));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindTexture(
++bool InternalFlutterGpu_ComputePass_PrismarineBindTexture(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture,
+@@ -350,7 +350,7 @@ bool InternalFlutterGpu_ComputePass_McsmBindTexture(
+   return wrapper->BindTexture(index, texture->GetTexture(), sampler);
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindStorageImage(
++bool InternalFlutterGpu_ComputePass_PrismarineBindStorageImage(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture) {
+@@ -360,7 +360,7 @@ bool InternalFlutterGpu_ComputePass_McsmBindStorageImage(
+   return wrapper->BindStorageImage(index, texture->GetTexture());
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmDispatch(
++bool InternalFlutterGpu_ComputePass_PrismarineDispatch(
+     flutter::gpu::ComputePass* wrapper,
+     int x,
+     int y,
+@@ -372,12 +372,12 @@ bool InternalFlutterGpu_ComputePass_McsmDispatch(
+                            static_cast<uint32_t>(z));
+ }
+ 
+-void InternalFlutterGpu_ComputePass_McsmBarrier(
++void InternalFlutterGpu_ComputePass_PrismarineBarrier(
+     flutter::gpu::ComputePass* wrapper) {
+   wrapper->Barrier();
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
++bool InternalFlutterGpu_ComputePass_PrismarineDispatchIndirect(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes) {
+@@ -388,7 +388,7 @@ bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
+                                    static_cast<size_t>(offset_in_bytes));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
++bool InternalFlutterGpu_ComputePass_PrismarineBindTextureSampler(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture,
+@@ -404,7 +404,7 @@ bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
+       flutter::gpu::McsmSamplerFromPacked(packed, min_lod, max_lod, lod_bias));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++bool InternalFlutterGpu_ComputePass_PrismarineBindTexelBuffer(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+@@ -420,14 +420,14 @@ bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
+                                   flutter::gpu::ToImpellerPixelFormat(format));
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++bool InternalFlutterGpu_ComputePass_PrismarineBindSeparateTexture(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture) {
+   return texture && wrapper->BindSeparateTexture(index, texture->GetTexture());
+ }
+ 
+-bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++bool InternalFlutterGpu_ComputePass_PrismarineBindSeparateSampler(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     int64_t packed,
+diff --git a/engine/src/flutter/lib/gpu/compute_pass.h b/engine/src/flutter/lib/gpu/compute_pass.h
+index 939c9397c7..c52625e2c0 100644
+--- a/engine/src/flutter/lib/gpu/compute_pass.h
++++ b/engine/src/flutter/lib/gpu/compute_pass.h
+@@ -124,37 +124,38 @@ extern "C" {
+ 
+ /// Returns null on success, else an error string.
+ FLUTTER_GPU_EXPORT
+-extern Dart_Handle InternalFlutterGpu_ComputePipeline_McsmInitialize(
++extern Dart_Handle InternalFlutterGpu_ComputePipeline_PrismarineInitialize(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Shader* shader);
+ 
+ FLUTTER_GPU_EXPORT
+-extern void InternalFlutterGpu_ComputePass_McsmInitialize(Dart_Handle wrapper);
++extern void InternalFlutterGpu_ComputePass_PrismarineInitialize(
++    Dart_Handle wrapper);
+ 
+ /// Returns null on success, else an error string.
+ FLUTTER_GPU_EXPORT
+-extern Dart_Handle InternalFlutterGpu_ComputePass_McsmBegin(
++extern Dart_Handle InternalFlutterGpu_ComputePass_PrismarineBegin(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::CommandBuffer* command_buffer);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindPipeline(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindPipeline(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::ComputePipeline* pipeline);
+ 
+ /// `index` from Shader_ResolveUniformStruct.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindUniform(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindUniform(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+     int offset_in_bytes,
+     int length_in_bytes);
+ 
+-/// `index` from Shader_McsmResolveStorageBuffer.
++/// `index` from Shader_PrismarineResolveStorageBuffer.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindStorageBuffer(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+@@ -164,7 +165,7 @@ extern bool InternalFlutterGpu_ComputePass_McsmBindStorageBuffer(
+ /// `index` from Shader_ResolveUniformTexture; the sampler as in
+ /// RenderPass_BindTextureIndexed.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindTexture(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindTexture(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture,
+@@ -176,7 +177,7 @@ extern bool InternalFlutterGpu_ComputePass_McsmBindTexture(
+ 
+ /// A texture with a whole sampler state (McsmSamplerFromPacked).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindTextureSampler(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture,
+@@ -185,22 +186,22 @@ extern bool InternalFlutterGpu_ComputePass_McsmBindTextureSampler(
+     double max_lod,
+     double lod_bias);
+ 
+-/// `index` from Shader_McsmResolveStorageImage.
++/// `index` from Shader_PrismarineResolveStorageImage.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindStorageImage(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindStorageImage(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmDispatch(
++extern bool InternalFlutterGpu_ComputePass_PrismarineDispatch(
+     flutter::gpu::ComputePass* wrapper,
+     int x,
+     int y,
+     int z);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindTexelBuffer(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::DeviceBuffer* buffer,
+@@ -209,13 +210,13 @@ extern bool InternalFlutterGpu_ComputePass_McsmBindTexelBuffer(
+     int format);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateTexture(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindSeparateTexture(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     flutter::gpu::Texture* texture);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
++extern bool InternalFlutterGpu_ComputePass_PrismarineBindSeparateSampler(
+     flutter::gpu::ComputePass* wrapper,
+     int index,
+     int64_t packed,
+@@ -224,13 +225,13 @@ extern bool InternalFlutterGpu_ComputePass_McsmBindSeparateSampler(
+     double lod_bias);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_ComputePass_McsmDispatchIndirect(
++extern bool InternalFlutterGpu_ComputePass_PrismarineDispatchIndirect(
+     flutter::gpu::ComputePass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes);
+ 
+ FLUTTER_GPU_EXPORT
+-extern void InternalFlutterGpu_ComputePass_McsmBarrier(
++extern void InternalFlutterGpu_ComputePass_PrismarineBarrier(
+     flutter::gpu::ComputePass* wrapper);
+ 
+ }  // extern "C"
+diff --git a/engine/src/flutter/lib/gpu/context.cc b/engine/src/flutter/lib/gpu/context.cc
+index 51d35ec067..677e174628 100644
+--- a/engine/src/flutter/lib/gpu/context.cc
++++ b/engine/src/flutter/lib/gpu/context.cc
+@@ -256,14 +256,14 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+   return true;
+ }
+ 
+-extern int64_t InternalFlutterGpu_McsmFeatures() {
+-  // mcsm7: 16 = Texture_McsmWriteDirect (host-visible textures written
++extern int64_t InternalFlutterGpu_PrismarineFeatures() {
++  // mcsm7: 16 = Texture_PrismarineWriteDirect (host-visible textures written
+   // without a staging buffer or command buffer), 64 = several passes in
+   // turn on one command buffer (Metal), 128 = several colour attachments on
+   // GLES (impeller render_pass_gles), 256 = viewport arrays on Metal
+-  // (RenderPass_McsmSetViewports; false on other backends), 512 = draws from
+-  // a first instance (RenderPass_McsmDrawInstanced). (32 is unused: a
+-  // batched encoding was tried and measured no cheaper than the leaf calls.)
++  // (RenderPass_PrismarineSetViewports; false on other backends), 512 = draws
++  // from a first instance (RenderPass_PrismarineDrawInstanced). (32 is unused:
++  // a batched encoding was tried and measured no cheaper than the leaf calls.)
+   //
+   // mcsm8: once the default context exists the bits are its backend's, with
+   // 1024 set: Metal 16, 64, 256; GLES 64, 128; Vulkan 64 (several passes on
+@@ -271,22 +271,22 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   // Before that, every bit without 1024 (callers ask again later).
+   const int backend = g_mcsm_backend;
+   //
+-  // mcsm9: 2048 = Minecraft: Story Mode S2's needs on Metal and Vulkan: 2D
+-  // array and 3D textures (Texture_McsmInitializeLayered), the added pixel
+-  // formats and 2x MSAA, storage buffers in render passes
+-  // (RenderPass_McsmBindStorageBuffer), compute pipelines and passes
++  // mcsm9: 2048 = layered textures, storage and compute on Metal and
++  // Vulkan: 2D array and 3D textures (Texture_PrismarineInitializeLayered),
++  // the added pixel formats and 2x MSAA, storage buffers in render passes
++  // (RenderPass_PrismarineBindStorageBuffer), compute pipelines and passes
+   // (ComputePipeline_*, ComputePass_*), and shader bundles with storage
+   // resources and per-block uniform limits.
+   //
+   // mcsm10: 4096 = our renderer's needs on Metal and Vulkan: vertex stages
+   // without inputs, storage and unsigned texel buffers in pixel stages,
+   // more bindings per draw, leaf indirect draws
+-  // (RenderPass_McsmDrawIndirectCached), the binding resend cut and sRGB
++  // (RenderPass_PrismarineDrawIndirectCached), the binding resend cut and sRGB
+   // texture views.
+   //
+-  // mcsm11: 8192 = McsmDetach and McsmGcIdle (every backend).
++  // mcsm11: 8192 = PrismarineDetach and PrismarineGcIdle (every backend).
+   //
+-  // mcsm12: 16384 = McsmOldSpace and McsmHeap (every backend).
++  // mcsm12: 16384 = PrismarineOldSpace and PrismarineHeap (every backend).
+   const int64_t common = 1 | 2 | 4 | 8 | 512 | 8192 | 16384;
+   switch (backend) {
+     case 0:
+@@ -301,11 +301,11 @@ extern int64_t InternalFlutterGpu_McsmFeatures() {
+   }
+ }
+ 
+-extern int InternalFlutterGpu_McsmBackend() {
++extern int InternalFlutterGpu_PrismarineBackend() {
+   return g_mcsm_backend;
+ }
+ 
+-void InternalFlutterGpu_McsmDetach(Dart_Handle wrapper) {
++void InternalFlutterGpu_PrismarineDetach(Dart_Handle wrapper) {
+   intptr_t peer = 0;
+   if (Dart_IsError(Dart_GetNativeInstanceField(
+           wrapper, tonic::DartWrappable::kPeerIndex, &peer)) ||
+@@ -315,22 +315,22 @@ void InternalFlutterGpu_McsmDetach(Dart_Handle wrapper) {
+   reinterpret_cast<tonic::DartWrappable*>(peer)->ClearDartWrapper();
+ }
+ 
+-int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
+-                                      int64_t min_new_bytes,
+-                                      int64_t max_new_bytes) {
+-  return Dart_McsmIdle(Dart_TimelineGetMicros() + budget_micros,
+-                       min_new_bytes, max_new_bytes);
++int64_t InternalFlutterGpu_PrismarineGcIdle(int64_t budget_micros,
++                                            int64_t min_new_bytes,
++                                            int64_t max_new_bytes) {
++  return Dart_PrismarineIdle(Dart_TimelineGetMicros() + budget_micros,
++                             min_new_bytes, max_new_bytes);
+ }
+ 
+-int64_t InternalFlutterGpu_McsmOldSpace(int64_t request) {
+-  return Dart_McsmOldSpace(request, nullptr);
++int64_t InternalFlutterGpu_PrismarineOldSpace(int64_t request) {
++  return Dart_PrismarineOldSpace(request, nullptr);
+ }
+ 
+-int64_t InternalFlutterGpu_McsmHeap(int64_t which) {
++int64_t InternalFlutterGpu_PrismarineHeap(int64_t which) {
+   if (which < 0 || which > 4) {
+     return -1;
+   }
+   int64_t figures[5] = {0, 0, 0, 0, 0};
+-  Dart_McsmOldSpace(0, figures);
++  Dart_PrismarineOldSpace(0, figures);
+   return figures[which];
+ }
+diff --git a/engine/src/flutter/lib/gpu/context.h b/engine/src/flutter/lib/gpu/context.h
+index c8c012070c..3a7217cbad 100644
+--- a/engine/src/flutter/lib/gpu/context.h
++++ b/engine/src/flutter/lib/gpu/context.h
+@@ -122,19 +122,20 @@ extern bool InternalFlutterGpu_Context_SupportsTextureFormat(
+ ///   4: release builds take GC sizing Dart flags from
+ ///      FLUTTER_ENGINE_SWITCHES (dart-flags only; shell/common/switches.cc)
+ ///   8: retained draws (DrawList, RenderPass_BeginRecording/Replay)
+-///   16: Texture_McsmWriteDirect (mcsm7)
++///   16: Texture_PrismarineWriteDirect (mcsm7)
+ ///   64: several render passes in turn on one command buffer (mcsm7)
+ ///   128: several colour attachments in one pass on GLES (mcsm7)
+-///   256: viewport arrays, RenderPass_McsmSetViewports (Metal only) (mcsm7)
+-///   512: RenderPass_McsmDrawInstanced, draws from a first instance (mcsm7)
+-///   1024: the bits are the default context's backend's (mcsm8)
++///   256: viewport arrays, RenderPass_PrismarineSetViewports (Metal only)
++///   (mcsm7) 512: RenderPass_PrismarineDrawInstanced, draws from a first
++///   instance (mcsm7) 1024: the bits are the default context's backend's
++///   (mcsm8)
+ FLUTTER_GPU_EXPORT
+-extern int64_t InternalFlutterGpu_McsmFeatures();
++extern int64_t InternalFlutterGpu_PrismarineFeatures();
+ 
+ /// mcsm8: the default context's backend once Flutter GPU created it: -1
+ /// before, 0 Metal, 1 GLES, 2 Vulkan. Leaf.
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_McsmBackend();
++extern int InternalFlutterGpu_PrismarineBackend();
+ 
+ /// mcsm11 (feature bit 8192): detaches a Flutter GPU wrapper from its native
+ /// object now. The object's reference is released here, on the caller's
+@@ -143,29 +144,29 @@ extern int InternalFlutterGpu_McsmBackend();
+ /// a young collection and are destroyed one by one inside its pause). The
+ /// wrapper may be initialized again. Nothing happens to a detached wrapper.
+ FLUTTER_GPU_EXPORT
+-extern void InternalFlutterGpu_McsmDetach(Dart_Handle wrapper);
++extern void InternalFlutterGpu_PrismarineDetach(Dart_Handle wrapper);
+ 
+ /// mcsm11: the Dart VM's collections at the caller's idle point
+-/// (Dart_McsmIdle, with the deadline [budget_micros] from now). Returns what
+-/// ran: 1 a young collection, 2 a mark started, 4 a mark finalized. Not a
++/// (Dart_PrismarineIdle, with the deadline [budget_micros] from now). Returns
++/// what ran: 1 a young collection, 2 a mark started, 4 a mark finalized. Not a
+ /// leaf call.
+ FLUTTER_GPU_EXPORT
+-extern int64_t InternalFlutterGpu_McsmGcIdle(int64_t budget_micros,
+-                                             int64_t min_new_bytes,
+-                                             int64_t max_new_bytes);
++extern int64_t InternalFlutterGpu_PrismarineGcIdle(int64_t budget_micros,
++                                                   int64_t min_new_bytes,
++                                                   int64_t max_new_bytes);
+ 
+ /// mcsm12 (feature bit 16384): old-space work at the caller's chosen idle
+-/// point (Dart_McsmOldSpace): [request] 1 starts a concurrent mark now, 2
++/// point (Dart_PrismarineOldSpace): [request] 1 starts a concurrent mark now, 2
+ /// compacts (stop-the-world) and empties the page cache. Returns what ran:
+ /// 1 a mark started, 2 a compaction. Not a leaf call.
+ FLUTTER_GPU_EXPORT
+-extern int64_t InternalFlutterGpu_McsmOldSpace(int64_t request);
++extern int64_t InternalFlutterGpu_PrismarineOldSpace(int64_t request);
+ 
+ /// mcsm12: one of the isolate group's heap figures in bytes ([which] 0 old
+ /// space used, 1 its capacity, 2 its external, 3 new space used, 4 its
+ /// capacity; -1 for another [which]). Not a leaf call.
+ FLUTTER_GPU_EXPORT
+-extern int64_t InternalFlutterGpu_McsmHeap(int64_t which);
++extern int64_t InternalFlutterGpu_PrismarineHeap(int64_t which);
+ 
+ }  // extern "C"
+ 
+diff --git a/engine/src/flutter/lib/gpu/render_pass.cc b/engine/src/flutter/lib/gpu/render_pass.cc
+index 20a68dc17e..e325f4623a 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.cc
++++ b/engine/src/flutter/lib/gpu/render_pass.cc
+@@ -1605,7 +1605,7 @@ int InternalFlutterGpu_RenderPass_DrawCached(
+   return wrapper->Draw(element_count, instance_count, indexed) ? 1 : 0;
+ }
+ 
+-int InternalFlutterGpu_RenderPass_McsmDrawInstanced(
++int InternalFlutterGpu_RenderPass_PrismarineDrawInstanced(
+     flutter::gpu::RenderPass* wrapper,
+     int element_count,
+     int instance_count,
+@@ -1669,7 +1669,7 @@ bool InternalFlutterGpu_RenderPass_Replay(flutter::gpu::RenderPass* wrapper,
+   return wrapper->Replay(*list, indices.data(), static_cast<size_t>(count));
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmSetViewports(
++bool InternalFlutterGpu_RenderPass_PrismarineSetViewports(
+     flutter::gpu::RenderPass* wrapper,
+     Dart_Handle viewports_handle,
+     Dart_Handle scissors_handle,
+@@ -1684,7 +1684,7 @@ bool InternalFlutterGpu_RenderPass_McsmSetViewports(
+                                    static_cast<size_t>(count));
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmBindStorageBuffer(
++bool InternalFlutterGpu_RenderPass_PrismarineBindStorageBuffer(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -1702,7 +1702,7 @@ bool InternalFlutterGpu_RenderPass_McsmBindStorageBuffer(
+ }
+ 
+ // mcsm9: texel buffers, textures and samplers bound apart.
+-bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++bool InternalFlutterGpu_RenderPass_PrismarineBindTexelBuffer(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -1727,7 +1727,7 @@ bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
+   });
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++bool InternalFlutterGpu_RenderPass_PrismarineBindSeparateTexture(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -1745,7 +1745,7 @@ bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
+   });
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++bool InternalFlutterGpu_RenderPass_PrismarineBindSeparateSampler(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -1768,7 +1768,7 @@ bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
+   });
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
++bool InternalFlutterGpu_RenderPass_PrismarineDrawIndirect(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes,
+@@ -1788,7 +1788,7 @@ bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
+ // mcsm10: an indirect draw as a leaf call: only with the pipeline already
+ // cached on the pass (so it never blocks); 2 when it isn't, for the caller to
+ // draw through McsmDrawIndirect.
+-int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
++int InternalFlutterGpu_RenderPass_PrismarineDrawIndirectCached(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes,
+@@ -1810,7 +1810,7 @@ int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
+              : 0;
+ }
+ 
+-bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
++bool InternalFlutterGpu_RenderPass_PrismarineBindTextureSampler(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+diff --git a/engine/src/flutter/lib/gpu/render_pass.h b/engine/src/flutter/lib/gpu/render_pass.h
+index 4b2f584fee..d146eaa796 100644
+--- a/engine/src/flutter/lib/gpu/render_pass.h
++++ b/engine/src/flutter/lib/gpu/render_pass.h
+@@ -403,7 +403,7 @@ extern void InternalFlutterGpu_RenderPass_Initialize(Dart_Handle wrapper);
+ /// `index` from Shader_ResolveUniformTexture. The sampler comes from the
+ /// context's library, not the pass's small cache.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
++extern bool InternalFlutterGpu_RenderPass_PrismarineBindTextureSampler(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -414,9 +414,9 @@ extern bool InternalFlutterGpu_RenderPass_McsmBindTextureSampler(
+     double lod_bias);
+ 
+ /// mcsm9: texel buffers (`format` a Flutter GPU PixelFormat), textures and
+-/// samplers bound apart; indices from Shader_McsmResolveBinding.
++/// samplers bound apart; indices from Shader_PrismarineResolveBinding.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
++extern bool InternalFlutterGpu_RenderPass_PrismarineBindTexelBuffer(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -426,14 +426,14 @@ extern bool InternalFlutterGpu_RenderPass_McsmBindTexelBuffer(
+     int format);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateTexture(
++extern bool InternalFlutterGpu_RenderPass_PrismarineBindSeparateTexture(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+     flutter::gpu::Texture* texture);
+ 
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
++extern bool InternalFlutterGpu_RenderPass_PrismarineBindSeparateSampler(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -445,7 +445,7 @@ extern bool InternalFlutterGpu_RenderPass_McsmBindSeparateSampler(
+ /// mcsm10: RenderPass::McsmDrawIndirect as a leaf call (2: no cached
+ /// pipeline yet).
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
++extern int InternalFlutterGpu_RenderPass_PrismarineDrawIndirectCached(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes,
+@@ -453,16 +453,16 @@ extern int InternalFlutterGpu_RenderPass_McsmDrawIndirectCached(
+ 
+ /// mcsm9: RenderPass::McsmDrawIndirect.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmDrawIndirect(
++extern bool InternalFlutterGpu_RenderPass_PrismarineDrawIndirect(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::DeviceBuffer* args,
+     int offset_in_bytes,
+     bool indexed);
+ 
+ /// mcsm9: RenderPass::McsmBindStorageBuffer (index from
+-/// Shader_McsmResolveStorageBuffer).
++/// Shader_PrismarineResolveStorageBuffer).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmBindStorageBuffer(
++extern bool InternalFlutterGpu_RenderPass_PrismarineBindStorageBuffer(
+     flutter::gpu::RenderPass* wrapper,
+     flutter::gpu::Shader* shader,
+     int index,
+@@ -563,7 +563,7 @@ extern bool InternalFlutterGpu_RenderPass_BindTextureIndexed(
+ /// RenderPass::Draw); 1 = drawn, 2 = the pass has no cached pipeline yet
+ /// (nothing done: draw once through the non-leaf path), 0 = failed. Leaf.
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_RenderPass_McsmDrawInstanced(
++extern int InternalFlutterGpu_RenderPass_PrismarineDrawInstanced(
+     flutter::gpu::RenderPass* wrapper,
+     int element_count,
+     int instance_count,
+@@ -624,7 +624,7 @@ extern bool InternalFlutterGpu_RenderPass_Replay(
+ /// mcsm7: RenderPass::McsmSetViewports (a Float32List of 6 per viewport, an
+ /// Int32List of 4 per scissor rect).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_RenderPass_McsmSetViewports(
++extern bool InternalFlutterGpu_RenderPass_PrismarineSetViewports(
+     flutter::gpu::RenderPass* wrapper,
+     Dart_Handle viewports,
+     Dart_Handle scissors,
+diff --git a/engine/src/flutter/lib/gpu/shader.cc b/engine/src/flutter/lib/gpu/shader.cc
+index 5b27a4a8aa..ac528f7658 100644
+--- a/engine/src/flutter/lib/gpu/shader.cc
++++ b/engine/src/flutter/lib/gpu/shader.cc
+@@ -367,22 +367,23 @@ bool InternalFlutterGpu_Shader_DebugIsDirty(flutter::gpu::Shader* wrapper) {
+   return wrapper->IsDirty();
+ }
+ 
+-int InternalFlutterGpu_Shader_McsmResolveStorageBuffer(
++int InternalFlutterGpu_Shader_PrismarineResolveStorageBuffer(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle name_handle) {
+   return wrapper->McsmResolveStorageBuffer(
+       tonic::StdStringFromDart(name_handle));
+ }
+ 
+-int InternalFlutterGpu_Shader_McsmResolveStorageImage(
++int InternalFlutterGpu_Shader_PrismarineResolveStorageImage(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle name_handle) {
+   return wrapper->McsmResolveStorageImage(
+       tonic::StdStringFromDart(name_handle));
+ }
+ 
+-int InternalFlutterGpu_Shader_McsmResolveBinding(flutter::gpu::Shader* wrapper,
+-                                                 int kind,
+-                                                 Dart_Handle name_handle) {
++int InternalFlutterGpu_Shader_PrismarineResolveBinding(
++    flutter::gpu::Shader* wrapper,
++    int kind,
++    Dart_Handle name_handle) {
+   return wrapper->McsmResolve(kind, tonic::StdStringFromDart(name_handle));
+ }
+diff --git a/engine/src/flutter/lib/gpu/shader.h b/engine/src/flutter/lib/gpu/shader.h
+index b41606a3fe..f4582b4c25 100644
+--- a/engine/src/flutter/lib/gpu/shader.h
++++ b/engine/src/flutter/lib/gpu/shader.h
+@@ -260,19 +260,19 @@ extern int InternalFlutterGpu_Shader_GetUniformMemberOffset(
+ // reload deduplication keeps unchanged shaders clean.
+ /// mcsm9: Shader::McsmResolveStorageBuffer / McsmResolveStorageImage.
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_Shader_McsmResolveStorageBuffer(
++extern int InternalFlutterGpu_Shader_PrismarineResolveStorageBuffer(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle name_handle);
+ 
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_Shader_McsmResolveStorageImage(
++extern int InternalFlutterGpu_Shader_PrismarineResolveStorageImage(
+     flutter::gpu::Shader* wrapper,
+     Dart_Handle name_handle);
+ 
+ /// mcsm9: Shader::McsmResolve (kinds 2 texel buffers, 3 textures and 4
+ /// samplers declared apart).
+ FLUTTER_GPU_EXPORT
+-extern int InternalFlutterGpu_Shader_McsmResolveBinding(
++extern int InternalFlutterGpu_Shader_PrismarineResolveBinding(
+     flutter::gpu::Shader* wrapper,
+     int kind,
+     Dart_Handle name_handle);
+diff --git a/engine/src/flutter/lib/gpu/texture.cc b/engine/src/flutter/lib/gpu/texture.cc
+index 44322a7905..899e4841a2 100644
+--- a/engine/src/flutter/lib/gpu/texture.cc
++++ b/engine/src/flutter/lib/gpu/texture.cc
+@@ -340,7 +340,7 @@ bool InternalFlutterGpu_Texture_Initialize(Dart_Handle wrapper,
+       enable_shader_read_usage, enable_shader_write_usage, mip_level_count);
+ }
+ 
+-bool InternalFlutterGpu_Texture_McsmInitializeLayered(
++bool InternalFlutterGpu_Texture_PrismarineInitializeLayered(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     int storage_mode,
+@@ -418,7 +418,7 @@ static bool McsmInitializeView(Dart_Handle wrapper,
+   return true;
+ }
+ 
+-bool InternalFlutterGpu_Texture_McsmInitializeView(
++bool InternalFlutterGpu_Texture_PrismarineInitializeView(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Texture* parent,
+@@ -431,7 +431,7 @@ bool InternalFlutterGpu_Texture_McsmInitializeView(
+                             base_mip, mip_count, base_layer, layers, -1);
+ }
+ 
+-bool InternalFlutterGpu_Texture_McsmInitializeViewFormat(
++bool InternalFlutterGpu_Texture_PrismarineInitializeViewFormat(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Texture* parent,
+@@ -458,7 +458,7 @@ bool InternalFlutterGpu_Texture_Overwrite(flutter::gpu::Texture* texture,
+                             static_cast<uint32_t>(slice));
+ }
+ 
+-bool InternalFlutterGpu_Texture_McsmWriteDirect(
++bool InternalFlutterGpu_Texture_PrismarineWriteDirect(
+     flutter::gpu::Texture* texture,
+     flutter::gpu::Context* gpu_context,
+     Dart_Handle source_byte_data,
+diff --git a/engine/src/flutter/lib/gpu/texture.h b/engine/src/flutter/lib/gpu/texture.h
+index a7e2ac4046..7e2181285b 100644
+--- a/engine/src/flutter/lib/gpu/texture.h
++++ b/engine/src/flutter/lib/gpu/texture.h
+@@ -80,7 +80,7 @@ extern bool InternalFlutterGpu_Texture_Initialize(
+ /// mcsm9: Initialize for 2D array textures (`layers`) and 3D textures
+ /// (`depth`), the added formats and 2x MSAA (Metal and Vulkan).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_Texture_McsmInitializeLayered(
++extern bool InternalFlutterGpu_Texture_PrismarineInitializeLayered(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     int storage_mode,
+@@ -99,7 +99,7 @@ extern bool InternalFlutterGpu_Texture_McsmInitializeLayered(
+ /// mcsm9: a view of `parent`'s mip levels and layers
+ /// (Context::McsmMakeTextureView; Metal and Vulkan).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_Texture_McsmInitializeView(
++extern bool InternalFlutterGpu_Texture_PrismarineInitializeView(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Texture* parent,
+@@ -109,10 +109,10 @@ extern bool InternalFlutterGpu_Texture_McsmInitializeView(
+     int base_layer,
+     int layers);
+ 
+-/// mcsm10: Texture_McsmInitializeView in the parent's format or its sRGB
++/// mcsm10: Texture_PrismarineInitializeView in the parent's format or its sRGB
+ /// twin (a Flutter GPU pixel format).
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_Texture_McsmInitializeViewFormat(
++extern bool InternalFlutterGpu_Texture_PrismarineInitializeViewFormat(
+     Dart_Handle wrapper,
+     flutter::gpu::Context* gpu_context,
+     flutter::gpu::Texture* parent,
+@@ -133,7 +133,7 @@ extern bool InternalFlutterGpu_Texture_Overwrite(
+ 
+ /// mcsm7: Texture::McsmWriteDirect.
+ FLUTTER_GPU_EXPORT
+-extern bool InternalFlutterGpu_Texture_McsmWriteDirect(
++extern bool InternalFlutterGpu_Texture_PrismarineWriteDirect(
+     flutter::gpu::Texture* wrapper,
+     flutter::gpu::Context* gpu_context,
+     Dart_Handle source_byte_data,
+diff --git a/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc b/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
+index cd75971b25..7f8e7650fe 100644
+--- a/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
++++ b/engine/src/flutter/shell/platform/linux/fl_compositor_vulkan.cc
+@@ -340,10 +340,10 @@ static void take_ring_frame(FlCompositorVulkan* self, Ring& ring) {
+       ring.released_pending[k] = true;
+     }
+   }
+-  // MCSM_VK_DUMP=<file>: the 120th frame GL took, as a PPM (top row first),
+-  // to check the zero-copy path by eye.
++  // PRISMARINE_VK_DUMP=<file>: the 120th frame GL took, as a PPM (top row
++  // first), to check the zero-copy path by eye.
+   static int dumped = 0;
+-  const char* dump = getenv("MCSM_VK_DUMP");
++  const char* dump = getenv("PRISMARINE_VK_DUMP");
+   if (dump != nullptr && ++dumped == 120) {
+     std::vector<uint8_t> px(w * h * 4);
+     glBindFramebuffer(GL_READ_FRAMEBUFFER, self->gl_draw_fbo);
+diff --git a/engine/src/flutter/shell/platform/linux/fl_engine.cc b/engine/src/flutter/shell/platform/linux/fl_engine.cc
+index cdcc6e2cbe..3512e02b32 100644
+--- a/engine/src/flutter/shell/platform/linux/fl_engine.cc
++++ b/engine/src/flutter/shell/platform/linux/fl_engine.cc
+@@ -704,10 +704,14 @@ static FlEngine* fl_engine_new_full(FlDartProject* project,
+   FlEngine* self = FL_ENGINE(g_object_new(fl_engine_get_type(), nullptr));
+ 
+   self->project = FL_DART_PROJECT(g_object_ref(project));
+-  // mcsm8: MCSM_RENDERER=vulkan|gles (or FLUTTER_LINUX_RENDERER=vulkan|
+-  // opengl|software) picks the renderer; unset, Vulkan where a device meets
+-  // Impeller's needs, else OpenGL. The choice is logged.
+-  const gchar* renderer = g_getenv("MCSM_RENDERER");
++  // PRISMARINE_RENDERER=vulkan|gles, or MCSM_RENDERER, or
++  // FLUTTER_LINUX_RENDERER=vulkan|opengl|software picks the renderer. Unset,
++  // Vulkan where a device meets the needs of Impeller, else OpenGL. The
++  // choice is logged.
++  const gchar* renderer = g_getenv("PRISMARINE_RENDERER");
++  if (renderer == nullptr || renderer[0] == '\0') {
++    renderer = g_getenv("MCSM_RENDERER");
++  }
+   if (renderer == nullptr || renderer[0] == '\0') {
+     renderer = g_getenv("FLUTTER_LINUX_RENDERER");
+   }
+diff --git a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
+index c401443f48..caab61af9d 100644
+--- a/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
++++ b/engine/src/flutter/shell/platform/windows/flutter_windows_engine.cc
+@@ -212,12 +212,15 @@ FlutterWindowsEngine::FlutterWindowsEngine(
+   enable_impeller_ = enable_impeller;
+ 
+   // mcsm8: Impeller on Vulkan where a device meets its needs, else ANGLE.
+-  // MCSM_RENDERER=vulkan|gles forces one (read from the live environment, as
+-  // patch 0007 reads FLUTTER_ENGINE_SWITCHES: the static CRT's getenv sees a
+-  // copy taken at load).
++  // PRISMARINE_RENDERER=vulkan|gles, or MCSM_RENDERER, forces one. It is read
++  // from the live environment, as patch 0007 reads FLUTTER_ENGINE_SWITCHES:
++  // the static CRT's getenv sees a copy taken at load.
+   {
+     char renderer[32] = {};
+-    GetEnvironmentVariableA("MCSM_RENDERER", renderer, sizeof(renderer));
++    if (GetEnvironmentVariableA("PRISMARINE_RENDERER", renderer,
++                                sizeof(renderer)) == 0) {
++      GetEnvironmentVariableA("MCSM_RENDERER", renderer, sizeof(renderer));
++    }
+     const std::string choice(renderer);
+     std::string vulkan_error = "forced GLES";
+     if (enable_impeller_ && (choice.empty() || choice == "vulkan")) {

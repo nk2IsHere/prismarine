@@ -1,7 +1,7 @@
 # package.ps1 <engine\src> <out name> <target> <dest dir> [<host out name>]:
 # the Windows twin of package.sh. Packs what a release
 # `flutter build windows --local-engine` reads into
-# <dest>\mcsm-engine-<target>.tar.xz (+ .sha256): flutter_windows.dll, its
+# <dest>\prismarine-engine-<target>.tar.xz (+ .sha256): flutter_windows.dll, its
 # import library, export file and headers (an empty .pdb in place of its
 # debug symbols), the C++ client wrapper, gen_snapshot, icudtl,
 # the patched SDK (also as flutter_patched_sdk_product: a copy, since
@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $from = Join-Path $Src "out\$Out"
 if (!(Test-Path $from)) { throw "no $from" }
-$stage = Join-Path ([IO.Path]::GetTempPath()) ("mcsm-engine-pack-" + [guid]::NewGuid())
+$stage = Join-Path ([IO.Path]::GetTempPath()) ("prismarine-engine-pack-" + [guid]::NewGuid())
 $to = Join-Path $stage "$Target\src\out\$Out"
 New-Item -ItemType Directory -Force $to | Out-Null
 $files = @('flutter_windows.dll', 'flutter_windows.dll.lib', 'flutter_windows.dll.exp', 'flutter_export.h', 'flutter_macros.h',
@@ -49,12 +49,12 @@ $patches = (Get-ChildItem "$here\patches\*.patch" | Sort-Object Name | ForEach-O
 $rev = if ($env:PRISMARINE_ENGINE_REV) { $env:PRISMARINE_ENGINE_REV } elseif ($env:MCSM_ENGINE_REV) { $env:MCSM_ENGINE_REV } else { 'deb287481e3ce9468f3434937ced4240a70539ca' }
 $release = (Get-Content (Join-Path $here 'RELEASE') -Raw).Trim()
 @("target=$Target", "release=$release", "out=$Out", "engine_revision=$rev", "patches=$patches") |
-  Set-Content -Encoding ascii (Join-Path $stage "$Target\mcsm-engine.txt")
+  Set-Content -Encoding ascii (Join-Path $stage "$Target\prismarine-engine.txt")
 New-Item -ItemType Directory -Force $Dest | Out-Null
-$archive = Join-Path $Dest "mcsm-engine-$Target.tar.xz"
+$archive = Join-Path $Dest "prismarine-engine-$Target.tar.xz"
 tar -C $stage -cJf $archive $Target
 $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
-"$hash  mcsm-engine-$Target.tar.xz" | Set-Content -Encoding ascii "$archive.sha256" -NoNewline
+"$hash  prismarine-engine-$Target.tar.xz" | Set-Content -Encoding ascii "$archive.sha256" -NoNewline
 Add-Content -Encoding ascii "$archive.sha256" "`n" -NoNewline
 Remove-Item -Recurse -Force $stage
 "$archive $([math]::Round((Get-Item $archive).Length / 1MB, 1)) MB"

@@ -54,8 +54,8 @@ if ($Data) {
   $Data = if ($env:MCSM_DATA) { $env:MCSM_DATA } else { Join-Path (Resolve-Path "$here\..\..") 'data' }
   $dest = Join-Path $Data 'engine'
 }
-$asset = "mcsm-engine-$Target.tar.xz"
-$tmp = Join-Path ([IO.Path]::GetTempPath()) ("mcsm-engine-fetch-" + [guid]::NewGuid())
+$asset = "prismarine-engine-$Target.tar.xz"
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("prismarine-engine-fetch-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Force $tmp | Out-Null
 try {
   if ($Archive) {

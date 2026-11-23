@@ -1,0 +1,161 @@
+From 1c64a108cea9fe7721fbe26108f566406e1bcb33 Mon Sep 17 00:00:00 2001
+From: prismarine <prismarine@localhost>
+Date: Mon, 23 Nov 2026 21:41:28 +0100
+Subject: [PATCH] vm (prismarine): Dart_McsmIdle and Dart_McsmOldSpace become
+ Dart_PrismarineIdle and Dart_PrismarineOldSpace
+
+---
+ runtime/include/dart_api.h  | 12 ++++++------
+ runtime/vm/dart_api_impl.cc |  9 +++++----
+ runtime/vm/heap/heap.cc     |  9 +++++----
+ runtime/vm/heap/heap.h      | 12 ++++++------
+ runtime/vm/heap/scavenger.h |  4 ++--
+ 5 files changed, 24 insertions(+), 22 deletions(-)
+
+diff --git a/runtime/include/dart_api.h b/runtime/include/dart_api.h
+index 69aacaa6..377c0ca6 100644
+--- a/runtime/include/dart_api.h
++++ b/runtime/include/dart_api.h
+@@ -1235,9 +1235,9 @@ DART_EXPORT void Dart_NotifyIdle(int64_t deadline);
+  *
+  * Requires there to be a current isolate.
+  */
+-DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+-                                  int64_t min_new_bytes,
+-                                  int64_t max_new_bytes);
++DART_EXPORT int64_t Dart_PrismarineIdle(int64_t deadline,
++                                        int64_t min_new_bytes,
++                                        int64_t max_new_bytes);
+ 
+ /**
+  * mcsm: old-space work the embedder asks for at an idle point of its own
+@@ -1245,8 +1245,8 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+  *
+  * |request| 0: nothing, only the figures. 1: start a concurrent mark now,
+  * whatever the thresholds, unless one is running; finished, it waits up to
+- * 30 s for request 2 (Dart_McsmIdle doesn't finalize it meanwhile, unless
+- * the hard threshold is reached), which then only compacts. 2: a young
++ * 30 s for request 2 (Dart_PrismarineIdle doesn't finalize it meanwhile,
++ * unless the hard threshold is reached), which then only compacts. 2: a young
+  * collection, then a mark-compact (stop-the-world; a running mark is
+  * finished first), then the page cache emptied: the old space gives back
+  * the pages its
+@@ -1262,7 +1262,7 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+  *
+  * Requires there to be a current isolate.
+  */
+-DART_EXPORT int64_t Dart_McsmOldSpace(int64_t request, int64_t* figures);
++DART_EXPORT int64_t Dart_PrismarineOldSpace(int64_t request, int64_t* figures);
+ 
+ typedef void (*Dart_HeapSamplingReportCallback)(void* context, void* data);
+ 
+diff --git a/runtime/vm/dart_api_impl.cc b/runtime/vm/dart_api_impl.cc
+index 906ac53a..a266694a 100644
+--- a/runtime/vm/dart_api_impl.cc
++++ b/runtime/vm/dart_api_impl.cc
+@@ -1745,9 +1745,9 @@ DART_EXPORT void Dart_NotifyIdle(int64_t deadline) {
+   T->isolate()->group()->idle_time_handler()->NotifyIdle(deadline);
+ }
+ 
+-DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+-                                  int64_t min_new_bytes,
+-                                  int64_t max_new_bytes) {
++DART_EXPORT int64_t Dart_PrismarineIdle(int64_t deadline,
++                                        int64_t min_new_bytes,
++                                        int64_t max_new_bytes) {
+   Thread* T = Thread::Current();
+   CHECK_ISOLATE(T->isolate());
+   API_TIMELINE_BEGIN_END(T);
+@@ -1756,7 +1756,8 @@ DART_EXPORT int64_t Dart_McsmIdle(int64_t deadline,
+                              max_new_bytes >> kWordSizeLog2);
+ }
+ 
+-DART_EXPORT int64_t Dart_McsmOldSpace(int64_t request, int64_t* figures) {
++DART_EXPORT int64_t Dart_PrismarineOldSpace(int64_t request,
++                                            int64_t* figures) {
+   Thread* T = Thread::Current();
+   CHECK_ISOLATE(T->isolate());
+   API_TIMELINE_BEGIN_END(T);
+diff --git a/runtime/vm/heap/heap.cc b/runtime/vm/heap/heap.cc
+index f04ffb01..63927476 100644
+--- a/runtime/vm/heap/heap.cc
++++ b/runtime/vm/heap/heap.cc
+@@ -470,8 +470,9 @@ intptr_t Heap::McsmIdle(int64_t deadline,
+     MonitorLocker ml(old_space_.tasks_lock());
+     phase = old_space_.phase();
+   }
+-  // mcsm: a mark the embedder started for a compaction (Dart_McsmOldSpace
+-  // 1) waits for it, finished, unless the hard threshold is reached.
++  // mcsm: a mark the embedder started for a compaction
++  // (Dart_PrismarineOldSpace 1) waits for it, finished, unless the hard
++  // threshold is reached.
+   const bool held = OS::GetCurrentMonotonicMicros() < mcsm_mark_held_until_ &&
+                     !old_space_.ReachedHardThreshold();
+   if ((phase == PageSpace::kAwaitingFinalization && !held) ||
+@@ -711,7 +712,7 @@ void Heap::CheckConcurrentMarking(Thread* thread,
+       }
+       return;
+     case PageSpace::kAwaitingFinalization:
+-      // mcsm: the embedder's next idle call finalizes (Dart_McsmIdle).
++      // mcsm: the embedder's next idle call finalizes (Dart_PrismarineIdle).
+       if (McsmIdleRecent()) {
+         return;
+       }
+@@ -737,7 +738,7 @@ void Heap::CheckFinalizeMarking(Thread* thread) {
+   }
+ 
+   if (phase == PageSpace::kAwaitingFinalization) {
+-    // mcsm: the embedder's next idle call finalizes (Dart_McsmIdle).
++    // mcsm: the embedder's next idle call finalizes (Dart_PrismarineIdle).
+     if (McsmIdleRecent()) {
+       return;
+     }
+diff --git a/runtime/vm/heap/heap.h b/runtime/vm/heap/heap.h
+index b9a02d2c..b8f84e8c 100644
+--- a/runtime/vm/heap/heap.h
++++ b/runtime/vm/heap/heap.h
+@@ -107,14 +107,14 @@ class Heap {
+   bool CodeContains(uword addr) const;
+ 
+   void NotifyIdle(int64_t deadline);
+-  // mcsm: Dart_McsmIdle.
++  // mcsm: Dart_PrismarineIdle.
+   intptr_t McsmIdle(int64_t deadline,
+                     intptr_t min_new_words,
+                     intptr_t max_new_words);
+-  // mcsm: whether a Dart_McsmIdle call came in the last 100 ms (the next one
+-  // finalizes a finished mark).
++  // mcsm: whether a Dart_PrismarineIdle call came in the last 100 ms (the
++  // next one finalizes a finished mark).
+   bool McsmIdleRecent() const;
+-  // mcsm: Dart_McsmOldSpace.
++  // mcsm: Dart_PrismarineOldSpace.
+   intptr_t McsmOldSpace(intptr_t request, int64_t* figures);
+   void NotifyDestroyed();
+ 
+@@ -392,8 +392,8 @@ class Heap {
+   RelaxedAtomic<Dart_PerformanceMode> mode_ = {Dart_PerformanceMode_Default};
+ 
+   RelaxedAtomic<int64_t> mcsm_last_idle_micros_ = {0};
+-  // mcsm: until when a mark Dart_McsmOldSpace started waits, finished, for
+-  // its compaction.
++  // mcsm: until when a mark Dart_PrismarineOldSpace started waits, finished,
++  // for its compaction.
+   RelaxedAtomic<int64_t> mcsm_mark_held_until_ = {0};
+ 
+   bool assume_scavenge_will_fail_;
+diff --git a/runtime/vm/heap/scavenger.h b/runtime/vm/heap/scavenger.h
+index 689212a7..374b6416 100644
+--- a/runtime/vm/heap/scavenger.h
++++ b/runtime/vm/heap/scavenger.h
+@@ -184,8 +184,8 @@ class Scavenger {
+   void WriteProtect(bool read_only);
+ 
+   bool ShouldPerformIdleScavenge(int64_t deadline);
+-  // mcsm: Dart_McsmIdle's young collection: at least min_words in use and the
+-  // estimate ends by the deadline, or max_words in use.
++  // mcsm: Dart_PrismarineIdle's young collection: at least min_words in use
++  // and the estimate ends by the deadline, or max_words in use.
+   bool McsmShouldScavenge(int64_t deadline,
+                           intptr_t min_words,
+                           intptr_t max_words);
