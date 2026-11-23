@@ -1,5 +1,6 @@
 #version 460
-// A comparison sampler: 1 where the reference passes against the depth.
+// A comparison sampler that gives 1 where the reference passes against the
+// depth.
 uniform sampler2DShadow shadow;
 
 uniform Ref {

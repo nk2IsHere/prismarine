@@ -5,7 +5,8 @@ uniform sampler3D volume;
 uniform usampler3D grid;
 
 uniform Pick {
-  // x: array layer or depth slice; y: 0 array, 1 volume, 2 uint grid.
+  // x is the array layer or depth slice. y is 0 for an array, 1 for a
+  // volume and 2 for a uint grid.
   vec4 pick;
 } pick;
 

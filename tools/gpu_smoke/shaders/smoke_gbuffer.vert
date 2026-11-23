@@ -1,10 +1,10 @@
 #version 460 core
 
-// A quad per instance at its own depth (a G-buffer pass's depth test):
-// offset, colour and depth per instance.
+// A quad per instance at its own depth, for the depth test of a G-buffer
+// pass, with offset, colour and depth per instance.
 
 uniform FrameInfo {
-  vec4 scale;  // x: the quad's half size in clip space
+  vec4 scale;  // x is the half size of the quad in clip space
 }
 frame_info;
 

@@ -1,19 +1,19 @@
 // The checks of engine release 7.
 //
-// - instancing: per-instance attributes, and a draw of a sub-range of the
-//   instances by binding the instance buffer at an offset (a base instance),
-//   and the same through draw(firstInstance:) (flutter_gpu G7, engine bit
-//   512), non-indexed and indexed;
-// - a G-buffer pass: RGBA8 + a float target + depth with the depth test;
-// - viewport arrays (Metal; elsewhere casters draw per tile);
-// - multiple render targets of different formats in one pass (RGBA8 + R32F,
-//   as a G-buffer writes a colour and a depth);
-// - several passes in turn on one command buffer (feature 64);
-// - a direct texture write (feature 16);
-// - a scene-like per-draw cost (two vertex buffers, two uniform blocks,
-//   three textures, cull and winding changes).
+// - Instancing with per-instance attributes. A draw of a sub-range of the
+//   instances binds the instance buffer at an offset, a base instance. The
+//   same draw goes through draw(firstInstance:) (flutter_gpu G7, engine bit
+//   512), non-indexed and indexed.
+// - A G-buffer pass of RGBA8 + a float target + depth with the depth test.
+// - Viewport arrays on Metal. Other backends draw per tile.
+// - Multiple render targets of different formats in one pass, RGBA8 + R32F,
+//   as a G-buffer writes a colour and a depth.
+// - Several passes in turn on one command buffer (feature 64).
+// - A direct texture write (feature 16).
+// - A scene-like cost per draw with two vertex buffers, two uniform blocks,
+//   three textures and cull and winding changes.
 //
-// Each check prints a SMOKE line; the result is false when a check that the
+// Each check prints a SMOKE line. The result is false when a check that the
 // engine claims to support fails.
 import 'dart:async';
 import 'dart:io' as io;
@@ -116,7 +116,7 @@ Future<bool> release7Checks(void Function(String) log) async {
     offsetInBytes: 0,
     lengthInBytes: 48,
   );
-  // Four instances: one per quadrant, each its own colour.
+  // Four instances, one per quadrant, each with its own colour.
   final instData = Float32List.fromList([
     -0.5, 0.5, 1, 0, 0, 1, //
     0.5, 0.5, 0, 1, 0, 1, //
@@ -165,8 +165,8 @@ Future<bool> release7Checks(void Function(String) log) async {
   return s.allOk;
 }
 
-/// What every check shares: the context, the smoke shaders, the instanced
-/// quad and the render-target maker.
+/// The parts that every check shares, the context, the smoke shaders, the
+/// instanced quad and the render-target maker.
 class _Smoke {
   _Smoke(
     this.log,

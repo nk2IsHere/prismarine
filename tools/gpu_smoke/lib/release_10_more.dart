@@ -1,6 +1,6 @@
-// The checks of release 10, continued from release_10.dart: resources a
-// pixel stage declares but never reads, bindings changed and restored between
-// draws, leaf indirect draws and an sRGB view of a UNORM target.
+// The checks of release 10, continued from release_10.dart, for resources
+// that a pixel stage declares but does not read, bindings changed and restored
+// between draws, leaf indirect draws and an sRGB view of a UNORM target.
 import 'dart:typed_data';
 
 import 'package:flutter_gpu/gpu.dart' as gpu;
@@ -8,7 +8,7 @@ import 'package:vector_math/vector_math.dart';
 
 import 'release_10.dart' show release10Centre;
 
-/// Runs the checks through [check] (which logs and records each result).
+/// Runs the checks through [check], which logs and records each result.
 Future<void> release10MoreChecks(
   gpu.ShaderLibrary lib,
   Future<void> Function(String, Future<String?> Function()) check,
@@ -23,14 +23,14 @@ Future<void> release10MoreChecks(
   final triangle = view(
     Float32List.fromList([-1, -1, 0, 1, 3, -1, 0, 1, -1, 3, 0, 1]),
   );
-  // Row 4 is the colour the pixel stage reads.
+  // Row 4 is the colour that the pixel stage reads.
   gpu.BufferView colour(double r, double g, double b) =>
       view(Float32List.fromList([...List.filled(16, 0.0), r, g, b, 1]));
   final zeros = view(Uint32List(4));
   final unity = view(Float32List.fromList([1, 1, 1, 1]));
   final vs = lib['PullVertex']!;
 
-  // An RGBA8 render target (on Vulkan, mutable to its sRGB twin).
+  // An RGBA8 render target, mutable to its sRGB twin on Vulkan.
   gpu.Texture target() => ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
@@ -47,8 +47,8 @@ Future<void> release10MoreChecks(
     return null;
   }
 
-  // Draws with [fragment]; [steps] binds the pixel stage's resources and
-  // draws, once per step, in one pass.
+  // Draws with [fragment]. [steps] binds the resources of the pixel stage
+  // and draws, once per step, in one pass.
   Future<List<int>> run(
     gpu.Shader fragment,
     List<void Function(gpu.RenderPass)> steps, {
@@ -125,7 +125,7 @@ Future<void> release10MoreChecks(
         ..drawIndirect(
           gpu.BufferView(args.buffer, offsetInBytes: 0, lengthInBytes: 16),
         ),
-      // The pipeline is cached on the pass now: this one is the leaf call.
+      // The pipeline is cached on the pass now. This draw is the leaf call.
       (pass) => pass
         ..bindStorageBuffer(fs.getStorageBufferSlot('RawPullRows'), b)
         ..drawIndirect(

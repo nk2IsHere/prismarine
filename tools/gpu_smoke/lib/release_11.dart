@@ -1,14 +1,14 @@
-// The checks of engine release 11: command buffers and passes made again
-// after their submit (flutter_gpu G15 over the engine's McsmDetach) and the
+// The checks of engine release 11 for command buffers and passes made again
+// after their submit (flutter_gpu G15 over McsmDetach of the engine) and the
 // collection of the VM at the idle point of the caller (mcsmGcIdle).
 //
-// - after a submit, the next command buffer is the same Dart object on a new
-//   native one, and a pass made again draws as a new pass: a clear alone
-//   leaves the clear colour (nothing of the draws before), a draw after it
-//   the drawn colour;
-// - an idle call with no minimum runs a young collection and says so.
+// - After a submit the next command buffer is the same Dart object on a new
+//   native one. A pass made again draws as a new pass. A clear alone leaves
+//   the clear colour without the draws before it. A draw after it leaves
+//   the drawn colour.
+// - An idle call with no minimum runs a young collection and reports it.
 //
-// Each check prints a SMOKE line; the result is false when one fails.
+// Each check prints a SMOKE line. The result is false when one fails.
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -116,7 +116,7 @@ Future<bool> release11Checks(void Function(String) log) async {
     say('passes made again', '$e');
   }
   try {
-    // No minimum: new space holds enough whatever it holds.
+    // With no minimum, new space holds enough whatever it holds.
     final ran = gpu.mcsmGcIdle(0, 0, 0);
     say('idle collection', ran & 1 == 1 ? null : 'ran $ran, want bit 1');
   } on Object catch (e) {

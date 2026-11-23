@@ -1,7 +1,7 @@
 part of 'release_7.dart';
 
 extension _Targets on _Smoke {
-  // 2. Two targets of different formats in one pass, then the R32F one
+  // 2. Two targets of different formats in one pass, then the R32F target
   // copied into RGBA8 to read it.
   Future<void> mixedTargets() async {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
@@ -63,8 +63,9 @@ extension _Targets on _Smoke {
       ..draw(6);
     await _done(cb);
     final r0 = await _readRgba8(c0), r1 = await _readRgba8(copyOut);
-    // Target 0: the colour; target 1: g · 4 = 2.0, saturated by the copy
-    // into RGBA8 (r = 255): a second target that was never written stays 0.
+    // Target 0 holds the colour. Target 1 holds g · 4 = 2.0, saturated by the
+    // copy into RGBA8 at r = 255. A second target that was not written stays
+    // 0.
     final ok0 = _near(_px(r0, 64, 32, 32), [64, 128, 191, 255]);
     final ok1 = _near(_px(r1, 64, 32, 32).sublist(0, 1) + [0, 0, 0], [
       255,
@@ -72,7 +73,7 @@ extension _Targets on _Smoke {
       0,
       0,
     ]);
-    final claimed = mixed; // Metal with the mixed-format pipelines of release 6
+    final claimed = mixed; // Metal has the mixed-format pipelines of release 6
     log(
       'SMOKE mrt ${ok0 && ok1 ? 'ok' : 'WRONG'} (RGBA8 + '
       '${mixed ? 'R32F' : 'RGBA32F'} in one pass) '
@@ -82,11 +83,9 @@ extension _Targets on _Smoke {
     if (claimed) allOk &= ok0 && ok1;
   }
 
-  // 2b. A G-buffer pass: two targets (RGBA8 + a float) and a depth
-  // attachment with the depth test, as the single G-buffer pass that will
-  // replace the depth prepass and the occlusion pass writes them. Two
-  // overlapping quads, the nearer drawn first: where they overlap both
-  // targets keep the nearer one.
+  // 2b. A G-buffer pass with two targets of RGBA8 + a float and a depth
+  // attachment with the depth test. Two overlapping quads, the nearer drawn
+  // first, overlap in the middle. Both targets keep the nearer quad there.
   Future<void> gBuffer() async {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
@@ -136,8 +135,9 @@ extension _Targets on _Smoke {
       enableRenderTargetUsage: true,
     )!;
     final copyOut = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
-    // Near (z 0.2): blue with g 0.125 (→ 0.5 in target 1), left; far (z 0.6):
-    // g 0.25 (→ 1.0), right; they overlap in the middle.
+    // The near quad at z 0.2 is blue with g 0.125, which gives 0.5 in target
+    // 1, on the left. The far quad at z 0.6 has g 0.25, which gives 1.0, on
+    // the right. They overlap in the middle.
     final quads = ctx.createDeviceBufferWithCopy(
       ByteData.sublistView(
         Float32List.fromList([
@@ -199,7 +199,8 @@ extension _Targets on _Smoke {
       ..draw(6);
     await _done(cb);
     final r0 = await _readRgba8(c0), r1 = await _readRgba8(copyOut);
-    // Columns: 20 near only, 32 both (near wins), 44 far only.
+    // Column 20 has the near quad only, 32 both with the near one in front
+    // and 44 the far quad only.
     final ok =
         _near(_px(r0, 64, 20, 32), [0, 32, 255, 255]) &&
         _near(_px(r0, 64, 32, 32), [0, 32, 255, 255]) &&
@@ -217,9 +218,9 @@ extension _Targets on _Smoke {
     if (mixed) allOk &= ok;
   }
 
-  // 2c. Pass reuse of release 8: the same colour targets in passes that
+  // 2c. Pass reuse of release 8. The same colour targets in passes that
   // differ in load actions and depth targets must each get their own load,
-  // clear and depth (Vulkan caches a render pass and framebuffer per target).
+  // clear and depth. Vulkan caches a render pass and framebuffer per target.
   Future<void> passReuse() async {
     final mixed = fs.mcsmMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
@@ -334,8 +335,9 @@ extension _Targets on _Smoke {
       await _done(cb);
     }
 
-    // Red over depth 0.1; then loaded, both quads (z 0.2, 0.6) fail the
-    // loaded depth: still red (a stale clear would give black and quads).
+    // Red over depth 0.1. After a load both quads at z 0.2 and 0.6 fail the
+    // loaded depth and the target stays red. A stale clear would give black
+    // and quads.
     await pass(
       loadColor: false,
       clear: Vector4(1, 0, 0, 1),
@@ -353,8 +355,8 @@ extension _Targets on _Smoke {
       draw: true,
     );
     final r1 = await _readRgba8(c0);
-    // Cleared to black over a second depth target cleared to 1.0: both
-    // quads; then loaded with nothing drawn: kept.
+    // Cleared to black over a second depth target cleared to 1.0, both quads
+    // draw. A load with nothing drawn then keeps them.
     await pass(
       loadColor: false,
       clear: Vector4(0, 0, 0, 1),

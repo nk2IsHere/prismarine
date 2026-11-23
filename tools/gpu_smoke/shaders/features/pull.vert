@@ -1,7 +1,7 @@
 #version 460
-// A pulled vertex stage of release 10: no inputs, its positions
-// from a storage buffer by vertex index, and the same buffer's colour handed
-// to the pixel stage by index.
+// A pulled vertex stage of release 10 without inputs. Its positions come
+// from a storage buffer by vertex index. It passes the colour of the same
+// buffer to the pixel stage by index.
 layout(std430) readonly buffer RawPullRows {
   vec4 rows[];
 } pullRows;

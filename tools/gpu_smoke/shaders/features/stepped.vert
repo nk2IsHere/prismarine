@@ -1,5 +1,5 @@
 #version 460
-// Four instances, one per quadrant; the tint advances every two instances.
+// Four instances, one per quadrant. The tint advances every two instances.
 in vec2 position;
 in vec4 tint;
 

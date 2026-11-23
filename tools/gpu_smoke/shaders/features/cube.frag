@@ -1,5 +1,5 @@
 #version 460
-// A cube array's face +X of the cube from a uniform.
+// The face +X of the cube of a cube array that a uniform selects.
 uniform samplerCubeArray cubes;
 
 uniform At {

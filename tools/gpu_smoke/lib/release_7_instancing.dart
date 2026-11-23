@@ -1,8 +1,8 @@
 part of 'release_7.dart';
 
 extension _Instancing on _Smoke {
-  // 1. Instancing: all four, then the last two again through an offset
-  // binding (a base instance of 2) into a second target.
+  // 1. Instancing with all four instances, then the last two again through
+  // an offset binding, a base instance of 2, into a second target.
   Future<void> instancing() async {
     final a = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
@@ -62,7 +62,8 @@ extension _Instancing on _Smoke {
     final ra = await _readRgba8(a);
     var rb = await _readRgba8(b);
     if (_px(rb, 64, 16, 48).every((v) => v == 0)) {
-      // An empty read (ANGLE): read the same target again later, no draw.
+      // An empty read on ANGLE reads the same target again later without a
+      // draw.
       await Future<void>.delayed(const Duration(milliseconds: 200));
       rb = await _readRgba8(b);
       log(
@@ -70,8 +71,9 @@ extension _Instancing on _Smoke {
         'without drawing: ${_px(rb, 64, 16, 48)}',
       );
     }
-    // Quadrant centres (y down in the image): top-left red, top-right
-    // green, bottom-left blue, bottom-right yellow; b has only the bottom.
+    // The quadrant centres with y down in the image are red at the top left,
+    // green at the top right, blue at the bottom left and yellow at the bottom
+    // right. b has only the bottom.
     final ok =
         _near(_px(ra, 64, 16, 16), [255, 0, 0, 255]) &&
         _near(_px(ra, 64, 48, 16), [0, 255, 0, 255]) &&
@@ -90,10 +92,10 @@ extension _Instancing on _Smoke {
     allOk &= ok;
   }
 
-  // 1b. Draws from a first instance (G7; one leaf call on engine release 7,
-  // bound again at the offset elsewhere): the whole instance buffer bound,
-  // instances 2..3 drawn, and 1..3 indexed, each against the same instances
-  // through an offset binding. The bytes must match.
+  // 1b. Draws from a first instance (G7), one leaf call on engine release 7
+  // and bound again at the offset elsewhere. The whole instance buffer is
+  // bound, instances 2..3 are drawn and 1..3 indexed, each against the same
+  // instances through an offset binding. The bytes must match.
   Future<void> firstInstance() async {
     Future<Uint8List> one(void Function(gpu.RenderPass p) body) async {
       final t = rt(gpu.PixelFormat.r8g8b8a8UNormInt);

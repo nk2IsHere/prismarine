@@ -1,7 +1,7 @@
 part of 'release_9.dart';
 
-// A compute pass whose outputs (a storage buffer, an RGBA8 storage image and
-// a uint 3D storage image) render passes read afterwards.
+// A compute pass whose outputs, a storage buffer, an RGBA8 storage image and
+// a uint 3D storage image, render passes read afterwards.
 
 Future<String?> _compute(_Kit kit) async {
   final ctx = kit.ctx;
@@ -62,7 +62,7 @@ Future<String?> _compute(_Kit kit) async {
   if (!near(c2, [64, 128, 191, 255])) {
     return 'storage image: got $c2, want [64, 128, 191, 255]';
   }
-  // The uint 3D grid at (1, 1, 2): i = 1 * 16 + 1 = 17, + 0x1100.
+  // The uint 3D grid at (1, 1, 2) holds i = 1 * 16 + 1 = 17, + 0x1100.
   final g = kit.rgba8(16);
   await kit.draw(g, 'LayersFragment', (p, f) {
     _bindLayers(p, f, layers: ph.layers, volume: ph.volume, grid: ph.grid);
