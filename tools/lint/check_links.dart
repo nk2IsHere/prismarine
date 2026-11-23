@@ -6,8 +6,8 @@
 // is CLAUDE.md, docs/memory and docs/areas by default. In each Markdown file it
 // checks relative `[text](path)` and `[text](path#anchor)` links without the
 // anchor itself. It also checks `[[name]]` wikilinks, which must point at a
-// file in the same directory. Links with a scheme, such as https or mailto, and
-// pure anchors are skipped, as is anything inside backticks.
+// file in the same directory. Pure anchors and links with a scheme, such as
+// https or mailto, are skipped, as is anything inside backticks.
 //
 // The exit code is 0 when clean and 1 for dangling links.
 import 'dart:io';
