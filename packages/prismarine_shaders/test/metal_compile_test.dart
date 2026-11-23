@@ -3,8 +3,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:prismarine_shaders/src/metal_compile.dart';
-import 'package:prismarine_shaders/src/shader_bundle.dart';
 import 'package:test/test.dart';
+
+const _options = {
+  'metal_preserve_invariance': true,
+  'metal_safe_math': false,
+  'spirv_optimize': true,
+};
 
 void main() {
   test('only blocks with a buffer binding count', () {
@@ -23,17 +28,20 @@ fragment main0_out main0(main0_in in [[stage_in]],
     ]);
   });
 
-  test("S2's entries compile with the engine's run-time options", () {
-    expect(metalCompileFlags(bundleEntryOptions), [
-      '-std=macos-metal2.3',
-      '-fpreserve-invariance',
-    ]);
-    expect(metalCompileFlags(const {}), isEmpty);
-    expect(
-      metalCompileFlags(const {'metal_safe_math': true}),
-      contains('-fmetal-math-mode=safe'),
-    );
-  });
+  test(
+    "an entry with invariance compiles with the engine's run-time options",
+    () {
+      expect(metalCompileFlags(_options), [
+        '-std=macos-metal2.3',
+        '-fpreserve-invariance',
+      ]);
+      expect(metalCompileFlags(const {}), isEmpty);
+      expect(
+        metalCompileFlags(const {'metal_safe_math': true}),
+        contains('-fmetal-math-mode=safe'),
+      );
+    },
+  );
 
   final metal = MetalCompiler.find();
   test('a library starts with MTLB and the same source gives the same bytes '
@@ -46,7 +54,7 @@ fragment main0_out main0(main0_in in [[stage_in]],
           'fragment float4 f0() { return float4(1.0); }\n',
         ),
       );
-      final flags = metalCompileFlags(bundleEntryOptions);
+      final flags = metalCompileFlags(_options);
       final (a, errA) = await metal!.compile(msl, '${dir.path}/a', flags);
       final (b, errB) = await metal.compile(msl, '${dir.path}/b', flags);
       expect([errA, errB], [null, null]);
