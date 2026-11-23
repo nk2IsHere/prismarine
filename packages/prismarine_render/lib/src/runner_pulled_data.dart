@@ -10,8 +10,8 @@ class Pulled {
 
   final String root;
 
-  /// The names that the pulled passes find a draw's parts by, and the rows
-  /// they fill.
+  /// The names of the parts of a draw and the rows that the pulled passes
+  /// fill.
   final PulledLayout layout;
 
   /// The render passes drawn in pulled form: the layout's, and its main
@@ -183,8 +183,8 @@ class Pulled {
   }
 }
 
-/// The names that the pulled passes read a plan's draws by, and the rows
-/// they fill. The application that cooks the data gives them.
+/// The names of the parts of a plan's draws and the rows that the pulled
+/// passes fill. The application that cooks the data gives them.
 class PulledLayout {
   PulledLayout({
     required this.objectRow,
@@ -206,7 +206,8 @@ class PulledLayout {
   /// programs read.
   final RowLayout objectRow, instanceRow;
 
-  /// The render passes drawn in pulled form, and the main pass that may be.
+  /// The render passes drawn in pulled form. The main pass is drawn in
+  /// pulled form on request.
   final Set<String> passes;
   final String mainPass;
 
@@ -230,7 +231,7 @@ class PulledLayout {
   /// All of [cascadesBuffer], made once.
   late final BufferRef cascadesRef = BufferRef(cascadesBuffer);
 
-  /// The six planes of a view as its builder culls with them: left, right,
+  /// The six planes of a view, as the builder computes them: left, right,
   /// bottom, top, near and far, each a unit normal and a distance, from the
   /// view-projection matrix of 16 floats in the camera block.
   final List<double> Function(List<double> viewProjection) frustumPlanes;

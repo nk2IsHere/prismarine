@@ -3,8 +3,7 @@ import 'package:prismarine_frame/prismarine_frame.dart' show ShaderRecord;
 
 import 'load_tally.dart';
 
-/// The shaders that a frame runner draws with besides the plan's own, by
-/// id.
+/// The ids of the shaders that a frame runner uses besides the plan's own.
 class RunnerShaders {
   const RunnerShaders({
     required this.nullPixel,
@@ -29,11 +28,11 @@ class RunnerShaders {
 /// A load slower than this many ms goes to [RenderAssets.onSlow].
 const slowLoadMs = 4.0;
 
-/// The files a frame runner draws with: shaders by id, textures by stem and
+/// The files that a frame runner uses: shaders by id, textures by stem and
 /// mesh streams by stem, loaded on first use and kept until a release. The
-/// runner asks for them by the names a frame plan gives.
+/// runner asks for each one by the name that a frame plan gives.
 abstract interface class RenderAssets {
-  /// Whether shader [id] exists.
+  /// Returns true when shader [id] exists.
   bool hasShader(String id);
 
   /// Shader [id]'s interface: its blocks, textures, samplers and inputs.
@@ -49,7 +48,7 @@ abstract interface class RenderAssets {
   /// Loads the textures among [stems] that [texture] cannot read on demand.
   Future<void> loadTextures(Iterable<String> stems);
 
-  /// Whether texture [stem] exists.
+  /// Returns true when texture [stem] exists.
   bool hasTexture(String stem);
 
   /// Texture [stem] with every mip and layer, through an sRGB view when
@@ -73,7 +72,7 @@ abstract interface class RenderAssets {
   /// CPU time spent on loads so far, in ms.
   double get loadMs;
 
-  /// The phase that loads count under now: `record`, `prepare` or `warm`.
+  /// The current phase of the loads: `record`, `prepare` or `warm`.
   String get phase;
   set phase(String p);
 
@@ -84,13 +83,13 @@ abstract interface class RenderAssets {
   /// the [phase].
   void Function(String what, double ms, int bytes, String phase)? get onSlow;
 
-  /// The scene that the draws being made ready belong to. Its loads can be
+  /// The scene of the draws that are made ready now. Its loads can be
   /// forgotten while no other scene uses them.
   String? get tag;
   set tag(String? t);
 
-  /// The open scene that a warm-up makes draws ready for. Its loads are
-  /// that scene's too.
+  /// The open scene whose draws a warm-up makes ready. Its loads are that
+  /// scene's too.
   set warmFor(String? scene);
 
   /// The scenes that ask for loads now, a bit each.
