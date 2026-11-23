@@ -25,7 +25,7 @@ Uint8List _bundle({bool extraField = false}) {
     b.addUint64(4, 16 * tag);
     b.addOffset(5, fields);
     final st = b.writeList([b.endTable()]);
-    final tname = b.writeString('Sampler_sPostInput0');
+    final tname = b.writeString('Sampler_sInput0');
     b.startTable(4);
     b.addOffset(0, tname);
     b.addUint64(3, tag);
@@ -36,14 +36,14 @@ Uint8List _bundle({bool extraField = false}) {
     b.addUint64(1, 0);
     b.addUint32(4, 9);
     final input = b.writeList([b.endTable()]);
-    final tbname = b.writeString('sLightEnvDepthParameters');
+    final tbname = b.writeString('sDepthParameters');
     b.startTable(7);
     b.addOffset(0, tbname);
     b.addUint64(4, tag + 4);
     b.addBool(5, false);
     b.addBool(6, true);
     final texel = b.writeList([b.endTable()]);
-    final sepname = b.writeString('Sampler_sMaterialInput2');
+    final sepname = b.writeString('Sampler_sInput2');
     b.startTable(5);
     b.addOffset(0, sepname);
     b.addUint64(3, tag + 1);
@@ -107,7 +107,7 @@ void main() {
     expect([shader[1], shader[2], shader[3], shader[4]], everyElement(isNull));
     expect(jsonEncode(shader[5]), jsonEncode(orig[5]));
     expect(one[1], 2);
-    // Texel buffers, separate textures and samplers, and Metal's options.
+    // Texel buffers, separate textures, samplers and the options of Metal.
     final vk = shader[5] as List;
     expect([vk[10], vk[11], vk[12]], everyElement(hasLength(1)));
     expect(vk[13], 3);
@@ -128,7 +128,8 @@ void main() {
     final orig = ((decodeShaderBundle(x) as List)[0] as List)[0] as List;
     final want = [...(orig[2] as List)]..[backendShaderCompiled] = lib;
     expect(jsonEncode(backend), jsonEncode(want));
-    // Copied again, the library stays; a shader without one gets none.
+    // A library stays when the bundle is copied again. A shader without
+    // a library gets none.
     expect(
       jsonEncode(
         decodeShaderBundle(keepShaderBundleBackends(mtl, {'metal_desktop'})),
@@ -151,7 +152,7 @@ void main() {
     expect((os[2] as List)[backendShaderCompiled], isNull);
   });
 
-  test("a resource's unused mark (engine patch 0026) survives a split", () {
+  test("a resource's unused mark survives a split", () {
     final one =
         decodeShaderBundle(keepShaderBundleBackends(_bundle(), {'vulkan'}))
             as List;

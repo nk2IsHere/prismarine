@@ -4,17 +4,19 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-/// Compiled shader shards kept by what they were compiled from, so a
-/// slice, a refresh or a cook compiles only the shards whose sources
-/// changed: a shard's key is its entries' ids, bundle specs and sources (with
-/// every file they include), the compile arguments, and impellerc's and
-/// Apple's Metal compiler's identity (path, size, time). A shard is kept only
-/// when it compiled whole; one with a failed entry compiles again next time.
+/// Compiled shader shards, kept by the inputs of their compile. A build
+/// compiles only the shards whose sources changed. The key of a shard covers
+/// the ids, bundle specs and sources of its entries with every included
+/// file, the compile settings and the identity of impellerc and of the Metal
+/// compiler, which is their path, size and time. A shard is kept only when
+/// it compiled whole. A shard with a failed entry is compiled again by the
+/// next build.
 class ShaderShardCache {
   ShaderShardCache._(this.dir, this._tools);
 
-  /// The cache in [dir] for the tools at [impellerc] and [metal] (null:
-  /// none), or null when [dir] is null.
+  /// Opens the cache in [dir] for the tools at [impellerc] and [metal].
+  /// [metal] is null without a Metal compiler. The keys cover [settings]
+  /// as JSON. Returns null when [dir] is null.
   static ShaderShardCache? open(
     String? dir,
     String impellerc,
@@ -32,8 +34,9 @@ class ShaderShardCache {
 
     return ShaderShardCache._(
       dir,
-      // v1: what a cached shard holds (bundles per backend, final sources,
-      // Metal errors); bump when the shard's processing changes.
+      // The version of the contents of a cached shard, which are the bundles
+      // for each backend, the final sources and the Metal errors. A change
+      // to the processing of a shard raises it.
       'v1\n${identity(impellerc)}\n${identity(metal)}\n${jsonEncode(settings)}',
     );
   }
@@ -41,9 +44,9 @@ class ShaderShardCache {
   final String dir;
   final String _tools;
 
-  /// The key of a shard of [ids] with [specs] (entry → bundle spec), whose
-  /// sources are the files [files] names (entry → path), resolving
-  /// `#include "<path>"` under [includeRoot].
+  /// Returns the key of a shard of [ids]. [specs] maps each entry to its
+  /// bundle spec and [files] maps it to its source file. An
+  /// `#include "<path>"` resolves against [includeRoot].
   String key(
     List<String> ids,
     Map<String, Object?> specs,
@@ -79,8 +82,9 @@ class ShaderShardCache {
     return sha256.convert(utf8.encode(b.toString())).toString();
   }
 
-  /// The shard kept under [key]: its bundles by backend directory, its
-  /// entries' final sources and Metal errors; null when not kept.
+  /// Returns the shard kept under [key] with its bundles for each backend
+  /// directory and the final sources and Metal errors of its entries.
+  /// Returns null when the cache has no such shard.
   ({
     Map<String, Uint8List> bundles,
     Map<String, String> sources,
@@ -101,7 +105,7 @@ class ShaderShardCache {
     );
   }
 
-  /// Keeps a shard under [key], written whole or not at all.
+  /// Keeps a shard under [key]. The shard is written whole or not at all.
   void store(
     String key,
     Map<String, Uint8List> bundles,

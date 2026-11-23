@@ -36,9 +36,10 @@ class ShaderBundleSettings {
   };
 }
 
-/// [glsl] with each uniform block not in [bound] made a plain struct with a
-/// private instance of the same name: code that still names it compiles, and
-/// nothing asks for a binding the compiled shader doesn't have.
+/// Returns [glsl] with each uniform block that is not in [bound] turned into
+/// a plain struct with an instance of the same name. Code that reads the
+/// block still compiles and the shader asks for no binding that the
+/// compiled shader lacks.
 String unboundBlocksAsStructs(String glsl, Set<String> bound) =>
     glsl.replaceAllMapped(RegExp(r'uniform (\w+) \{([^}]*)\} (\w+);'), (m) {
       if (bound.contains(m[1])) return m[0]!;
@@ -69,10 +70,9 @@ String? findImpellerc({List<String> engineRoots = const []}) {
   return best?.path;
 }
 
-/// Entries per shard. A player reads a whole shard for any one of its
-/// shaders, and a scene draws from a few in each (BeaconTown's frame: 116
-/// shaders in 59 shards of 200), so a shard stays small: with their Metal
-/// libraries that frame reads 26 MB at 25, 161 MB at 200.
+/// The default number of entries in a shard. A reader of the bundles loads
+/// a whole shard for any one of its shaders and a small shard keeps the
+/// bytes read for one scene low.
 const shardEntries = 25;
 
 /// What [buildShaderBundles] built.
@@ -80,14 +80,13 @@ class ShaderBundleReport {
   ShaderBundleReport(this.bundled, this.failed, this.bytes, {this.cached = 0});
   final int bundled;
 
-  /// Of [bundled], the entries whose shard came from the cache (not
-  /// compiled again).
+  /// The entries of [bundled] whose shard came from the cache.
   final int cached;
 
-  /// Shader id → impellerc's message.
+  /// The message of impellerc for each failed entry id.
   final Map<String, String> failed;
 
-  /// Bytes on disk per backend directory.
+  /// The bytes on disk for each backend directory.
   final Map<String, int> bytes;
 }
 
@@ -99,27 +98,30 @@ class ShaderBundleReport {
 /// bundle per backend of [settings], at
 /// `<root>/bundle/<backend directory>/<effect>.<k>.shaderbundle.gz`. Its
 /// sources move to `<root>/programs/<effect>/<k>/`. A uniform block that the
-/// compiler drops becomes a plain struct in the source, and the source then
+/// compiler drops becomes a plain struct in the source and the source then
 /// declares exactly the bindings of the shader. A failing shard is built
 /// again entry by entry. On macOS each Metal entry also carries its source
 /// compiled to a Metal library. The failures go to `<root>/build.log`.
+///
+/// [impellerc] is the compiler to run. With [effects], only the shards of
+/// these effects are built again and the other bundles stay. With
+/// [cacheDir], a shard whose sources and tools have not changed is copied
+/// from the [ShaderShardCache] in that directory.
 Future<ShaderBundleReport> buildShaderBundles(
   String root,
   ShaderBundleSettings settings, {
   required String impellerc,
   int jobs = 4,
   int shard = shardEntries,
-  // Only these effects' shards built again, the rest kept.
   Set<String>? effects,
-  // Compiled shards kept by their sources (ShaderShardCache): a shard whose
-  // sources and tools are unchanged is copied, not compiled again.
   String? cacheDir,
 }) async {
   final tree = Directory('$root/programs');
-  final entries = <String, (String, String)>{}; // entry → (file, stage)
+  final entries =
+      <String, (String, String)>{}; // entry id to its file and stage
   for (final f in tree.listSync(recursive: true).whereType<File>()) {
     final rel = f.path.substring(tree.path.length + 1);
-    // Bodies are included by programs, not entries of their own.
+    // Programs include the files of a bodies folder. They are no entries.
     if (rel.split('/').contains('bodies')) continue;
     if (effects != null && !effects.contains(rel.split('/').first)) continue;
     entries[rel] = (f.path, rel.split('.').last);
@@ -128,10 +130,10 @@ Future<ShaderBundleReport> buildShaderBundles(
   if (effects == null) {
     if (out.existsSync()) out.deleteSync(recursive: true);
   } else {
-    // Only these effects' shards are built again: theirs go, the rest stay.
+    // Deletes the bundles of these effects and keeps the rest.
     for (final f in out.listSync(recursive: true).whereType<File>()) {
-      // `<effect>.<k>.shaderbundle.gz`, where an effect's name may hold a
-      // dot of its own.
+      // A file has the form `<effect>.<k>.shaderbundle.gz` and the name of
+      // an effect can contain a dot.
       final name = f.path.substring(f.parent.path.length + 1);
       final shardDot = name.lastIndexOf('.', name.indexOf('.shaderbundle') - 1);
       if (effects.contains(name.substring(0, shardDot))) f.deleteSync();
@@ -189,7 +191,7 @@ Future<ShaderBundleReport> buildShaderBundles(
     'sdk': metal?.sdk,
   });
 
-  // The sources move under their shard, where the renderer looks.
+  // Moves the sources into the folder of their shard.
   void move(String k, List<String> ids) {
     final shardDir = k.substring(k.lastIndexOf('.') + 1);
     for (final e in ids) {
@@ -210,8 +212,8 @@ Future<ShaderBundleReport> buildShaderBundles(
     String? key,
   }) async {
     var bytes = File(full).readAsBytesSync();
-    // Blocks the compiler dropped leave the kept sources, and the shard is
-    // built again from them, so source and bundle agree.
+    // The sources lose the blocks that the compiler dropped and the shard
+    // is built again from them. The sources and the bundle then agree.
     var rewrote = false;
     for (final MapEntry(key: e, value: msl) in metalSources(bytes).entries) {
       final bound = metalBoundBlocks(msl).toSet();
@@ -226,9 +228,10 @@ Future<ShaderBundleReport> buildShaderBundles(
     if (rewrote && await build(ids, full) == null) {
       bytes = File(full).readAsBytesSync();
     }
-    // Each entry's MSL compiled ahead, so the engine loads a library and
-    // compiles no source at run time; what Apple's compiler refuses keeps
-    // only its source, and the engine's run-time compile reports it.
+    // Compiles the MSL of each entry ahead of time. The engine then loads a
+    // library and compiles no source at run time. An entry that the Metal
+    // compiler refuses keeps only its source and the compile of the engine
+    // at run time reports the error.
     final libs = <String, Uint8List>{};
     if (metal != null) {
       final flags = metalCompileFlags(settings.entryOptions);
@@ -314,7 +317,8 @@ Future<ShaderBundleReport> buildShaderBundles(
       if (good.isNotEmpty && await build(good, full) == null) {
         await split(full, k, good);
       }
-      // A source that didn't bundle goes, so no renderer looks for it.
+      // Deletes the sources that did not bundle. The tree then holds no
+      // source without a bundle.
       for (final e in failed.keys) {
         final f = File(entries[e]!.$1);
         if (f.existsSync()) f.deleteSync();

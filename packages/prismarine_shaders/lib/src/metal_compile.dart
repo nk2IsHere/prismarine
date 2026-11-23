@@ -3,15 +3,16 @@ import 'dart:typed_data';
 
 import 'shader_bundle_split.dart';
 
-/// Apple's Metal compiler, which compiles a bundle's MSL into the Metal
-/// library the bundle carries (patch 0004's `compiled`): impellerc writes
-/// only the source, which the engine would otherwise compile at run time.
+/// The Metal compiler of Xcode. It compiles the MSL of a bundle into the
+/// Metal library that the bundle carries in its `compiled` field. Without
+/// the library the engine compiles the source at run time.
 class MetalCompiler {
   MetalCompiler._(this.metal, this.sdk);
   final String metal;
   final String sdk;
 
-  /// The compiler xcrun names, or null off macOS or without the toolchain.
+  /// Finds the compiler through xcrun. Returns null on a system other than
+  /// macOS or without the toolchain.
   static MetalCompiler? find() {
     if (!Platform.isMacOS) return null;
     final m = Process.runSync('xcrun', ['-sdk', 'macosx', '-f', 'metal']);
@@ -23,9 +24,9 @@ class MetalCompiler {
     );
   }
 
-  /// Checks that [msl] (written to [file]) compiles with [flags]
-  /// ([metalCompileFlags]), without linking a library: null when it does,
-  /// else the compiler's first error.
+  /// Checks that [msl] compiles with [flags] from [metalCompileFlags]
+  /// without linking a library. Writes the source to [file]. Returns null
+  /// when it compiles, else the first error of the compiler.
   Future<String?> check(Uint8List msl, String file, List<String> flags) async {
     File(file).writeAsBytesSync(msl);
     final r = await Process.run(metal, [
@@ -41,10 +42,10 @@ class MetalCompiler {
     return r.exitCode == 0 ? null : _firstError(r, file);
   }
 
-  /// Compiles [msl] in [dir] with [flags] ([metalCompileFlags]): the
-  /// library, or the compiler's first error. The library names its output
-  /// file and takes its UUID from it, so the name is fixed: the same source
-  /// gives the same bytes.
+  /// Compiles [msl] in [dir] with [flags] from [metalCompileFlags]. Returns
+  /// the library or the first error of the compiler. The library takes its
+  /// UUID from the name of its output file. The name is fixed and the same
+  /// source gives the same bytes.
   Future<(Uint8List?, String?)> compile(
     Uint8List msl,
     String dir,
@@ -79,13 +80,12 @@ String _firstError(ProcessResult r, String file) => '${r.stderr}'
     .replaceFirst(file, '')
     .trim();
 
-/// The compiler flags for a bundle entry with [options] (its
-/// `metal_preserve_invariance` and `metal_safe_math`), as the engine
-/// compiles its source at run time (patch 0021's compile options: MSL 2.3,
-/// invariance, safe maths; none at all for an entry without options). The
-/// SDK's macOS is the target, as the engine's own compile targets the
-/// running system; an older macOS refuses the library and the engine
-/// compiles the source instead (patch 0004).
+/// Returns the compiler flags for a bundle entry with [options], the same
+/// flags as the compile of the engine at run time. `metal_preserve_invariance`
+/// and `metal_safe_math` select MSL 2.3 with invariance and with safe maths.
+/// An entry with neither gets no flags. The target is the macOS of the SDK.
+/// An older macOS refuses the library and the engine then compiles the
+/// source.
 List<String> metalCompileFlags(Map<String, Object> options) {
   final invariance = options['metal_preserve_invariance'] == true;
   final safe = options['metal_safe_math'] == true;
@@ -100,7 +100,8 @@ List<String> metalCompileFlags(Map<String, Object> options) {
   ];
 }
 
-/// The uniform blocks [msl] really binds: `constant Name& x [[buffer(n)]]`.
+/// Returns the uniform blocks that [msl] binds, each of the form
+/// `constant Name& x [[buffer(n)]]`.
 List<String> metalBoundBlocks(Uint8List msl) {
   final text = String.fromCharCodes(msl);
   final found = {
@@ -112,7 +113,7 @@ List<String> metalBoundBlocks(Uint8List msl) {
   return found.toList()..sort();
 }
 
-/// Each entry's `metal_desktop` source in an impellerc bundle.
+/// Returns the `metal_desktop` source of each entry of an impellerc bundle.
 Map<String, Uint8List> metalSources(Uint8List bundle) {
   final out = <String, Uint8List>{};
   final d = decodeShaderBundle(bundle) as List;

@@ -2,12 +2,12 @@ import 'dart:typed_data';
 
 import 'package:flat_buffers/flat_buffers.dart' as fb;
 
-/// A field of a flatbuffer table in impellerc's shader bundle schema
-/// (impeller/shader_bundle/shader_bundle.fbs).
+/// The kind of a field of a flatbuffer table in the shader bundle schema of
+/// impellerc, `impeller/shader_bundle/shader_bundle.fbs`.
 enum _F { str, u8, u32, u64, boolean, bytes, u32s, table, tables }
 
-/// The schema's tables: per field index its kind and, for tables, the
-/// child table's name.
+/// The tables of the schema. Each field index has its kind and, for a
+/// table, the name of the child table.
 const Map<String, List<(_F, String?)>> _schema = {
   'ShaderBundle': [(_F.tables, 'Shader'), (_F.u32, null)],
   'Shader': [
@@ -63,8 +63,8 @@ const Map<String, List<(_F, String?)>> _schema = {
     (_F.u64, null),
     (_F.tables, 'ShaderUniformStructField'),
   ],
-  // The trailing boolean on these three is mcsm_unused (engine patch 0026:
-  // the stage declares the resource but never reads it).
+  // The trailing boolean of these three marks a resource that the stage
+  // declares and does not read.
   'ShaderUniformTexture': [
     (_F.str, null),
     (_F.u64, null),
@@ -100,14 +100,14 @@ const shaderBundleBackends = {
   'vulkan': 5,
 };
 
-/// The `BackendShader` field of a backend's compiled code (patch 0004's
-/// `compiled`: a Metal library the engine loads in place of the source).
+/// The `BackendShader` field that holds the compiled code of a backend, a
+/// Metal library that the engine loads in place of the source.
 const backendShaderCompiled = 6;
 
-/// [bundle] with only the backends in [keep]: a player on Metal loads the
-/// `metal_desktop` copy and one on Vulkan the `vulkan` copy, so each can
-/// carry its own; what a player can load is unchanged. [metalCompiled]
-/// (entry name → `.metallib`) fills `metal_desktop`'s `compiled` field.
+/// Returns [bundle] with only the backends in [keep]. An app on Metal loads
+/// the `metal_desktop` copy and an app on Vulkan the `vulkan` copy and each
+/// backend can be stored in a bundle of its own. [metalCompiled] maps entry
+/// names to Metal libraries for the `compiled` field of `metal_desktop`.
 Uint8List keepShaderBundleBackends(
   Uint8List bundle,
   Set<String> keep, {
@@ -171,8 +171,8 @@ int _copy(
   Uint8List? compiled,
 }) {
   final fields = _schema[table]!;
-  // A field this schema lacks would be dropped silently: impellerc's schema
-  // grew, and [_schema] must follow it.
+  // A field that this schema lacks would be dropped without notice. The
+  // schema of impellerc grew and [_schema] must follow it.
   if (r.fieldCount(t) > fields.length) {
     throw FormatException(
       '$table has ${r.fieldCount(t)} fields; the copier knows ${fields.length}',
@@ -262,7 +262,7 @@ String _string(_Reader r, int s) => String.fromCharCodes(
   r.d.buffer.asUint8List(r.d.offsetInBytes + s + 4, r.u32(s)),
 );
 
-/// [bundle] as nested lists (per table its fields by index), for checks.
+/// Returns [bundle] as nested lists, with the fields of each table by index.
 Object? decodeShaderBundle(Uint8List bundle) {
   final r = _Reader(ByteData.sublistView(bundle));
   Object? table(int t, String name) {
