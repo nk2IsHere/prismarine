@@ -28,9 +28,10 @@ toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
 
-A machine has one Flutter SDK, one pub cache and one engine directory for every repository on it, in `~/.prismarine`.
-Link your Flutter SDK there once. `tools/toolchain/env.sh` reads the three folders, puts the Flutter SDK first on your
-`PATH` and exports the pub cache. Source it in every bash or zsh shell that builds, tests or fetches.
+`tools/toolchain/env.sh` sets up a shell for prismarine. It looks for the Flutter SDK at `~/.prismarine/flutter`, keeps
+the pub cache in `~/.prismarine/pub-cache` and the engine in `~/.prismarine/engine`, so every repository on the machine
+shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link, once per machine. Then source
+`env.sh` in every bash or zsh shell that builds, tests or fetches; it puts that Flutter first on your `PATH`.
 
     mkdir -p ~/.prismarine/pub-cache
     ln -s ~/flutter ~/.prismarine/flutter
