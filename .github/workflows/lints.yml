@@ -54,8 +54,9 @@ jobs:
         run: dart tools/lint/code_shape.dart
       - name: alloc
         run: |
-          (cd packages/prismarine_render && flutter pub get)
-          (cd packages/prismarine_loop && flutter pub get)
+          for p in $(sed -n 's/^  flutter_packages: \[\(.*\)\]$/\1/p' tools/lint/config.yaml | tr ',' ' '); do
+            (cd "$p" && flutter pub get)
+          done
           dart tools/lint/alloc.dart
       # analyze.dart skips a check without its toolchain and passes. Here
       # a skipped check fails the step.
