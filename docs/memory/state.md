@@ -30,3 +30,6 @@ and texture arrays of the cook. GitHub workflows run the lints and the tests for
 Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
 its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
 setup and the build of the sample app for each platform, checked on macOS and Linux.
+The slim scene layer of [its design](../specs/2026-11-23-scene-layer-design.md) is in place. `prismarine_scene` has
+glTF scene nodes under `GltfModel`, the screen copy, the build hook for shader bundles and the backend of the engine.
+The runner of `prismarine_render` calls `onGpuSubmit` for the GPU pass log. mcsm and gpu_smoke use no flutter_scene.

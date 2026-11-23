@@ -52,7 +52,7 @@ The decisions behind this spec are in [decisions](../memory/decisions.md); the u
 | `prismarine_shaders` | tools/mcsm shader toolchain | impellerc bundles, the shard cache, precompiled Metal |
 | `prismarine_audio` | mcsm_audio's `PcmSource`, formats, `WavWriter` | The audio interfaces (the generic engine comes with its own spec) |
 | `prismarine_audio_out` | mcsm_audio_out's device and decoders | cpal output, push ring, minimp3 and stb_vorbis, the decode cache |
-| `prismarine_scene` | mcsm_slice_scene's file bundle, paced loads, sampling | Asset bundles and paced loading; becomes the slim scene layer (own spec) |
+| `prismarine_scene` | mcsm_slice_scene's file bundle, paced loads, sampling | Asset bundles and paced loading, then the slim scene layer of [its design](2026-11-23-scene-layer-design.md) |
 | `prismarine_loop` | the player's gc_pacing, frame_pace, metal_frames, mem_log, line_writer; platform focus, cursor, mouse look | The real-time loop's pieces |
 | `prismarine_debug` | the player's frame ring, F7 review, glitch catcher, profiler, pass log, heap snapshot, plan replay; the F1 panel's shell and frame graph | Debug tools; games register their own panel sections |
 
@@ -115,7 +115,7 @@ Then prismarine's first engine release:
 
 Later, each through its own spec and plan, in this order:
 
-- **Slim scene layer:** `prismarine_scene` grows into a glTF importer and scene-node layer on Flutter GPU, under our renderer; mcsm's vendored flutter_scene goes once nothing uses it. The old S1 look's patches (shadow binder, display tone mapping, render textures, translucent depth) go with it.
+- **Slim scene layer:** `prismarine_scene` grows into a glTF importer and scene-node layer on Flutter GPU, under our renderer; mcsm's vendored flutter_scene goes. The old S1 look's patches (shadow binder, display tone mapping, render textures, translucent depth) go with it. Designed in [the scene layer design](2026-11-23-scene-layer-design.md).
 - **Replay:** `prismarine_replay`: the route container and hash chain, the snapshot schedule and pruning, the shadow-process runner, a deterministic-sim interface; mcsm registers its state (Lua, chores, session). Recorded routes must still replay.
 - **Lua:** `prismarine_lua`, an embeddable Lua for Dart with double numbers by default; mcsm's float32 numbers, CRT text and exe profiles become an mcsm profile on it. Lua fidelity stays exact.
 - **Audio engine:** prismarine's event and bus engine; FMOD Studio 1.x semantics and the Telltale bridge become mcsm adapters. The parity test stays identical.
