@@ -6,6 +6,15 @@
 Flutter engine and the parts that a real-time game needs around them, from worker threads to deterministic replay.
 Every part runs on macOS, Linux and Windows.
 
+<img alt="The sample app: Intel's Sponza with the debug panel" src="docs/images/sample.png">
+
+The sample app on macOS. Sponza 2022 Scene commissioned by Frank Meinl, sponsored by Anton Kaplanyan; Intel Sponza,
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+## Building and running engine
+
+To learn how to build and run sample application with prismarine engine, refer to [`Building`](docs/building.md).
+
 ## Packages
 
 The README of each linked package gives its use, a short example and its platforms.
@@ -59,120 +68,6 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 | [Machine locks](tools/machine/README.md) | Share one machine between the heavy jobs and the timed runs of every repository on it |
 | [Toolchain](tools/toolchain/README.md) | Sets the Flutter SDK, the pub cache and the engine directory of the machine in a shell |
 | [Engine release scripts](third_party/flutter_engine/README.md) | Build, package and fetch the patched engine for each platform |
-
-## Workspace setup
-
-You need the Flutter SDK, the patched engine, Rust, CMake and a C compiler. The Flutter SDK must be 3.47.7, the version
-of the engine patches. Clone it at its tag and put its `bin` folder on your `PATH`.
-
-    git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/flutter
-    export PATH=$HOME/flutter/bin:$PATH
-    flutter --version
-
-Each platform needs the tools of a Flutter desktop app. The build hooks of `prismarine_pad` and `prismarine_audio_out`
-compile Rust crates. `prismarine_pad` also builds SDL with CMake and a C compiler.
-
-- On macOS, install Xcode 27 with its command-line tools and CMake, for example with `brew install cmake`.
-- On Ubuntu, install `git curl unzip xz-utils zip clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-  libasound2-dev` with `sudo apt install`. The ALSA headers in `libasound2-dev` are for the audio output.
-- On Windows, install Git and Visual Studio 2022 with the workload "Desktop development with C++". The workload brings
-  the MSVC compiler and CMake.
-
-Install Rust with rustup. On Windows, run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and keep its MSVC
-toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since a build hook does not get
-`RUSTUP_HOME` or `CARGO_HOME`. A macOS app build compiles each crate for both CPUs of the Mac, which needs the standard
-libraries of both targets.
-
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-    rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
-
-### The patched engine
-
-A release of the patched engine is a set of archives on GitHub, one for each platform and CPU. `fetch.sh` downloads the
-archive of your machine with the GitHub CLI, checks it and unpacks it into the engine directory. `gh` must be logged in
-to an account that can read the repository of the releases. `PRISMARINE_ENGINE_DIR` is the engine directory, which every
-repository on the machine shares. `PRISMARINE_ENGINE_REPO` is the repository of the releases, as owner and name. Run the
-script from the root of your checkout.
-
-    export PRISMARINE_ENGINE_DIR=$HOME/prismarine-engine
-    export PRISMARINE_ENGINE_REPO=<owner>/<name>
-    third_party/flutter_engine/fetch.sh
-
-On Windows, run `powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1`. The script prints the
-flags of `flutter build` for the engine at its end. You can also build the engine yourself, which takes about an hour on
-each machine. [The engine README](third_party/flutter_engine/README.md) describes both ways. An app builds and runs on
-the stock engine of Flutter too, slower but with the same frames.
-
-### Dependencies
-
-`dart pub get` at the root of the checkout resolves the pub workspace, which holds the pure-Dart packages and the lints.
-The Flutter packages `prismarine_render`, `prismarine_scene`, `prismarine_loop` and `prismarine_debug`, the sample app
-and gpu_smoke are outside the workspace. Run `flutter pub get` in the directory of each one that you use.
-
-    dart pub get
-    (cd packages/prismarine_render && flutter pub get)
-
-### The private repo
-
-The folder `private/` is ignored by git. It can hold a separate private repository with the privacy patterns and the
-landing gate. You do not need it to build or test prismarine. Only the privacy check of the lints fails without it. The engine
-scripts read `PRISMARINE_ENGINE_REPO` from a file `private/config/*.env` when the variable is not set.
-
-## Building
-
-Run the tests of a package in its directory, `dart test` for a pure-Dart package and `flutter test` for a Flutter
-package. The first test run of `prismarine_pad` or `prismarine_audio_out` builds its Rust crate and SDL, which takes
-about a minute.
-
-    cd packages/prismarine_pad
-    dart test
-
-The sample app in `apps/prismarine_sample` is the example of an app build. It needs the patched engine and the model,
-which `dart tool/fetch.dart` in `apps/prismarine_sample` downloads into `~/.prismarine/sample`, or
-`%LOCALAPPDATA%\prismarine\sample` on Windows, as [its README](apps/prismarine_sample/README.md) describes. Set
-`PRISMARINE_SAMPLE_DATA` or pass `--data=<dir>` to the app for another folder. `tool/shaders.sh`
-builds its shaders with the impellerc of the engine before the app is built. The steps below for macOS
-ran on macOS 27.2 on an Apple M2 Pro and the steps for Linux on Ubuntu 26.04 on x86-64. The steps for Windows follow the
-scripts of the engine and are not checked on a Windows machine.
-
-### macOS
-
-The commands build and start the app on an Apple silicon Mac. An Intel Mac takes `macos-x64` and `host_release` in place
-of `macos-arm64` and `host_release_arm64`. The Intel form is not checked.
-
-    cd apps/prismarine_sample
-    flutter pub get
-    E=$PRISMARINE_ENGINE_DIR/macos-arm64/src
-    tool/shaders.sh $E/out/host_release_arm64/impellerc
-    flutter build macos --release --local-engine-src-path=$E \
-      --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
-    build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
-
-### Linux
-
-The commands build the app on an x86-64 machine into `build/linux/x64/release/bundle/prismarine_sample`, which runs
-with Vulkan.
-
-    cd apps/prismarine_sample
-    flutter pub get
-    E=$PRISMARINE_ENGINE_DIR/linux-x64/src
-    tool/shaders.sh $E/out/host_release/impellerc
-    flutter build linux --release --local-engine-src-path=$E \
-      --local-engine=host_release --local-engine-host=host_release
-
-### Windows
-
-The commands are for PowerShell on an x64 machine and build the app into
-`build\windows\x64\runner\Release\prismarine_sample.exe`. The build stops in the build of SDL for prismarine_pad,
-whose file paths are longer than MSBuild accepts. `tool/shaders.sh` is a bash script. On Windows the build of the
-shaders runs its Dart tool directly.
-
-    cd apps\prismarine_sample
-    flutter pub get
-    $E = "$env:PRISMARINE_ENGINE_DIR\windows-x64\src"
-    dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
-    flutter build windows --release --local-engine-src-path=$E `
-      --local-engine=host_release --local-engine-host=host_release
 
 ## Licence
 
