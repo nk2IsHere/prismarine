@@ -120,6 +120,7 @@ void main() {
       '${dir.path}/out/textures/array_2x2_37_2.ktx2',
     ).readAsBytesSync();
     expect(keyValues(ktx)['layers'], 'a,b');
+    expect(keyValues(ktx)['KTXwriter'], 'prismarine_assets');
     final d = ByteData.sublistView(ktx);
     expect(d.getUint32(32, Endian.little), 2);
     int levelAt(int k) => d.getUint64(80 + 24 * k, Endian.little);

@@ -31,13 +31,15 @@ TextureGroup? textureGroup(String dir, String stem) {
 /// Writes one KTX2 array into `[outDir]/textures/` for each group of the
 /// textures `[dir]/textures/<stem>.ktx2` of [stems]. A file has the name of
 /// its group. The key-value data of each array holds its layer stems under
-/// [layersKey]. Returns the arrays ordered by size, format and levels, with
-/// the layers of each ordered by stem.
+/// [layersKey] and its `KTXwriter` holds [writer]. Returns the arrays
+/// ordered by size, format and levels, with the layers of each ordered by
+/// stem.
 List<CookedArray> cookTextureArrays(
   String dir,
   Iterable<String> stems,
   String outDir, {
   required String layersKey,
+  String writer = 'prismarine_assets',
 }) {
   final groups = <TextureGroup, List<String>>{};
   for (final s in stems) {
@@ -90,6 +92,7 @@ List<CookedArray> cookTextureArrays(
           layers: layers.length,
           levels: levels,
           values: {layersKey: layers.join(',')},
+          writer: writer,
         ),
       );
     out.add(
