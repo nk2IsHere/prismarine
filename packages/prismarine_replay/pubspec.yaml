@@ -1,0 +1,12 @@
+name: prismarine_replay
+description: Deterministic replay for games. Route recording with a hash chain, state snapshot files with a schedule and pruning, a snapshot shadow process and a regression corpus runner. Pure Dart.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+dependencies:
+  prismarine_snap:
+    path: ../prismarine_snap
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

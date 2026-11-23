@@ -26,7 +26,11 @@ flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bun
 precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5 adds
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
-and texture arrays of the cook. GitHub workflows run the lints and the tests for a pull request and by hand, as
+and texture arrays of the cook.
+`prismarine_replay` follows [the replay design](../specs/2026-11-23-replay-design.md). It holds route recording and
+replay with the hash chain, snapshot files with the schedule and pruning, the snapshot shadow and the corpus runner.
+mcsm registers its route and snapshot formats and its game on it.
+GitHub workflows run the lints and the tests for a pull request and by hand, as
 [CI](../areas/ci.md) describes. They are not yet enabled on GitHub.
 Each package, the lints, the machine locks, gpu_smoke and the sample app have a README. The example of a package is in
 its `example/` folder. `check_links` keeps the copy in the README equal to it. The root README has the workspace
