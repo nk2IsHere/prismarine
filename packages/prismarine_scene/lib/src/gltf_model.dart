@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:prismarine_assets/prismarine_assets.dart';
 import 'package:vector_math/vector_math_64.dart';
 
+import 'scene_node.dart';
+
 /// The blend mode of a glTF material.
 enum AlphaMode { opaque, mask, blend }
 
@@ -154,7 +156,6 @@ class GltfModel {
     final draws = <ModelDraw>[];
     final cameras = <ModelCamera>[];
     final lights = <ModelLight>[];
-    final nodes = doc.list('nodes');
     final cameraDefs = doc.list('cameras');
     final lightDefs =
         (((doc.json['extensions'] as Map?)?['KHR_lights_punctual']
@@ -164,59 +165,46 @@ class GltfModel {
         const [];
     final min = Vector3.all(double.infinity);
     final max = Vector3.all(-double.infinity);
-    void visit(int n, Matrix4 parent) {
-      final node = nodes[n];
-      final world = parent * _local(node) as Matrix4;
-      if (node['mesh'] case final int mesh) {
-        for (final (p, prim) in meshes[mesh].indexed) {
-          if (prim == null) continue;
-          final (c, r) = _sphere(prim, world);
-          draws.add(ModelDraw(mesh, p, world, c, r));
-          _growBox(prim, world, min, max);
+    for (final root in importSceneNodes(doc)) {
+      root.walk((node) {
+        final world = node.world.clone();
+        if (node.mesh case final int mesh) {
+          for (final (p, prim) in meshes[mesh].indexed) {
+            if (prim == null) continue;
+            final (c, r) = _sphere(prim, world);
+            draws.add(ModelDraw(mesh, p, world, c, r));
+            _growBox(prim, world, min, max);
+          }
         }
-      }
-      if (node['camera'] case final int cam) {
-        final def = cameraDefs[cam];
-        if (def['perspective'] case final Map p) {
-          cameras.add(
-            ModelCamera(
-              (node['name'] as String?) ?? 'camera $cam',
-              world,
-              (p['yfov'] as num).toDouble(),
-              (p['znear'] as num).toDouble(),
-              (p['zfar'] as num?)?.toDouble(),
+        if (node.camera case final int cam) {
+          final def = cameraDefs[cam];
+          if (def['perspective'] case final Map p) {
+            cameras.add(
+              ModelCamera(
+                node.name ?? 'camera $cam',
+                world,
+                (p['yfov'] as num).toDouble(),
+                (p['znear'] as num).toDouble(),
+                (p['zfar'] as num?)?.toDouble(),
+              ),
+            );
+          }
+        }
+        if (node.light case final int l when l < lightDefs.length) {
+          final def = lightDefs[l];
+          final c = (def['color'] as List?)?.cast<num>() ?? const [1, 1, 1];
+          lights.add(
+            ModelLight(
+              def['type'] as String,
+              Vector3(c[0].toDouble(), c[1].toDouble(), c[2].toDouble()),
+              ((def['intensity'] as num?) ?? 1).toDouble(),
+              (def['range'] as num?)?.toDouble(),
+              world.getTranslation(),
+              (world.getRotation() * Vector3(0, 0, -1))..normalize(),
             ),
           );
         }
-      }
-      final ext = (node['extensions'] as Map?)?['KHR_lights_punctual'] as Map?;
-      if (ext?['light'] case final int l when l < lightDefs.length) {
-        final def = lightDefs[l];
-        final c = (def['color'] as List?)?.cast<num>() ?? const [1, 1, 1];
-        lights.add(
-          ModelLight(
-            def['type'] as String,
-            Vector3(c[0].toDouble(), c[1].toDouble(), c[2].toDouble()),
-            ((def['intensity'] as num?) ?? 1).toDouble(),
-            (def['range'] as num?)?.toDouble(),
-            world.getTranslation(),
-            (world.getRotation() * Vector3(0, 0, -1))..normalize(),
-          ),
-        );
-      }
-      for (final child in (node['children'] as List?) ?? const []) {
-        visit(child as int, world);
-      }
-    }
-
-    final scenes = doc.list('scenes');
-    final roots = scenes.isEmpty
-        ? [for (var i = 0; i < nodes.length; i++) i]
-        : ((scenes[(doc.json['scene'] as int?) ?? 0]['nodes'] as List?) ??
-                  const [])
-              .cast<int>();
-    for (final r in roots) {
-      visit(r, Matrix4.identity());
+      });
     }
     return GltfModel._(
       meshes,
@@ -245,23 +233,6 @@ class GltfModel {
       p.material == null ? _fallback : materials[p.material!];
 
   static final _fallback = ModelMaterial.fallback();
-
-  static Matrix4 _local(Map<String, Object?> node) {
-    if (node['matrix'] case final List m) {
-      return Matrix4.fromList([for (final v in m) (v as num).toDouble()]);
-    }
-    List<double> v(String k, List<double> d) => [
-      for (final x in (node[k] as List?) ?? d) (x as num).toDouble(),
-    ];
-    final t = v('translation', const [0, 0, 0]);
-    final r = v('rotation', const [0, 0, 0, 1]);
-    final s = v('scale', const [1, 1, 1]);
-    return Matrix4.compose(
-      Vector3(t[0], t[1], t[2]),
-      Quaternion(r[0], r[1], r[2], r[3]),
-      Vector3(s[0], s[1], s[2]),
-    );
-  }
 
   /// Grows [min] and [max] by the box of [p] in world space.
   static void _growBox(
