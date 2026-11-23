@@ -96,7 +96,8 @@ shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
 After a fetch, source `tools/toolchain/env.sh` again to build with the new engine. It sets `prismarine_engine_args`,
-which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched engine, `flutter build` uses Flutter's own engine, which is slower.
+which you pass to `flutter build`, and `PRISMARINE_IMPELLERC`, the shader compiler of the engine. Without a fetched
+engine, `flutter build` uses Flutter's own engine, which is slower.
 
 ## Patching and building the engine from stratch
 
@@ -110,13 +111,12 @@ about an hour and several GB of disk.
 | Linux | `third_party/flutter_engine/linux.sh setup`, then `linux.sh build` | `host_release` for x64, `linux_release_arm64` for arm64 |
 | Windows | `windows-toolchain.ps1` for the tools, then `windows.ps1 -EngineDir <dir>` | `host_release` for x64, `host_release_arm64` for arm64 |
 
-The sources and the out dirs are in `<engine dir>/flutter`. `env.sh` takes a fetched engine before a built one. Once you have
-built one release, the next one builds incrementally in a few minutes. Apply only
-the new patches, with `git am <patch>` in `<engine dir>/flutter` and `git apply <patch>` for a new Dart patch in
+The sources and the out dirs are in `<engine dir>/flutter`. `env.sh` takes a fetched engine before a built one. Once you
+have built one release, the next one builds incrementally in a few minutes. Apply only the new patches, with `git am
+<patch>` in `<engine dir>/flutter` and `git apply <patch>` for a new Dart patch in
 `engine/src/flutter/third_party/dart`. Then run the build step alone, `build.sh build` on macOS or `linux.sh build` on
-Linux. Do not run the setup again once you have the tree. [The engine
-README](../third_party/flutter_engine/README.md) lists the requirements of each platform, every patch, the packaging
-of a release and its publishing.
+Linux. Do not run the setup again once you have the tree. [The engine README](../third_party/flutter_engine/README.md)
+lists the requirements of each platform, every patch, the packaging of a release and its publishing.
 
 ## Apps on the engine
 
