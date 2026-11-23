@@ -2,7 +2,7 @@
 
 From [the scene layer design](../specs/2026-11-23-scene-layer-design.md). The work is on branch `prismscene` in both
 repositories. The coordinator merges prismarine first, then mcsm with the pin on the prismarine tip. The glTF code of
-the sample, `GltfDocument` and `GltfModel`, is merged before steps 2 and 6.
+the sample, `GltfDocument` and `GltfModel`, is merged into the branch before steps 2 and 6.
 
 ## prismarine
 
@@ -21,8 +21,8 @@ the sample, `GltfDocument` and `GltfModel`, is merged before steps 2 and 6.
 
 ## mcsm
 
-6. `tt_meshes.dart` packs on `GltfDocument`. A test first compares every primitive of every mesh and rig of the S1
-   treehouse with the packing of flutter_scene. The test then stays as a check against stored hashes.
+6. `tt_meshes.dart` packs on `GltfDocument`. A scratch test compares every primitive of every mesh and rig of every S1
+   slice with the packing of flutter_scene before the copy goes.
 7. The 22 GLSL files that the cooked S1 programs include are copied into `mcsm_look_scene/shaders/scene/`. The cook
    includes that folder. The treehouse is cooked into a private folder twice and compared with the live slice byte
    for byte.
