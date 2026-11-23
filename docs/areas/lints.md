@@ -56,6 +56,10 @@ applies only to the files that the code lints check, outside the `comment_check_
 every call from these roots and counts each place that allocates. A place that must allocate carries
 `// alloc: <reason>`. A function that a steady frame does not run carries `// alloc-cold: <reason>`.
 
+The lint resolves the pure-Dart packages of the workspace. The Flutter packages in `alloc.flutter_packages` of the
+config resolve through their own package config, such as `prismarine_render` with its runner. Run `flutter pub get` in
+each of them before the lint, else it stops with a message.
+
 ## Checks
 
 Run `dart test` in `tools/lint`.

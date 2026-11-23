@@ -20,10 +20,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      # The Dart of Flutter 3.47.7. The format check depends on the version.
-      - uses: dart-lang/setup-dart@v1
+      # Flutter 3.47.7 with Dart 3.13.5. The format check depends on the
+      # version. The allocation lint resolves two Flutter packages.
+      - uses: subosito/flutter-action@v2
         with:
-          sdk: "3.13.5"
+          flutter-version: "3.47.7"
+          channel: stable
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88.0"
@@ -51,7 +53,10 @@ jobs:
       - name: code shape
         run: dart tools/lint/code_shape.dart
       - name: alloc
-        run: dart tools/lint/alloc.dart
+        run: |
+          (cd packages/prismarine_render && flutter pub get)
+          (cd packages/prismarine_loop && flutter pub get)
+          dart tools/lint/alloc.dart
       # analyze.dart skips a check without its toolchain and passes. Here
       # a skipped check fails the step.
       - name: analyze and format
