@@ -1,0 +1,12 @@
+name: prismarine_shaders
+description: Builds impellerc shader bundles in shards per backend, keeps compiled shards in a cache and adds precompiled Metal libraries on macOS.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+dependencies:
+  crypto: ^3.0.6
+  flat_buffers: ^25.9.23
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0
