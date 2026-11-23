@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-/// Decoded audio the player reads: interleaved float32 frames.
+/// Decoded audio as interleaved float32 frames.
 abstract class PcmSource {
   int get channels;
   int get sampleRate;
 
-  /// Total frames (a voice MP3's FSB `numSamples` is padded to whole 1152
-  /// frames; the chore block is the authority on its length).
+  /// Total frames. A source whose length comes from a container's metadata
+  /// may count more frames than the decoded file holds.
   int get frames;
 
   /// Copies up to [count] frames from [frame] into [out] (interleaved);
@@ -14,11 +14,9 @@ abstract class PcmSource {
   int read(Float32List out, int frame, int count);
 }
 
-/// A source whose data is still loading off the render thread: an
-/// instrument on it starts late
-/// from its first sample once [ready] (FMOD 1.06 doesn't wait for sample
-/// data); a timelocked one holds its event's timeline, as 1.06 holds a
-/// stream's.
+/// A source whose data is still loading off the render thread. A player
+/// decides what a sound on it does until [ready], such as starting late from
+/// its first sample or holding its timeline.
 abstract interface class LoadingPcmSource implements PcmSource {
   bool get ready;
 }

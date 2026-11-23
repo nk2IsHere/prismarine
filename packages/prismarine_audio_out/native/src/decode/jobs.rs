@@ -1,6 +1,5 @@
-//! Background decodes: a waveform FMOD keeps in memory is decoded whole on a
-//! worker thread, never on the render thread; the render polls the job and
-//! the instrument starts once its data is there (FMOD 1.06's late start).
+//! Background decodes. A file is decoded whole on a worker thread, never on
+//! the render thread, and the render polls the job until its data is there.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI32, Ordering};

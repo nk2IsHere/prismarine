@@ -6,10 +6,9 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import '../native.dart';
 
-/// A waveform FMOD keeps in memory, decoded whole on the native worker
-/// thread: until [ready]
-/// the engine starts its instruments late (FMOD 1.06's rule). [channels],
-/// [sampleRate] and [frames] are the bank's until the decode lands.
+/// A file decoded whole on the native worker thread. [channels],
+/// [sampleRate] and [frames] are the ones given until the decode lands, and
+/// reads give silence until [ready].
 class AsyncPcmSource implements LoadingPcmSource {
   AsyncPcmSource.start(
     this.path, {

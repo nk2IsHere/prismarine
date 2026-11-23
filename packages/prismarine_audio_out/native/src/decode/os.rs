@@ -74,7 +74,7 @@ const BACKGROUND_STEP: i32 = 10;
 /// Linux I/O priorities (`linux/ioprio.h`): the best-effort class (2 << 13)
 /// at its highest level for the feeder and its lowest for background
 /// decodes, both allowed without privileges; not the idle class, behind
-/// which a decode the mixer waits on would wait for every other reader.
+/// which a decode that a render waits on would wait for every other reader.
 const IOPRIO_FEEDER: i32 = 0x4000;
 const IOPRIO_BACKGROUND: i32 = 0x4007;
 /// The feeder's slice on Linux 6.12 and later: shorter than the default
@@ -87,7 +87,7 @@ const FEEDER_SLICE_NS: u64 = 1_000_000;
 /// background threads), with EcoQoS off and on (Windows 11 puts EcoQoS
 /// threads on the efficiency cores, as macOS does utility ones); not
 /// background mode, whose very low I/O priority would stall a decode the
-/// mixer waits on. Linux: the threads are the mixer's own and never serve
+/// render waits on. Linux: the threads are this library's own and never serve
 /// other work, so a nice raised for good is fine; a feeder asks for a short
 /// slice and goes above the process only where RLIMIT_NICE allows, never
 /// down; the best-effort I/O class at its highest and lowest levels.

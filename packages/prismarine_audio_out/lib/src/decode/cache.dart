@@ -6,11 +6,11 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import '../native.dart';
 
-/// The process-wide decoded-audio cache (native/out/src/decode/cache.rs):
-/// whole-file decodes of in-memory bank
-/// waveforms and voice lines, in native memory, decoded on low-priority
-/// native threads. Every isolate sees the same cache: the sim asks for what
-/// is coming ([want]); the render isolate plays it ([CachedPcmSource]).
+/// The process-wide decoded-audio cache (native/src/decode/cache.rs). It
+/// holds whole-file decodes in native memory, decoded on low-priority native
+/// threads and keyed by path. Every isolate sees the same cache. One isolate
+/// asks for what is coming ([want]) and another plays it
+/// ([CachedPcmSource]).
 abstract final class PcmCache {
   /// Asks for [path] ahead of need. Returns its state: 0 queued, 1 ready,
   /// 2 decoding, −1 failed.
@@ -77,7 +77,7 @@ class PcmCacheStats {
 /// A whole file from [PcmCache], held while this object lives (a native
 /// finalizer gives the reference back): the samples stay in native memory
 /// and reads copy only the frames asked for. Until the decode lands it is a
-/// [LoadingPcmSource] with the bank's format ([channels], [sampleRate],
+/// [LoadingPcmSource] with the format given ([channels], [sampleRate],
 /// [frames] as given); [wait] blocks until it is there. [ffi.Finalizable]
 /// keeps it alive to the end of every method that reads its view.
 class CachedPcmSource implements LoadingPcmSource, ffi.Finalizable {

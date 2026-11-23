@@ -1,4 +1,4 @@
-//! The Dart mixer's output (`--mixer=dart` real time): PCM rendered on a
+//! Output of PCM rendered elsewhere. PCM rendered on a
 //! Dart isolate is pushed into a ring the output device ([device], cpal)
 //! drains in its callback. The audio clock is the frames the device has
 //! taken from the ring ([PushStream::consumed]).
@@ -7,11 +7,10 @@
 //! the producer (one Dart isolate at a time, under a lock) pushes, the
 //! device's callback pops and never allocates or locks.
 //!
-//! Behaviour kept from the flutter_soloud buffer stream it replaces: a
-//! paused stream takes nothing (the clock stops); a muted one takes and
+//! A paused stream takes nothing (the clock stops); a muted one takes and
 //! plays silence (the clock runs); a ring that runs dry plays silence
 //! without advancing the clock and waits until [REFILL] frames are queued
-//! again (soloud's `bufferingTimeNeeds: 0.05`), counting an underrun.
+//! again, counting an underrun.
 
 use crossbeam_utils::CachePadded;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -43,7 +42,7 @@ struct Reader {
     ring: rtrb::Consumer<f32>,
     sh: Arc<Shared>,
     /// Dry: silent until [REFILL] frames are queued. A new stream starts
-    /// dry, as soloud's did.
+    /// dry.
     dry: bool,
 }
 

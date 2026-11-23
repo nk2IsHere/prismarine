@@ -7,7 +7,7 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import '../native.dart';
 
-/// Decodes a slice audio file (`.mp3` voice, `.ogg` bank sample) into memory.
+/// Decodes an audio file (`.mp3` or `.ogg`) into memory.
 /// A missing or undecodable file is a [FormatException] naming it.
 MemoryPcmSource decodeAudioFile(String path) {
   final f = File(path);

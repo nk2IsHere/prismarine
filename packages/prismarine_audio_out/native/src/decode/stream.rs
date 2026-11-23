@@ -1,5 +1,5 @@
-//! Streamed Ogg Vorbis: a waveform FMOD streams (WAIB loading mode 2) is
-//! decoded incrementally, never whole on the render thread. Each stream reads
+//! Streamed Ogg Vorbis. A file too long to decode whole is decoded
+//! incrementally, never on the render thread. Each stream reads
 //! its file, decodes a head at open (the start and loops back to it play at
 //! once), and a single feeder thread keeps a ring of decoded frames ahead of
 //! the reader. The reader only copies from the head or the ring; frames not

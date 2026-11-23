@@ -59,7 +59,7 @@ fn main() {
     let blocks = (seconds * 48000.0 / 1024.0) as usize;
     for _ in 0..blocks {
         for (i, s0) in streams.iter().enumerate() {
-            // A stream's timeline holds until it is open (FMOD 1.06).
+            // A stream is read once it is open.
             if s0.ready() != 1 {
                 continue;
             }

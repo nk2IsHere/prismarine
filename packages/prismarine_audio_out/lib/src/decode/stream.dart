@@ -7,10 +7,10 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import '../native.dart';
 
-/// A waveform FMOD streams (WAIB loading mode 2), decoded incrementally by the native feeder:
-/// opening decodes only a head, and reads copy decoded frames (silence where
-/// the feeder hasn't reached yet). Each concurrent reader position gets its
-/// own native stream, as FMOD opens one per playing instrument.
+/// An Ogg Vorbis file decoded incrementally by the native feeder. Opening
+/// decodes only a head, and reads copy decoded frames, with silence where
+/// the feeder hasn't reached yet. Each concurrent reader position gets its
+/// own native stream.
 class StreamingPcmSource implements LoadingPcmSource {
   StreamingPcmSource._(
     this.path,
@@ -23,7 +23,7 @@ class StreamingPcmSource implements LoadingPcmSource {
   }
 
   /// Opens [path] (an `.ogg`) on the feeder thread; [channels],
-  /// [sampleRate] and [frames] are the bank's (the file agrees). A
+  /// [sampleRate] and [frames] are the caller's (the file agrees). A
   /// [FormatException] when the file is missing.
   factory StreamingPcmSource.open(
     String path, {
@@ -59,7 +59,7 @@ class StreamingPcmSource implements LoadingPcmSource {
   /// plays at once while the feeder moves.
   static const headSeconds = 0.5;
 
-  /// At most this many native streams per waveform (concurrent voices).
+  /// At most this many native streams per file (concurrent readers).
   static const maxTaps = 4;
 
   final String path;

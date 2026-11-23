@@ -1,9 +1,8 @@
-//! The decoded-audio cache: whole-file decodes (in-memory bank waveforms,
-//! voice lines) to interleaved float32, keyed by path, process-wide. Any
-//! isolate may ask for a file ahead of need ([want]: the sim's preloader) or
-//! take it to play ([Held::acquire]: the render isolate, the mixer); the
-//! samples live outside the Dart heap, so neither the decode nor the data
-//! touch the heap the isolates share. Decodes run on low-priority threads.
+//! The decoded-audio cache. It holds whole-file decodes to interleaved
+//! float32, keyed by the path that the caller passes, for the whole process.
+//! Any isolate may ask for a file ahead of need ([want]) or take it to play
+//! ([Held::acquire]). The samples are outside the Dart heap, and neither the
+//! decode nor the data touch the heap that the isolates share. Decodes run on low-priority threads.
 //! Entries nobody holds are dropped two scene changes after they were last
 //! wanted, or oldest first while the cache is over its budget.
 

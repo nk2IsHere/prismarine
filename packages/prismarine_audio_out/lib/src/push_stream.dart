@@ -5,10 +5,9 @@ import 'package:ffi/ffi.dart';
 
 import 'native.dart';
 
-/// The Dart mixer's real-time output (`--mixer=dart`): rendered PCM (f32
-/// 48 kHz interleaved stereo) pushed into a ring the system's default
-/// output device drains (native/out/src/push.rs, through cpal, as the
-/// native mixer outputs). Its audio clock is the frames the device has
+/// Real-time output of PCM rendered in Dart, as f32 48 kHz interleaved
+/// stereo pushed into a ring that the system's default output device drains
+/// (native/src/push.rs). Its audio clock is the frames the device has
 /// taken: a paused stream takes nothing, a muted one takes and plays
 /// silence, a ring that runs dry plays silence without advancing the clock
 /// until 50 ms are queued again (each time is an underrun).

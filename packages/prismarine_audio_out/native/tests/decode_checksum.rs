@@ -2,7 +2,7 @@
 //! multiply-adds, stb_vorbis's tables from the libm crate (build.rs).
 //! tests/data holds two short
 //! files made for this test (ffmpeg's vorbis and libmp3lame encoders from
-//! generated tones and noise; no game data); CI runs this on every OS and
+//! generated tones and noise); CI runs this on every OS and
 //! architecture against the same checksums.
 
 use prismarine_audio_out::decode::codec::decode_file;

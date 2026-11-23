@@ -1,5 +1,5 @@
-// The decoders, the decoded-audio cache, streams and the output ring
-// (native/out), in the package's one native library.
+// The C functions of the native library (native/) for the decoders, the
+// decoded-audio cache, streams and the output ring.
 @ffi.DefaultAsset('package:prismarine_audio_out/src/native.dart')
 library;
 
@@ -37,7 +37,7 @@ external int oggDecode(
 )
 external void audioFree(ffi.Pointer<ffi.Void> p);
 
-// Streamed Ogg Vorbis (native/out/src/decode/stream.rs).
+// Streamed Ogg Vorbis (native/src/decode/stream.rs).
 final class NativeStream extends ffi.Opaque {}
 
 @ffi.Native<
@@ -95,7 +95,7 @@ external void streamClose(ffi.Pointer<NativeStream> s);
 )
 external int streamReady(ffi.Pointer<NativeStream> s);
 
-// Background whole-file decodes (native/out/src/decode/jobs.rs).
+// Background whole-file decodes (native/src/decode/jobs.rs).
 final class NativeJob extends ffi.Opaque {}
 
 @ffi.Native<ffi.Pointer<NativeJob> Function(ffi.Pointer<ffi.Char>)>(
@@ -129,7 +129,7 @@ external ffi.Pointer<ffi.Float> jobResult(
 )
 external void jobRelease(ffi.Pointer<NativeJob> j);
 
-// The decoded-audio cache (native/out/src/decode/cache.rs).
+// The decoded-audio cache (native/src/decode/cache.rs).
 final class NativePcm extends ffi.Opaque {}
 
 @ffi.Native<ffi.Int32 Function(ffi.Pointer<ffi.Char>)>(
@@ -193,7 +193,7 @@ external void pcmClear();
 )
 external void pcmStats(ffi.Pointer<ffi.Int64> out);
 
-/// The Dart mixer's output ring into the device (native/out/src/push.rs).
+/// The output ring into the device (native/src/push.rs).
 final class NativePushStream extends ffi.Opaque {}
 
 @ffi.Native<ffi.Pointer<NativePushStream> Function(ffi.Pointer<ffi.Int32>)>(

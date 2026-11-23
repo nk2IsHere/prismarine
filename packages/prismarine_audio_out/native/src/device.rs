@@ -9,8 +9,7 @@
 //! out to silence before it stops (dropping the [Device], or the process
 //! exiting: an `atexit` hook fades every live device), so the speakers
 //! don't click on the step from or to silence. The fade is applied after
-//! the render, at the device only: what the mixer renders (captures, the
-//! Dart/Rust parity) is unchanged.
+//! the render, at the device only. What the [Render] renders is unchanged.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Once};
@@ -25,8 +24,7 @@ pub trait Render: Send + 'static {
     fn render(&mut self, out: &mut [f32]);
 }
 
-/// Why the device didn't start: the code `mcsm_mix_start` returns and the
-/// platform's message.
+/// Why the device didn't start. A negative code and the platform's message.
 pub struct StartError {
     pub code: i32,
     pub message: String,
@@ -119,8 +117,8 @@ extern "C" {
     fn atexit(f: extern "C" fn()) -> std::os::raw::c_int;
 }
 
-/// At process exit (the player quits through `exit()`, so no device is
-/// dropped): fade every live device to silence. The streams are left to
+/// Fades every live device to silence at process exit, where no device is
+/// dropped. The streams are left to
 /// the process's end, playing silence.
 extern "C" fn fade_all_at_exit() {
     let live: Vec<Arc<Gate>> = LIVE.lock().unwrap_or_else(|e| e.into_inner()).clone();
@@ -141,8 +139,7 @@ pub struct Device {
 
 impl Device {
     /// Starts the default output with [render], asking for [period]-frame
-    /// buffers (FMOD's default, and what soloud used) when the device
-    /// allows it.
+    /// buffers when the device allows it.
     pub fn start<R: Render>(mut render: Box<R>, period: u32) -> Result<Device, StartError> {
         let host = cpal::default_host();
         let device = host

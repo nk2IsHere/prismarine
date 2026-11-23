@@ -1,7 +1,8 @@
 //! Audio decoding outside the Dart heap: the vendored decoders ([codec]),
 //! the process-wide decoded-audio cache ([cache]), background whole-file
 //! decodes ([jobs]) and streamed Ogg Vorbis ([stream]); [ffi] is their C ABI
-//! for Dart (lib/src/native.dart). The mixer uses them directly.
+//! for Dart (lib/src/native.dart). A crate that links this one uses them
+//! directly.
 
 pub mod cache;
 pub mod codec;

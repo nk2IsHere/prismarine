@@ -1,6 +1,6 @@
 # Third-party decoders (public domain)
 
-The spec's ruling S5 (desktop-first native decoders behind `PcmSource`; pure-Dart ones may replace them later). These are unmodified copies, pinned:
+The decoders behind `PcmSource` on the desktop are unmodified copies of these libraries, pinned by commit.
 
 | Library | Source | Commit | Licence |
 |---|---|---|---|

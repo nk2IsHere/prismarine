@@ -1,7 +1,7 @@
-//! prismarine_audio_out's output library: the decoders, the decoded-audio cache
-//! and streams ([decode]), the output device ([device]) and the ring that
-//! feeds it PCM rendered elsewhere ([push]). The mixer crate links it and
-//! uses the cache, streams and device directly.
+//! The native library of prismarine_audio_out. It holds the decoders, the
+//! decoded-audio cache and streams ([decode]), the output device ([device])
+//! and the ring that feeds the device PCM rendered elsewhere ([push]). A
+//! crate that links it uses the cache, streams and device directly.
 //!
 //! `unsafe` lives only at the FFI edge (the `extern "C"` functions here and
 //! in decode/ffi.rs, the decoders' calls, the thread role calls in
@@ -13,8 +13,7 @@ pub mod push;
 
 use std::panic::catch_unwind;
 
-/// The Dart mixer's output ([push]): opens the default output device fed
-/// from a new PCM ring. Null when no device opens; [err] (when not null)
+/// Opens the default output device fed from a new PCM ring ([push]). Null when no device opens; [err] (when not null)
 /// gets the code of the [device::StartError], or −7 when the start panicked.
 ///
 /// # Safety

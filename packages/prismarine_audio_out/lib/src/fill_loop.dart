@@ -27,7 +27,7 @@ class FillLoop {
 
   /// A block whose render threw: it plays as silence and the loop goes on
   /// (an uncaught error would end the isolate, and with it the stream and
-  /// the audible clock the game is paced by).
+  /// the audible clock that an app may pace by).
   final void Function(Object error, StackTrace stack)? onError;
 
   Timer? _timer;

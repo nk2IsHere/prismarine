@@ -3,7 +3,7 @@ name = "prismarine_audio_out"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "prismarine_audio_out's output library: the decoders (minimp3, stb_vorbis), the decoded-audio cache, streams, the output device and the push ring"
+description = "The native library of prismarine_audio_out. MP3 and Ogg Vorbis decoders, a process-wide cache of decoded audio, streams, the output device and a PCM ring into it."
 
 [lib]
 name = "prismarine_audio_out"
@@ -12,14 +12,14 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # CachePadded: each writer's atomics on their own cache line (128 B on Apple Silicon).
 crossbeam-utils = "0.8"
-# The Dart mixer's PCM into the output device (push.rs): a wait-free
-# single-producer single-consumer ring.
+# PCM rendered elsewhere into the output device (push.rs), through a
+# wait-free single-producer single-consumer ring.
 rtrb = "0.3"
 # The output device on every desktop platform (CoreAudio, WASAPI, ALSA).
 cpal = "0.18"
 # sin, cos, exp, log and pow in portable Rust (musl's fdlibm code) for
 # stb_vorbis's tables: the same bits on every target, where the platform's C
-# maths differ. Pinned with the mixer's dmath.rs.
+# maths differ. Pinned, so that the decoded bits stay the same.
 libm = { version = "=0.2.16", default-features = false }
 
 # The decode threads' roles (decode/os.rs): the nice and RLIMIT_NICE calls

@@ -149,7 +149,7 @@ class RenderIsolate {
         push: out.push,
         lead: lead,
         block: block,
-        // Each distinct failure once (a broken voice may throw every block).
+        // Each distinct failure once (a broken source may throw every block).
         onError: (e, st) {
           if (failed.add('$e')) {
             host.problem('audio render failed (silent block): $e\n$st');
