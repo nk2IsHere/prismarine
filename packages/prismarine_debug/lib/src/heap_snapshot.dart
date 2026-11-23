@@ -1,13 +1,13 @@
 import 'dart:developer' show NativeRuntime;
 import 'dart:io';
 
-/// `PRISMARINE_HEAP_SNAPSHOT=<dir>:<t>,<t>…`: at the first tick at or past
-/// each game time t, the isolate group's heap (every isolate of the group
-/// alike) is written to `<dir>/heap-<t>.dartheap`, the VM service's snapshot
-/// format (`HeapSnapshotGraph.fromChunks` reads it). Profile and debug builds
-/// only:
-/// a release (product) VM has no snapshot writer, so it logs that once.
-/// Diagnostics; the write holds every isolate for its seconds.
+/// Heap snapshots at the game times of `PRISMARINE_HEAP_SNAPSHOT=<dir>:<t>,<t>…`.
+///
+/// At the first tick at or past each game time t, the heap of the isolate
+/// group is written to `<dir>/heap-<t>.dartheap` in the snapshot format of
+/// the VM service, which `HeapSnapshotGraph.fromChunks` reads. This works in
+/// profile and debug builds only. A release VM has no snapshot writer and
+/// logs that once. The write holds every isolate for several seconds.
 final class HeapSnapshots {
   HeapSnapshots._(this._dir, this._times);
 
@@ -29,7 +29,8 @@ final class HeapSnapshots {
   final List<double> _times;
   int _next = 0;
 
-  /// Writes the snapshot due at game time [t], if one is.
+  /// Writes the snapshot that is due at game time [t], if any, and reports
+  /// to [log].
   void step(double t, void Function(String)? log) {
     if (_next >= _times.length || t < _times[_next]) return;
     final want = _times[_next++];

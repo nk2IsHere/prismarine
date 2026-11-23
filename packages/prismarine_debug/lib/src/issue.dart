@@ -1,12 +1,13 @@
-// The review's data: the frame ring's indexing, the marks drawn on a frame and the issue written
-// with a dump. Plain Dart, so its rules are tested without a GPU.
+// The data of the review, with the indexing of the frame ring, the marks
+// drawn on a frame and the issue written with a dump. It is plain Dart and
+// is tested without a GPU.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// The slots of a fixed-size ring, newest first: [push] takes the next slot
-/// (overwriting the oldest once full), [slotAt] maps "n frames back" to a
-/// slot.
+/// The slots of a fixed-size ring, newest first. [push] takes the next slot
+/// and overwrites the oldest once the ring is full. [slotAt] maps a number
+/// of frames back to a slot.
 class RingIndex {
   RingIndex(this.capacity) : assert(capacity > 0);
 
@@ -14,10 +15,10 @@ class RingIndex {
   int _next = 0;
   int _length = 0;
 
-  /// How many slots hold a frame.
+  /// The number of slots that hold a frame.
   int get length => _length;
 
-  /// The slot for a new frame.
+  /// Returns the slot for a new frame.
   int push() {
     final slot = _next;
     _next = (_next + 1) % capacity;
@@ -25,7 +26,7 @@ class RingIndex {
     return slot;
   }
 
-  /// The slot [back] frames before the newest (0 = newest).
+  /// Returns the slot [back] frames before the newest, where 0 is the newest.
   int slotAt(int back) {
     RangeError.checkValidIndex(back, this, 'back', _length);
     return (_next - 1 - back) % capacity;
@@ -37,8 +38,8 @@ class RingIndex {
   }
 }
 
-/// What a frame in the ring was: its game time, game frame, wall time (the
-/// app's clock, s) and the 3D scene shown.
+/// A frame in the ring with its game time, game frame, wall time in seconds
+/// of the clock of the app and the 3D scene shown.
 class HistoryMeta {
   const HistoryMeta({
     required this.frame,
@@ -53,17 +54,18 @@ class HistoryMeta {
   final double wall;
   final String? scene;
 
-  /// What the 3D frame was drawn with (the camera, the scene's fog), kept
-  /// so a marked one-off frame can be told apart afterwards (a wrong camera
-  /// or fog for one frame).
+  /// The inputs of the 3D frame, such as the camera and the fog of the
+  /// scene. A marked frame with a wrong camera or fog for one frame is then
+  /// visible afterwards.
   final Map<String, Object?>? render;
 }
 
 /// The review's drawing tools.
 enum MarkTool { point, arrow, pen, box }
 
-/// One mark on a frame: its tool, its points as fractions (0–1) of the 16:9
-/// frame (x right, y down), and a label (a point's number).
+/// One mark on a frame with its tool, its points as fractions from 0 to 1 of
+/// the 16:9 frame with x right and y down, and a label such as the number of
+/// a point.
 class Mark {
   Mark(this.tool, List<(double, double)> points, {this.label})
     : points = List.unmodifiable(points);
@@ -86,7 +88,7 @@ class Mark {
           ((p[0] as num).toDouble(), (p[1] as num).toDouble()),
       ], label: j['label'] as String?);
 
-  /// [x], [y] (pixels in a [width]×[height] frame) as a mark point.
+  /// Returns the pixel [x], [y] of a [width]×[height] frame as a mark point.
   static (double, double) normalize(
     double x,
     double y,
@@ -108,10 +110,10 @@ class IssueFrame {
 
   final HistoryMeta meta;
 
-  /// What is wrong on this frame (its marks and its time code).
+  /// The note about the defect on this frame, its marks and its time code.
   final String note;
 
-  /// Seconds before the review opened (≤ 0).
+  /// The seconds before the review opened, 0 or less.
   final double offset;
   final List<Mark> marks;
 
@@ -138,16 +140,17 @@ class Issue {
     required this.openedAt,
   });
 
-  /// The frames' notes, oldest first (each note belongs to its frame).
+  /// The notes of the frames, oldest first. Each note belongs to its frame.
   String get note => [
     for (final f in frames)
       if (f.note.isNotEmpty) f.note,
   ].join('; ');
 
-  /// The marked frames, oldest first (the shown frame when none is marked).
+  /// The marked frames, oldest first, or the shown frame when none is
+  /// marked.
   final List<IssueFrame> frames;
 
-  /// The ring's frame size.
+  /// The frame size of the ring.
   final int width, height;
 
   /// The game time at which the review opened.
