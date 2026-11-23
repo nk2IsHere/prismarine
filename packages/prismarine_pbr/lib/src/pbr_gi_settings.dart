@@ -70,7 +70,7 @@ class PbrGiSettings {
   double ssrThickness = 0.4;
 
   /// The rays per probe update and the probes updated per frame.
-  int raysPerProbe = 96, probesPerFrame = 512;
+  int raysPerProbe = 96, probesPerFrame = 256;
 
   /// The directions and the steps along each of the ambient occlusion.
   int aoDirections = 2, aoSteps = 6;
@@ -93,21 +93,21 @@ class PbrGiSettings {
     switch (q) {
       case GiQuality.low:
         raysPerProbe = 64;
-        probesPerFrame = 256;
+        probesPerFrame = 128;
         aoDirections = 2;
         aoSteps = 4;
         ssrSteps = 16;
         ssrFullSize = false;
       case GiQuality.medium:
         raysPerProbe = 96;
-        probesPerFrame = 512;
+        probesPerFrame = 256;
         aoDirections = 2;
         aoSteps = 6;
         ssrSteps = 32;
         ssrFullSize = false;
       case GiQuality.high:
         raysPerProbe = 192;
-        probesPerFrame = 1024;
+        probesPerFrame = 768;
         aoDirections = 4;
         aoSteps = 8;
         ssrSteps = 64;

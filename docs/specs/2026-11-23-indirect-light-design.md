@@ -172,7 +172,7 @@ can be changed after it.
 | Setting | Low | Medium, the default | High |
 |---|---|---|---|
 | `raysPerProbe` | 64 | 96 | 192 |
-| `probesPerFrame` | 256 | 512 | 1,024 |
+| `probesPerFrame` | 128 | 256 | 768 |
 | `aoDirections`, `aoSteps` | 2, 4 | 2, 6 | 4, 8 |
 | `ssrSteps` | 16 | 32 | 64 |
 | `ssrFullSize` | no | no | yes |

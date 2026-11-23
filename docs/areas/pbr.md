@@ -149,7 +149,7 @@ column from near to far. The apply pass lays the sum over the scene by the depth
 | `volume.sun`, `volume.points`, `volume.ambient`, `volume.history` | The factors of the light in the fog, 1, 1 and 0.5 and the share of the last frame in each froxel, 0.9. |
 | `gi.sky`, `gi.probes`, `gi.ambientOcclusion`, `gi.reflections` | The sky with its image-based light, the probes, the occlusion and the reflections, each on by default. Without the sky, the flat colours `sky` and `ground` light the scene. Without the probes, the sky lights it without occlusion. |
 | `gi.quality` | `medium` by default. It sets the counts below. |
-| `gi.raysPerProbe`, `gi.probesPerFrame` | 64 and 256 at low, 96 and 512 at medium, 192 and 1,024 at high. |
+| `gi.raysPerProbe`, `gi.probesPerFrame` | 64 and 128 at low, 96 and 256 at medium, 192 and 768 at high. |
 | `gi.aoDirections`, `gi.aoSteps` | The samples of the occlusion, 2 by 4, 2 by 6 or 4 by 8. |
 | `gi.ssrSteps`, `gi.ssrFullSize` | The steps of a reflected ray, 16, 32 or 64, and reflections at full size at high. |
 | `gi.intensity`, `gi.skyIntensity`, `gi.bounce` | The factors of the indirect light, of the sky and of each bounce, 1 by default. |
