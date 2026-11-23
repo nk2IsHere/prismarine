@@ -4,7 +4,7 @@ This page takes you from a fresh computer to an app that runs on the patched eng
 release of the engine or build the engine from its patches and then build the app. The sample app in
 `apps/prismarine_sample` is the example throughout.
 
-## The toolchain
+## Setting up toolchain
 
 You need the Flutter SDK, Rust, CMake and a C compiler. The Flutter SDK must be 3.47.7, the version of the engine
 patches. Clone it at its tag.
@@ -118,13 +118,15 @@ have built one release, the next one builds incrementally in a few minutes. Appl
 Linux. Do not run the setup again once you have the tree. [The engine README](../third_party/flutter_engine/README.md)
 lists the requirements of each platform, every patch, the packaging of a release and its publishing.
 
-## Apps on the engine
+## Running sample app
 
-A release build of an app takes the flags in `prismarine_engine_args`. Debug builds run on the stock engine. The sample
-app needs the model and its shaders. `tool/fetch.dart` downloads Intel's Sponza and prepares it in
-`~/.prismarine/sample`, or in `%LOCALAPPDATA%\prismarine\sample` on Windows. The scene takes about 0.6 GB on disk.
-`tool/shaders.sh` builds the shaders with the impellerc of the engine. [The sample
-README](../apps/prismarine_sample/README.md) lists its options.
+To build an app on the patched engine, build it in release mode and pass `prismarine_engine_args` to `flutter build`.
+Debug builds always use Flutter's own engine.
+
+The sample app needs two things before its first build. `tool/fetch.dart` downloads Intel's Sponza and prepares it in
+`~/.prismarine/sample`, or in `%LOCALAPPDATA%\prismarine\sample` on Windows; the prepared scene takes about 0.6 GB.
+`tool/shaders.sh` compiles the sample's shaders with the shader compiler of the engine. The options of the sample are in
+[its README](../apps/prismarine_sample/README.md).
 
 On macOS the commands build the app and start it.
 
