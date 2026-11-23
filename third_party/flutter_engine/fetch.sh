@@ -11,8 +11,8 @@
 #                              or else data/engine of this checkout
 #   PRISMARINE_FLUTTER         the Flutter SDK, by default the flutter on PATH
 #   PRISMARINE_ENGINE_REPO     owner/name of the release repository, by default
-#                              the value in the first private/config/*.env above
-#                              this directory
+#                              its value in a private/config/*.env above this
+#                              directory. MCSM_ENGINE_REPO is the last fallback.
 #   PRISMARINE_ENGINE_ARCHIVE  a downloaded archive with its .sha256 beside it,
 #                              unpacked in place of the download
 # The download needs gh, logged in to an account that can read the repository.
@@ -20,19 +20,17 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$here/../.." && pwd)
-# setting <key>… prints the first value of the keys in the first
-# private/config/*.env above this directory.
+# setting <key> prints the value of the key in the nearest private/config/*.env
+# above this directory that has it.
 setting() {
-  local d=$here f k
+  local d=$here f v
   while [[ $d != / ]]; do
     if [[ -d $d/private/config ]]; then
       for f in "$d"/private/config/*.env; do
         [[ -f $f ]] || continue
-        for k in "$@"; do
-          sed -n "s/^$k=//p" "$f" | tail -1 | sed -e "s/^[\"']//" -e "s/[\"']\$//"
-        done
-      done | sed -n 1p
-      return 0
+        v=$(sed -n "s/^$1=//p" "$f" | tail -1 | sed -e "s/^[\"']//" -e "s/[\"']\$//")
+        [[ -n $v ]] && { echo "$v"; return 0; }
+      done
     fi
     d=$(dirname "$d")
   done
@@ -45,8 +43,10 @@ if [[ -z $flutter_sdk ]]; then
   flutter_sdk=$(cd "$(dirname "$(command -v flutter)")/.." && pwd)
 fi
 archive=${PRISMARINE_ENGINE_ARCHIVE:-${MCSM_ENGINE_ARCHIVE:-}}
-repo=${PRISMARINE_ENGINE_REPO:-${MCSM_ENGINE_REPO:-}}
-[[ -n $repo ]] || repo=$(setting PRISMARINE_ENGINE_REPO MCSM_ENGINE_REPO)
+repo=${PRISMARINE_ENGINE_REPO:-}
+[[ -n $repo ]] || repo=$(setting PRISMARINE_ENGINE_REPO)
+[[ -n $repo ]] || repo=${MCSM_ENGINE_REPO:-}
+[[ -n $repo ]] || repo=$(setting MCSM_ENGINE_REPO)
 if [[ -z $repo && -z $archive ]]; then
   echo "fetch.sh: no release repository. Set PRISMARINE_ENGINE_REPO to owner/name, or PRISMARINE_ENGINE_ARCHIVE to a downloaded archive." >&2
   exit 1

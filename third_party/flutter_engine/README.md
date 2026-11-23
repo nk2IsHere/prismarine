@@ -26,7 +26,7 @@ The scripts read these settings from the environment. Each one is also read in i
 |---|---|
 | `PRISMARINE_ENGINE_DIR` | The engine directory, with the fetched targets in `<dir>/<target>` and a built engine in `<dir>/flutter`. The default is `$MCSM_DATA/engine` or else `data/engine` of the checkout. |
 | `PRISMARINE_FLUTTER` | The Flutter SDK. The default is the `flutter` on `PATH`. |
-| `PRISMARINE_ENGINE_REPO` | The GitHub repository of the releases, as owner/name. The default is the value in the first `private/config/*.env` above this directory. |
+| `PRISMARINE_ENGINE_REPO` | The GitHub repository of the releases, as owner/name. The default is its value in a `private/config/*.env` above this directory. Releases from prismarine1 on are in the repository of prismarine, the older ones in the one of `MCSM_ENGINE_REPO`. |
 | `PRISMARINE_ENGINE_ARCHIVE` | A downloaded archive with its `.sha256` beside it, which `fetch.sh` unpacks in place of the download. |
 | `PRISMARINE_ENGINE_CPU`, `_MODE`, `_JOBS`, `_TRIM` | The CPU, runtime mode, ninja jobs and object-file clean-up of `build.sh`. |
 | `PRISMARINE_ENGINE_REV` | The engine revision that `linux.sh` checks out and `package.sh` records. |
