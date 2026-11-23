@@ -17,4 +17,6 @@ config. The heavy-job and measure locks of each machine are the scripts in `tool
 use. The first half of step 9 and step 10 are done. `prismarine_loop` and `prismarine_scene` are Flutter packages
 outside the pub workspace, each with a page in `docs/areas/`. Step 8 adds `prismarine_audio` and
 `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of `prismarine_audio_out` and links it.
-Step 5, the runner behind a `RenderAssets` interface, follows.
+Step 11 brings the patched engine with its git history from mcsm: `third_party/flutter_engine` at release mcsm11,
+`third_party/flutter_gpu` and `tools/gpu_smoke`, described in [engine](../areas/engine.md). mcsm reads the release and
+flutter_gpu through its pin. Step 5, the runner behind a `RenderAssets` interface, follows.
