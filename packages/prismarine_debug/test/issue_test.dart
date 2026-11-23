@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_debug/prismarine_debug.dart';
 
@@ -52,13 +56,13 @@ void main() {
       frame: 10945,
       time: 182.4,
       wall: 30.5,
-      scene: 'adv_theNetherTransition.scene',
+      scene: 'courtyard.scene',
     );
     final issue = Issue(
       frames: [
         IssueFrame(
           meta: meta,
-          note: 'bow vanishes',
+          note: 'lamp vanishes',
           offset: -0.63,
           marks: [
             Mark(MarkTool.point, [(0.5, 0.5)], label: '1'),
@@ -72,7 +76,7 @@ void main() {
 
     test('issue.json names the frames and their images', () {
       final j = issue.toJson();
-      expect(j['note'], 'bow vanishes');
+      expect(j['note'], 'lamp vanishes');
       expect(j['ring'], {'width': 800, 'height': 450});
       final f = (j['frames']! as List).single as Map;
       expect(f['frame'], 10945);
@@ -80,7 +84,7 @@ void main() {
       expect(f['offset'], -0.63);
       expect(f['image'], 'frame_10945.png');
       expect(f['marked'], 'frame_10945.marked.png');
-      expect(f['note'], 'bow vanishes');
+      expect(f['note'], 'lamp vanishes');
       expect((f['marks'] as List).single, {
         'tool': 'point',
         'points': [
@@ -107,6 +111,42 @@ void main() {
       expect(
         ((i.toJson()['frames']! as List)[1] as Map).containsKey('note'),
         isFalse,
+      );
+    });
+
+    test('README: per frame its time, its note and the caller\'s lines', () {
+      final r = issue
+          .readme(
+            '/runs/x/dumps/4',
+            commands: (dir, f) => ['  again: replay $dir at ${f.meta.time}'],
+          )
+          .join('\n');
+      expect(r, contains('Issue: lamp vanishes'));
+      expect(r, contains('  note: lamp vanishes'));
+      expect(
+        r,
+        contains(
+          'Frame 10945 at t 182.400 (-0.63 s before the review, 1 mark): '
+          'frame_10945.marked.png',
+        ),
+      );
+      expect(r, contains('  again: replay /runs/x/dumps/4 at 182.4'));
+      expect(issue.readme('/d').join('\n'), isNot(contains('again')));
+    });
+
+    test('writeIssue: the files, issue.json and README lines appended', () {
+      final dir = Directory.systemTemp.createTempSync('issue');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/README').writeAsStringSync('dump\n');
+      writeIssue(dir.path, issue, {
+        'frame_10945.png': Uint8List.fromList([1, 2, 3]),
+      });
+      expect(File('${dir.path}/frame_10945.png').readAsBytesSync(), [1, 2, 3]);
+      final j = jsonDecode(File('${dir.path}/issue.json').readAsStringSync());
+      expect((j as Map)['note'], 'lamp vanishes');
+      expect(
+        File('${dir.path}/README').readAsStringSync(),
+        startsWith('dump\n\nIssue: lamp vanishes\n'),
       );
     });
   });

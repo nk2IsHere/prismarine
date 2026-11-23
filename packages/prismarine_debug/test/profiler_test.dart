@@ -9,15 +9,15 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('prof');
     final p = FrameProfiler(dir.path);
     p.beginFrame(t: 0, dt: 0);
-    p.add('look.solve', 2);
-    p.add('look.solve', 3);
+    p.add('physics.solve', 2);
+    p.add('physics.solve', 3);
     p.beginFrame(t: 1 / 30, dt: 1 / 30);
-    p.add('binding.apply', 1.5);
+    p.add('audio.mix', 1.5);
     await p.close();
     final lines = File('${dir.path}/frames.jsonl').readAsLinesSync();
     expect(lines, hasLength(2));
-    expect(jsonDecode(lines[0])['look.solve'], 5);
-    expect(jsonDecode(lines[1])['binding.apply'], 1.5);
+    expect(jsonDecode(lines[0])['physics.solve'], 5);
+    expect(jsonDecode(lines[1])['audio.mix'], 1.5);
     expect(File('${dir.path}/summary.txt').existsSync(), isTrue);
   });
 
