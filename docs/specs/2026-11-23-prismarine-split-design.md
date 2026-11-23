@@ -34,7 +34,7 @@ The decisions behind this spec are in [decisions](../memory/decisions.md); the u
 
 - Packages are named `prismarine_<function>`; Flutter-free packages stay usable from pure-Dart isolates and tools.
 - Environment variables are `PRISMARINE_*`; each moved variable also reads its old `MCSM_*` name for one release, so mcsm's scripts keep working while they are renamed.
-- The engine's native exports keep their `Mcsm*` names until prismarine's first engine release, which renames them (`Prismarine*`) with the feature bits unchanged and flutter_gpu in lockstep.
+- The engine's native exports keep their `Mcsm*` forms until prismarine's first engine release. A new patch on top of the existing ones renames them (`Prismarine*`) with the feature bits unchanged and flutter_gpu in lockstep.
 
 ## Packages
 
@@ -98,7 +98,7 @@ A step's mcsm side is imports, pubspecs and deletions only, except the seams nam
 9. **Loop and debug:** `prismarine_loop`, then `prismarine_debug` with the panel shell; mcsm registers its sections. Checked with a real-time recording on the workstation.
 10. **Scene assets:** `FileAssetBundle`, paced loading and sampling become `prismarine_scene`; Telltale cameras and component types stay.
 11. **Engine:** `third_party/flutter_engine`, `flutter_gpu` and `tools/gpu_smoke` move with their git history from mcsm. The commits that touched these paths are rewritten to the new paths and merged into prismarine, so the history of every engine patch stays in `git log`. mcsm reads the release through the pin; the same release and archives (no build in this step).
-12. **First engine release (prismarine's):** mcsm12's patches (Dart old-space compaction at switch holds: dart/0003, 0029, flutter_gpu G16, G17) plus the rename to prismarine names, built for every target incrementally, gpu_smoke on each.
+12. **First engine release (prismarine's):** mcsm12's patches (Dart old-space compaction at switch holds: dart/0003, 0029, flutter_gpu G16, G17) plus one new patch on top that renames the `Mcsm*` exports to prismarine forms. The existing patches stay unchanged, so each machine applies only the new patches. Built for every target incrementally, gpu_smoke on each.
 
 Later, each through its own spec and plan, in this order:
 
