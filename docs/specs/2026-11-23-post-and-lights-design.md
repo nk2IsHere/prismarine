@@ -68,13 +68,14 @@ offset from the Halton sequence in bases 2 and 3, with 8 offsets at low and medi
 `previousViewProjection` the last frame's view-projection without jitter and `frameIndex` the count of frames, for the
 temporal noise of other passes.
 
-The resolve finds the nearest depth of the 3 by 3 pixels around each pixel and reprojects that point into the last
-frame with the matrices without jitter. A static camera then reads the history at the same pixel. The history is read
-with a five-tap Catmull-Rom filter at high quality and bilinear filtering below it. The 3 by 3 neighbourhood of the
-current frame in YCoCg gives the mean and the deviation and the history is clipped towards the mean into the box of
-1.25 deviations. Colours are weighted by the inverse of their luminance before the blend, which keeps a single bright
-pixel from flickering. A colour that is not a finite number counts as black and does not enter the history. The blend takes 1/12 of the current frame. A history outside the view or a reset takes the
-current frame alone. Low quality uses a clamp to the minimum and maximum of the 5 neighbours of a cross.
+The resolve finds the nearest depth of each pixel and its four diagonal neighbours and reprojects that point into the
+last frame with the matrices without jitter. A static camera then reads the history at the same pixel. The history is read with a
+five-tap Catmull-Rom filter at high quality and bilinear filtering below it. The 3 by 3 neighbourhood of the current
+frame in YCoCg gives the mean and the deviation and the history is clipped towards the mean into the box of 1.25
+deviations. Colours are weighted by the inverse of their luminance before the blend, which keeps a single bright pixel
+from flickering. A colour that is not a finite number counts as black and does not enter the history. The blend takes
+1/12 of the current frame. A history outside the view or a reset takes the current frame alone. Low quality uses a clamp
+to the minimum and maximum of the 5 neighbours of a cross.
 
 The history is `taaHistory`, a copy of `resolved` that the tone map pass writes as its second colour target. A copy
 pass is not needed. The material sampler gets a mip bias of -0.5 with TAA on, which the history averages back into a
