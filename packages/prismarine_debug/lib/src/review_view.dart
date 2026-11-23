@@ -1,5 +1,6 @@
-// The review: scrub the frame history while the game is paused, mark what's wrong on
-// the frames (point, arrow, pen, box) with a note, and save it as an issue.
+// The review steps through the frame history while the game is paused. It
+// marks defects on the frames with a point, arrow, pen or box and a note.
+// It saves them as an issue.
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -11,7 +12,7 @@ import 'frame_history.dart';
 import 'issue.dart';
 import 'png.dart';
 
-/// What the review saves: the issue, and its PNGs by file name.
+/// The save of the review with the issue and its PNGs by file name.
 typedef ReviewSave =
     Future<String?> Function(
       Issue issue,
@@ -38,13 +39,14 @@ class ReviewView extends StatefulWidget {
   final ReviewSave onSave;
   final VoidCallback onClose;
 
-  /// An unattended check: a test mark on the frame 10 back, then save.
+  /// Runs an unattended check that puts a test mark on the frame 10 back and
+  /// saves.
   final bool autoSave;
 
-  /// The note of [autoSave]'s test mark.
+  /// The note of the test mark of [autoSave].
   final String autoSaveNote;
 
-  /// The text in place of a frame's time while the history holds none.
+  /// The text in place of the time of a frame while the history holds none.
   final String emptyText;
 
   @override
@@ -56,24 +58,25 @@ class _ReviewViewState extends State<ReviewView> {
   final _note = TextEditingController();
   final _noteFocus = FocusNode();
 
-  /// The shown frame, frames back from the newest.
+  /// The shown frame, as the number of frames back from the newest.
   int _back = 0;
   ui.Image? _image;
   int? _imageBack;
   MarkTool _tool = MarkTool.point;
 
-  /// Marks by game frame number (a mark belongs to the frame it's drawn on).
+  /// The marks by game frame number. A mark belongs to the frame under it.
   final _marks = <int, List<Mark>>{};
 
-  /// Notes by game frame number: the note box edits the shown frame's.
+  /// The notes by game frame number. The note box edits the note of the
+  /// shown frame.
   final _notes = <int, String>{};
 
-  /// Whether frame [frame] carries an issue (marks or a note).
+  /// Returns true when [frame] carries marks or a note.
   bool _isMarked(int frame) =>
       (_marks[frame] ?? const []).isNotEmpty ||
       (_notes[frame] ?? '').trim().isNotEmpty;
 
-  /// The stroke being drawn (fractions of the frame).
+  /// The stroke being drawn, in fractions of the frame.
   List<(double, double)>? _stroke;
   String? _status;
   bool _saving = false;
@@ -125,8 +128,9 @@ class _ReviewViewState extends State<ReviewView> {
     final hw = HardwareKeyboard.instance;
     final step = hw.isShiftPressed ? 10 : 1;
     final cmd = hw.isMetaPressed || hw.isControlPressed;
-    // Typing a note: every key is the text field's (digits, arrows, ⌘Z)
-    // except save, and Escape, which leaves the field for the frame.
+    // While a note is typed, every key goes to the text field, digits,
+    // arrows and ⌘Z included. Save and Escape are the exceptions. Escape
+    // leaves the field for the frame.
     if (_noteFocus.hasFocus) {
       if (cmd && k == LogicalKeyboardKey.keyS) {
         _save();
@@ -221,7 +225,8 @@ class _ReviewViewState extends State<ReviewView> {
       _status = 'saving…';
     });
     final newestWall = _h.metaAt(0).wall;
-    // The marked frames, oldest first; the shown frame when none is marked.
+    // The marked frames, oldest first, or the shown frame when none is
+    // marked.
     final backs = <int>[
       for (var b = _count - 1; b >= 0; b--)
         if (_isMarked(_h.metaAt(b).frame)) b,
@@ -268,8 +273,8 @@ class _ReviewViewState extends State<ReviewView> {
     if (out != null) widget.onClose();
   }
 
-  /// [image] with [marks] drawn, as a PNG (read back through a Picture;
-  /// encoded on a worker isolate).
+  /// Returns [image] with [marks] drawn as a PNG. The image is read back
+  /// through a Picture and encoded on a worker isolate.
   Future<Uint8List> _png(
     ui.Image image,
     List<Mark> marks, {
@@ -293,7 +298,8 @@ class _ReviewViewState extends State<ReviewView> {
     );
   }
 
-  /// The marked PNG's caption: the frame's time code and its note.
+  /// Returns the caption of the marked PNG with the time code and the note
+  /// of the frame.
   static String _caption(IssueFrame f) =>
       't ${f.meta.time.toStringAsFixed(2)} s · frame ${f.meta.frame} · '
       '${f.offset.toStringAsFixed(2)} s'
@@ -401,8 +407,8 @@ class _ReviewViewState extends State<ReviewView> {
                         ),
                       ],
                     ),
-                    // Tools (wrap on a narrow window: a debug panel takes
-                    // room), then the note with save and close.
+                    // The tools wrap on a narrow window, since a debug panel
+                    // takes room. The note with save and close follows.
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
@@ -440,7 +446,7 @@ class _ReviewViewState extends State<ReviewView> {
                               if (_count == 0) return;
                               final was = _isMarked(_meta.frame);
                               _notes[_meta.frame] = v;
-                              // The strip's dot comes and goes with it.
+                              // The dot of the strip follows the marks.
                               if (was != _isMarked(_meta.frame)) {
                                 setState(() {});
                               }
@@ -485,7 +491,8 @@ class _ReviewViewState extends State<ReviewView> {
   }
 }
 
-/// The frames as a strip: oldest left, newest right; marked frames dotted.
+/// The frames as a strip, oldest left and newest right, with a dot on each
+/// marked frame.
 class _Scrubber extends StatelessWidget {
   const _Scrubber({
     required this.count,
@@ -580,7 +587,7 @@ class _FramePainter extends CustomPainter {
     paintMarks(canvas, size, [...marks, ?_live()]);
   }
 
-  /// The stroke being drawn, as the mark it will become.
+  /// Returns the stroke being drawn as the mark it will become.
   Mark? _live() {
     final s = stroke;
     if (s == null || s.isEmpty) return null;
@@ -596,7 +603,7 @@ class _FramePainter extends CustomPainter {
   bool shouldRepaint(_FramePainter old) => true;
 }
 
-/// Draws [marks] over a [size] frame (the review and the saved PNGs).
+/// Draws [marks] over a frame of [size] on [canvas].
 void paintMarks(Canvas canvas, Size size, List<Mark> marks) {
   final unit = size.width / 800;
   final stroke = Paint()
@@ -676,8 +683,8 @@ void paintMarks(Canvas canvas, Size size, List<Mark> marks) {
   }
 }
 
-/// A caption strip along the bottom of a [size] frame: [text] (the frame's
-/// time code and note) on a dark band, so a saved frame explains itself.
+/// Draws [text], the time code and note of the frame, on [canvas] as a
+/// caption on a dark band along the bottom of a frame of [size].
 void paintCaption(Canvas canvas, Size size, String text) {
   final unit = size.width / 800;
   final tp = TextPainter(

@@ -1,9 +1,9 @@
 //! Streamed Ogg Vorbis. A file too long to decode whole is decoded
-//! incrementally, never on the render thread. Each stream reads
-//! its file, decodes a head at open (the start and loops back to it play at
-//! once), and a single feeder thread keeps a ring of decoded frames ahead of
-//! the reader. The reader only copies from the head or the ring; frames not
-//! decoded yet read as silence and are counted.
+//! incrementally and not on the render thread. Each stream reads its file
+//! and decodes a head at open, which lets the start and loops back to it
+//! play at once. A single feeder thread keeps a ring of decoded frames ahead
+//! of the reader. The reader only copies from the head or the ring. Frames
+//! not decoded yet read as silence and are counted.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -14,30 +14,31 @@ use super::codec::Vorbis;
 struct Inner {
     channels: i32,
     rate: i32,
-    /// Frames in the file.
+    /// The number of frames in the file.
     total: i64,
     head: Vec<f32>,
     head_frames: i64,
-    /// Circular: frame f at (f % cap).
+    /// The circular ring, with frame f at (f % cap).
     ring: Vec<f32>,
     cap: i64,
     base: i64,
     filled: i64,
     /// The end of the latest read.
     consumed: i64,
-    /// −1: none.
+    /// The pending seek, −1 for none.
     seek_req: i64,
-    /// Frames read as silence (not decoded yet).
+    /// The frames read as silence before they were decoded.
     missing: i64,
-    /// The first such frame since the last [Stream::take_missing_info], and
-    /// the ring then (base, filled, a seek pending): −1 none.
+    /// The first such frame since the last [Stream::take_missing_info], or −1
+    /// for none. `miss_ring` holds the ring at that time with its base, its
+    /// filled frames and a pending seek.
     miss_at: i64,
     miss_ring: (i64, i64, bool),
-    /// A prefetch asked for before the stream opened (0: none): the feeder
-    /// starts its ring there after the head.
+    /// A prefetch asked for before the stream opened, or 0 for none. The
+    /// feeder starts its ring there after the head.
     cue_at: i64,
     closed: bool,
-    /// 0 opening (on the feeder), 1 open, −1 failed.
+    /// 0 while opening on the feeder, 1 when open and −1 when failed.
     state: i32,
 }
 
@@ -65,10 +66,11 @@ impl Shared {
     }
 }
 
-/// A stream; dropping it closes it (the feeder lets it go).
+/// A stream. Dropping it closes it. The feeder then lets it go.
 pub struct Stream(Arc<Shared>);
 
-/// Streams the feeder hasn't picked up yet, and whether it runs.
+/// The streams that the feeder has not picked up yet, with a flag for a
+/// running feeder.
 struct Opened {
     new: Vec<Arc<Shared>>,
     feeder: bool,
@@ -79,7 +81,7 @@ static OPENED: Mutex<Opened> = Mutex::new(Opened {
     feeder: false,
 });
 
-/// The feeder's own part of a stream.
+/// The own part of a stream on the feeder.
 struct Fed {
     s: Arc<Shared>,
     v: Option<Vorbis>,
@@ -89,8 +91,8 @@ struct Fed {
 const TMP_FRAMES: i64 = 4096;
 
 fn feeder() {
-    // PRISMARINE_FEEDER_QOS=off, or MCSM_FEEDER_QOS=off, keeps the class
-    // that the thread was made with (A/B runs).
+    // PRISMARINE_FEEDER_QOS=off, or MCSM_FEEDER_QOS=off, keeps the class of the thread at its
+    // creation.
     let qos = std::env::var("PRISMARINE_FEEDER_QOS").or_else(|_| std::env::var("MCSM_FEEDER_QOS"));
     if qos.map_or(true, |v| v != "off") {
         super::os::take_role(super::os::Role::Feeder);
@@ -119,7 +121,7 @@ fn feeder() {
     }
 }
 
-/// Reads and opens the file and decodes the head (on the feeder thread).
+/// Reads and opens the file and decodes the head on the feeder thread.
 fn init(f: &mut Fed) -> bool {
     let Some(data) = std::fs::read(&f.s.path).ok().filter(|d| !d.is_empty()) else {
         return false;
@@ -143,7 +145,7 @@ fn init(f: &mut Fed) -> bool {
     let cap = rate as i64 * 2;
     let ring = vec![0f32; (cap * ch) as usize];
     let mut s = f.s.lock();
-    // A prefetch made while opening: the ring starts there.
+    // The ring starts at a prefetch made while opening.
     let start = if s.cue_at > got && s.cue_at < total {
         s.cue_at
     } else {
@@ -167,8 +169,8 @@ fn init(f: &mut Fed) -> bool {
     true
 }
 
-/// One feeder pass over a stream: a pending seek, then decode while the
-/// ring has room. True if it did anything.
+/// Runs one feeder pass over a stream, a pending seek and then decodes while
+/// the ring has room. Returns true if it did anything.
 fn feed(f: &mut Fed, tmp: &mut [f32]) -> bool {
     let state = f.s.lock().state;
     if state == 0 {
@@ -205,8 +207,8 @@ fn feed(f: &mut Fed, tmp: &mut [f32]) -> bool {
             if s.seek_req >= 0 {
                 return true;
             }
-            // Keep an eighth of the ring behind the reader (re-reads of
-            // recent frames, the interpolation's next frame).
+            // An eighth of the ring stays behind the reader for re-reads of
+            // recent frames and the next frame of the interpolation.
             let keep = s.consumed - s.cap / 8;
             if keep > s.base {
                 let drop = (keep - s.base).min(s.filled);
@@ -238,8 +240,9 @@ fn feed(f: &mut Fed, tmp: &mut [f32]) -> bool {
 }
 
 impl Stream {
-    /// Queues [path] (Ogg Vorbis) for the feeder, which opens it and decodes
-    /// a [head_seconds] head; until then reads are silence and [ready] is 0.
+    /// Queues the Ogg Vorbis file [path] for the feeder, which opens it and
+    /// decodes a head of [head_seconds]. Until then reads are silence and
+    /// [ready] is 0.
     pub fn open(path: &str, head_seconds: f64) -> Stream {
         let s = Arc::new(Shared {
             path: path.to_string(),
@@ -263,21 +266,21 @@ impl Stream {
         Stream(s)
     }
 
-    /// 1 open, 0 still opening, −1 failed.
+    /// Returns 1 when open, 0 while opening and −1 when failed.
     pub fn ready(&self) -> i32 {
         self.0.lock().state
     }
 
-    /// Channels, rate, frames (zero until open).
+    /// Returns the channels, rate and frames, zero until open.
     pub fn info(&self) -> (i32, i32, i64) {
         let s = self.0.lock();
         (s.channels, s.rate, s.total)
     }
 
-    /// Copies [count] frames from [frame] into [out] (interleaved; at most
-    /// what fits): the head, the ring, or silence where neither has them
-    /// yet. Asks the feeder to move when the ring isn't where the reader
-    /// needs it. Returns the frames that had data.
+    /// Copies up to [count] interleaved frames from [frame] into [out], at
+    /// most what fits. The frames come from the head, the ring or silence
+    /// where neither has them yet. Asks the feeder to move when the ring is
+    /// not where the reader needs it. Returns the frames that had data.
     pub fn read(&self, out: &mut [f32], frame: i64, count: i64) -> i64 {
         let mut s = self.0.lock();
         if s.state != 1 {
@@ -302,7 +305,7 @@ impl Stream {
             }
         }
         let end = frame + count;
-        // The first frame the ring must hold next: past the head.
+        // The first frame that the ring must hold next, past the head.
         let need = if end > s.head_frames {
             frame.max(s.head_frames)
         } else {
@@ -335,11 +338,11 @@ impl Stream {
         served
     }
 
-    /// Asks the feeder to have [frame] decoded before it is read: a timeline
-    /// jump is about to land there (a loop end or a quantized transition,
-    /// up to 0.5 s ahead). Frames in the head or the ring already need
-    /// nothing; else the ring moves there now (or starts there once the
-    /// stream opens), as a read far from it would move it later.
+    /// Asks the feeder to have [frame] decoded before it is read, for a jump
+    /// of the timeline that arrives there up to 0.5 s later, such as a loop
+    /// end or a quantized transition. Frames in the head or the ring already
+    /// need nothing. Otherwise the ring moves there now, or starts there once
+    /// the stream opens, as a read far from it would move it later.
     pub fn prefetch(&self, frame: i64) {
         let mut s = self.0.lock();
         match s.state {
@@ -358,9 +361,9 @@ impl Stream {
         }
     }
 
-    /// Whether [frame] and the block after it can be read now (open, in the
-    /// head or the ring), or lie past the end: a sound starting there won't
-    /// read silence.
+    /// Returns true when [frame] and the block after it can be read now from
+    /// the head or the ring of an open stream, or lie past the end. A sound
+    /// that starts there then does not read silence.
     pub fn has(&self, frame: i64) -> bool {
         let s = self.0.lock();
         if s.state != 1 {
@@ -373,16 +376,17 @@ impl Stream {
         have(frame) && have(last)
     }
 
-    /// Frames read as silence so far (cleared by the call).
+    /// Returns and clears the frames read as silence so far.
     pub fn take_missing(&self) -> i64 {
         let mut s = self.0.lock();
         s.miss_at = -1;
         std::mem::take(&mut s.missing)
     }
 
-    /// As [take_missing], with where it happened: (frames, the first frame
-    /// read as silence, the ring's base and frames then, a seek pending then,
-    /// the head's frames, the rate). None when nothing was missing.
+    /// Returns what [take_missing] returns with its place. The tuple holds
+    /// the frames, the first frame read as silence, the base and frames of
+    /// the ring at that time, a pending seek at that time, the frames of the
+    /// head and the rate. Returns None when nothing was missing.
     pub fn take_missing_info(&self) -> Option<(i64, i64, i64, i64, bool, i64, i32)> {
         let mut s = self.0.lock();
         let n = std::mem::take(&mut s.missing);

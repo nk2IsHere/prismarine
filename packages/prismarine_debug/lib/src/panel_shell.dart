@@ -38,14 +38,14 @@ class DebugPanelShell extends StatefulWidget {
 }
 
 class _DebugPanelShellState extends State<DebugPanelShell> {
-  /// Sections' open state by id (kept here: a PageStorage entry would share
-  /// its id with the text fields' scroll offsets inside the section).
+  /// The open state of the sections by id. A PageStorage entry would share
+  /// its id with the scroll offsets of the text fields inside the section.
   final _open = <String, bool>{};
 
   @override
   Widget build(BuildContext context) {
-    // The panel's own build (`panel.build`; its layout and paint are
-    // Flutter's, untimed).
+    // Times the build of the panel as `panel.build`. Its layout and paint
+    // are not timed.
     final sw = Stopwatch()..start();
     final w = _build(context);
     final ms = sw.elapsedMicroseconds / 1000;
@@ -64,7 +64,7 @@ class _DebugPanelShellState extends State<DebugPanelShell> {
       color: const Color(0xF0181A1F),
       child: Padding(
         padding: const EdgeInsets.all(10),
-        // Scrolls as a whole, so it fits any window height.
+        // The card scrolls as a whole to fit any window height.
         child: ListView(
           children: [
             ...widget.header(context, p),
@@ -74,7 +74,7 @@ class _DebugPanelShellState extends State<DebugPanelShell> {
               children: [
                 FrameGraph(d, style: small),
                 const SizedBox(height: 4),
-                // Means over the last 60 frames (rebuilt with the panel).
+                // Means over the last 60 frames, rebuilt with the panel.
                 frameGraphLegend(d, small),
               ],
             ),
@@ -86,8 +86,9 @@ class _DebugPanelShellState extends State<DebugPanelShell> {
   }
 }
 
-/// A collapsible panel section; its open state lives in [open] (by [id],
-/// default the title), so it survives rebuilds, collapses and scrolling.
+/// A collapsible panel section. Its open state is kept in [open] by [id],
+/// which defaults to the title. The state survives rebuilds, collapses and
+/// scrolling.
 class PanelSection extends StatelessWidget {
   PanelSection(
     this.title, {

@@ -1,7 +1,7 @@
 #version 460
-// A pulled pixel stage that declares resources it never reads (the shared
-// pulled preamble does): Metal reflects them without an index, and binding
-// them crashed the driver before release 10.
+// A pulled pixel stage that declares resources that it does not read, as a
+// shared pulled preamble does. Metal reflects them without an index. Binding
+// them crashes the driver on an engine before release 10.
 layout(std430) readonly buffer RawPullRows {
   vec4 rows[];
 } pullRows;

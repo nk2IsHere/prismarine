@@ -1,10 +1,10 @@
-//! Decodes every .mp3/.ogg under a directory with the vendored decoders and
-//! prints one line per file (path, frames, channels, rate, FNV-1a 64 of the
-//! float32 bits), then the hash of all lines. Run it on each target and
-//! diff: decoded PCM must be identical across architectures and platforms
-//! (dev only).
+//! Decodes every .mp3 and .ogg file under a directory with the vendored
+//! decoders. Prints one line per file with the path, frames, channels, rate
+//! and the FNV-1a 64 of the float32 bits, then the hash of all lines. Run it
+//! on each target and compare the output. Decoded PCM must be identical
+//! across architectures and platforms.
 //!
-//! usage: `cargo run --release --example decode_hash -- <dir> [threads]`
+//! Run it with `cargo run --release --example decode_hash -- <dir> [threads]`.
 
 use prismarine_audio_out::decode::codec::decode_file;
 

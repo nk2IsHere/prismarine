@@ -1,18 +1,21 @@
 // The checks of engine release 9, on Metal and Vulkan.
 //
-// - a 12,288-byte uniform block (impellerc's limit is per block there);
-// - a storage buffer read in a fragment shader;
-// - 2D array textures (uploaded per layer, sampled by layer, rendered into
-//   a layer) and 3D textures (uploaded per slice, read per slice);
-// - the added formats as targets (R11G11B10 float, RGBA16 unorm, RGBA16
-//   float, D16, D32 float) and a 2x MSAA D16 target read per sample later;
-// - a compute pass: storage buffers in and out, a uniform, an RGBA8 storage
-//   image and a uint 3D storage image, read afterwards by render passes;
-// - indirect draws and dispatches, texture views, per-frame array uploads,
+// - A 12,288-byte uniform block. The limit of impellerc is per block there.
+// - A storage buffer read in a fragment shader.
+// - 2D array textures, uploaded per layer, sampled by layer and rendered
+//   into a layer.
+// - 3D textures, uploaded per slice and read per slice.
+// - The added formats as targets, R11G11B10 float, RGBA16 unorm, RGBA16
+//   float, D16 and D32 float.
+// - A 2x MSAA D16 target read per sample later.
+// - A compute pass with storage buffers in and out, a uniform, an RGBA8
+//   storage image and a uint 3D storage image, read afterwards by render
+//   passes.
+// - Indirect draws and dispatches, texture views, per-frame array uploads,
 //   sampler state, copies and mip generation, vertex formats and step
 //   rates, layered passes and cube arrays.
 //
-// Each check prints a SMOKE line; the result is false when a check fails on
+// Each check prints a SMOKE line. The result is false when a check fails on
 // an engine that claims the features of release 9, bit 2048.
 import 'dart:async';
 import 'dart:typed_data';

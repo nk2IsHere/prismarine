@@ -1,16 +1,17 @@
-//! Thread roles: what each system is asked so a decode thread runs with the
-//! threads that feed the device or below the frame's. `calls` is the
-//! mapping, pure and tested on every platform; `apply` makes the calls. The
-//! same roles as prismarine_jobs' thread_roles.dart.
+//! Thread roles. Each system gets the calls that make a decode thread run
+//! with the threads that feed the device or below the threads of the frame.
+//! `calls` is the mapping, pure and tested on every platform. `apply` makes
+//! the calls.
 
-/// A decode thread's role.
+/// The role of a decode thread.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
-    /// Feeds what is heard next (the stream feeder: a chunk decoded late is
-    /// heard as silence): macOS's user-interactive class.
+    /// Feeds the audio heard next, such as the stream feeder, where a chunk
+    /// decoded late is heard as silence. It is the user-interactive class on
+    /// macOS.
     Feeder,
-    /// Work no frame waits on yet (the decode cache's preloads): macOS's
-    /// utility class.
+    /// Work that no frame needs yet, such as the preloads of the decode cache.
+    /// It is the utility class on macOS.
     Background,
 }
 
@@ -23,10 +24,10 @@ pub enum Os {
     Other,
 }
 
-/// What Linux lets a thread do with its nice: the process's nice (the
-/// thread group leader's), the calling thread's, and RLIMIT_NICE's soft
-/// limit (an unprivileged thread may lower its nice only down to
-/// 20 - limit).
+/// The nice values that limit a thread on Linux. They are the nice of the
+/// process, which is that of the thread group leader, the nice of the
+/// calling thread and the soft limit of RLIMIT_NICE. A thread without
+/// privileges may lower its nice only down to 20 - limit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Nice {
     pub process: i32,
@@ -41,24 +42,24 @@ pub enum Call {
     MacQos(u32),
     /// Windows `SetThreadPriority(GetCurrentThread(), priority)`.
     WinPriority(i32),
-    /// Windows `SetThreadInformation(ThreadPowerThrottling)`, the execution
-    /// speed bit: true EcoQoS (efficiency cores, a lower clock), false opted
-    /// out.
+    /// Windows `SetThreadInformation(ThreadPowerThrottling)` with the
+    /// execution speed bit. True selects EcoQoS with the efficiency cores and
+    /// a lower clock. False opts out.
     WinEcoQos(bool),
-    /// Linux `setpriority(PRIO_PROCESS, 0, nice)`: the calling thread's
-    /// nice (per thread on Linux).
+    /// Linux `setpriority(PRIO_PROCESS, 0, nice)`, the nice of the calling
+    /// thread, which is per thread on Linux.
     LinuxNice(i32),
-    /// Linux `sched_setattr`: SCHED_OTHER at `nice`, asking for a slice of
-    /// `slice_ns` (EEVDF's custom slice, 6.12 on; older kernels take the
-    /// nice and ignore the slice). Where the call is refused, `setpriority`
-    /// if `nice` is a change.
+    /// Linux `sched_setattr` with SCHED_OTHER at `nice` and a slice of
+    /// `slice_ns`, the custom slice of EEVDF from Linux 6.12. Older kernels
+    /// take the nice and ignore the slice. A refused call falls back to
+    /// `setpriority` if `nice` is a change.
     LinuxFrame {
         nice: i32,
         slice_ns: u64,
         nice_changes: bool,
     },
-    /// Linux `ioprio_set(IOPRIO_WHO_PROCESS, 0, ioprio)`: the calling
-    /// thread's I/O priority.
+    /// Linux `ioprio_set(IOPRIO_WHO_PROCESS, 0, ioprio)`, the I/O priority of
+    /// the calling thread.
     LinuxIoPrio(i32),
 }
 
@@ -66,31 +67,33 @@ const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
 const QOS_CLASS_UTILITY: u32 = 0x11;
 const THREAD_PRIORITY_HIGHEST: i32 = 2;
 const THREAD_PRIORITY_BELOW_NORMAL: i32 = -1;
-/// Linux: the feeder's step above the process's nice where RLIMIT_NICE
-/// allows it (the engine's raster thread on Android is at -5), and
-/// background work's below it (`nice`'s own default step).
+/// The steps on Linux of the nice of the feeder above the nice of the process, where RLIMIT_NICE
+/// allows it, with the step of background work below it. The raster thread of the engine on Android
+/// is at -5. The background step is the default step of `nice`.
 const FEEDER_STEP: i32 = 5;
 const BACKGROUND_STEP: i32 = 10;
-/// Linux I/O priorities (`linux/ioprio.h`): the best-effort class (2 << 13)
-/// at its highest level for the feeder and its lowest for background
-/// decodes, both allowed without privileges; not the idle class, behind
-/// which a decode that a render waits on would wait for every other reader.
+/// Linux I/O priorities from `linux/ioprio.h`. The feeder uses the highest
+/// level of the best-effort class (2 << 13) and background decodes its
+/// lowest level. Both are allowed without privileges. The idle class is not
+/// used. A decode that a render needs would wait behind every other reader.
 const IOPRIO_FEEDER: i32 = 0x4000;
 const IOPRIO_BACKGROUND: i32 = 0x4007;
-/// The feeder's slice on Linux 6.12 and later: shorter than the default
-/// (0.75 ms × (1 + log2 CPUs), 3 ms from 8 CPUs), so EEVDF lets it preempt
-/// on wakeup. Any thread may ask (0.1–100 ms).
+/// The slice of the feeder on Linux 6.12 and later. The default slice is
+/// 0.75 ms × (1 + log2 CPUs), 3 ms from 8 CPUs. EEVDF lets a thread with a
+/// shorter slice preempt on wakeup. Any thread may request a slice of 0.1 ms
+/// to 100 ms.
 const FEEDER_SLICE_NS: u64 = 1_000_000;
 
-/// The calls that give a thread `role` on `os`. Windows: the feeder at the
-/// highest normal priority, background work below normal (as the engine's
-/// background threads), with EcoQoS off and on (Windows 11 puts EcoQoS
-/// threads on the efficiency cores, as macOS does utility ones); not
-/// background mode, whose very low I/O priority would stall a decode the
-/// render waits on. Linux: the threads are this library's own and never serve
-/// other work, so a nice raised for good is fine; a feeder asks for a short
-/// slice and goes above the process only where RLIMIT_NICE allows, never
-/// down; the best-effort I/O class at its highest and lowest levels.
+/// Returns the calls that give a thread `role` on `os` with the limits `nice`.
+///
+/// On Windows the feeder runs at the highest normal priority without EcoQoS. Background work runs
+/// below normal with EcoQoS. Background mode is not used, since its very low I/O priority would
+/// stall a decode that the render needs.
+///
+/// On Linux the threads belong to this library and serve no other work. A nice raised for good is
+/// fine. A feeder requests a short slice and goes above the process only where RLIMIT_NICE allows
+/// it. It does not go lower. The I/O priority is the highest or lowest level of the best-effort
+/// class.
 pub fn calls(os: Os, role: Role, nice: Nice) -> [Option<Call>; 2] {
     match (os, role) {
         (Os::Mac, Role::Feeder) => [Some(Call::MacQos(QOS_CLASS_USER_INTERACTIVE)), None],
@@ -127,9 +130,9 @@ pub fn calls(os: Os, role: Role, nice: Nice) -> [Option<Call>; 2] {
     }
 }
 
-/// Gives the calling thread `role` (refused quietly where the system won't).
-/// A thread otherwise takes the class of the thread that made it, here
-/// whichever Dart thread first needed it.
+/// Gives the calling thread `role`. A system that refuses it does so
+/// quietly. A thread otherwise takes the class of the thread that made it,
+/// here the Dart thread that first needed it.
 pub fn take_role(role: Role) {
     for call in calls(this_os(), role, read_nice()).into_iter().flatten() {
         apply(call);
@@ -156,9 +159,9 @@ fn read_nice() -> Nice {
     };
     // SAFETY: getrlimit writes one rlimit through a pointer to a live local.
     let ok = unsafe { libc::getrlimit(libc::RLIMIT_NICE, &mut lim) } == 0;
-    // SAFETY: getpid and getpriority take and return plain integers; with
-    // `who` 0 getpriority reads the calling thread, with the pid the thread
-    // group's leader.
+    // SAFETY: getpid and getpriority take and return plain integers. With
+    // `who` 0 getpriority reads the calling thread and with the pid the
+    // leader of the thread group.
     let (process, thread) = unsafe {
         let pid = libc::getpid() as libc::id_t;
         (
@@ -169,7 +172,7 @@ fn read_nice() -> Nice {
     Nice {
         process,
         thread,
-        // RLIM_INFINITY: any nice. rlim_t is narrower on 32-bit targets.
+        // RLIM_INFINITY allows any nice. rlim_t is narrower on 32-bit targets.
         #[allow(clippy::unnecessary_cast)]
         rlimit: if ok { lim.rlim_cur as u64 } else { 0 },
     }
@@ -206,14 +209,15 @@ fn apply(call: Call) {
             extern "C" {
                 fn pthread_set_qos_class_self_np(qos: u32, relative_priority: i32) -> i32;
             }
-            // SAFETY: a plain system call about the calling thread; no pointers.
+            // SAFETY: a plain system call about the calling thread without
+            // pointers.
             unsafe { pthread_set_qos_class_self_np(class, 0) };
         }
         #[cfg(windows)]
         Call::WinPriority(p) => {
             use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadPriority};
-            // SAFETY: the calling thread's pseudo-handle and a priority; no
-            // pointers.
+            // SAFETY: the pseudo-handle of the calling thread and a priority,
+            // without pointers.
             unsafe { SetThreadPriority(GetCurrentThread(), p) };
         }
         #[cfg(windows)]
@@ -245,7 +249,7 @@ fn apply(call: Call) {
         }
         #[cfg(any(target_os = "linux", target_os = "android"))]
         Call::LinuxNice(n) => {
-            // SAFETY: plain integers; `who` 0 is the calling thread.
+            // SAFETY: plain integers. `who` 0 is the calling thread.
             unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, n) };
         }
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -261,8 +265,9 @@ fn apply(call: Call) {
                 runtime: slice_ns,
                 ..SchedAttr::default()
             };
-            // SAFETY: sched_setattr(pid 0: the calling thread, a live
-            // sched_attr of the size it names, flags 0); no C wrapper.
+            // SAFETY: sched_setattr with pid 0 for the calling thread, a live
+            // sched_attr of the size in its field and flags 0, without a C
+            // wrapper.
             let r = unsafe {
                 libc::syscall(
                     libc::SYS_sched_setattr,
@@ -272,14 +277,15 @@ fn apply(call: Call) {
                 )
             };
             if r != 0 && nice_changes {
-                // SAFETY: plain integers; `who` 0 is the calling thread.
+                // SAFETY: plain integers. `who` 0 is the calling thread.
                 unsafe { libc::setpriority(libc::PRIO_PROCESS, 0, nice) };
             }
         }
         #[cfg(any(target_os = "linux", target_os = "android"))]
         Call::LinuxIoPrio(ioprio) => {
-            const IOPRIO_WHO_PROCESS: libc::c_long = 1; // who 0: this thread
-                                                        // SAFETY: plain integers; no C wrapper.
+            // With who 0, IOPRIO_WHO_PROCESS selects this thread.
+            const IOPRIO_WHO_PROCESS: libc::c_long = 1;
+            // SAFETY: plain integers, without a C wrapper.
             unsafe {
                 libc::syscall(
                     libc::SYS_ioprio_set,
@@ -366,7 +372,8 @@ mod tests {
 
     #[test]
     fn linux_feeder_slice_io_and_the_nice_the_limit_allows() {
-        // Without RLIMIT_NICE: the slice and the I/O priority, its own nice.
+        // Without RLIMIT_NICE the feeder gets the slice and the I/O priority
+        // at its own nice.
         assert_eq!(calls(Os::Linux, Role::Feeder, NONE), feeder(0, false));
         let some = Nice {
             process: 0,
@@ -380,7 +387,8 @@ mod tests {
             rlimit: u64::MAX,
         };
         assert_eq!(calls(Os::Linux, Role::Feeder, any), feeder(-5, true));
-        // Made by a lowered thread: back up as far as the limit allows.
+        // A thread made by a lowered thread goes back up as far as the limit
+        // allows.
         let made_low = Nice {
             process: 0,
             thread: 10,

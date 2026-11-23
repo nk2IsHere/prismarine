@@ -1,16 +1,16 @@
-/// The cook's output for one scene, as the renderer loads it: what the
-/// cooked files under `<content>/cooked/<scene>/` hold and where each mesh
-/// batch and texture went. Derived from the editable content and never
-/// edited.
+/// The output of the cook for one scene, as the renderer loads it. It
+/// describes the cooked files under `<content>/cooked/<scene>/` and the place
+/// of each mesh batch and texture in them. The files are derived from the
+/// editable content and are not edited.
 library;
 
-/// Bumped when the cooked files' meaning changes; a cache of another
-/// version is cooked again.
+/// The version of the cooked files, raised when their meaning changes. A
+/// cache of another version is cooked again.
 const cookVersion = 5;
 
-/// Material textures of one (width, height, format, levels) group, as one
-/// KTX2 2D array: layer i is [layers][i]'s image, bytes as the content has
-/// them.
+/// The material textures of one (width, height, format, levels) group as one
+/// KTX2 2D array. Layer i holds the image of [layers][i] with the bytes of
+/// the content.
 class CookedArray {
   CookedArray({
     required this.file,
@@ -30,11 +30,12 @@ class CookedArray {
     layers: [for (final s in j['layers']! as List) s as String],
   );
 
-  /// The array's texture stem: `textures/<file>.ktx2` in the cooked scene.
+  /// The texture stem of the array, `textures/<file>.ktx2` in the cooked
+  /// scene.
   final String file;
   final int width, height, vkFormat, levels;
 
-  /// Texture stems by layer.
+  /// The texture stems by layer.
   final List<String> layers;
 
   Map<String, Object?> toJson() => {
@@ -47,9 +48,9 @@ class CookedArray {
   };
 }
 
-/// Every static batch of one vertex layout, concatenated: one glTF buffer
-/// of interleaved-free streams (each attribute its own accessor over all
-/// the pool's vertices) and one 32-bit index buffer.
+/// Every static batch of one vertex layout, concatenated into one glTF
+/// buffer and one 32-bit index buffer. The buffer holds one stream per
+/// attribute, each an accessor over all vertices of the pool.
 class CookedPool {
   CookedPool({
     required this.file,
@@ -67,8 +68,8 @@ class CookedPool {
 
   final String file;
 
-  /// The attributes, as `NAME:componentType:type` joined by `|` in name
-  /// order (glTF's terms).
+  /// The attributes in name order, each of the form `NAME:componentType:type`
+  /// in the terms of glTF and joined by `|`.
   final String layout;
   final int vertexCount, indexCount;
 
@@ -80,7 +81,7 @@ class CookedPool {
   };
 }
 
-/// Where one batch (glTF primitive) of a mesh went.
+/// The place of one batch, a glTF primitive, of a mesh in the cooked files.
 class CookedBatch {
   CookedBatch({
     required this.pool,
@@ -106,11 +107,11 @@ class CookedBatch {
     shadow: j.length > 7 && j[7] == true,
   );
 
-  /// Index into [CookedScene.pools].
+  /// The index into [CookedScene.pools].
   final int pool;
   final int firstIndex, indexCount, baseVertex;
 
-  /// The primitive's material index in its mesh's glTF.
+  /// The material index of the primitive in the glTF of its mesh.
   final int material;
 
   /// The first index of the batch in the index buffer of its source mesh.
@@ -134,13 +135,14 @@ class CookedBatch {
     shadow,
   ];
 
-  /// A shadow batch: its indices are the mesh's shadow index buffer's
-  /// (index buffer 1; the editable mesh's `shadowBatches`).
+  /// True for a shadow batch. Its indices are those of the shadow index
+  /// buffer of the mesh, index buffer 1, from the `shadowBatches` of the
+  /// editable mesh.
   final bool shadow;
 
-  /// The batch of [batches] that starts at shipped index [start] with
-  /// [count] indices of the default batches' index buffer, or of the shadow
-  /// batches' with [shadow], or null.
+  /// Returns the batch of [batches] that starts at the shipped index [start]
+  /// with [count] indices, or null. The indices are those of the default
+  /// index buffer, or those of the shadow index buffer with [shadow].
   static CookedBatch? at(
     List<CookedBatch> batches,
     int start,
@@ -188,16 +190,17 @@ class CookedScene {
 
   final String scene;
 
-  /// Each input file, relative to the content directory, and its content
-  /// hash: the cache is stale when any differs.
+  /// Each input file, relative to the content directory, with its content
+  /// hash. The cache is stale when any hash differs.
   final Map<String, String> inputs;
   final List<CookedArray> arrays;
   final List<CookedPool> pools;
 
-  /// Batches by mesh stem, in glTF primitive order.
+  /// The batches by mesh stem, in glTF primitive order.
   final Map<String, List<CookedBatch>> meshes;
 
-  /// (array, layer) of texture [stem], or null when no array holds it.
+  /// Returns the (array, layer) of the texture [stem], or null when no array
+  /// holds it.
   (int, int)? textureAt(String stem) {
     final at = _textureIndex[stem];
     return at;

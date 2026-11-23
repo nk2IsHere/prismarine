@@ -1,14 +1,15 @@
-// The snapshot object-graph codec writes a binary stream of values. Every
-// object is written once and is referred to by its index after that. Shared
-// references and cycles come back as they were. Classes are written by codecs
-// ([SnapCodec]) that live in their own libraries (private fields); a codec
-// writes what the object's constructor needs ([SnapCodec.writeNew]) where the
-// object is first referenced and the rest of its state ([SnapCodec.write])
-// later, in queue order, so a cycle never runs through a constructor.
+// The snapshot codec writes a binary stream of values. Every object is
+// written once and is referred to by its index after that. Shared references
+// and cycles are read back as they were. A codec ([SnapCodec]) writes the
+// objects of one class. It is defined in the library of its class to reach
+// the private fields. A codec writes the inputs of the constructor
+// ([SnapCodec.writeNew]) where the object is first referenced. It writes the
+// rest of the state ([SnapCodec.write]) later in queue order. A cycle
+// therefore never runs through a constructor.
 //
-// Objects the reader already has (a fresh session's roots, data loaded from
-// files) are registered on both sides in the same order ([SnapWriter.known],
-// [SnapReader.known]) and only their state is written.
+// Objects that the reader already has, such as the roots of a new session or
+// data loaded from files, are registered on both sides in the same order with
+// [SnapWriter.known] and [SnapReader.known]. Only their state is written.
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -21,8 +22,8 @@ part 'snap_weak_map.dart';
 part 'snap_writer.dart';
 part 'snap_writer_graph.dart';
 
-/// A snapshot that can't be written or read (a class without a codec, a
-/// stream out of step).
+/// The error of a snapshot that cannot be written or read, such as a class
+/// without a codec or a stream out of step.
 class SnapError extends Error {
   SnapError(this.message);
   final String message;
@@ -30,33 +31,34 @@ class SnapError extends Error {
   String toString() => 'SnapError: $message';
 }
 
-/// Writes and reads one class's objects.
+/// Writes and reads the objects of one class.
 abstract class SnapCodec<T extends Object> {
   const SnapCodec(this.tag);
 
-  /// The class's name in the stream.
+  /// The name of the class in the stream.
   final String tag;
 
   Type get type => T;
 
-  /// What [make] needs to construct the object (its constructor's inputs),
-  /// written where the object is first referenced. References are allowed,
-  /// but no reference back to this object.
+  /// Writes the inputs of the constructor that [make] needs, where the object
+  /// is first referenced. The inputs may hold references but no reference
+  /// back to this object.
   void writeNew(SnapWriter w, T o) =>
       throw SnapError('$tag is not constructible (a known object only)');
 
-  /// The object, constructed from what [writeNew] wrote.
+  /// Constructs the object from the inputs that [writeNew] wrote.
   T make(SnapReader r) =>
       throw SnapError('$tag is not constructible (a known object only)');
 
-  /// The object's state (everything [writeNew] didn't cover).
+  /// Writes the state of the object that [writeNew] did not cover.
   void write(SnapWriter w, T o);
 
   /// Restores what [write] wrote into [o].
   void read(SnapReader r, T o);
 
-  /// Whether a new object has state after its constructor's inputs: one
-  /// without (a vector: [writeNew] holds it all) isn't queued for [write].
+  /// False for a class whose objects have no state beyond the inputs of the
+  /// constructor, such as a vector that [writeNew] writes whole. Such an
+  /// object is not queued for [write].
   bool get hasState => true;
 }
 

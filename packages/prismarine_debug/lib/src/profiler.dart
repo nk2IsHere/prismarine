@@ -1,7 +1,8 @@
-// A per-frame profiler: it writes into its directory frames.jsonl (one
-// object per frame: t, dt, rss every 30 frames, each timed section in ms),
-// timings.jsonl (Flutter FrameTiming), and, on close,
-// summary.txt (p50/p95/max per section over its windows).
+// A per-frame profiler. It writes three files into its directory.
+// frames.jsonl has one object per frame with t, dt, rss every 30 frames and
+// each timed section in ms. timings.jsonl has the FrameTiming of Flutter.
+// summary.txt is written on close with the p50, p95 and max of each section
+// over its windows.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -39,8 +40,9 @@ class FrameProfiler {
     );
   }
 
-  /// `loop.lag` (the longest the event loop was held, our sections
-  /// included) and `loop.untimed` (held outside them) per frame.
+  /// Measures `loop.lag` and `loop.untimed` per frame. `loop.lag` is the
+  /// longest time the event loop was held, the timed sections included.
+  /// `loop.untimed` is the time it was held outside them.
   final _loop = LoopMonitor();
 
   static String _made(String dir) {
@@ -55,17 +57,16 @@ class FrameProfiler {
   /// The path of an audio trace beside the profile.
   String get audioTrace => '$dir/audio.jsonl';
 
-  // A frame is a row of numbers by column (a section's name, numbered at
-  // its first use), written as a JSON line from kept bytes; every row is
-  // kept as (column, value) pairs in typed lists for the summary (perf: a
-  // map, its boxed numbers and a JSON string per frame, the maps kept for
-  // the run).
+  // A frame is a row of numbers by column. A column is the name of a section,
+  // numbered at its first use. The row is written as a JSON line from kept
+  // bytes. Every row is kept as (column, value) pairs in typed lists for the
+  // summary.
   final _cols = <String, int>{};
   final _names = <String>[];
   var _row = Float64List(64);
   var _has = Uint8List(64);
 
-  /// The columns set this frame, in the order first set (the line's).
+  /// The columns set in this frame, in the order of the line.
   var _touched = Int32List(64);
   int _nTouched = 0;
   bool _open = false;
@@ -109,7 +110,8 @@ class FrameProfiler {
     }
   }
 
-  /// Starts a frame (the previous one is written).
+  /// Starts a frame at game time [t] with the step [dt] and writes the
+  /// previous frame.
   void beginFrame({required double t, required double dt}) {
     _flush();
     final (lag, untimed) = _loop.take();
@@ -122,9 +124,9 @@ class FrameProfiler {
     _put(_cWall, DateTime.now().microsecondsSinceEpoch.toDouble());
     if (_n++ % 30 == 0) {
       _put(_cRss, ProcessInfo.currentRss.toDouble());
-      // What Activity Monitor shows (compressed and swapped pages and the
-      // GPU's allocations included), and the GPU memory made through
-      // Flutter GPU by kind (MB).
+      // The footprint that Activity Monitor shows, with compressed and
+      // swapped pages and the allocations of the GPU. The GPU memory made
+      // through Flutter GPU follows by kind, in MB.
       if (physFootprint() case final f?) _put(_cFootprint, f / 1048576);
       GpuMemory.bytes.forEach(_gpu_);
     }
@@ -135,7 +137,8 @@ class FrameProfiler {
   void _gpu(String kind, int bytes) =>
       _put(_gpuCols[kind] ??= _col('mem.gpu.$kind'), bytes / 1048576);
 
-  /// Adds [ms] to this frame's [section] (sections repeat within a frame).
+  /// Adds [ms] to [section] of this frame. A section may repeat within a
+  /// frame.
   void add(String section, double ms) {
     if (!_open) return;
     final c = _col(section);
@@ -146,7 +149,7 @@ class FrameProfiler {
     }
   }
 
-  /// Sets this frame's [key].
+  /// Sets [key] of this frame to [value].
   void set(String key, double value) {
     if (_open) _put(_col(key), value);
   }
@@ -200,7 +203,7 @@ class FrameProfiler {
     _open = false;
   }
 
-  /// Every frame as a map, for [summarize] (made once, at the end).
+  /// Returns every frame as a map for [summarize], once at the end.
   List<Map<String, Object?>> _maps() {
     final out = <Map<String, Object?>>[];
     var at = 0;
@@ -226,15 +229,15 @@ class FrameProfiler {
   }
 }
 
-/// The UI isolate's own timed work (µs so far): the tick less its waits for
-/// other isolates, the paint's sections and the panel's graph. [LoopMonitor]
-/// takes it out of the event loop's lateness.
+/// The timed work of the UI isolate in µs so far. It is the tick less its
+/// waits for other isolates, the sections of the paint and the graph of the
+/// panel. [LoopMonitor] takes it out of the lateness of the event loop.
 abstract final class UiWork {
   static int micros = 0;
 
-  /// Of [micros], the paint's and the graph's: they can run while the tick
-  /// awaits another isolate (a Flutter frame between the request and the
-  /// reply).
+  /// The part of [micros] of the paint and the graph. They can run while the
+  /// tick awaits another isolate, as a Flutter frame between the request and
+  /// the reply.
   static int paintMicros = 0;
 
   static void add(double ms, {bool paint = false}) {
@@ -244,15 +247,15 @@ abstract final class UiWork {
   }
 }
 
-/// The event loop's lateness, measured by a 1 ms timer: [take] gives, since
-/// the last take, the longest the loop was held (`loop.lag`: our own
-/// sections included, so it is about the longest synchronous section) and
-/// the time it was held outside our timed UI work ([UiWork]): a GC pause of
-/// the isolate group (another isolate's allocation stops this one too),
-/// Flutter's own build, layout and compositing (the panel's rebuilds), timers
-/// and port messages, or the thread not scheduled by the OS while work was
-/// due.
-/// Lateness under 0.5 ms a tick is timer jitter, not counted.
+/// Measures the lateness of the event loop with a 1 ms timer.
+///
+/// [take] returns two times since the last take. `loop.lag` is the longest time
+/// the loop was held, the timed sections included. It is about the longest
+/// synchronous section. `loop.untimed` is the time it was held outside the
+/// timed UI work of [UiWork]. Causes are a GC pause of the isolate group, the
+/// build, layout and compositing of Flutter, timers, port messages and a thread
+/// that the OS did not schedule while work was due. A lateness under 0.5 ms per
+/// tick is timer jitter and does not count.
 class LoopMonitor {
   LoopMonitor() {
     _clock.start();
@@ -273,7 +276,7 @@ class LoopMonitor {
   int _last = 0, _own = 0, _lagMax = 0, _untimed = 0;
   Timer? _timer;
 
-  /// (lag, untimed) in ms since the last take.
+  /// Returns (lag, untimed) in ms since the last take.
   (double, double) take() {
     final r = (_lagMax / 1000, _untimed / 1000);
     _lagMax = 0;
@@ -287,7 +290,8 @@ class LoopMonitor {
 double _pct(List<double> v, double p) =>
     v.isEmpty ? 0 : v[((v.length - 1) * p).round().clamp(0, v.length - 1)];
 
-/// Per window: the frame count, then each numeric section's p50/p95/max.
+/// Returns the summary with the frame count of each window and then the
+/// p50, p95 and max of each numeric section.
 String summarize(
   List<Map<String, Object?>> frames,
   List<(String, double, double)> windows,
@@ -329,17 +333,17 @@ String summarize(
   return out.toString();
 }
 
-/// The process's physical footprint in bytes (`ri_phys_footprint` of
-/// `proc_pid_rusage`, what Activity Monitor's Memory column shows), or null
-/// off macOS.
+/// Returns the physical footprint of the process in bytes, or null on a
+/// system other than macOS. It is the `ri_phys_footprint` of
+/// `proc_pid_rusage`, which the Memory column of Activity Monitor shows.
 int? physFootprint() {
   final f = _rusage;
   if (f == null) return null;
   final buf = _rusageBuf ??= _malloc(512);
   if (f(_getpid!(), 2, buf) != 0) return null;
-  // rusage_info_v2: uuid[16], then u64 user_time, system_time,
-  // pkg_idle_wkups, interrupt_wkups, pageins, wired_size, resident_size,
-  // phys_footprint.
+  // rusage_info_v2 has uuid[16] and then the u64 fields user_time,
+  // system_time, pkg_idle_wkups, interrupt_wkups, pageins, wired_size,
+  // resident_size and phys_footprint.
   return Pointer<Uint64>.fromAddress(buf.address + 16 + 7 * 8).value;
 }
 

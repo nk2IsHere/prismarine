@@ -27,7 +27,7 @@ void main() {
     expect(String.fromCharCodes(png.sublist(12, 16)), 'IHDR');
     expect((b.getUint32(16), b.getUint32(20)), (3, 2));
     expect((png[24], png[25]), (8, 2));
-    // IHDR's CRC over type + data, and IEND's well-known one.
+    // The CRC of IHDR over type and data, then the well-known CRC of IEND.
     expect(b.getUint32(29), 0x1216f14d);
     expect(png.sublist(png.length - 12), [
       0,

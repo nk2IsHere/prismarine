@@ -1,7 +1,7 @@
-// The Linux calls behind thread_roles.dart: per-thread nice, scheduling
-// policy, EEVDF slice and I/O priority. ioprio and sched_{get,set}attr have
-// no C library wrappers in the glibc versions we meet, so they go through
-// syscall(2) by number.
+// The Linux calls for thread_roles.dart, with the nice, scheduling policy,
+// EEVDF slice and I/O priority of a thread. ioprio and sched_{get,set}attr
+// have no C library wrappers in common glibc versions. They are called
+// through syscall(2) by number.
 import 'dart:ffi';
 import 'dart:io' show pid;
 
@@ -22,31 +22,33 @@ Pointer<Uint8> nativeBlock(int bytes) {
 }
 
 final _freeing = NativeFinalizer(malloc.nativeFree);
-// Each block's owner lives as long as the isolate's globals.
+// The owner of each block is kept as long as the globals of the isolate.
 final _owners = <_BlockOwner>[];
 
 final class _BlockOwner implements Finalizable {}
 
-/// (ioprio_set, ioprio_get, sched_setattr, sched_getattr) on this ABI
-/// (arch/x86/entry/syscalls/syscall_64.tbl; the generic table
-/// include/uapi/asm-generic/unistd.h for arm64 and riscv64); null elsewhere.
+/// Returns the syscall numbers of ioprio_set, ioprio_get, sched_setattr and
+/// sched_getattr on this ABI, or null on another ABI. The numbers are from
+/// arch/x86/entry/syscalls/syscall_64.tbl and, for arm64 and riscv64, from
+/// the generic table include/uapi/asm-generic/unistd.h.
 (int, int, int, int)? _numbers() => switch (Abi.current()) {
   Abi.linuxX64 || Abi.androidX64 => (251, 252, 314, 315),
   Abi.linuxArm64 || Abi.androidArm64 || Abi.linuxRiscv64 => (30, 31, 274, 275),
   _ => null,
 };
 
-const _ioprioWhoProcess = 1; // with who 0: the calling thread
-// struct sched_attr, SCHED_ATTR_SIZE_VER0 (include/uapi/linux/sched/types.h):
-// size u32 @0, policy u32 @4, flags u64 @8, nice s32 @16, priority u32 @20,
-// runtime u64 @24, deadline u64 @32, period u64 @40.
+const _ioprioWhoProcess = 1; // the calling thread with who 0
+// The fields of struct sched_attr at SCHED_ATTR_SIZE_VER0, from
+// include/uapi/linux/sched/types.h, are size u32 @0, policy u32 @4, flags
+// u64 @8, nice s32 @16, priority u32 @20, runtime u64 @24, deadline u64 @32
+// and period u64 @40.
 const _attrSize = 48;
 
 /// The roles on Linux.
 ThreadRoles linuxThreadRoles() {
   final lib = DynamicLibrary.process();
-  // On Linux PRIO_PROCESS with who 0 is the calling thread, not the
-  // process (setpriority(2), BUGS).
+  // On Linux PRIO_PROCESS with who 0 is the calling thread and not the
+  // process, as setpriority(2) states under BUGS.
   final getpriority = lib
       .lookupFunction<Int32 Function(Int32, Uint32), int Function(int, int)>(
         'getpriority',
@@ -83,7 +85,8 @@ ThreadRoles linuxThreadRoles() {
         Long Function(Long, VarArgs<(Long, Long, Long, Long)>),
         int Function(int, int, int, int, int)
       >('syscall', isLeaf: true);
-  // rlimit {rlim_cur, rlim_max} @0, sched_param {0} @16, sched_attr @24.
+  // The block holds rlimit {rlim_cur, rlim_max} @0, sched_param {0} @16 and
+  // sched_attr @24.
   final block = nativeBlock(24 + _attrSize);
   var rlimitNice = 0;
   if (sizeOf<IntPtr>() == 8) {
@@ -95,12 +98,13 @@ ThreadRoles linuxThreadRoles() {
     const rlimitNiceResource = 13; // RLIMIT_NICE
     final rlimit = block.cast<Uint64>();
     if (getrlimit(rlimitNiceResource, rlimit) == 0) {
-      // RLIM_INFINITY reads as a negative int: any nice is allowed.
+      // RLIM_INFINITY reads as a negative int and allows any nice.
       final cur = rlimit[0];
       rlimitNice = cur > 40 || cur < 0 ? 40 : cur;
     }
   }
-  // The main thread's nice is the process's (the thread group's leader).
+  // The nice of the main thread, the leader of the thread group, is the nice
+  // of the process.
   final processNice = getpriority(0, pid);
   return ThreadRoles(
     ThreadOs.linux,

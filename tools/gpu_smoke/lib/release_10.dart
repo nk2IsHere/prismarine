@@ -1,20 +1,20 @@
 // The checks of engine release 10, for passes that pull their vertices from
 // storage buffers.
 //
-// - a vertex stage with no inputs, its vertices read from a storage buffer
-//   by vertex index;
-// - the same storage buffer bound to the vertex and the pixel stage, a
-//   second one in the pixel stage, beside a uniform block (Metal crashed in
-//   setFragmentBuffer);
-// - a four-channel unsigned texel buffer in a pixel stage;
-// - (release_10_more.dart) resources a pixel stage declares but never reads
-//   (Metal reflects them without an index; binding them crashed the driver
-//   in setFragmentBuffer and setFragmentTexture), bindings changed and
-//   restored between draws (the resend cut), leaf indirect draws and an sRGB
-//   view of a UNORM target.
+// - A vertex stage with no inputs, its vertices read from a storage buffer
+//   by vertex index.
+// - The same storage buffer bound to the vertex and the pixel stage, with a
+//   second one in the pixel stage beside a uniform block. Metal can crash in
+//   setFragmentBuffer here.
+// - A four-channel unsigned texel buffer in a pixel stage.
+// - In release_10_more.dart, resources that a pixel stage declares but does
+//   not read, bindings changed and restored between draws, leaf indirect
+//   draws and an sRGB view of a UNORM target. Metal reflects unread resources
+// without an index. Binding them can crash the driver in
+//   setFragmentBuffer and setFragmentTexture.
 //
-// Each check prints a SMOKE line and runs where the earlier ones survived;
-// the result is false when one fails.
+// Each check prints a SMOKE line and runs where the earlier ones survived.
+// The result is false when one fails.
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -58,8 +58,8 @@ Future<bool> release10Checks(void Function(String) log) async {
     return gpu.BufferView(b, offsetInBytes: 0, lengthInBytes: b.sizeInBytes);
   }
 
-  // A triangle over the whole target, then row 4's colour (0.25, 0.5,
-  // 0.75, 1) the pixel stage reads.
+  // A triangle over the whole target, then the colour of row 4, (0.25, 0.5,
+  // 0.75, 1), which the pixel stage reads.
   final rows = view(
     ByteData.sublistView(
       Float32List.fromList([
@@ -122,7 +122,7 @@ Future<bool> release10Checks(void Function(String) log) async {
     return release10Centre(cb, target);
   }
 
-  // R = 0.25 + 51/255 = 0.45 → 115; G 0.5 → 128; B 0.75 → 191.
+  // R = 0.25 + 51/255 = 0.45 → 115, G 0.5 → 128 and B 0.75 → 191.
   bool right(List<int> c) =>
       (c[0] - 115).abs() <= 1 &&
       (c[1] - 128).abs() <= 1 &&
@@ -198,9 +198,9 @@ Future<bool> release10Checks(void Function(String) log) async {
   return ok;
 }
 
-/// Submits [cb], waits for the GPU and reads [target]'s centre pixel
-/// (RGBA8) through a picture, as the checks of release 9 do. GLES gives zeros
-/// for a raw texture's own read.
+/// Submits [cb], waits for the GPU and reads the RGBA8 centre pixel of
+/// [target] through a picture, as the checks of release 9 do. GLES gives
+/// zeros for the own read of a raw texture.
 Future<List<int>> release10Centre(
   gpu.CommandBuffer cb,
   gpu.Texture target,

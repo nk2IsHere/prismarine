@@ -16,35 +16,34 @@ class FrameGroupStyle {
   final String label;
   final Color color;
 
-  /// The fill of the group's bars.
+  /// The fill of the bars of the group.
   late final Paint paint = Paint()..color = color;
 }
 
-/// One frame's time per group (ms), its raster time, its wall gap to the
-/// next frame and the timed sections it was made of (the graph's hover).
-/// A subclass puts each section's time into its groups in [sort].
+/// The time of one frame per group in ms, its raster time, its wall gap to
+/// the next frame and its timed sections. A subclass puts the time of each
+/// section into its groups in [sort].
 class FrameSample {
   FrameSample(int groups) : ms = Float64List(groups);
 
-  /// Per group, by its index in [FrameSamples.groups].
+  /// The ms of each group, by its index in [FrameSamples.groups].
   final Float64List ms;
   double raster = 0;
   double dt = 0;
 
-  /// The wall time to the next frame's tick (ms; 0 until it starts).
+  /// The wall time in ms to the tick of the next frame, 0 until it starts.
   double gap = 0;
 
-  /// The UI tick's wall time (ms).
+  /// The wall time of the UI tick in ms.
   double tick = 0;
 
-  /// Every section as reported, in order: its name and ms at the same
-  /// place, [sectionCount] of them (perf: a record per section a frame).
+  /// Every section as reported, in order. The name and the ms of a section
+  /// are at the same index of the two lists, [sectionCount] of them.
   final sectionNames = KeptList<String>();
   var sectionMs = Float64List(64);
   int get sectionCount => sectionNames.length;
 
-  /// The sample for another frame (FrameSamples reuses the one its history
-  /// drops).
+  /// Resets the sample for another frame.
   @mustCallSuper
   void reset() {
     ms.fillRange(0, ms.length, 0);
@@ -62,14 +61,14 @@ class FrameSample {
     sort(section, v);
   }
 
-  /// Adds [v] ms of [section] to the groups it belongs to.
+  /// Adds [v] ms of [section] to the groups of the section.
   @protected
   void sort(String section, double v) {}
 
-  /// Closes the frame once the next one starts: [gap] its wall time,
-  /// [untimed] the time the event loop was held outside our timed work
-  /// ([LoopMonitor]); [inline] when the game ran on the UI isolate (its
-  /// phases are inside the tick).
+  /// Closes the frame once the next one starts. [gap] is its wall time.
+  /// [untimed] is the time that the event loop was held outside the timed
+  /// work, from [LoopMonitor]. [inline] is true when the game ran on the UI
+  /// isolate, with its phases inside the tick.
   @mustCallSuper
   void finish({
     required double gap,
@@ -88,25 +87,24 @@ class FrameSample {
   }
 }
 
-/// The last frames' samples, drawn by the frame graph in [groups]. A
+/// The samples of the last frames, drawn by the frame graph in [groups]. A
 /// subclass makes its samples in [newSample].
 abstract class FrameSamples {
   FrameSamples(this.groups);
 
-  /// The graph's stacked groups, bottom to top.
+  /// The stacked groups of the graph, bottom to top.
   final List<FrameGroupStyle> groups;
 
-  /// The profiler that receives the panel's own timings, or null.
+  /// The profiler that receives the timings of the panel, or null.
   FrameProfiler? profiler;
 
   static const _frames = 240;
   final frames = ListQueue<FrameSample>();
 
-  /// Bumped when a frame closes: the frame graph repaints on it (every
-  /// frame) while the rest of the panel rebuilds at most every 250 ms.
+  /// Changes when a frame closes. The frame graph repaints on it every frame.
   final graph = ValueNotifier<int>(0);
 
-  /// Whether the game runs on the UI isolate.
+  /// True when the game runs on the UI isolate.
   bool simInline = false;
 
   FrameSample? _open, _spare;
@@ -116,7 +114,7 @@ abstract class FrameSamples {
   /// Returns a sample for a new frame with one time per group.
   FrameSample newSample();
 
-  /// Starts a frame: the previous one closes with its wall gap and lag.
+  /// Starts a frame. The previous frame closes with its wall gap and lag.
   FrameSample beginFrame() {
     final now = _wall.elapsedMicroseconds;
     if (_open case final f?) {
@@ -128,8 +126,8 @@ abstract class FrameSamples {
       _push(f);
     }
     _openUs = now;
-    // The sample the history dropped again, while the panel is hidden (it
-    // may hold a hovered one; perf: a sample and its lists per frame).
+    // The sample that the history dropped is used again while the panel is
+    // hidden. A shown panel may hold it as the hovered frame.
     final spare = _spare;
     _spare = null;
     return _open = spare == null || _loop != null
@@ -137,8 +135,9 @@ abstract class FrameSamples {
         : (spare..reset());
   }
 
-  /// The frame's tick ended: it closes now, or with [keepOpen] (real time)
-  /// takes its paint's sections until the next [beginFrame] closes it.
+  /// Ends the tick of [f] with its [raster] time. The frame closes now. With
+  /// [keepOpen] it takes the sections of its paint until the next
+  /// [beginFrame] closes it.
   void endFrame(FrameSample f, {double raster = 0, bool keepOpen = false}) {
     f.raster = raster;
     if (!keepOpen || !identical(f, _open)) {
@@ -147,7 +146,7 @@ abstract class FrameSamples {
     }
   }
 
-  /// The frame sections arrive in until the next tick (the paint's).
+  /// The frame that receives the sections of the paint until the next tick.
   FrameSample? get openFrame => _open;
 
   void _push(FrameSample f) {
@@ -158,8 +157,8 @@ abstract class FrameSamples {
     graph.value++;
   }
 
-  // The event loop held outside our timed work (as the profiler's), only
-  // while the panel shows.
+  // Measures the event loop held outside the timed work, only while the
+  // panel shows.
   LoopMonitor? _loop;
 
   void measureLag(bool on) {
@@ -168,7 +167,7 @@ abstract class FrameSamples {
     _loop = on ? LoopMonitor() : null;
   }
 
-  /// Frames per second over the last 60 frames' wall time.
+  /// Frames per second over the wall time of the last 60 frames.
   double get fps {
     final f = frames.toList();
     final last = f.skip(math.max(0, f.length - 60)).where((s) => s.dt > 0);

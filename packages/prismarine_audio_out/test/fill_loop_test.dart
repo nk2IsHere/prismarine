@@ -61,7 +61,7 @@ void main() {
     )..start();
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(pushes, greaterThan(0));
-    // The consumer moves on: the timer tops the stream up by itself.
+    // The consumer moves on and the timer tops the stream up by itself.
     final before = pushes;
     consumed = 1.0;
     await Future<void>.delayed(const Duration(milliseconds: 20));

@@ -16,7 +16,8 @@ class FileAssetBundle extends CachingAssetBundle {
 
   static final _missing = <String>{};
 
-  /// [key] when it is on disk; otherwise reports it (once) and returns false.
+  /// Returns true when the file [key] is on disk. Otherwise reports the path
+  /// once and returns false.
   static Future<bool> present(String key) async {
     if (await File(key).exists()) return true;
     if (_missing.add(key)) {
@@ -27,8 +28,8 @@ class FileAssetBundle extends CachingAssetBundle {
 
   @override
   Future<ByteData> load(String key) async {
-    // Reads off the UI thread. A realize asks for all its textures at once,
-    // and a synchronous read of them held a frame for about 80 ms.
+    // The read stays asynchronous. A scene asks for all its textures at once.
+    // A synchronous read of them holds a frame for about 80 ms.
     if (!await present(key)) return ByteData.sublistView(staticBlackPng);
     return ByteData.sublistView(await File(key).readAsBytes());
   }

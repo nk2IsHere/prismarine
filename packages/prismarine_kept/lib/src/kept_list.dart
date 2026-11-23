@@ -1,16 +1,14 @@
 import 'dart:collection';
 
-/// A growable list that keeps its storage when cleared or shortened. The
-/// VM's growable list gives its store up on `clear()` (and on a length
-/// cut well below its capacity), so a list cleared and refilled each frame
-/// grew it again from empty every frame (perf).
+/// A growable list that keeps its storage when it is cleared or shortened.
+/// Use it for a list that is cleared and filled again every frame.
 final class KeptList<E> extends ListBase<E> {
   KeptList();
 
   var _items = List<Object?>.filled(8, null);
   int _length = 0;
 
-  /// Elements the list has room for before it grows (tests).
+  /// The number of elements the list holds before it grows.
   int get capacity => _items.length;
 
   @override
@@ -60,7 +58,7 @@ final class KeptList<E> extends ListBase<E> {
 
   @override
   void addAll(Iterable<E> iterable) {
-    // A list by index (no iterator).
+    // A list is read by index. An iterator would allocate.
     if (iterable is List<E>) {
       final n = iterable.length;
       if (_length + n > _items.length) _reserve(_length + n);
@@ -74,7 +72,7 @@ final class KeptList<E> extends ListBase<E> {
     }
   }
 
-  /// Empties the list, its storage kept.
+  /// Empties the list and keeps its storage.
   @override
   void clear() => length = 0;
 
@@ -85,10 +83,10 @@ final class KeptList<E> extends ListBase<E> {
   bool get isNotEmpty => _length != 0;
 }
 
-/// [had] while it holds [now]'s elements (the same objects, in order),
-/// else a fixed-length copy of [now]: a list gathered in scratch each frame
-/// and kept from frame to frame while it holds (perf). Nothing may write
-/// the list returned.
+/// Returns [had] while it holds the elements of [now], the same objects in
+/// the same order, or else a fixed-length copy of [now]. Use it to keep a
+/// list that is gathered in scratch storage every frame. The returned list
+/// must not be changed.
 List<E> keptCopyOf<E>(List<E>? had, List<E> now) {
   final n = now.length;
   if (had != null && had.length == n) {

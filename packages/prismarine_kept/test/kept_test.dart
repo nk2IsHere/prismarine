@@ -157,7 +157,7 @@ void main() {
       expect(pairs.length, 25);
       expect(m.values.toList(), [0, 10, 20, 30, 40]);
     }
-    // A walk stopped early leaves the next one whole.
+    // A walk that stops early does not change the next walk.
     for (final k in m.keys) {
       if (k == 1) break;
     }

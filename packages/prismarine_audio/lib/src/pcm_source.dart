@@ -5,12 +5,14 @@ abstract class PcmSource {
   int get channels;
   int get sampleRate;
 
-  /// Total frames. A source whose length comes from a container's metadata
-  /// may count more frames than the decoded file holds.
+  /// The total number of frames. A source whose length comes from the
+  /// metadata of a container may count more frames than the decoded file
+  /// holds.
   int get frames;
 
-  /// Copies up to [count] frames from [frame] into [out] (interleaved);
-  /// returns the frames copied (0 at or past the end).
+  /// Copies up to [count] interleaved frames, starting at [frame], into
+  /// [out]. Returns the number of frames copied, which is 0 at or past the
+  /// end.
   int read(Float32List out, int frame, int count);
 }
 
@@ -21,7 +23,7 @@ abstract interface class LoadingPcmSource implements PcmSource {
   bool get ready;
 }
 
-/// Whether [s] has its data.
+/// Returns true when [s] has its data.
 bool pcmReady(PcmSource s) => s is! LoadingPcmSource || s.ready;
 
 /// A whole decoded file in memory.

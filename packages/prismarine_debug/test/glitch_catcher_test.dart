@@ -57,7 +57,7 @@ void main() {
     fillTriangle(cur, 250);
     final rgba = Uint8List(w * h * 4);
     for (var i = 0; i < w * h; i++) {
-      // Yellow: red and green bright, blue dark.
+      // Yellow has red and green bright and blue dark.
       rgba[i * 4] = cur[i];
       rgba[i * 4 + 1] = cur[i];
       rgba[i * 4 + 2] = 20;

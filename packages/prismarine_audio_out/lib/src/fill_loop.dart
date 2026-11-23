@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-/// Keeps rendered − consumed ≥ [lead] seconds (48 kHz) by rendering
-/// [block]-frame blocks into [push], polled every [period] on the isolate
-/// that owns it — the render isolate, so UI-isolate hitches can't starve the
-/// stream.
+/// Keeps rendered − consumed ≥ [lead] seconds at 48 kHz by rendering blocks
+/// of [block] frames into [push]. It polls every [period] on the isolate
+/// that owns it, the render isolate. Hitches of the UI isolate then cannot
+/// starve the stream.
 class FillLoop {
   FillLoop({
     required double Function() consumed,
@@ -25,19 +25,19 @@ class FillLoop {
   final int block;
   final Duration period;
 
-  /// A block whose render threw: it plays as silence and the loop goes on
-  /// (an uncaught error would end the isolate, and with it the stream and
-  /// the audible clock that an app may pace by).
+  /// Receives the error of a block whose render threw. The block plays as
+  /// silence and the loop continues. An uncaught error would end the isolate
+  /// with the stream and the audible clock that an app may use for pacing.
   final void Function(Object error, StackTrace stack)? onError;
 
   Timer? _timer;
   var _stopped = false;
   var _requested = 0;
 
-  /// Frames rendered and pushed so far.
+  /// The number of frames rendered and pushed so far.
   int get requestedFrames => _requested;
 
-  /// One poll: render until the lead is met.
+  /// Polls once and renders until the lead is met.
   void fill() {
     if (_stopped) return;
     while (_requested / 48000 - _consumed() < lead) {
@@ -59,7 +59,7 @@ class FillLoop {
     _timer ??= Timer.periodic(period, (_) => fill());
   }
 
-  /// Stops for good: [fill] does nothing afterwards.
+  /// Stops for good. [fill] does nothing afterwards.
   void stop() {
     _stopped = true;
     _timer?.cancel();

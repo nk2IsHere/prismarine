@@ -2,9 +2,6 @@ import 'dart:typed_data';
 
 import 'frame_plan.dart';
 
-/// [FramePlan] as JSON, with byte payloads (constant buffers, texel
-/// buffers, constant texels) kept apart as blobs by name: a plan written for
-/// a check, or made by another tool, reads back through [planFromJson].
 Map<String, Object?> _ref(BufferRef r) => {
   'buffer': r.buffer,
   'offset': r.offset,
@@ -19,11 +16,13 @@ BufferRef _refFrom(Map r) => BufferRef(
   format: r['format'] as String?,
 );
 
-/// The format tag of [planToJson]'s form unless a caller gives its own.
+/// The format tag of the form of [planToJson] unless a caller gives its own.
 const framePlanFormat = 'prismarine.frame/1';
 
-/// Writes [p] as JSON with the tag [format]. [putBlob] stores a byte payload
-/// and returns its blob name.
+/// Writes [p] as JSON with the tag [format]. Byte payloads, such as constant
+/// buffers, texel buffers and constant texels, are kept apart as blobs by
+/// name. [putBlob] stores a byte payload and returns its blob name.
+/// [planFromJson] reads the JSON back.
 Map<String, Object?> planToJson(
   FramePlan p,
   String Function(Uint8List bytes) putBlob, {
@@ -31,7 +30,7 @@ Map<String, Object?> planToJson(
 }) {
   Map<String, Object?> res(StageResources r) => {
     'blocks': {
-      // A frame role's bytes for this frame (FrameRole).
+      // The bytes of a frame role for this frame (FrameRole).
       for (final MapEntry(:key, :value) in r.blocks.entries)
         key: putBlob(p.block(value)),
     },
@@ -140,7 +139,7 @@ Map<String, Object?> planToJson(
             'render': r.name,
             'colors': [for (final c in r.colors) att(c)],
             'depth': r.depth == null ? null : att(r.depth!),
-            // A pass's rows are its first draws (RenderPassPlan.allDraws).
+            // The rows of a pass are its first draws (RenderPassPlan.allDraws).
             'draws': [
               for (final d in r.allDraws)
                 {
@@ -227,7 +226,7 @@ Map<String, Object?> planToJson(
   };
 }
 
-/// Reads [planToJson]'s form back; [blob] resolves a blob name. Fails
+/// Reads the form of [planToJson] back. [blob] resolves a blob name. Fails
 /// unless the plan has the tag [format].
 FramePlan planFromJson(
   Map<String, Object?> j,

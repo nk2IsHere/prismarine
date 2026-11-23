@@ -1,8 +1,8 @@
 use super::cache::{self, Held, FAILED, QUEUED, READY};
 use super::codec::Pcm;
 
-/// The test loader: "<n>.pcm" decodes to n frames of mono ramps; anything
-/// else fails.
+/// The test loader. "<n>.pcm" decodes to n frames of mono ramps. Any other
+/// path fails.
 fn load(path: &str) -> Option<Pcm> {
     let name = path.rsplit('/').next()?;
     let n: i64 = name.strip_suffix(".pcm")?.parse().ok()?;
@@ -14,14 +14,14 @@ fn load(path: &str) -> Option<Pcm> {
     })
 }
 
-// One test: the cache is process-wide.
+// One test, since the cache is process-wide.
 #[test]
 fn cache_decodes_holds_and_drops() {
     cache::set_loader(load);
     cache::clear();
     let s0 = cache::stats();
 
-    // Wanted ahead of need, then taken and waited for.
+    // Wanted ahead of need, then taken and awaited.
     let st = cache::want("t/16.pcm");
     assert!(st == QUEUED || st == READY || st == cache::DECODING);
     let h = Held::acquire("t/16.pcm");
@@ -42,12 +42,12 @@ fn cache_decodes_holds_and_drops() {
     cache::scene_changed();
     cache::scene_changed();
     let s = cache::stats();
-    // Held: 16 and the failed one; dropped: 8.
+    // 16 and the failed one are held. 8 is dropped.
     assert_eq!(s[0] - s0[0], 2);
     assert_eq!(s[1] - s0[1], 16 * 4);
     assert!(s[5] > s0[5]);
 
-    // Over budget: the oldest unheld entries go first.
+    // Over budget the oldest unheld entries go first.
     cache::set_budget(40 * 4);
     for n in [10, 11, 12] {
         let h = Held::acquire(&format!("t/{n}.pcm"));
@@ -73,7 +73,8 @@ fn cache_decodes_holds_and_drops() {
     assert_eq!(cache::stats()[0], 0);
 }
 
-/// The vendored decoders on a real file (not under Miri: foreign code).
+/// The vendored decoders on a real file, not under Miri, which runs no
+/// foreign code.
 #[test]
 #[cfg_attr(miri, ignore)]
 fn decoders_reject_garbage() {
@@ -81,10 +82,10 @@ fn decoders_reject_garbage() {
     assert!(super::codec::decode_ogg(&[0u8; 64]).is_none());
 }
 
-/// A prefetch asked for while the stream opens or once it is open is
-/// served as the whole decode's samples, with nothing read as silence (the
-/// test file is shorter than the ring, so this checks the bookkeeping, not
-/// the timing).
+/// A prefetch asked for while the stream opens or once it is open is served
+/// as the samples of the whole decode, with nothing read as silence. The
+/// test file is shorter than the ring. The test checks the bookkeeping and
+/// not the timing.
 #[test]
 #[cfg_attr(miri, ignore)]
 fn stream_prefetch_serves_the_decoded_samples() {

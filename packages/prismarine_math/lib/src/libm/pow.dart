@@ -1,4 +1,3 @@
-// pow, and dpow on top of it.
 part of '../../libm.dart';
 
 // --------------------------------------------------------------------- pow
@@ -26,7 +25,6 @@ const _ivln2 = 1.44269504088896338700e+00;
 const _ivln2H = 1.44269502162933349609e+00;
 const _ivln2L = 1.92596299112661746887e-08;
 
-/// libm's pow.
 double pow(double x, double y) {
   double t1, t2;
   final hx = _i32(_hi(x)), lx = _lo(x);
@@ -196,8 +194,9 @@ double pow(double x, double y) {
   return s * z;
 }
 
-/// dart:math's `pow` on doubles (the VM's fast paths: native/mixer's
-/// `dpow`), with libm's pow behind them.
+/// Returns [b] to the power [e] with the results of the `pow` of dart:math. The
+/// exponents 0, 1, 2, 3 and 0.5 take the short paths of dart:math. The other
+/// cases call [pow].
 double dpow(double b, double e) {
   if (e == 0.0) return 1.0;
   if (!e.isNaN) {

@@ -12,7 +12,8 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ReviewView(
-            // No frames kept (no GPU in a widget test): the bar still works.
+            // A widget test has no GPU and keeps no frames. The bar still
+            // works.
             history: FrameHistory(seconds: 0, copy: _NoCopy()),
             openedAt: 0,
             onSave: (_, _, _) async => null,
@@ -23,7 +24,8 @@ void main() {
     );
     await t.tap(find.byType(TextField));
     await t.pump();
-    // Digits are the tool keys (1–4) outside the note: inside it they type.
+    // The digits 1 to 4 are the tool keys outside the note. Inside the note
+    // they type.
     for (final k in [
       LogicalKeyboardKey.digit1,
       LogicalKeyboardKey.digit2,
@@ -34,11 +36,11 @@ void main() {
     await t.enterText(find.byType(TextField), 'arm clips at 1:24');
     await t.pump();
     expect(find.text('arm clips at 1:24'), findsOneWidget);
-    // Escape leaves the field (doesn't close the review) …
+    // Escape leaves the field and does not close the review.
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pump();
     expect(closed, isFalse);
-    // … and a second Escape closes it.
+    // A second Escape closes the review.
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pump();
     expect(closed, isTrue);

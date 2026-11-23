@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prismarine_loop/prismarine_loop.dart';
 
-/// A stand-in for the runner's NSCursor hide/unhide count: hide pushes,
-/// unhide pops, and an unhide without a hide is an error (NSCursor's calls
-/// must pair).
+/// A stand-in for the NSCursor hide and unhide count of the runner. Hide
+/// pushes and unhide pops. An unhide without a hide is an error, since the
+/// calls of NSCursor must pair.
 class _Count {
   int depth = 0;
   final calls = <bool>[];
@@ -26,7 +26,7 @@ void main() {
     expect(c.calls, isEmpty);
     h.over = true;
     expect(c.depth, 1);
-    h.over = true; // repeated enter: no second hide
+    h.over = true; // a repeated enter hides once
     expect(c.calls, [true]);
     h.over = false; // to the panel or out of the window
     expect(c.depth, 0);
@@ -50,7 +50,7 @@ void main() {
   test('any sequence stays paired and dispose shows the cursor', () {
     final c = _Count();
     final h = OsCursorHider(c.send);
-    // Every enter/exit/review order over a few hundred steps.
+    // Every order of enter, exit and review over a few hundred steps.
     var s = 12345;
     for (var i = 0; i < 400; i++) {
       s = (s * 1103515245 + 12345) & 0x7fffffff;

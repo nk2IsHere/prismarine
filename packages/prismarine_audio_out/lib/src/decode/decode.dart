@@ -7,8 +7,8 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 
 import '../native.dart';
 
-/// Decodes an audio file (`.mp3` or `.ogg`) into memory.
-/// A missing or undecodable file is a [FormatException] naming it.
+/// Decodes an audio file, `.mp3` or `.ogg`, into memory. A missing or
+/// undecodable file throws a [FormatException] with its path.
 MemoryPcmSource decodeAudioFile(String path) {
   final f = File(path);
   if (!f.existsSync()) throw FormatException('$path: missing audio file');

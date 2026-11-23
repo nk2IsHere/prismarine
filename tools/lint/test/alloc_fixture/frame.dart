@@ -1,6 +1,6 @@
-// The allocation lint's fixture: a small program with one frame entry
-// (`frame`). A line's expected kinds are after `// expect:`; a line without
-// one must report nothing.
+// The fixture of the allocation lint, a small program with the one frame
+// entry `frame`. The expected kinds of a line follow `// expect:`. A line
+// without them must report nothing.
 // ignore_for_file: unused_local_variable, unused_element, unused_field
 // ignore_for_file: prefer_function_declarations_over_variables
 import 'dart:typed_data';
@@ -64,7 +64,7 @@ final byName = <String, double>{};
 // alloc-cold: a first use
 List<int> _load() => List.filled(1024, 0);
 
-// alloc-setup: binds once; its closures run per frame
+// alloc-setup: binds once, its closures run per frame
 void bind(void Function(String, double Function(double)) add) {
   final table = <String>[];
   add('twice', (x) {

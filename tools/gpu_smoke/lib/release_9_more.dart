@@ -16,7 +16,8 @@ Future<List<int>> _pixel(gpu.Texture t, int x, int y) async {
 }
 
 Future<String?> _samplers(_Kit kit) async {
-  // Comparison: a D32 float depth of 0.25, references either side of it.
+  // A comparison of a D32 float depth of 0.25 with references on either
+  // side of it.
   final depth = kit.ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     16,
@@ -173,7 +174,7 @@ Future<String?> _copies(_Kit kit) async {
 
 Future<String?> _vertexFormats(_Kit kit) async {
   final ctx = kit.ctx;
-  // Positions as float32x2, colours as unorm8x4; then positions as half2.
+  // Positions as float32x2 and colours as unorm8x4, then positions as half2.
   final quad = [
     -1.0,
     -1.0,
@@ -365,7 +366,7 @@ Future<String?> _layered(_Kit kit) async {
     if (!near(c, want)) return 'layer $layer: got $c, want $want';
   }
 
-  // A cube array: two cubes, face +X of cube 1.
+  // A cube array of two cubes, read at face +X of cube 1.
   final cubes = ctx.createTexture(
     gpu.StorageMode.devicePrivate,
     4,
@@ -386,7 +387,7 @@ Future<String?> _layered(_Kit kit) async {
     p.bindUniform(f.getUniformSlot('At'), kit.floats([1, 0, 0, 0]));
   });
   final c = await centre(out);
-  // Face 6 is cube 1's +X.
+  // Face 6 is the +X face of cube 1.
   return near(c, [120, 135, 60, 255])
       ? null
       : 'cube 1 +X: got $c, want [120, 135, 60, 255]';

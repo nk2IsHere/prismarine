@@ -11,75 +11,74 @@ export 'plan_codec_types.dart';
 
 part 'plan_codec_rows.dart';
 
-/// Writes frame plans for an [PlanReader] on another isolate. The
-/// objects the frame runner keys its GPU objects and lookups on (byte
-/// blocks, samplers, file and constant textures, inline register maps) are
-/// sent once and then named by id, so the reader's plan shares them as the
-/// builder's does. A byte block named again is compared with the copy
-/// sent; one changed in place is sent again under a new id. A frame role
-/// (FrameRole) is sent by name once, its bytes with each plan. A draw
-/// sent in two messages in a row (the builder keeps a still batch's draw
-/// from frame to frame) is kept on both sides and named by id after, so
-/// its resources cross once. Everything else goes by value: the builder
-/// makes most of it anew each frame.
+/// Writes frame plans for a [PlanReader] on another isolate.
+///
+/// The objects that the frame runner keys its GPU objects and lookups on,
+/// such as byte blocks, samplers, file and constant textures and inline
+/// register maps, are sent once and then by id. The plan of the reader
+/// shares them as the plan of the builder does. A byte block that is sent
+/// again by id is compared with the copy sent. A block changed in place is
+/// sent again under a new id. A frame role (FrameRole) is sent by name once
+/// and its bytes with each plan. A draw sent in two messages in a row is
+/// kept on both sides and sent by id after that. Its resources then cross
+/// once. Everything else goes by value.
 class PlanWriter {
-  /// Whether each message goes through a SendPort, whose send copies the
-  /// blocks at once: the builder may then change them in place next frame
-  /// without the writer copying them first (perf: a heap copy per block).
+  /// True when each message goes through a SendPort, whose send copies the
+  /// blocks at once. The builder may then change them in place in the next
+  /// frame without a copy by the writer.
   final bool sentThroughPort;
 
   PlanWriter({this.sentThroughPort = false, this.store});
 
-  /// Where frame roles' bytes go (null: in the message, copied). A draw's
-  /// own blocks go in the message: kept draws, passes and rows hold theirs
-  /// on the reader for as long as they live there, which no message count
-  /// bounds, and the store frees a block by message.
+  /// The store of the bytes of frame roles, or null to copy them into the
+  /// message. The own blocks of a draw go in the message. Kept draws, passes
+  /// and rows hold their blocks on the reader for as long as they exist
+  /// there, which no message count bounds. The store frees a block by
+  /// message.
   final PlanBlockStore? store;
 
-  /// Per id, the address of its role block in [store], which the writer
-  /// frees (0: none).
+  /// The address of the role block of each id in [store], which the writer
+  /// frees, or 0 for none.
   final _native = <int>[];
 
-  /// The role blocks in [store] by the builder's bytes object, apart from
-  /// [_ids]: a draw that names the same object directly gets a block of its
-  /// own, since a kept draw holds its block for as long as the reader
-  /// keeps it, past any plan, and a role block is freed once no plan
-  /// running names it.
+  /// The role blocks in [store] by the bytes object of the builder, apart
+  /// from [_ids]. A draw that binds the same object directly gets a block of
+  /// its own. A kept draw holds its block for as long as the reader keeps
+  /// the draw, past any plan. A role block is freed once no running plan
+  /// refers to it.
   final _roleIds = HashMap<Uint8List, int>.identity();
 
-  /// The reader's side ran every plan before message [message] it will run.
+  /// Frees the role blocks once the reader has run every plan before
+  /// [message] that it will run.
   void release(int message) => store?.release(message);
 
   final _ids = LinkedHashMap<Object, int>.identity();
   final _objects = <Object?>[];
   final _lastUse = <int>[];
 
-  /// Per id of a byte block: a hash of the bytes sent and their length (a
-  /// block changed in place is sent again); null for other objects.
-  // A block's hash and length as sent (length -1: not a block with a copy
-  // sent); the hashes in a typed list (perf: a boxed 64-bit hash per block
-  // kept).
+  /// The hash of the bytes sent for each id of a byte block. [_sentLength]
+  /// holds their length, -1 for an object that is not a block with a copy
+  /// sent. A block changed in place is sent again.
   var _sent = Int64List(1024);
   final _sentLength = <int>[];
 
-  /// Per id, the message in which its block was last sent or found the
-  /// same as sent: a plan is whole when it is written, so a block named
-  /// again in the same message (BufferCamera, BufferScene: once a draw) is
-  /// compared once.
+  /// The message in which the block of each id was last sent or found the
+  /// same as sent. A plan is whole when it is written. A block bound again
+  /// in the same message, such as a camera or scene block bound by every
+  /// draw, is compared once.
   final _checked = <int>[];
   final _table = PlanIds();
   int _message = 0;
 
-  /// While a draw or dispatch is written by value ([_naming]): the ids it
-  /// names, its blocks and objects.
+  /// The ids of the blocks and objects that a draw or dispatch refers to
+  /// while it is written by value ([_naming]).
   var _named = Int32List(256);
   int _nNamed = 0;
   bool _naming = false;
 
-  /// Per id of a kept draw or dispatch, the ids it named: a reference to it
-  /// marks them used too, so a block a kept draw still binds isn't swept
-  /// and sent again when a new draw names it (perf: the skin batch's 1.4 MB
-  /// sources went again each time its tables changed after four frames).
+  /// The ids of the references of each kept draw or dispatch. A reference to
+  /// the draw marks them used too. A block that a kept draw still binds is
+  /// then not swept and sent again when a new draw binds it.
   final _kids = <Int32List?>[];
 
   var _ints = Int64List(4096);
@@ -88,25 +87,26 @@ class PlanWriter {
   int _nd = 0;
   var _strings = <String>[];
 
-  /// Every string sent by its id: the reader keeps the same table, so a
-  /// string crosses once and reads back as the same object each frame
-  /// (the runner's pipeline and binding lookups compare by identity first).
+  /// The id of every string sent. The reader keeps the same table. A string
+  /// crosses once and reads back as the same object each frame, which the
+  /// pipeline and binding lookups of the runner compare by identity first.
   final _stringIds = <String, int>{};
   var _bytes = <Uint8List>[];
   var _dropped = <int>[];
 
   /// The draws and dispatches sent by value in the last message and in this
-  /// one: one seen in both is kept.
+  /// one. One seen in both messages is kept.
   var _lastDraws = LinkedHashSet<Object>.identity();
   var _nowDraws = LinkedHashSet<Object>.identity();
 
-  /// Each pass's rows as sent ([_rows]).
+  /// The rows of each pass as sent by [_rows].
   final _sentRows = <String, _SentRows>{};
 
-  /// [r]'s rows as a change to what the reader has: the rows whose draw is
-  /// not the one sent under their id, then the ids gone since; the first
-  /// time a pass's rows are sent, the reader starts its table afresh. The
-  /// id and plan lists sent last again (keptRowSet) change nothing.
+  /// Writes the rows of [r] as a change to the rows of the reader. It writes
+  /// the rows whose draw is not the one sent under their id and then the
+  /// ids gone since. The first time the rows of a pass are sent, the reader
+  /// starts its table afresh. The id and plan lists sent last, sent again
+  /// (keptRowSet), change nothing.
   void _rows(RenderPassPlan r) {
     final rows = r.rows;
     if (rows == null) {
@@ -131,7 +131,7 @@ class PlanWriter {
           byId[id] = _SentRow(plan, stamp);
           continue;
         }
-        // In place (perf: a record per row a message).
+        // The changed rows are found in place without a record per row.
         if (!identical(had.plan, plan)) changed.add(i);
         had
           ..plan = plan
@@ -152,7 +152,8 @@ class PlanWriter {
       sent.rows.remove(gone[k]);
       _int(gone[k]);
     }
-    // A changed row's bounds go with it; the culling values every message.
+    // The bounds of a changed row go with it. The culling values go with
+    // every message.
     final bounds = rows.bounds;
     _int(bounds == null ? 0 : 1);
     if (bounds != null) {
@@ -181,7 +182,8 @@ class PlanWriter {
 
   late final _goneOne_ = _goneOne;
 
-  /// [plan] (null: no camera showed) and [draws] as one message.
+  /// Writes [plan] and [draws] as one message. [plan] is null when no camera
+  /// showed.
   PlanMessage write(FramePlan? plan, [List<DrawPlan> draws = const []]) {
     _message++;
     _ni = _nd = 0;
@@ -220,7 +222,7 @@ class PlanWriter {
     );
   }
 
-  /// Objects in the table now (tests, profiles).
+  /// The number of objects in the table now.
   int get tableSize => _ids.length + _roleIds.length;
 
   void _sweep() {
@@ -231,8 +233,8 @@ class PlanWriter {
     }
   }
 
-  /// Drops the byte blocks (the ids with a copy sent) unused in the last
-  /// [planKeepBlocks] messages.
+  /// Drops the byte blocks, the ids with a copy sent, that were unused in the
+  /// last [planKeepBlocks] messages.
   void _sweepBlocks() {
     final before = _message - planKeepBlocks;
     final lengths = _sentLength, lastUse = _lastUse;
@@ -310,7 +312,7 @@ class PlanWriter {
     }
   }
 
-  /// True (and the reference written) when [o] was sent and is kept.
+  /// Returns true and writes the reference when [o] was sent and is kept.
   bool _known(Object o) {
     final id = _ids[o];
     if (id == null) return false;
@@ -334,13 +336,15 @@ class PlanWriter {
     _named[_nNamed++] = id;
   }
 
-  /// Starts naming for a draw or dispatch written by value.
+  /// Starts to collect the references of a draw or dispatch written by
+  /// value.
   void _nameFrom() {
     _naming = true;
     _nNamed = 0;
   }
 
-  /// Ends it: [o]'s id when it is kept, with what it named.
+  /// Ends the collection and gives [o] its id when it is kept, with its
+  /// references.
   void _keepNamed(Object o, bool again) {
     _naming = false;
     if (!again) return;
@@ -348,18 +352,21 @@ class PlanWriter {
     _kids[id] = _named.sublist(0, _nNamed);
   }
 
-  /// Gives [o], just written (its tag, then its parts), its id: after its
-  /// parts', as the reader makes it after reading them.
+  /// Gives [o], just written with its tag and then its parts, its id. The id
+  /// comes after those of its parts, as the reader makes it after reading
+  /// them.
   int _keep(Object o) => _keepBlock(o, 0, -1);
 
-  /// [_keep] of a block sent by value: its [hash] and [length].
+  /// Keeps a block sent by value with its [hash] and [length], as [_keep]
+  /// does.
   int _keepBlock(Object o, int hash, int length) {
     final id = _newId(o, hash, length);
     _ids[o] = id;
     return id;
   }
 
-  /// A table id for [o] (a block: its [hash] and [length]), named.
+  /// Returns a table id for [o], recorded as a reference. A block has its
+  /// [hash] and [length].
   int _newId(Object o, int hash, int length) {
     final id = _table.take();
     if (id >= _sent.length) {
@@ -411,15 +418,13 @@ class PlanWriter {
     }
     _int(tagBytes);
     _int(_bytes.length);
-    // The reader gets the bytes as they are now: a port's send copies
+    // The reader gets the bytes as they are now. The send of a port copies
     // them, else a copy goes here. A view crosses a port with the whole
-    // buffer it views (the VM copies the backing store, and the reader's
-    // view keeps it), so a view of part of a buffer goes as a copy of its
-    // own bytes: the skinning's sources and scratch-built blocks had sent
-    // their whole buffers, MBs a frame of old-space garbage on the UI.
-    // alloc: a block sent anew is copied anyway; .buffer tells a view
+    // buffer that it views. A view of part of a buffer therefore goes as a
+    // copy of its own bytes.
+    // alloc: a block sent anew is copied anyway, .buffer reveals a view
     final whole = b.lengthInBytes == b.buffer.lengthInBytes;
-    // alloc: a block sent anew, as before; a view's own bytes
+    // alloc: a block sent anew, as before, or the own bytes of a view
     _bytes.add(sentThroughPort && whole ? b : Uint8List.fromList(b));
     _keepBlock(b, _hash(b), b.length);
   }
@@ -435,7 +440,7 @@ class PlanWriter {
 
   void _bufferOne(String key, BufferSpec value) {
     _string(key);
-    // By value: the runner uploads [BufferSpec.initial] each frame, so its
+    // By value. The runner uploads [BufferSpec.initial] each frame and its
     // bytes go through the block check.
     _block(value.initial);
     _int(value.size << 1 | (value.readBack ? 1 : 0));
@@ -447,8 +452,8 @@ class PlanWriter {
   }
 
   void _plan(FramePlan p) {
-    // The targets of the last plan again (most frames): −1, and the reader
-    // gives its last map again (perf: a map and a spec per target a frame).
+    // The targets of the last plan again, as in most frames, go as −1. The
+    // reader then gives its last map again.
     if (_sameTargets(p.targets)) {
       _int(-1);
     } else {
@@ -460,8 +465,8 @@ class PlanWriter {
       }
     }
     _lastTargets = p.targets;
-    // By forEach through kept tear-offs (perf: an iterator per map a
-    // frame).
+    // The map is walked by forEach through kept tear-offs, without an
+    // iterator.
     _int(p.buffers.length);
     p.buffers.forEach(_bufferOne_);
     _int(p.frameBlocks.length);
@@ -491,7 +496,7 @@ class PlanWriter {
     }
   }
 
-  /// The last plan's targets.
+  /// The targets of the last plan.
   Map<String, TargetSpec>? _lastTargets;
 
   bool _sameTargets(Map<String, TargetSpec> now) {
@@ -516,13 +521,12 @@ class PlanWriter {
     return true;
   }
 
-  /// Each role's bytes as last sent, by id.
+  /// The bytes of each role as last sent, by id.
   final _roleSent = HashMap<Uint8List, int>.identity();
 
-  /// Role [role]'s bytes [b] this frame: the bytes last sent for the role
-  /// again when [b] holds the same (the builder makes a role's bytes anew
-  /// each frame, the same while the camera or object holds still), so the
-  /// reader's role keeps its bytes object; else [b] as a block.
+  /// Writes the bytes [b] of [role] for this frame. It writes the bytes last
+  /// sent for the role again when [b] holds the same bytes. The role of the
+  /// reader then keeps its bytes object. Otherwise it writes [b] as a block.
   void _roleBytes(Uint8List role, Uint8List b) {
     if (store case final st? when b.isNotEmpty) {
       _roleNative(st, role, b);
@@ -547,9 +551,10 @@ class PlanWriter {
     if (_ids[b] case final id?) _roleSent[role] = id;
   }
 
-  /// [_roleBytes] into [st]: the same bytes as last sent for the role, or
-  /// as this object's, by id; else a copy in [st] (the object's old one
-  /// dropped when it changed in place).
+  /// Writes the bytes [b] of [role] into [st], as [_roleBytes] does. The
+  /// bytes last sent for the role or for this object go by id. Otherwise a
+  /// copy goes into [st]. The old copy of an object changed in place is
+  /// dropped.
   void _roleNative(PlanBlockStore st, Uint8List role, Uint8List b) {
     final h = _hash(b);
     final known = _roleIds[b];
@@ -585,22 +590,23 @@ class PlanWriter {
     _roleSent[role] = id;
   }
 
-  /// Last message's render passes by position in the plan, and each one's
-  /// id once kept (-1: not kept; -2: kept from this message on).
+  /// The render passes of the last message by position in the plan, with
+  /// the id of each once kept. The id is -1 when not kept and -2 when kept
+  /// since this message.
   final _passes = <RenderPassPlan?>[];
   final _passIds = <int>[];
 
-  /// The message each of [_passes] was seen in: only last message's pass is
-  /// compared (a builder writes a published pass's draw list again two
-  /// publishes later, FrameSlots).
+  /// The message in which each of [_passes] was seen. Only the pass of the
+  /// last message is compared. A builder writes the draw list of a
+  /// published pass again two publishes later.
   final _passSeen = <int>[];
 
-  /// Writes [r]'s tag at [at] in the plan, or all of it when it is the pass
-  /// sent there last time (the same name, attachments and draw objects,
-  /// which the builder makes anew each frame): its id, the reader's pass
-  /// being the same object as before. A pass seen the same twice in a row
-  /// is kept on both sides from then on. Passes with rows go by value
-  /// (their rows change apart from the pass).
+  /// Writes the pass [r] at [at] in the plan. A pass with the same name,
+  /// attachments and draw objects as the pass sent there last time goes by
+  /// its id. The pass of the reader is then the same object as before. A
+  /// pass seen the same twice in a row is kept on both sides after that.
+  /// Passes with rows go by value, since their rows change apart from the
+  /// pass.
   bool _passKept(int at, RenderPassPlan r) {
     while (_passes.length <= at) {
       _passes.add(null);
@@ -610,29 +616,30 @@ class PlanWriter {
     final last = _passSeen[at] == _message - 1 ? _passes[at] : null;
     _passes[at] = r;
     _passSeen[at] = _message;
-    // A pass with rows is the same while its rows are the same object too
-    // (a published row set is not written again).
+    // A pass with rows is the same while its rows are the same object too.
+    // A published row set is not written again.
     final same =
         last != null && identical(last.rows, r.rows) && _samePass(last, r);
     if (!same) {
-      // Its draws and rows into the reader's same pass object. A pass whose
-      // rows' culling values change each frame takes this path.
+      // The draws and rows go into the same pass object of the reader. A
+      // pass whose culling values change each frame takes this path.
       if (last != null && r.rows != null && _passRows(at, last, r)) {
         return true;
       }
-      // A kept pass with a few draws changed (the draws of a moved
-      // object): an edit, the reader's pass the same object.
+      // A kept pass with a few draws changed, such as the draws of a moved
+      // object, goes as an edit. The pass of the reader stays the same
+      // object.
       if (last != null && r.rows == null && _passEdit(at, last, r)) {
         return true;
       }
-      // Its draws whole into the reader's same pass object, for a pass
-      // whose draw count changed.
+      // The draws go whole into the same pass object of the reader, for a
+      // pass whose draw count changed.
       if (last != null && r.rows == null && _passReshape(at, last, r)) {
         return true;
       }
-      // Kept from its first frame, so the frames after send it as an edit
-      // or a reshape (a pass with rows as a rows reshape). A pass that
-      // changes every frame is kept as well.
+      // The pass is kept from its first frame. The frames after it send the
+      // pass as an edit or a reshape, or as a rows reshape for a pass with
+      // rows. A pass that changes every frame is kept as well.
       return _keepNew(at, r);
     }
     final id = _passIds[at];
@@ -640,8 +647,8 @@ class PlanWriter {
       _int(tagRef);
       _int(id);
       _lastUse[id] = _message;
-      // Its draws stay in both tables while it is named: a pass that
-      // changes later still names them by id.
+      // The draws stay in both tables while a message refers to the pass. A
+      // pass that changes later still refers to them by id.
       final draws = r.draws;
       for (var i = 0; i < draws.length; i++) {
         if (_ids[draws[i]] case final k?) _lastUse[k] = _message;
@@ -651,8 +658,8 @@ class PlanWriter {
     return _keepNew(at, r);
   }
 
-  /// [r] written whole as the pass kept at [at] (its id given once
-  /// written).
+  /// Writes [r] whole as the pass kept at [at] and gives it its id once it
+  /// is written.
   bool _keepNew(int at, RenderPassPlan r) {
     _passIds[at] = -2;
     while (_keptPass.length <= at) {
@@ -674,11 +681,11 @@ class PlanWriter {
     return true;
   }
 
-  /// The same name, attachments and draw count.
+  /// Returns true for the same name, attachments and draw count.
   static bool _sameShape(RenderPassPlan a, RenderPassPlan b) =>
       a.draws.length == b.draws.length && _sameAttachments(a, b);
 
-  /// The same name and attachments.
+  /// Returns true for the same name and attachments.
   static bool _sameAttachments(RenderPassPlan a, RenderPassPlan b) {
     if (a.name != b.name ||
         a.colors.length != b.colors.length ||
@@ -711,9 +718,8 @@ class PlanWriter {
     return true;
   }
 
-  /// A dispatch as a draw goes: one sent in the last message and this one
-  /// (the builder keeps a still caster's cull and a still mesh's skinning)
-  /// is kept on both sides and named by id after.
+  /// Writes a dispatch as a draw goes. A dispatch sent in the last message
+  /// and in this one is kept on both sides and sent by id after that.
   void _dispatch(DispatchPlan c) {
     if (_known(c)) return;
     final again = _lastDraws.contains(c);
@@ -773,8 +779,8 @@ class PlanWriter {
     _keepNamed(d, again);
   }
 
-  // The maps walked by forEach through tear-offs made once (perf: two
-  // iterator objects per walk, four walks per stage).
+  // The maps are walked by forEach through tear-offs made once, without
+  // iterators.
   void _resources(StageResources r) {
     _int(r.blocks.length);
     r.blocks.forEach(_blockEntry_);

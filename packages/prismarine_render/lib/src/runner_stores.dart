@@ -1,7 +1,7 @@
 part of 'frame_runner.dart';
 
-/// A draw's target textures, its vertex stage's then its pixel stage's in
-/// binding order (a plan's draws are not changed once made).
+/// Returns the target textures of a draw, those of its vertex stage and then
+/// those of its pixel stage in binding order.
 List<TargetTexture> _targetTexturesOf(DrawPlan d) => [
   for (final res in [d.vertexResources, d.pixelResources])
     for (final t in res.textures.values)
@@ -11,26 +11,26 @@ List<TargetTexture> _targetTexturesOf(DrawPlan d) => [
 /// The targets each dispatch reads, by dispatch.
 final _dispatchReads = Expando<List<String>>('dispatch target reads');
 
-/// Which depth attachments a frame need not write back. On Metal's tiles a
-/// stored attachment is written out to memory at the end of each pass; the
-/// scene depth and the back buffer's depth are full-window D32S8 targets
-/// (about 36 MB each at 3600 × 2025) whose last pass in a frame stored them
-/// for nothing: no later pass reads them, and the next frame clears them
-/// before any read. Dropping that store changes no pixel.
+/// Finds the depth attachments that a frame need not write back. On the
+/// tiles of Metal a stored attachment is written out to memory at the end
+/// of each pass. A full-window D32S8 depth target is about 36 MB at
+/// 3600 × 2025. Its last pass in a frame stores it for nothing when no later
+/// pass reads it and the next frame clears it before any read. Dropping that
+/// store changes no pixel.
 extension _RunnerStores on FrameRunner {
-  /// The render passes of [plan] whose depth target needs no store: no
-  /// later pass of the plan reads or attaches it, and the plan's first use
-  /// of it clears its depth and stencil (so no next frame of the same
-  /// passes reads what this one leaves). Empty with [keepStores].
+  /// Returns the render passes of [plan] whose depth target needs no store. No
+  /// later pass of the plan reads or attaches it. The first use of it in the
+  /// plan clears its depth and stencil. The next frame of the same passes then
+  /// does not read what this frame leaves. Empty with [keepStores].
   Set<RenderPassPlan> _depthUnstored(FramePlan plan) {
-    // The walk's sets, lists and maps are the runner's, cleared (perf: five
-    // collections and an iterator per pass each frame).
+    // The sets, lists and maps of the walk belong to the runner and are
+    // cleared.
     final dropped = _unstored..clear();
     if (keepStores) return dropped;
     final later = _later..clear();
     final lastTarget = _lastTarget..clear(), lastPass = _lastPass..clear();
     final lastSeen = _lastSeen..clear();
-    // Each target's first use in the plan, and whether that use clears it.
+    // The first use of each target in the plan and if that use clears it.
     final firstClears = _firstClears..clear();
     final passes = plan.passes;
     final used = _used, order = _usedOrder;
@@ -67,9 +67,8 @@ extension _RunnerStores on FrameRunner {
             if (t != d?.target) firstClears[t] = false;
           }
         case final DispatchPlan c:
-          // Read once per dispatch (a kept one is the same object from
-          // frame to frame): two map walks per dispatch were a frame's
-          // garbage (perf).
+          // Read once per dispatch, since a kept dispatch is the same object
+          // from frame to frame.
           final reads = _dispatchReads[c] ??= [
             for (final t in c.resources.textures.values)
               if (t is TargetTexture) t.target,
@@ -93,8 +92,8 @@ extension _RunnerStores on FrameRunner {
     return dropped;
   }
 
-  /// The targets draw [d] samples, kept with the draw (a plan's draws are
-  /// not changed once made).
+  /// Returns the targets that the draw [d] samples, kept with the draw. The
+  /// draws of a plan do not change once made.
   List<String> _targetsRead(DrawPlan d) {
     final cache = _cacheOf(d);
     return cache.reads ??= [for (final t in _targetTexturesOf(d)) t.target];

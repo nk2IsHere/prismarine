@@ -1,15 +1,15 @@
-// The glitch catcher: every frame the history ring keeps (the
-// image the window was given: the 3D frame copied on the GPU right after it
-// was drawn, with the UI scenes blended over it) is read back and compared
-// with the frames shown before and after it. A frame with a bright patch
-// that neither neighbour has, while the neighbours agree with each other, is
-// a one-frame artefact (such as GPU-race triangles): the three frames
-// and a mask of the flagged pixels go to `<run>/caught/`, one line each in
-// `caught.jsonl`. A dump re-renders what the game state gives and the
-// review scrubs the ring; this keeps what was actually drawn, GPU races
-// included.
+// The glitch catcher reads back every frame that the history ring keeps and
+// compares it with the frames shown before and after it. A kept frame is the
+// image that the window was given, the 3D frame copied on the GPU right after
+// it was drawn with the UI scenes blended over it. A frame with a bright
+// patch that neither neighbour has, while the neighbours agree with each
+// other, is a one-frame artefact, such as the triangles of a GPU race. The
+// three frames and a mask of the flagged pixels go to `<run>/caught/`, with
+// one line each in `caught.jsonl`. The catcher keeps what was actually
+// drawn, GPU races included.
 //
-// Off by default: a read-back (640 × 360, through the raster thread) a frame.
+// It is off by default. It reads back one 640 × 360 frame through the raster
+// thread every frame.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -26,12 +26,12 @@ import 'png.dart';
 class GlitchCatcher {
   GlitchCatcher(this.dir, {this.log});
 
-  /// Where the caught frames go (`<run>/caught`).
+  /// The folder of the caught frames, `<run>/caught`.
   final String dir;
   final void Function(String line)? log;
 
-  /// Read-backs in flight at most; a frame past that isn't checked (and its
-  /// neighbours aren't checked against it).
+  /// The maximum number of read-backs in flight. A frame past it is not
+  /// checked and its neighbours are not checked against it.
   static const maxInFlight = 4;
 
   int _inFlight = 0;
@@ -75,8 +75,8 @@ class GlitchCatcher {
     }
   }
 
-  /// [FrameHistory.onFrameDone]: reads [frame] back and hands it to the
-  /// checker with [seq] and [meta].
+  /// Reads [frame] back and passes it to the checker with [seq] and [meta].
+  /// Set it as [FrameHistory.onFrameDone].
   void frameDone(int seq, gpu.Texture frame, HistoryMeta meta) {
     _start();
     if (_inFlight >= maxInFlight) {
@@ -126,16 +126,16 @@ class GlitchCatcher {
   int _windowSeq = 0;
   int windowFrames = 0;
 
-  /// A frame the window showed (WindowSurfaceReader), [width] wide: checked
-  /// against the window's frames before and after it. It carries the newest
-  /// history frame's time.
+  /// Checks the frame [rgba] of [width] by [height] that the window showed
+  /// against the window frames before and after it. The frame comes from
+  /// WindowSurfaceReader and carries the time of the newest history frame.
   void windowFrame(Uint8List rgba, int width, int height) {
     _start();
     windowFrames++;
     final m = _last;
-    // PRISMARINE_CATCH_SAVE=<t0>:<t1>: every window frame in that stretch of
-    // game time is kept as well (window_all/), to look at a moment frame by
-    // frame.
+    // With PRISMARINE_CATCH_SAVE=<t0>:<t1> every window frame in that stretch
+    // of game time is kept as well in window_all/, to step through a moment
+    // frame by frame.
     if (_saveSpan case (final t0, final t1)? when m != null) {
       if (m.time >= t0 && m.time <= t1) {
         final path =
@@ -165,7 +165,7 @@ class GlitchCatcher {
     ]);
   }
 
-  /// The run's summary line.
+  /// The summary line of the run.
   String get summary =>
       'catch: $read history frames read back, $dropped not checked '
       '(read-backs busy), $windowFrames window frames read, $flagged '
@@ -177,9 +177,10 @@ class GlitchCatcher {
   }
 }
 
-/// Writes the history's newest [count] frames (the images the window was
-/// given) into [dir] as `shown_<k>_f<frame>.png` (k = 0 the newest): a
-/// dump's re-rendered screenshot can't show a GPU glitch, these can.
+/// Writes the newest [count] frames of the history, the images that the
+/// window was given, into [dir] as `shown_<k>_f<frame>.png`, where k = 0 is
+/// the newest. These frames show a GPU glitch that a re-rendered screenshot
+/// does not show.
 Future<void> writeShownFrames(
   FrameHistory history,
   String dir, {
@@ -237,10 +238,10 @@ class _Frame {
   }
 }
 
-/// What makes a pixel part of a one-frame bright artefact: bright in the
-/// frame, and [rise] levels above every pixel of both neighbours within
-/// [reach] pixels (so whatever moved a little between the frames, a rim
-/// light on a swinging arm, isn't taken for one).
+/// The thresholds for a pixel of a one-frame bright artefact. The pixel is
+/// bright in the frame and [rise] levels above every pixel of both
+/// neighbours within [reach] pixels. A thing that moved a little between the
+/// frames, such as a rim light on a swinging arm, is then not flagged.
 class GlitchThresholds {
   const GlitchThresholds({
     this.bright = 150,
@@ -251,19 +252,21 @@ class GlitchThresholds {
   });
   final int bright, rise, reach;
 
-  /// How far from grey a flagged pixel may be (max − min of its R, G, B):
-  /// the artefacts are white; a saturated rim light on a moving arm isn't.
+  /// The largest distance from grey of a flagged pixel, the max − min of its
+  /// R, G and B. The artefacts are white and a saturated rim light on a
+  /// moving arm is not.
   final int grey;
 
-  /// The pixels the largest connected patch of flagged pixels needs (at the
-  /// ring's 640 × 360): a stretched triangle is one patch; sparkles, embers
-  /// and lip-sync mouth shapes that change for a frame are many small ones.
+  /// The pixels that the largest connected patch of flagged pixels needs at
+  /// the 640 × 360 of the ring. A stretched triangle is one patch. Sparkles,
+  /// embers and mouth shapes that change for a frame are many small ones.
   final int minBlob;
 }
 
-/// The pixels of [cur] that are a one-frame bright artefact against [prev]
-/// and [next] (all luma, one byte a pixel, the same size): the count, the
-/// bounding box (x0, y0, x1, y1) and a mask (255 where flagged).
+/// Returns the pixels of [cur] that are a one-frame bright artefact against
+/// [prev] and [next]. All three are luma of one byte per pixel and of the
+/// same size. Returns the count, the bounding box (x0, y0, x1, y1) and a mask
+/// that is 255 where flagged.
 ({int count, List<int> box, Uint8List mask}) brightTransient(
   Uint8List prev,
   Uint8List cur,
@@ -273,8 +276,8 @@ class GlitchThresholds {
   GlitchThresholds th = const GlitchThresholds(),
 }) {
   final h = cur.length ~/ w;
-  // The brightest of either neighbour within [reach]: a max filter, rows
-  // then columns.
+  // The brightest pixel of either neighbour within [reach], as a max filter
+  // over rows and then columns.
   final both = Uint8List(cur.length);
   for (var i = 0; i < both.length; i++) {
     both[i] = prev[i] > next[i] ? prev[i] : next[i];
@@ -329,7 +332,7 @@ class GlitchThresholds {
   );
 }
 
-/// The size of the largest 4-connected patch of set pixels in [mask].
+/// Returns the size of the largest 4-connected patch of set pixels in [mask].
 int largestBlob(Uint8List mask, int w) {
   final seen = Uint8List(mask.length);
   final stack = <int>[];
@@ -362,8 +365,8 @@ void _catcherMain((SendPort, String) args) {
   reply.send(port.sendPort);
   final windows = {'ring': <_Frame>[], 'window': <_Frame>[]};
   final jsonl = File('$dir/caught.jsonl');
-  // Every large catch is kept; small ones (lip-sync mouth shapes, sparks)
-  // only up to a few, so a long run's folder stays small.
+  // Every large catch is kept. Small ones, such as mouth shapes and sparks,
+  // are kept only up to a few to keep the folder of a long run small.
   var saved = 0, savedSmall = 0;
   const maxSaved = 300, maxSmall = 40, large = 150;
   port.listen((m) {
@@ -388,8 +391,8 @@ void _catcherMain((SendPort, String) args) {
       msg[8] as int,
       (msg[9] as TransferableTypedData).materialize().asUint8List(),
     );
-    // Read-backs can finish out of order: keep the window in seq order, and
-    // restart it at a hole.
+    // Read-backs can finish out of order. The window stays in seq order and
+    // restarts at a hole.
     if (window.isNotEmpty && f.seq != window.last.seq + 1) {
       if (f.seq <= window.last.seq) return;
       window.clear();
@@ -410,8 +413,9 @@ void _catcherMain((SendPort, String) args) {
     if (keep) {
       saved++;
       if (blob < large) savedSmall++;
-      // One image: the frame before | the caught frame, the frame after |
-      // the flagged pixels in red over the caught frame, darkened.
+      // One image has the frame before and the caught frame in its top row.
+      // The frame after and the flagged pixels in red over the darkened
+      // caught frame are in its bottom row.
       File(
         out,
       ).writeAsBytesSync(encodePng(_sheet(p, c, n, r.mask), 2 * c.w, 2 * c.h));
@@ -434,8 +438,8 @@ void _catcherMain((SendPort, String) args) {
   });
 }
 
-/// A 2 × 2 sheet (RGBA): [p] | [c] over [n] | [c] darkened with [mask]'s
-/// pixels red.
+/// Returns a 2 × 2 RGBA sheet with [p] and [c] in the top row. The bottom row
+/// has [n] and [c] darkened with the pixels of [mask] in red.
 Uint8List _sheet(_Frame p, _Frame c, _Frame n, Uint8List mask) {
   final w = c.w, h = c.h, sw = 2 * w;
   final out = Uint8List(sw * 2 * h * 4);

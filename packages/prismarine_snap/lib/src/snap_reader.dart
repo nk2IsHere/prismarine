@@ -1,4 +1,3 @@
-// The snapshot reader.
 part of 'snap.dart';
 
 /// Reads a snapshot stream written by [SnapWriter].
@@ -9,7 +8,7 @@ class SnapReader {
 
   final SnapRegistry registry;
 
-  /// What codecs share during one read, by key.
+  /// The values that codecs share during one read, by key.
   final env = <Object, Object?>{};
   final Uint8List _buf;
   final ByteData _bd;
@@ -18,10 +17,10 @@ class SnapReader {
   final _strings = <String>[];
   final _queue = Queue<(Object, SnapCodec)>();
 
-  /// Objects read so far (known ones included).
+  /// The number of objects read so far, the known ones included.
   int get objects => _objs.length;
 
-  /// Every object read so far, by its index (a restore's consistency checks).
+  /// Every object read so far, by its index.
   List<Object?> get table => _objs;
 
   // --- primitives ------------------------------------------------------------
@@ -103,7 +102,7 @@ class SnapReader {
     _queue.add((o, c));
   }
 
-  /// Reads every queued object's state, as [SnapWriter.finish] wrote it.
+  /// Reads the state of every queued object as [SnapWriter.finish] wrote it.
   void finish() {
     while (_queue.isNotEmpty) {
       final (o, c) = _queue.removeFirst();
@@ -149,7 +148,8 @@ class SnapReader {
         final slot = _objs.length;
         _objs.add(null);
         final b = bytes();
-        // Typed lists of their own (not views), byte for byte.
+        // Typed lists are read byte for byte into lists of their own, not
+        // into views.
         final TypedData o = switch (k) {
           0 => b,
           1 => Int8List(b.length),
@@ -257,11 +257,11 @@ class SnapReader {
     }
   }
 
-  /// A reference read as [T].
+  /// Reads a reference as [T].
   T ref<T>() => value() as T;
 
-  /// An object written with [SnapWriter.begin]: [create] makes it (it is
-  /// registered at once), [fill] reads the rest.
+  /// Reads an object written with [SnapWriter.begin]. [create] makes the
+  /// object, which is registered at once. [fill] reads the rest.
   T begin<T extends Object>(T Function() create, [void Function(T o)? fill]) {
     final t = byte();
     if (t == _tRef) return _objs[uint()] as T;
@@ -334,6 +334,6 @@ class SnapReader {
     _ => null,
   };
 
-  /// Whether the whole stream was read.
+  /// True when the whole stream was read.
   bool get atEnd => _pos == _buf.length;
 }

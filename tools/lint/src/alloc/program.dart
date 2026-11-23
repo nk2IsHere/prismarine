@@ -1,6 +1,6 @@
-// The resolved program the allocation lint walks: every function with a
-// body in the files in scope, by a stable id, and the class hierarchy that
-// says which overrides an instance call can reach.
+// The resolved program that the allocation lint walks. It holds every
+// function with a body in the files in scope by a stable id, with the class
+// hierarchy that gives the overrides an instance call can reach.
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
@@ -14,7 +14,7 @@ import 'ids.dart';
 class SourceFile {
   SourceFile(this.path, this.package, this.unit, this.lines, this.text);
 
-  /// Relative to the repository root.
+  /// The path relative to the repository root.
   final String path;
   final String package;
   final CompilationUnit unit;
@@ -31,13 +31,14 @@ class Decl {
   final String id;
   final SourceFile file;
 
-  /// The declaration (its body and, for a constructor, its initializers).
+  /// The declaration with its body and, for a constructor, its initializers.
   final AstNode node;
 
-  /// The enclosing class's id, if any.
+  /// The id of the enclosing class, if any.
   final String? owner;
 
-  /// A generative constructor also runs its class's field initializers.
+  /// The field initializers of its class, which a generative constructor
+  /// also runs.
   final List<Expression> fieldInits;
 
   int get line => file.lineOf(node.offset);
@@ -47,30 +48,32 @@ class Program {
   final files = <String, SourceFile>{};
   final decls = <String, Decl>{};
 
-  /// Each class's supertypes' ids (itself excluded), whole chain.
+  /// The ids of the supertypes of each class along the whole chain, without
+  /// the class itself.
   final supers = <String, Set<String>>{};
 
-  /// Member name (as in an id) to the classes declaring it.
+  /// Maps a member name, as in an id, to the classes that declare it.
   final declaring = <String, List<String>>{};
 
-  /// Classes with no declared constructor: `Class.new` runs their field
-  /// initializers only.
+  /// The classes without a declared constructor, whose `Class.new` runs
+  /// only their field initializers.
   final implicitCtors = <String, List<Expression>>{};
   final implicitCtorFiles = <String, SourceFile>{};
   final classNodes = <String, AstNode>{};
 
-  /// The superclass of each class (for a constructor's implicit `super()`).
+  /// The superclass of each class, for the implicit `super()` of a
+  /// constructor.
   final superclass = <String, String>{};
 
-  /// Functions torn off in a class's field initializers (kept tear-offs:
-  /// reachable once the class has reachable code).
+  /// The functions torn off in the field initializers of a class. These kept
+  /// tear-offs are reachable once the class has reachable code.
   final classTearOffs = <String, Set<String>>{};
 
   /// Every id declared in [classId].
   final members = <String, List<String>>{};
 
-  /// The overrides of [member] (a name as in an id) in subtypes of
-  /// [ofClass], and [ofClass]'s own.
+  /// Returns the overrides of [member], a name as in an id, in subtypes of
+  /// [ofClass] and the member of [ofClass] itself.
   Iterable<String> implementations(String ofClass, String member) sync* {
     for (final c in declaring[member] ?? const <String>[]) {
       if (c == ofClass || (supers[c]?.contains(ofClass) ?? false)) {
@@ -80,7 +83,7 @@ class Program {
   }
 }
 
-/// Resolves every `.dart` file of [paths] (absolute) into [program]; a file
+/// Resolves every `.dart` file of the absolute [paths] into [program]. A file
 /// that fails to resolve is reported through [warn].
 Future<void> loadProgram(
   Program program,
@@ -161,10 +164,10 @@ void _indexClass(
     for (final v in m.fields.variables) {
       final init = v.initializer;
       if (init == null) continue;
-      // A field's tear-off is made once and kept (a late or static one on
-      // first use): its target runs wherever the field is called.
+      // The tear-off of a field is made once and kept, a late or static one
+      // on first use. Its target runs wherever the field is called.
       init.accept(_TearOffs(tearOffs));
-      // Only a plain instance field's initializer runs in constructors.
+      // Only the initializer of a plain instance field runs in constructors.
       if (!m.isStatic && !m.fields.isLate) inits.add(init);
     }
   }
@@ -205,7 +208,7 @@ void _indexClass(
   }
 }
 
-/// Collects the functions an expression tears off.
+/// Collects the functions that an expression tears off.
 class _TearOffs extends RecursiveAstVisitor<void> {
   _TearOffs(this.out);
   final Set<String> out;

@@ -1,15 +1,16 @@
-// What the macOS window really shows: Flutter's macOS
-// embedder presents each composited frame as an IOSurface set as a CALayer's
-// contents (FlutterSurfaceManager). Each UI frame this takes the surface the
-// window shows now (main thread: AppKit), keeps it from being reused
-// (IOSurfaceIncrementUseCount) and hands it to a worker isolate, which locks
-// it (that waits for the GPU to finish writing it, off the UI thread), reads
-// a 640-wide copy and lets it go. The glitch catcher checks those frames as
-// it checks the history ring's: a glitch in Flutter's own compositing, after
-// our textures, shows only here.
+// Reads the frames that the macOS window really shows. The macOS embedder of
+// Flutter presents each composited frame as an IOSurface set as the contents
+// of a CALayer (FlutterSurfaceManager). Each UI frame this file takes the
+// surface that the window shows now on the AppKit main thread. It keeps the
+// surface from reuse with IOSurfaceIncrementUseCount and passes it to a
+// worker isolate. The worker locks it, which waits for the GPU to finish
+// writing it, reads a 640-wide copy and lets it go. The glitch catcher
+// checks these frames as it checks those of the history ring. A glitch in
+// the compositing of Flutter shows only here.
 //
-// Plain dart:ffi on the Objective-C runtime and the IOSurface C API; macOS
-// only, and only with merged platform/UI threads (Flutter's default).
+// It calls the Objective-C runtime and the IOSurface C API through dart:ffi.
+// It works on macOS only and only with merged platform and UI threads, the
+// default of Flutter.
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
@@ -17,13 +18,14 @@ import 'dart:typed_data';
 
 import 'package:prismarine_loop/objc.dart';
 
-/// Takes the window's shown surface each UI frame and reads it on a worker.
+/// Takes the shown surface of the window each UI frame and reads it on a
+/// worker.
 class WindowSurfaceReader {
   WindowSurfaceReader._(this._send);
 
-  /// A reader that hands each new frame to [onFrame] (RGBA, [width] wide,
-  /// on the UI isolate), or null where it can't work (not macOS, or the UI
-  /// isolate isn't on the main thread).
+  /// Returns a reader that passes each new RGBA frame of [width] to
+  /// [onFrame] on the UI isolate. Returns null on a system other than macOS
+  /// or when the UI isolate is not on the main thread.
   static Future<WindowSurfaceReader?> start(
     void Function(Uint8List rgba, int width, int height) onFrame, {
     int width = 640,
@@ -58,8 +60,8 @@ class WindowSurfaceReader {
   int taken = 0, missed = 0;
   String? note;
 
-  /// Call once per UI frame: the surface the window shows now goes to the
-  /// worker (it reads it once the GPU is done with it).
+  /// Passes the surface that the window shows now to the worker, which reads
+  /// it once the GPU is done with it. Call it once per UI frame.
   void take() {
     final surface = _shownSurface();
     if (surface == null) {
@@ -74,7 +76,8 @@ class WindowSurfaceReader {
 
   void close() => _send.send(null);
 
-  // The windows' layer trees, for a log line when no surface is found.
+  // Returns the layer trees of the windows, for a log line when no surface is
+  // found.
   static String _describe() {
     final out = StringBuffer();
     final app = msgSend(
@@ -139,8 +142,8 @@ class WindowSurfaceReader {
     return null;
   }
 
-  // The first layer (depth-first, at most 4 deep) whose contents are an
-  // IOSurface: the embedder's lowest content layer.
+  // Returns the first layer, depth-first and at most 4 deep, whose contents
+  // are an IOSurface. It is the lowest content layer of the embedder.
   static ObjcId? _find(ObjcId layer, int depth) {
     if (layer == nullptr || depth > 4) return null;
     final contents = msgSend(layer, sel('contents'));
@@ -206,9 +209,9 @@ void _readerMain((SendPort, SendPort, int) args) {
       >('CFRelease');
   const readOnly = 1; // kIOSurfaceLockReadOnly
   const bgra = 0x42475241; // 'BGRA'
-  // 'w40a' (MTLPixelFormatBGRA10_XR, the wide-gamut window): B, G, R, A as
-  // 16 bits each, the 10-bit value in the top bits, extended range
-  // (384 = 0.0, 894 = 1.0).
+  // 'w40a' is MTLPixelFormatBGRA10_XR of a wide-gamut window. B, G, R and A
+  // have 16 bits each with the 10-bit value in the top bits, in an extended
+  // range where 384 is 0.0 and 894 is 1.0.
   const bgra10xr = 0x77343061;
   final xr = Uint8List(1024);
   for (var v = 0; v < 1024; v++) {
@@ -262,7 +265,7 @@ void _readerMain((SendPort, SendPort, int) args) {
             sum = (sum * 31 + rgba[o] + rgba[o + 1] + rgba[o + 2]) & 0x3fffffff;
           }
         }
-        // The same picture again (no new present since the last take).
+        // The same picture again, without a new present since the last take.
         if (sum == lastSum) return;
         lastSum = sum;
         out.send([

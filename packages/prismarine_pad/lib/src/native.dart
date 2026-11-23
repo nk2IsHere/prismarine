@@ -1,11 +1,11 @@
-/// The pad library's entry point (native/, a Rust `cdylib` the package's
-/// build hook builds with cargo).
+/// The functions of the pad library, the Rust `cdylib` in native/ that the
+/// build hook of the package builds.
 @ffi.DefaultAsset('package:prismarine_pad/src/native.dart')
 library;
 
 import 'dart:ffi' as ffi;
 
-/// `PadReading` (native/src/lib.rs), returned by value.
+/// The `PadReading` of native/src/lib.rs, returned by value.
 final class NativePadReading extends ffi.Struct {
   @ffi.Uint8()
   external int connected;
@@ -36,7 +36,7 @@ final class NativePadReading extends ffi.Struct {
 @ffi.Native<NativePadReading Function()>(symbol: 'prismarine_pad_read')
 external NativePadReading padRead();
 
-/// `PadDevice` (native/src/lib.rs), returned by value.
+/// The `PadDevice` of native/src/lib.rs, returned by value.
 final class NativePadDevice extends ffi.Struct {
   @ffi.Uint8()
   external int present;

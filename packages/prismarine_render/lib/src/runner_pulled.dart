@@ -1,31 +1,29 @@
 part of 'frame_runner.dart';
 
-/// A pulled pass's per-frame scratch and buffers, kept by the runner per
-/// pass: a frame's passes are prepared before the GPU runs the first, so
-/// none shares another's.
+/// The per-frame scratch and buffers of a pulled pass, kept by the runner per
+/// pass. The passes of a frame are prepared before the GPU runs the first one.
+/// No pass may share the scratch of another.
 class _PulledFrame {
   final instances = _Bytes(), objects = _Bytes(), materials = _Bytes();
   final clusters = _Bytes(), bases = _Bytes(), args = _Bytes();
 
-  /// A cascade pass's rows' mesh boxes (8 floats an instance).
+  /// The mesh boxes of the rows of a cascade pass, 8 floats per instance.
   final boxes = _Bytes();
 
-  /// Each object row's block as the draws bind it (a role's is read again
-  /// each frame), and the rows' part as last made ([_KeptRows]).
+  /// The block of each object row as the draws bind it, read again each frame
+  /// for a role. It also holds the part of the rows as last made ([_KeptRows]).
   final objectSources = KeptList<Uint8List>();
   _KeptRows? kept;
 
-  /// [kept]'s storage, refilled when the rows change (also while [kept] is
-  /// null).
+  /// The storage of [kept], filled again when the rows change, also while
+  /// [kept] is null.
   final keptStore = _KeptRows();
   final objectAt = KeptMap<Uint8List, int>.identity(),
       materialAt = KeptMap<Uint8List, int>.identity();
   final indexCounts = KeptList<int>();
 
-  /// A prepare's state while its draws are added (_pulledAdd), kept from
-  /// frame to frame and cleared, storage kept (perf: a closure and its
-  /// context per prepare, and collections that grew from empty each
-  /// frame).
+  /// The state of a prepare while its draws are added (_pulledAdd). It is
+  /// kept from frame to frame and cleared with its storage kept.
   final rest = KeptList<DrawPlan>();
   final why = KeptMap<String, int>();
   final buckets = KeptMap<Object, _PulledBucket>();
@@ -41,50 +39,49 @@ class _PulledFrame {
     _PulledFrameBuffers(),
   ];
 
-  /// The buckets in cluster order, and their base words (perf: a list and
-  /// a record per bucket, and the words, a frame).
+  /// The buckets in cluster order and their base words.
   final ranges = KeptList<_PulledBucket>();
   var words = Uint32List(0);
   var wordBytes = Uint8List(0);
 }
 
-/// A pulled bucket's views for its stages ([_RunnerPulled._pulledStage]):
-/// clusters, instances, objects, materials.
+/// The views of a pulled bucket for its stages ([_RunnerPulled._pulledStage]),
+/// the clusters, instances, objects and materials.
 final _stageViews = List<gpu.BufferView?>.filled(4, null);
 
 final _emptyObject = Uint8List(16);
 
-/// Zeros padding an object row (added by copy, never written).
+/// The zeros that pad an object row, added by copy and not changed.
 final _zero16 = Uint8List(16);
 
-/// One pipeline bucket of a pulled pass: the draws that share programs,
-/// pool, state, arrays and samplers, drawn as one instanced draw of their
-/// clusters.
+/// One pipeline bucket of a pulled pass. It holds the draws that share
+/// programs, pool, state, arrays and samplers, drawn as one instanced draw
+/// of their clusters.
 class _PulledBucket {
   _PulledBucket(this.first, this.scene, this.pool, this.arrays, this.index);
   final DrawPlan first;
   final _CookedSceneGpu scene;
   final int pool;
 
-  /// Each material texture input's array (by input name).
+  /// The array of each material texture input, by input name.
   final Map<String, gpu.Texture> arrays;
 
-  /// Its place in the frame's buckets: its indirect draw's.
+  /// The place of the bucket and of its indirect draw in the buckets of the
+  /// frame.
   final int index;
 
-  /// This frame's clusters, and the first of them ([_RunnerPulled]'s
-  /// prepare sets it; its record reads it right after).
+  /// The clusters of this frame and the first of them. The prepare of
+  /// [_RunnerPulled] sets them and its record reads them right after.
   int clusters = 0, start = 0;
 
-  /// Its record's views as made of late, a few of each (the frames' buffers
-  /// come in turn, so one view a kind was new every frame), taken again
-  /// while they hold ([view]).
+  /// The recent views of its record, a few of each kind, taken again by
+  /// [view] while they hold. The buffers of the frames take turns.
   final clusterViews = List<gpu.BufferView?>.filled(4, null);
   final argViews = List<gpu.BufferView?>.filled(4, null);
   int _viewTurn = 0;
 
-  /// A view of [buffer] from [offset] for [length]: one of [kept] when it
-  /// is that (perf: two views per bucket a frame).
+  /// Returns a view of [buffer] from [offset] for [length]. A matching view
+  /// of [kept] is returned again.
   gpu.BufferView view(
     List<gpu.BufferView?> kept,
     gpu.DeviceBuffer buffer,
@@ -108,7 +105,7 @@ class _PulledBucket {
   }
 }
 
-/// A pulled pass's frame, made before the pass begins ([_RunnerPulled]).
+/// The frame of a pulled pass, made before the pass begins ([_RunnerPulled]).
 class _PulledPrepared {
   _PulledPrepared(
     this.rest,
@@ -123,23 +120,23 @@ class _PulledPrepared {
   /// The draws left to their own records.
   final List<DrawPlan> rest;
 
-  /// The buckets, each with its first cluster ([_PulledBucket.start]).
+  /// The buckets, each with its first cluster in [_PulledBucket.start].
   final List<_PulledBucket> ranges;
   final gpu.BufferView instances, objects, materials, args;
   final gpu.DeviceBuffer clusters;
 }
 
-/// The bits of InstanceRow.flags that carry a skinned instance's output
-/// stride in words and its normal count, as the cooked programs read them.
+/// The bits of InstanceRow.flags that carry the output stride in words and
+/// the normal count of a skinned instance, as the cooked programs read them.
 const _skinStrideShift = 8, _skinNormalsShift = 16;
 
-/// The culling stage's shader id in the cooked tree.
+/// The shader id of the culling stage in the cooked tree.
 const _pulledCull = 'PulledCull/cull.comp';
 
-/// What a draw is in pulled form, made once per draw object (the builder
-/// keeps a still batch's draw from frame to frame): its bucket key, cooked
-/// batch, arrays, texture layers and instance row up to its per-frame
-/// fields. A draw that can't be pulled keeps why.
+/// The pulled form of a draw, made once per draw object. It holds the
+/// bucket key, the cooked batch, the arrays, the texture layers and the
+/// instance row up to its per-frame fields. A draw that cannot be pulled
+/// keeps the reason.
 class _PulledDraw {
   _PulledDraw.refused(this.reason)
     : key = null,
@@ -162,19 +159,20 @@ class _PulledDraw {
   final CookedBatch? batch;
   final Map<String, gpu.Texture> arrays;
 
-  /// The material inputs' array layers, a uint each, padded to 16 bytes.
+  /// The array layers of the material inputs, a uint each, padded to 16
+  /// bytes.
   final Uint8List layers;
 
-  /// The instance row: BufferInstance's bytes (texcoord transforms at
-  /// identity) and the batch's pool range; object and material offsets are
-  /// written per frame.
+  /// The instance row with the bytes of the instance block with the texcoord
+  /// transforms at identity and the pool range of the batch. The object and
+  /// material offsets are filled per frame.
   final Uint8List row;
 }
 
 final _pulledForms = Expando<_PulledDraw>('pulled draws');
 
-/// A frame's pulled buffers, kept and overwritten: one set per frame in
-/// flight, as the runner keeps three frames' plan buffers.
+/// The pulled buffers of a frame, kept and overwritten. One set exists per
+/// frame in flight, as the runner keeps the plan buffers of three frames.
 class _PulledFrameBuffers {
   gpu.DeviceBuffer? instances, objects, materials, clusters, args, bases;
   gpu.DeviceBuffer? boxes;
@@ -182,7 +180,7 @@ class _PulledFrameBuffers {
   /// A view of the whole of [clusters].
   gpu.BufferView? clusterView;
 
-  /// The buffers [put] writes, by kind.
+  /// The kinds of the buffers that [put] fills.
   static const instancesKind = 0, objectsKind = 1, argsKind = 2;
   static const basesKind = 3, materialsKind = 4, boxesKind = 5;
 
@@ -204,9 +202,8 @@ class _PulledFrameBuffers {
     _ => boxes = b,
   };
 
-  /// [bytes] (the first [length]) in the buffer of [kind], grown when too
-  /// small (a kind, not a getter and setter pair: two closures a buffer a
-  /// prepare; perf).
+  /// Puts the first [length] of [bytes] into the buffer of [kind], grown
+  /// when it is too small. Returns the view of the bytes.
   gpu.BufferView put(int kind, Uint8List bytes, int length) {
     var b = _of(kind);
     final want = length < 16 ? 16 : length;
@@ -224,8 +221,9 @@ class _PulledFrameBuffers {
   }
 }
 
-/// What of a draw's state its bucket shares: the fields, not the object
-/// (the builder makes a state per draw).
+/// Returns the key of the part of the state of a draw that its bucket
+/// shares. The key holds the fields, since the builder makes a state object
+/// per draw.
 String _stateKey(DrawState s) =>
     '${s.cull}|${s.frontCounterClockwise}|${s.depthTest}|${s.depthWrite}|'
     '${s.depthFunc}|${s.topology}|${s.depthBias}|${s.slopeScaledDepthBias}|'
@@ -233,9 +231,10 @@ String _stateKey(DrawState s) =>
     '${s.stencil == null ? '' : '${s.stencil!.func},${s.stencil!.passOp},${s.stencil!.readMask},${s.stencil!.writeMask}'}|'
     '${[for (final b in s.blends) '${b.enabled}${b.color}${b.alpha}'].join(';')}';
 
-/// A texture reference as a bucket compares it: by what it names (a plan
-/// read from its files makes a reference object per draw), its bytes by
-/// identity (blocks and texels are kept objects).
+/// Returns a texture reference as a bucket compares it. A reference is
+/// compared by its target, since a plan read from its files makes a
+/// reference object per draw. Its bytes are compared by identity, since
+/// blocks and texels are kept objects.
 Object _textureKey(TextureRef ref) => switch (ref) {
   FileTexture(:final stem, :final srgb) => 'f:$stem:$srgb',
   final TargetTexture t =>
@@ -252,18 +251,17 @@ String _samplerKey(SamplerState s) =>
     '${s.minLinear}${s.magLinear}${s.mipLinear}${s.address.join()}'
     '${s.anisotropy}${s.compare}${s.minLod}${s.maxLod}${s.lodBias}${s.border}';
 
-/// Storage names as the pulled stage matches them (`Raw<Name>` lower-cased
-/// without `raw`) and pool streams' names as `pool<name>`: made once, not
-/// for every binding of every frame.
+/// The storage names as the pulled stage matches them, `Raw<Name>` lower-cased
+/// without `raw`. It also holds the names of the pool streams as `pool<name>`,
+/// made once.
 final _storageKeys = <String, String>{};
 final _poolKeys = <String, String>{};
 
-/// Each stage's storage names in order ([_RunnerPulled._pulledStage]).
+/// The storage names of each stage in order ([_RunnerPulled._pulledStage]).
 final _storageNames = Expando<List<String>>('pulled storage names');
 
-/// The pool's stream whose name, as `pool<name>` lower-cased without
-/// underscores, is [n]: a loop, where a closure per storage binding gave
-/// the stage a context each call.
+/// Returns the stream of [pool] whose name, as `pool<name>` lower-cased
+/// without underscores, is [n].
 gpu.BufferView _poolStream(_PoolGpu pool, String n, String id, String name) =>
     pool.byStorage[n] ?? (pool.byStorage[n] = _findStream(pool, n, id, name));
 
@@ -276,30 +274,30 @@ gpu.BufferView _findStream(_PoolGpu pool, String n, String id, String name) {
 }
 
 extension _RunnerPulled on FrameRunner {
-  /// [d] in pulled form, made on its first frame and kept with it.
+  /// Returns [d] in pulled form, made on its first frame and kept with it.
   _PulledDraw _pulledOf(DrawPlan d) {
     final had = _pulledForms[d];
     if (had != null && !(had.scene?.dead ?? false)) return had;
     return _pulledForms[d] = _makePulled(d);
   }
 
-  // The miss path in a method of its own: an inline closure capturing [d]
-  // gave every call a context, hits included (perf).
+  // The miss path is a method of its own. An inline closure that captures
+  // [d] would allocate a context on every call.
   _PulledDraw _makePulled(DrawPlan d) {
     _pulledStats.made++;
     final p = pulled!;
     final layout = p.layout, instanceRow = layout.instanceRow;
     final g = d.geometry;
     final reason = switch (g) {
-      // A skinned batch reads the frame's skinning output: one buffer for
-      // all its streams (the batched or the mesh's own output).
+      // A skinned batch reads the skinning output of the frame, one buffer
+      // for all its streams.
       DrawMeshGeometry(streams: final st)
           when st.isNotEmpty &&
               st.values.map((e) => e.$1.buffer).toSet().length != 1 =>
         'skinned',
       DrawMeshGeometry(indirect: final i) when i != null => 'indirect',
-      // A blended draw's place in the pass is the picture: it keeps its
-      // record, after the pulled buckets (opaque draws test depth equal).
+      // The place of a blended draw in the pass changes the picture. It keeps
+      // its record after the pulled buckets. Opaque draws test depth equal.
       DrawMeshGeometry() when d.state.blends.any((b) => b.enabled) => 'blended',
       DrawMeshGeometry() when !p.shaders.hasShader(d.vertex) =>
         'no pulled vertex',
@@ -315,7 +313,8 @@ extension _RunnerPulled on FrameRunner {
     };
     if (reason != null) return _PulledDraw.refused(reason);
     g as DrawMeshGeometry;
-    // A shadow batch's indices are the mesh's shadow index buffer's.
+    // The indices of a shadow batch are those of the shadow index buffer of
+    // the mesh.
     final found = p.batch(
       g.mesh,
       g.firstIndex,
@@ -325,7 +324,7 @@ extension _RunnerPulled on FrameRunner {
     );
     if (found == null) return _PulledDraw.refused('not cooked');
     final (scene, batch) = found;
-    // The material inputs' arrays, and each texture's layer.
+    // The arrays of the material inputs and the layer of each texture.
     final arrays = <String, gpu.Texture>{};
     final layers = <int>[];
     var arrayKey = '';
@@ -343,8 +342,9 @@ extension _RunnerPulled on FrameRunner {
       layers[n] = at.$2;
       arrayKey += '$key=${a.file}:${value.srgb};';
     }
-    // Every material input the pulled pixel stage declares needs a cooked
-    // array (a swapped or another scene's texture may have none).
+    // Every material input that the pulled pixel stage declares needs a
+    // cooked array. A swapped texture or the texture of another scene may
+    // have none.
     final pixel = d.pixel == null ? null : p.shaders.shaderRecord(d.pixel!);
     for (final t in pixel?.textures ?? const <TextureSlot>[]) {
       if (t.name.startsWith(layout.materialTexturePrefix) &&
@@ -356,8 +356,9 @@ extension _RunnerPulled on FrameRunner {
     for (var i = 0; i < layers.length; i++) {
       layerBytes.buffer.asByteData().setUint32(i * 4, layers[i], Endian.little);
     }
-    // The instance row: BufferInstance's bytes, the texcoord transforms at
-    // identity (the cooked UVs carry them), then the batch's range.
+    // The instance row holds the bytes of the instance block with the
+    // texcoord transforms at identity, since the cooked UVs carry them. The
+    // range of the batch follows.
     final row = ByteData(instanceRow.stride);
     final ib = d.vertexResources.blocks[layout.instanceBlock];
     final ibytes = ib == null || ib.isEmpty ? null : ib;
@@ -376,10 +377,10 @@ extension _RunnerPulled on FrameRunner {
         ..setFloat32(at + 8, 1, Endian.little)
         ..setFloat32(at + 12, 1, Endian.little);
     }
-    // A skinned batch's output: its first word, its stride in words and
-    // its normal count (12 bytes and 4 a normal), and
-    // no sphere test (its bind-pose sphere doesn't hold the pose; the
-    // builder culled it).
+    // The output of a skinned batch has its first word, its stride in words
+    // and its normal count, 12 bytes and 4 per normal. It has no sphere test,
+    // since its bind-pose sphere does not hold the pose and the builder
+    // culled it.
     final skin = g.streams.isEmpty
         ? null
         : g.streams.values.reduce((a, b) => a.$1.offset <= b.$1.offset ? a : b);
@@ -414,7 +415,7 @@ extension _RunnerPulled on FrameRunner {
       _stateKey(d.state),
       d.viewport.join(','),
       arrayKey,
-      // The bucket binds its first draw's samplers and frame resources.
+      // The bucket binds the samplers and frame resources of its first draw.
       [
         for (final res in [d.vertexResources, d.pixelResources])
           for (final MapEntry(:key, :value) in res.samplers.entries)
@@ -442,13 +443,13 @@ extension _RunnerPulled on FrameRunner {
     );
   }
 
-  /// Makes [draws]' (one render pass's) pulled frame before the pass
-  /// begins: their rows, each bucket's cluster range, and the culling
-  /// dispatch into [cb] that fills the ranges and the buckets' indirect
-  /// draws. A draw is pulled when its mesh batch is cooked, its programs
-  /// have pulled forms, and it reads no skinning output or indirect
-  /// arguments; the rest stay for the plan's own records. Null when none is
-  /// pulled.
+  /// Makes the pulled frame of [draws], the draws of one render pass, before
+  /// the pass begins. It makes their rows, the cluster range of each bucket
+  /// and the culling dispatch into [cb] that fills the ranges and the
+  /// indirect draws of the buckets. A draw is pulled when its mesh batch is
+  /// cooked, its programs have pulled forms and it reads no skinning output
+  /// or indirect arguments. The other draws stay for the own records of the
+  /// plan. Returns null when no draw is pulled.
   _PulledPrepared? _pulledPrepare(
     gpu.CommandBuffer cb,
     String pass,
@@ -472,7 +473,7 @@ extension _RunnerPulled on FrameRunner {
     RowSet? rows,
   ) {
     // A pass whose rows carry bounds is culled per cascade
-    // (runner_cascades.dart); its rows come first in [draws].
+    // (runner_cascades.dart). Its rows come first in [draws].
     final bounds = rows?.bounds;
     final rowCount = rows?.plans.length ?? 0;
 
@@ -495,9 +496,9 @@ extension _RunnerPulled on FrameRunner {
       ..camera = null
       ..cameraSource = null;
 
-    // The rows' part as last frame made it while the reader's rows are the
-    // same draws: only the objects' bytes are read again (a moving
-    // object's block is its role's).
+    // The part of the rows as the last frame made it, while the rows of the
+    // reader are the same draws. Only the bytes of the objects are read
+    // again, since the block of a moving object is a role.
     final kept = f.kept;
     if (rows != null && kept != null && identical(kept.plans, rows.plans)) {
       kept.restore(
@@ -542,10 +543,10 @@ extension _RunnerPulled on FrameRunner {
         '${rest.length} left to their records $why',
       );
     }
-    // Each bucket's cluster range, on a 256-byte boundary (Metal's offset
-    // alignment), as many clusters as its instances have; the bases and the
-    // indirect draws' arguments with their counts at zero.
-    // Kept per pass (perf: a list and a record per bucket a frame).
+    // The cluster range of each bucket, on a 256-byte boundary for the
+    // offset alignment of Metal, as many clusters as its instances have. The
+    // bases and the arguments of the indirect draws start with their counts
+    // at zero. The ranges are kept per pass.
     final ranges = f.ranges..clear();
     final bases = f.bases..reset();
     final args = f.args..reset();
@@ -562,9 +563,8 @@ extension _RunnerPulled on FrameRunner {
       if (bounds != null) b.clusters *= _cascadeCount;
       next += b.clusters;
     }
-    // The bases, a uint each: the pairs above hold one in their first.
-    // The words through the bases' own data view (perf: two views a
-    // bucket).
+    // The bases, a uint each. The pairs above hold one in their first. The
+    // words go through the own data view of the bases.
     if (f.words.length < buckets.length) {
       f.words = Uint32List(buckets.length * 2);
       f.wordBytes = f.words.buffer.asUint8List();
@@ -597,7 +597,7 @@ extension _RunnerPulled on FrameRunner {
     );
     final clusterBytes = next * 8;
     var clusters = slot.clusters;
-    // A bucket's view is rounded up to 256 bytes past its last cluster.
+    // The view of a bucket is rounded up to 256 bytes past its last cluster.
     if (clusters == null || clusters.sizeInBytes < clusterBytes + 256) {
       gpu.GpuMemory.tag = 'buffer.pulledRows';
       clusters = slot.clusters = gpu.gpuContext.createDeviceBuffer(
@@ -611,7 +611,7 @@ extension _RunnerPulled on FrameRunner {
       f.materials.bytes,
       f.materials.length,
     );
-    // One view per cluster buffer (perf: one per prepare).
+    // One view per cluster buffer.
     var clusterView = slot.clusterView;
     if (clusterView == null || !identical(clusterView.buffer, clusters)) {
       clusterView = slot.clusterView = gpu.BufferView(
@@ -629,8 +629,9 @@ extension _RunnerPulled on FrameRunner {
         basesView,
       ));
     } else {
-      // The cull: the camera's planes (the builder's, from the camera
-      // block's view-projection) and the instance count.
+      // The cull takes the planes of the camera, from the view-projection of
+      // the camera block as the builder computes them. It also takes the
+      // instance count.
       final planes = pulled!.layout.frustumPlanes(
         Float32List.sublistView(camera!, 0, 64),
       );
@@ -672,8 +673,8 @@ extension _RunnerPulled on FrameRunner {
     );
   }
 
-  /// Records [p]'s buckets into [pass]: one indirect draw each, of the
-  /// clusters the culling kept.
+  /// Records the buckets of [p] into [pass], one indirect draw each of the
+  /// clusters that the culling kept.
   void _pulledRecord(gpu.RenderPass pass, _PulledPrepared p, UniformRing host) {
     final ranges = p.ranges;
     for (var i = 0; i < ranges.length; i++) {
@@ -712,8 +713,8 @@ extension _RunnerPulled on FrameRunner {
   ) {
     final p = pulled!;
     final d = b.first;
-    // Kept with the bucket's first draw (a kept draw is the same object
-    // from frame to frame): its pulled setup was made per bucket a frame.
+    // Kept with the first draw of the bucket, since a kept draw is the same
+    // object from frame to frame.
     final cache = _cacheOf(d);
     if (cache.pulledFixed == null && _Warm.on) {
       _warm.learn(d.vertex, pulled: true);
@@ -740,7 +741,7 @@ extension _RunnerPulled on FrameRunner {
         pass.setColorBlendEquation(e, colorAttachmentIndex: i);
       }
     }
-    // The views through fields (perf: a record per stage).
+    // The views go through fields, not a record per stage.
     _stageViews
       ..[0] = clusters
       ..[1] = instances
@@ -753,7 +754,7 @@ extension _RunnerPulled on FrameRunner {
     pass.drawIndirect(args);
   }
 
-  /// A pulled bucket's draw's shaders and pipeline.
+  /// Returns the shaders and pipeline of the draw of a pulled bucket.
   _DrawSetup _pulledSetup(Pulled p, DrawPlan d) {
     final vs = p.shaders.shader(d.vertex);
     final fs = d.pixel == null
@@ -764,7 +765,7 @@ extension _RunnerPulled on FrameRunner {
         .createRenderPipeline(
           vs,
           fs,
-          // A pulled vertex has no inputs: its place in its cluster is
+          // A pulled vertex has no inputs. Its place in its cluster is
           // gl_VertexIndex.
           vertexLayout: const gpu.VertexLayout(buffers: []),
         );
@@ -778,9 +779,8 @@ extension _RunnerPulled on FrameRunner {
     );
   }
 
-  /// Binds stage [id]'s ([shader]'s) inputs of bucket [b]'s draw [d]: a
-  /// method, where a closure capturing the bucket's locals was made per
-  /// bucket a frame.
+  /// Binds the inputs of the stage [id] with [shader] for the draw [d] of
+  /// the bucket [b].
   void _pulledStage(
     gpu.RenderPass pass,
     UniformRing host,
@@ -796,8 +796,7 @@ extension _RunnerPulled on FrameRunner {
     final clusters = views[0]!, instances = views[1]!;
     final objects = views[2]!, materials = views[3]!;
     final info = p.shaders.shaderRecord(id)!;
-    // By index, the storage names listed once per stage (perf: an iterator
-    // per walk, three walks per bucket a frame).
+    // By index, with the storage names listed once per stage.
     final blocks = info.blocks;
     for (var k = 0; k < blocks.length; k++) {
       final block = blocks[k];
@@ -811,7 +810,7 @@ extension _RunnerPulled on FrameRunner {
     );
     for (var k = 0; k < names.length; k++) {
       final name = names[k];
-      // `Raw<Name>`, as the cooked programs declare them.
+      // `Raw<Name>` as the cooked programs declare them.
       final n = _storageKeys[name] ??= name.toLowerCase().replaceFirst(
         'raw',
         '',
@@ -843,10 +842,11 @@ extension _RunnerPulled on FrameRunner {
         pass.bindSeparateTexture(_textureSlot(shader, t.name), tex);
         continue;
       }
-      // A frame texture or texel buffer, as the draw's own record binds it.
+      // A frame texture or texel buffer, as the own record of the draw binds
+      // it.
       final ref = res.textures[t.name];
       if (t.type.contains('Buffer')) {
-        // Two locals, not a record (perf: one per texel bind).
+        // Two locals, not a record per texel bind.
         final gpu.BufferView view;
         final String format;
         if (ref is BufferTexture) {

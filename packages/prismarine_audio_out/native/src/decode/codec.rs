@@ -1,11 +1,11 @@
 //! Whole-buffer MP3 (minimp3) and Ogg Vorbis (stb_vorbis) decodes to
-//! interleaved float32, and an incremental Vorbis reader for streams. The
-//! decoders are the vendored C (build.rs); this module is their only caller.
+//! interleaved float32 with an incremental Vorbis reader for streams. The
+//! decoders are the vendored C of build.rs. This module is their only caller.
 
 use std::ffi::{c_int, c_uint, c_void};
 use std::ptr::NonNull;
 
-/// Decoded audio: interleaved float32.
+/// Decoded audio as interleaved float32.
 pub struct Pcm {
     pub samples: Vec<f32>,
     pub frames: i64,
@@ -85,8 +85,8 @@ extern "C" {
     fn free(p: *mut c_void);
 }
 
-// stb_vorbis's maths (build.rs renames its calls): the libm crate's, the same
-// bits on every target.
+// The maths of stb_vorbis, whose calls build.rs renames. They are the
+// functions of the libm crate, with the same bits on every target.
 #[no_mangle]
 extern "C" fn prismarine_vorbis_sin(x: f64) -> f64 {
     libm::sin(x)
@@ -108,7 +108,7 @@ extern "C" fn prismarine_vorbis_pow(x: f64, y: f64) -> f64 {
     libm::pow(x, y)
 }
 
-/// prismarine_mp3_decode: the whole file, or None.
+/// Decodes a whole MP3 file for prismarine_mp3_decode, or returns None.
 pub fn decode_mp3(data: &[u8]) -> Option<Pcm> {
     let mut dec = Box::new(Mp3Dec {
         mdct_overlap: [[0.0; 9 * 32]; 2],
@@ -126,9 +126,9 @@ pub fn decode_mp3(data: &[u8]) -> Option<Pcm> {
         layer: 0,
         avg_bitrate_kbps: 0,
     };
-    // SAFETY: `dec` and `info` are valid, writable and laid out as
-    // minimp3's mp3dec_t and mp3dec_file_info_t; `data` is read within its
-    // length; no progress callback.
+    // SAFETY: `dec` and `info` are valid, writable and laid out as the
+    // mp3dec_t and mp3dec_file_info_t of minimp3. `data` is read within its
+    // length. No progress callback is passed.
     let r = unsafe {
         mp3dec_load_buf(
             &mut *dec,
@@ -143,7 +143,7 @@ pub fn decode_mp3(data: &[u8]) -> Option<Pcm> {
     let pcm = if r != 0 || buffer.is_null() || info.channels <= 0 {
         None
     } else {
-        // SAFETY: on success minimp3 hands back a malloc'd buffer of
+        // SAFETY: on success minimp3 returns a malloc'd buffer of
         // `info.samples` floats, all written.
         let samples = unsafe { std::slice::from_raw_parts(buffer, info.samples) }.to_vec();
         Some(Pcm {
@@ -154,8 +154,8 @@ pub fn decode_mp3(data: &[u8]) -> Option<Pcm> {
         })
     };
     if !buffer.is_null() {
-        // SAFETY: minimp3 allocated it with malloc, and nothing else holds
-        // it (the samples were copied).
+        // SAFETY: minimp3 allocated it with malloc. Nothing else holds it,
+        // since the samples were copied.
         unsafe { free(buffer.cast()) };
     }
     pcm
@@ -167,7 +167,7 @@ pub struct Vorbis {
     _data: Box<[u8]>,
     pub channels: i32,
     pub rate: i32,
-    /// Frames in the stream.
+    /// The number of frames in the stream.
     pub total: i64,
 }
 
@@ -175,8 +175,8 @@ impl Vorbis {
     pub fn open(data: Box<[u8]>) -> Option<Vorbis> {
         let len = c_int::try_from(data.len()).ok()?;
         let mut err: c_int = 0;
-        // SAFETY: stb_vorbis reads `len` bytes of `data`, which the decoder
-        // owns (`_data`) and never moves (a boxed slice) until it closes.
+        // SAFETY: stb_vorbis reads `len` bytes of `data`. The decoder owns
+        // them in `_data`, a boxed slice that does not move until it closes.
         let v = NonNull::new(unsafe {
             stb_vorbis_open_memory(data.as_ptr(), len, &mut err, std::ptr::null())
         })?;
@@ -193,8 +193,8 @@ impl Vorbis {
         })
     }
 
-    /// Decodes up to `out.len() / channels` frames into `out` (interleaved
-    /// in this stream's channels); the frames written, 0 at the end.
+    /// Decodes up to `out.len() / channels` frames into `out`, interleaved in
+    /// the channels of this stream. Returns the frames written, 0 at the end.
     pub fn read(&mut self, out: &mut [f32]) -> i64 {
         let floats = c_int::try_from(out.len()).unwrap_or(c_int::MAX);
         // SAFETY: `v` is open and `out` has room for `floats` floats.
@@ -222,7 +222,8 @@ impl Drop for Vorbis {
     }
 }
 
-/// prismarine_ogg_decode: the whole file, or None.
+/// Decodes a whole Ogg Vorbis file for prismarine_ogg_decode, or returns
+/// None.
 pub fn decode_ogg(data: &[u8]) -> Option<Pcm> {
     let mut v = Vorbis::open(data.into())?;
     let ch = v.channels as i64;
@@ -246,8 +247,8 @@ pub fn decode_ogg(data: &[u8]) -> Option<Pcm> {
     })
 }
 
-/// A whole file (.ogg, or .mp3 by its extension), or None when it can't be
-/// read or decoded.
+/// Decodes a whole .ogg file, or an .mp3 file by its extension. Returns None
+/// when the file cannot be read or decoded.
 pub fn decode_file(path: &str) -> Option<Pcm> {
     let data = std::fs::read(path).ok().filter(|d| !d.is_empty())?;
     if path.len() > 4 && (path.ends_with(".mp3") || path.ends_with(".MP3")) {

@@ -1,8 +1,8 @@
 part of 'release_7.dart';
 
 extension _Cost on _Smoke {
-  // 4b. Per-pass CPU cost: a command buffer, one pass with one draw, a
-  // submit (the look's post passes are like this), median of 200.
+  // 4b. The CPU cost per pass, the median of 200 runs of a command buffer,
+  // one pass with one draw and a submit, as in a post pass.
   Future<void> passCost() async {
     final target = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     final times = <int, List<double>>{0: [], 1: [], 2: []};
@@ -44,7 +44,7 @@ extension _Cost on _Smoke {
     );
   }
 
-  // 5. Scene-like draws: µs per draw (CPU), best of 7 rounds of 2,000.
+  // 5. Scene-like draws in µs of CPU per draw, the best of 7 rounds of 2,000.
   Future<void> drawCost() async {
     final pipeline = ctx.createRenderPipeline(
       vInst,
@@ -83,7 +83,7 @@ extension _Cost on _Smoke {
     final c = fTex.getUniformSlot('map_c');
     final target = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     var best = double.infinity;
-    // GPU_SMOKE_REPEAT=<n>: n rounds instead of 7 (for a profiler).
+    // GPU_SMOKE_REPEAT=<n> runs n rounds in place of 7, for a profiler.
     final rounds =
         int.tryParse(io.Platform.environment['GPU_SMOKE_REPEAT'] ?? '') ?? 7;
     for (var r = 0; r < rounds; r++) {

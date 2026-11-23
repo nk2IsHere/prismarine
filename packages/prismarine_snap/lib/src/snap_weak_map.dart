@@ -1,8 +1,8 @@
 part of 'snap.dart';
 
-/// An [Expando] whose live entries can be listed (a snapshot writes the
-/// entries whose keys it holds). Entries die with their keys, as an
-/// Expando's do; the list of keys holds them weakly.
+/// An [Expando] whose live entries can be listed. A snapshot writes the
+/// entries whose keys it holds. An entry dies with its key. The list of keys
+/// holds the keys weakly.
 class SnapWeakMap<K extends Object, V extends Object> {
   SnapWeakMap([String? name]) : _e = Expando<V>(name);
   final Expando<V> _e;
@@ -19,8 +19,9 @@ class SnapWeakMap<K extends Object, V extends Object> {
     _e[key] = value;
   }
 
-  // Drops the references of gone or unset keys, and the later copies of a
-  // key removed and set again (each set after a removal adds a reference).
+  // Drops the references of collected or unset keys. Drops the later copies
+  // of a key that was removed and set again, since each set after a removal
+  // adds a reference.
   void _prune() {
     _since = 0;
     final seen = HashSet<K>.identity();
@@ -30,7 +31,7 @@ class SnapWeakMap<K extends Object, V extends Object> {
     });
   }
 
-  /// The live entries (keys still reachable and set), oldest first.
+  /// The live entries, whose keys are still reachable and set, oldest first.
   List<(K, V)> get entries {
     _prune();
     return [
@@ -40,7 +41,6 @@ class SnapWeakMap<K extends Object, V extends Object> {
     ];
   }
 
-  /// Every entry removed.
   void clear() {
     for (final (k, _) in entries) {
       _e[k] = null;
@@ -48,7 +48,8 @@ class SnapWeakMap<K extends Object, V extends Object> {
     _keys.clear();
   }
 
-  /// The entries whose keys [w] has written, as (key, value) pairs.
+  /// Writes the entries whose keys [w] has written as (key, value) pairs,
+  /// each value with [writeValue].
   void snapWrite(SnapWriter w, void Function(V v) writeValue) {
     final live = [
       for (final e in entries)

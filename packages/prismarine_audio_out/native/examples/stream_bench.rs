@@ -1,9 +1,8 @@
-//! Stream feeder load check (dev): opens the given Ogg files as streams at
-//! once, as a cutscene's music stems start together, and reads each in real
-//! time (1024-frame callbacks every 21.3 ms) for a while, reporting the
-//! frames read as silence per stream. `--cue=<s>` also cues each stream at
-//! that point 0.4 s ahead and jumps there (a section change), `--load=<n>`
-//! keeps n busy threads running beside it (a loaded machine).
+//! Checks the load of the stream feeder. Opens the given Ogg files as streams at once, as music
+//! stems that start together. Reads each in real time with 1024-frame callbacks every 21.3 ms for a
+//! while. Reports the frames read as silence per stream. `--cue=<s>` also cues each stream at that
+//! point 0.4 s ahead and jumps there, as a section change does. `--load=<n>` keeps n busy threads
+//! running beside it, as on a loaded machine.
 //!
 //!   cargo run --release --example stream_bench -- [--seconds=8] [--cue=20] [--load=8] <file.ogg>...
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,9 +23,9 @@ fn main() {
     let seconds = opt(&args, "seconds").unwrap_or(8.0);
     let cue = opt(&args, "cue");
     let load = opt(&args, "load").unwrap_or(0.0) as usize;
-    // --offset=<s>: each stream starts reading there (a loop's random start
-    // offset); --hold: it waits until the stream holds that position (the
-    // engine's stream_ready_at) and the wait is reported.
+    // With --offset=<s> each stream starts reading there, as a loop with a
+    // random start offset does. With --hold it waits until the stream holds
+    // that position and the wait is reported.
     let offset = opt(&args, "offset");
     let hold = args.iter().any(|a| a == "--hold");
     let files: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
@@ -44,8 +43,8 @@ fn main() {
         })
         .collect();
     let streams: Vec<Stream> = files.iter().map(|f| Stream::open(f, 0.5)).collect();
-    // A cue opens a tap of its own with its ring at the jump (the engine's
-    // stream_cue), 0.4 s before the jump.
+    // A cue opens a tap of its own with its ring at the jump, 0.4 s before
+    // the jump.
     let mut taps: Vec<Option<Stream>> = files.iter().map(|_| None).collect();
     let mut pos = vec![0i64; streams.len()];
     let mut jumped = vec![false; streams.len()];

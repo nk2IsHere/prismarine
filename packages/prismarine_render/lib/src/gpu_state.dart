@@ -1,9 +1,10 @@
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:prismarine_frame/prismarine_frame.dart';
 
-/// The engine format for a format name of the DXGI kind, in RenderDoc's
-/// spelling (`R11G11B10_FLOAT`, `D32_SFLOAT_S8_UINT`, `BC1_SRGB`, …), or for
-/// a texture file's raw format (`dxt1`, `rgba8`, …).
+/// Returns the engine format for a format name of the DXGI kind in the
+/// spelling of RenderDoc, such as `R11G11B10_FLOAT`, `D32_SFLOAT_S8_UINT` or
+/// `BC1_SRGB`, or for the raw format of a texture file, such as `dxt1` or
+/// `rgba8`. [srgb] selects the sRGB variant.
 gpu.PixelFormat pixelFormat(String name, {bool srgb = false}) {
   final n = name.toUpperCase();
   return switch (n) {
@@ -43,7 +44,7 @@ gpu.PixelFormat pixelFormat(String name, {bool srgb = false}) {
   };
 }
 
-/// Bytes of one texel (or one 4×4 block) of [f], for uploads.
+/// Returns the bytes of one texel, or of one 4×4 block, of [f].
 int texelBytes(gpu.PixelFormat f) => switch (f) {
   .r8UNormInt || .a8UNormInt => 1,
   .r8g8UNormInt || .r16Float || .d16UNormInt => 2,
@@ -81,7 +82,7 @@ gpu.CompareFunction compareFunction(String c) => switch (c.toLowerCase()) {
   _ => throw UnsupportedError('compare $c'),
 };
 
-/// A Direct3D 11 stencil operation by the plan's name.
+/// Returns the Direct3D 11 stencil operation for the name [op] of the plan.
 gpu.StencilOperation stencilOp(String op) => switch (op.toLowerCase()) {
   'keep' => .keep,
   'zero' => .zero,
@@ -94,7 +95,8 @@ gpu.StencilOperation stencilOp(String op) => switch (op.toLowerCase()) {
   _ => throw UnsupportedError('stencil op $op'),
 };
 
-/// A plan's stencil test as the engine's config, both faces alike.
+/// Returns the stencil test [s] of a plan as the config of the engine, with
+/// both faces alike.
 gpu.StencilConfig stencilConfigOf(Stencil s) => gpu.StencilConfig(
   compareFunction: compareFunction(s.func),
   depthStencilPassOperation: stencilOp(s.passOp),
@@ -102,11 +104,12 @@ gpu.StencilConfig stencilConfigOf(Stencil s) => gpu.StencilConfig(
   writeMask: s.writeMask,
 );
 
-/// The engine's stencil config for draws without a test: always passes and
-/// keeps the stored value.
+/// The stencil config of the engine for draws without a test. It always
+/// passes and keeps the stored value.
 final noStencil = gpu.StencilConfig();
 
-/// A Direct3D 11 sampler state as the engine's whole sampler.
+/// Returns the Direct3D 11 sampler state [s] as a whole sampler of the
+/// engine.
 gpu.McsmSampler sampler(SamplerState s) => gpu.McsmSampler(
   minFilter: s.minLinear ? .linear : .nearest,
   magFilter: s.magLinear ? .linear : .nearest,
@@ -159,11 +162,10 @@ gpu.CullMode cullMode(String c) => switch (c.toLowerCase()) {
   _ => .backFace,
 };
 
-/// [b] with its write mask folded into the blend: flutter_gpu has no colour
-/// write mask (the spec's engine gaps), so a masked-out half (RGB or alpha)
-/// blends as (zero, one, add), which keeps the target's value exactly. A
-/// mask that splits the colour channels (rare: none in the treasure room)
-/// keeps all three.
+/// Returns [b] with its write mask folded into the blend. flutter_gpu has
+/// no colour write mask. A masked-out half, RGB or alpha, blends as (zero,
+/// one, add), which keeps the value of the target exactly. A mask that
+/// splits the colour channels keeps all three.
 Blend maskedBlend(Blend b) {
   final m = b.writeMask;
   if (m == 0xf) return b;
@@ -179,8 +181,9 @@ Blend maskedBlend(Blend b) {
   return Blend(enabled: true, color: colour, alpha: alphaOps, writeMask: 0xf);
 }
 
-/// The vertex format of a buffer-fed input in its DXGI name (the skinned
-/// streams: float3 positions, signed normalized byte normals and tangents).
+/// Returns the vertex format of a buffer-fed input for its DXGI name, such
+/// as the float3 positions and the signed normalized byte normals and
+/// tangents of skinned streams.
 gpu.VertexFormat streamFormat(String format) => switch (format) {
   'R32G32B32A32_FLOAT' => gpu.VertexFormat.float32x4,
   'R32G32B32_FLOAT' => gpu.VertexFormat.float32x3,

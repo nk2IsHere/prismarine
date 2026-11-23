@@ -109,7 +109,7 @@ List<CookedArray> cookTextureArrays(
   return out;
 }
 
-/// The image of [level] in a KTX2 [file] of one layer and one face.
+/// Returns the image of [level] in a KTX2 [file] of one layer and one face.
 Uint8List _level(Uint8List file, int level) {
   final d = ByteData.sublistView(file);
   final at = d.getUint64(80 + 24 * level, Endian.little);

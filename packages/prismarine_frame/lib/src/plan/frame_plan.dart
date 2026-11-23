@@ -18,35 +18,35 @@ class FramePlan {
   final Map<String, TargetSpec> targets;
   final List<PassPlan> passes;
 
-  /// GPU buffers the frame's passes write and read (the outputs of culling
-  /// computes, indirect arguments, skinned vertices), by name.
+  /// The GPU buffers that the passes of the frame write and read, by name,
+  /// such as the outputs of culling computes, indirect arguments and skinned
+  /// vertices.
   final Map<String, BufferSpec> buffers;
 
-  /// The bytes of each frame role the draws bind this frame, by the role's
-  /// block ([FrameRole.block]).
+  /// The bytes of each frame role that the draws bind this frame, by the
+  /// block of the role ([FrameRole.block]).
   final Map<Uint8List, Uint8List> frameBlocks;
 
-  /// Passes whose work a runner may leave out, by pass name: a stamp of
-  /// what the pass makes (0: none). A pass with the stamp it last ran
-  /// with, on targets not made again since, would write what its targets
-  /// already hold: a local light's shadow while nothing it sees changes.
-  /// The plan is whole either way; a runner that has not run a stamp runs
-  /// the pass.
+  /// The passes whose work a runner may leave out, by pass name, each with a
+  /// stamp of its output or 0 for none. A pass with the stamp of its last run,
+  /// on targets not made again since, would write what its targets already
+  /// hold, such as the shadow of a local light while nothing it sees
+  /// changes. The plan is whole either way. A runner that has not run a stamp
+  /// runs the pass.
   final Map<String, int> retained;
 
-  /// Constant block [b] of a draw as this frame binds it: a role's bytes
-  /// for the frame, any other block as it is.
+  /// Returns the constant block [b] of a draw as this frame binds it. A role
+  /// gives its bytes for the frame and any other block is returned as it is.
   Uint8List block(Uint8List b) => b.isEmpty ? frameBlocks[b] ?? b : b;
 }
 
-/// A constant block a draw names by its role in the frame (the camera's,
-/// the scene's, a light group's) rather than by its bytes, which change
-/// from frame to frame: a draw that binds only roles and blocks kept from
-/// frame to frame stays the same object while the object it draws holds
-/// still, and the plan codec sends it once. In a draw's resources a role
-/// stands as [block], an empty block of its own; the plan gives its bytes
-/// for the frame ([FramePlan.frameBlocks]). One role per name in an
-/// isolate.
+/// A constant block that a draw binds by its role in the frame, such as the
+/// block of the camera, the scene or a light group, in place of its bytes,
+/// which change from frame to frame. A draw that binds only roles and kept
+/// blocks stays the same object while the object it draws holds still. The
+/// plan codec then sends it once. In the resources of a draw a role stands
+/// as [block], an empty block of its own. The plan gives its bytes for the
+/// frame ([FramePlan.frameBlocks]). An isolate has one role per name.
 final class FrameRole {
   factory FrameRole(String name) => _roles[name] ??= FrameRole._(name);
   FrameRole._(this.name) {
@@ -55,18 +55,18 @@ final class FrameRole {
   final String name;
   final Uint8List block = Uint8List(0);
 
-  /// The role [b] stands for, or null when it is a block of bytes.
+  /// Returns the role of [b], or null when [b] is a block of bytes.
   static FrameRole? of(Uint8List b) => b.isEmpty ? _roleBlocks[b] : null;
 }
 
 final _roles = <String, FrameRole>{};
 final _roleBlocks = HashMap<Uint8List, FrameRole>.identity();
 
-/// A GPU buffer of [size] bytes, filled with [initial] at the start of the
-/// frame when given (uploaded from the CPU), else left as the last frame
-/// left it; with [readBack] the runner hands its bytes as the frame left
-/// them to its reader once the GPU is done (a compute pass's visibility
-/// words).
+/// A GPU buffer of [size] bytes. The CPU uploads [initial] at the start of
+/// the frame when it is given. Otherwise the buffer keeps the contents of the
+/// last frame. With [readBack] the runner passes the bytes at the end of the
+/// frame to its reader once the GPU is done, such as the visibility words of
+/// a compute pass.
 class BufferSpec {
   const BufferSpec(this.size, {this.initial, this.readBack = false});
   final int size;
@@ -74,15 +74,15 @@ class BufferSpec {
   final bool readBack;
 }
 
-/// A range of a frame buffer: as a texel buffer of [format], a raw or
-/// structured storage buffer (no format), an indirect argument block or a
-/// vertex stream.
+/// A range of a frame buffer, used as a texel buffer of [format], as a raw or
+/// structured storage buffer without a format, as an indirect argument block
+/// or as a vertex stream.
 class BufferRef extends StorageRef {
   const BufferRef(this.buffer, {this.offset = 0, this.size, this.format});
   final String buffer;
   final int offset;
 
-  /// Bytes from [offset]; null: to the buffer's end.
+  /// The bytes from [offset], or null for the rest of the buffer.
   final int? size;
   final String? format;
 }
@@ -93,9 +93,9 @@ class BufferTextureRef extends TextureRef {
   final BufferRef ref;
 }
 
-/// A render target (or a compute pass's storage image): size, format (a
-/// DXGI name without the `DXGI_FORMAT_` prefix, e.g. `R11G11B10_FLOAT`),
-/// layers, mips and samples.
+/// A render target or the storage image of a compute pass with its size,
+/// format, layers, mips and samples. The format is a DXGI name without the
+/// `DXGI_FORMAT_` prefix, such as `R11G11B10_FLOAT`.
 class TargetSpec {
   const TargetSpec(
     this.width,
@@ -111,24 +111,24 @@ class TargetSpec {
   final int width, height, layers, mips, samples;
   final String format;
 
-  /// Texels the runner uploads into mip 0 at the start of each frame, layer
-  /// after layer, rows top first, without padding (a frame role's block:
-  /// FramePlan.block gives this frame's bytes); null: the target keeps
-  /// what passes draw into it. A lightmap that the CPU computes each frame
-  /// is one.
+  /// The texels that the runner uploads into mip 0 at the start of each
+  /// frame, layer after layer, rows top first, without padding. It is the
+  /// block of a frame role. FramePlan.block gives the bytes of this frame.
+  /// Null when the target keeps what passes draw into it. A lightmap
+  /// that the CPU computes each frame is an example.
   final Uint8List? initial;
 
   /// A 3D texture of [layers] depth slices rather than an array.
   final bool volume;
 
-  /// Whether a compute pass writes it as a storage image.
+  /// True when a compute pass writes it as a storage image.
   final bool storage;
 
   bool get isDepth => format.startsWith('D');
 }
 
-/// One attachment of a pass: a target (a mip and layer of it) and what the
-/// pass does with its contents first.
+/// One attachment of a pass, a mip and layer of a target, with the first
+/// action of the pass on its contents.
 class Attachment {
   const Attachment(
     this.target, {
@@ -142,12 +142,12 @@ class Attachment {
   final String target;
   final int mip, layer;
 
-  /// Drawn through an sRGB view of an 8-bit RGBA target: written values are
-  /// encoded (and blended linear), as sRGB render-target views do in
-  /// Direct3D 11.
+  /// True when the pass draws through an sRGB view of an 8-bit RGBA target.
+  /// Written values are encoded and blended linear, as sRGB render-target
+  /// views do in Direct3D 11.
   final bool srgb;
 
-  /// A colour clear (RGBA), or null to load.
+  /// The RGBA colour of a clear, or null to load.
   final List<double>? clear;
   final double? clearDepth;
   final int? clearStencil;
@@ -158,32 +158,32 @@ sealed class PassPlan {
   final String name;
 }
 
-/// A render pass: colour attachments, an optional depth attachment and its
-/// draws in order.
+/// A render pass with colour attachments, an optional depth attachment and
+/// its draws in order.
 class RenderPassPlan extends PassPlan {
   RenderPassPlan(super.name, this.colors, this.depth, this.draws);
   final List<Attachment> colors;
   final Attachment? depth;
   final List<DrawPlan> draws;
 
-  /// The pass's kept rows, drawn before [draws]: draws neither culled nor
-  /// ordered on the CPU, which the codec sends only when they change and
-  /// the runner draws in pulled form, culled on the GPU. Null for a pass of
-  /// [draws] only.
+  /// The kept rows of the pass, drawn before [draws]. Rows are draws that the
+  /// CPU neither culls nor orders. The codec sends them only when they
+  /// change. The runner draws them in pulled form, culled on the GPU. Null
+  /// for a pass of [draws] only.
   RowSet? rows;
 
-  /// What a frame runner keeps with this pass (its attachments as the
-  /// engine's objects): the runner's, not part of the plan. A pass the
-  /// codec keeps is the same object from frame to frame.
+  /// The state that a frame runner keeps with this pass, such as its
+  /// attachments as objects of the engine. It belongs to the runner and not
+  /// to the plan. A pass that the codec keeps is the same object from frame
+  /// to frame.
   Object? runnerState;
 
-  /// Changes to [draws] in place so far (the codec's edits of a kept
-  /// pass), for what a runner keeps with it.
+  /// The count of the changes to [draws] in place so far, such as the edits
+  /// of the codec to a kept pass. A runner checks it against its state.
   int version = 0;
 
-  /// Everything the pass draws: its [rows]' draws, then [draws]; made
-  /// again when the rows or the [version] changed (a kept pass's codec
-  /// edits).
+  /// Every draw of the pass, the draws of its [rows] and then [draws]. The
+  /// list is made again when the rows or the [version] changed.
   List<DrawPlan> get allDraws {
     final r = rows;
     if (r == null) return draws;
@@ -200,25 +200,28 @@ class RenderPassPlan extends PassPlan {
   List<DrawPlan>? _all;
 }
 
-/// A pass's rows: each row's draw and its id, which holds while the builder
-/// keeps the draw's batch (a changed draw keeps its row's id).
+/// The rows of a pass, with the draw and the id of each row. The id holds
+/// while the builder keeps the batch of the draw. A changed draw keeps the
+/// id of its row.
 class RowSet {
   RowSet(this.ids, this.plans, {this.bounds, this.params});
   final List<int> ids;
   final List<DrawPlan> plans;
 
-  /// Per row, what a pass's own culling reads besides the draw (10 floats a
-  /// row: the key light's casters, their mesh's bounding sphere and box).
+  /// The values that the culling of the pass reads for each row besides the
+  /// draw. A row has 10 floats for the casters of the key light, the
+  /// bounding sphere and the box of their mesh.
   final Float32List? bounds;
 
-  /// The pass's culling values this frame (a shadow cascade's light
-  /// rotation rows, the view's rectangle, the cascade rows).
+  /// The culling values of the pass this frame, such as the light rotation
+  /// rows of a shadow cascade, the rectangle of the view and the cascade
+  /// rows.
   final Float32List? params;
 
-  /// [plans] then [draws] ([RenderPassPlan.allDraws]): a view over both,
-  /// the same object while [draws] is (perf: a pass's every draw copied
-  /// each frame its draws changed). A reader's kept pass changes [draws]
-  /// in place and moves its version, which its runner follows.
+  /// Returns [plans] and then [draws] for [RenderPassPlan.allDraws] as a
+  /// view over both. The view is the same object while [draws] is. The kept
+  /// pass of a reader changes [draws] in place and raises its version, which
+  /// its runner follows.
   List<DrawPlan> withDraws(List<DrawPlan> draws) {
     final had = _all;
     if (had != null && identical(had._b, draws)) return had;
@@ -227,8 +230,8 @@ class RowSet {
 
   _Joined? _all;
 
-  /// [had]'s view when it is over the same plans (a set made anew for
-  /// new culling values).
+  /// Keeps the view of [had] when it is over the same plans, for a set that
+  /// is made again for new culling values.
   void keepDrawsOf(RowSet had) {
     if (!identical(had.plans, plans)) return;
     _all = had._all;
@@ -270,15 +273,16 @@ class DispatchPlan extends PassPlan {
   final List<int> groups;
   final StageResources resources;
 
-  /// Group counts read on the GPU from three uints here (DispatchIndirect).
+  /// The buffer of three uints from which the GPU reads the group counts
+  /// (DispatchIndirect).
   final BufferRef? indirect;
 
-  /// What a frame runner keeps with this dispatch (its GPU reads and
-  /// writes): the runner's, not part of the plan.
+  /// The state that a frame runner keeps with this dispatch, such as its GPU
+  /// reads and writes. It belongs to the runner and not to the plan.
   Object? runnerState;
 }
 
-/// Where a texture or texel buffer a shader reads comes from.
+/// The source of a texture or texel buffer that a shader reads.
 sealed class TextureRef {
   const TextureRef();
 }
@@ -304,23 +308,24 @@ class TargetTexture extends TextureRef {
   final String target;
   final int mip, mips, layer, layers;
 
-  /// Read through an sRGB view of an 8-bit RGBA target (texels decoded).
+  /// True when the shader reads through an sRGB view of an 8-bit RGBA
+  /// target, which decodes the texels.
   final bool srgb;
 }
 
-/// A texel buffer's contents (format as a DXGI name); [bytes] may be a
-/// frame role's block (FrameRole), whose bytes the plan gives for the
-/// frame (FramePlan.block).
+/// The contents of a texel buffer with its format as a DXGI name. [bytes]
+/// may be the block of a frame role (FrameRole), whose bytes the plan gives
+/// for the frame (FramePlan.block).
 class BufferTexture extends TextureRef {
   const BufferTexture(this.bytes, this.format);
   final Uint8List bytes;
   final String format;
 }
 
-/// A texture filled with constant texels, for an input a pass does not have
-/// yet (format as a DXGI name, the bytes of one texel), or with [width] ×
-/// [height] texels the frame makes from data (a particle file's property
-/// maps), row by row in [texel].
+/// A texture filled with one constant texel, for an input that a pass does
+/// not have yet, or with [width] × [height] texels that the frame makes from
+/// data row by row in [texel]. The property maps of a particle file are an
+/// example. The format is a DXGI name.
 class ConstantTexture extends TextureRef {
   const ConstantTexture(
     this.format,
@@ -333,7 +338,7 @@ class ConstantTexture extends TextureRef {
   final Uint8List texel;
   final String type;
 
-  /// The size of an image from data; null: one texel everywhere.
+  /// The size of an image from data, or null for one texel everywhere.
   final int? width, height;
 }
 
@@ -353,25 +358,27 @@ class SamplerState {
   });
   final bool minLinear, magLinear, mipLinear;
 
-  /// U, V, W: `wrap`, `clamp`, `mirror`, `border`.
+  /// The address modes of U, V and W, each `wrap`, `clamp`, `mirror` or
+  /// `border`.
   final List<String> address;
   final int anisotropy;
 
-  /// A comparison function name (`less`, `lessEqual`, …) or null.
+  /// The name of a comparison function, such as `less` or `lessEqual`, or
+  /// null.
   final String? compare;
   final double minLod, maxLod, lodBias;
   final String border;
 }
 
-/// A read-write resource a compute shader binds (`u#`, or a raw or
-/// structured buffer `RawT#`/`RawU#`).
+/// A read-write resource that a compute shader binds, a `u#` or a raw or
+/// structured buffer `RawT#` or `RawU#`.
 sealed class StorageRef {
   const StorageRef();
 }
 
-/// A buffer holding [bytes] for this dispatch only (an input filled
-/// on the CPU, or a written buffer whose result nothing in the plan reads);
-/// [format] names the texel format of a storage texel buffer.
+/// A buffer that holds [bytes] for this dispatch only. It is an input filled
+/// on the CPU or a written buffer whose result nothing in the plan reads.
+/// [format] is the texel format of a storage texel buffer.
 class InlineBuffer extends StorageRef {
   const InlineBuffer(this.bytes, {this.format});
   final Uint8List bytes;
@@ -385,8 +392,9 @@ class ImageRef extends StorageRef {
   final int mip, layer;
 }
 
-/// What a shader stage binds: constant buffers by block name, textures by
-/// GLSL name, samplers by `s#` register and storage resources by name.
+/// The bindings of a shader stage. Constant buffers are bound by block name,
+/// textures by GLSL name, samplers by `s#` register and storage resources by
+/// name.
 class StageResources {
   StageResources({
     Map<String, Uint8List>? blocks,
@@ -402,12 +410,13 @@ class StageResources {
   final Map<int, SamplerState> samplers;
   final Map<String, StorageRef> storage;
 
-  /// What a frame runner keeps with these (their bindings in a shader's
-  /// order): the runner's, not part of the plan.
+  /// The state that a frame runner keeps with these resources, such as their
+  /// bindings in the order of a shader. It belongs to the runner and not to
+  /// the plan.
   Object? runnerState;
 }
 
-/// Blend state of one colour target.
+/// The blend state of one colour target.
 class Blend {
   const Blend({
     this.enabled = false,
@@ -417,15 +426,15 @@ class Blend {
   });
   final bool enabled;
 
-  /// source factor, destination factor, operation.
+  /// The source factor, the destination factor and the operation.
   final List<String> color, alpha;
   final int writeMask;
 }
 
-/// A draw's stencil test, the same for both faces: the comparison of the
-/// draw's reference with the stored value (both under [readMask]), and the
-/// operation where the stencil and depth tests pass, writing [writeMask]'s
-/// bits; a failing test keeps the stored value.
+/// The stencil test of a draw, the same for both faces. It compares the
+/// reference of the draw with the stored value, both under [readMask]. It
+/// applies the operation to the bits of [writeMask] where the stencil and
+/// depth tests pass. A failing test keeps the stored value.
 class Stencil {
   const Stencil({
     this.func = 'always',
@@ -434,7 +443,8 @@ class Stencil {
     this.writeMask = 0xff,
   });
 
-  /// `always`, `equal`, … as [DrawState.depthFunc] names them.
+  /// The comparison, such as `always` or `equal`, in the terms of
+  /// [DrawState.depthFunc].
   final String func;
 
   /// `keep` or `replace`.
@@ -442,7 +452,7 @@ class Stencil {
   final int readMask, writeMask;
 }
 
-/// Raster and depth state of a draw.
+/// The raster and depth state of a draw.
 class DrawState {
   const DrawState({
     this.cull = 'back',
@@ -464,17 +474,17 @@ class DrawState {
   final double depthBias, slopeScaledDepthBias, depthBiasClamp;
   final String topology;
 
-  /// The stencil test, with [DrawPlan.stencilRef]; null: off.
+  /// The stencil test with [DrawPlan.stencilRef], or null when it is off.
   final Stencil? stencil;
 }
 
-/// Where a draw's vertices come from.
+/// The source of the vertices of a draw.
 sealed class DrawGeometry {
   const DrawGeometry();
 }
 
-/// A mesh's shipped streams (`meshes/<stem>.glb`): index buffer [ibuffer]
-/// from [firstIndex], [indexCount] indices.
+/// The shipped streams of a mesh in `meshes/<stem>.glb`, drawn with
+/// [indexCount] indices of the index buffer [ibuffer] from [firstIndex].
 class DrawMeshGeometry extends DrawGeometry {
   const DrawMeshGeometry(
     this.mesh,
@@ -488,21 +498,23 @@ class DrawMeshGeometry extends DrawGeometry {
   final String mesh;
   final int ibuffer, firstIndex, indexCount, instances;
 
-  /// Index count, instance count, first index, base vertex and first
-  /// instance read on the GPU here (DrawIndexedInstancedIndirect); the
-  /// index range above still picks the bound index buffer's start.
+  /// The buffer from which the GPU reads the index count, instance count,
+  /// first index, base vertex and first instance
+  /// (DrawIndexedInstancedIndirect). The index range above still selects the
+  /// start of the bound index buffer.
   final BufferRef? indirect;
 
-  /// Vertex inputs fed from frame buffers instead of the mesh, by input
-  /// register: the buffer range, its stride and the input's DXGI format
-  /// (the skinned positions a compute pass writes).
+  /// The vertex inputs fed from frame buffers in place of the mesh, by input
+  /// register, each with the buffer range, its stride and the DXGI format of
+  /// the input. The skinned positions that a compute pass writes are an
+  /// example.
   final Map<int, (BufferRef, int, String)> streams;
 }
 
-/// A draw of vertices given inline: one vertex buffer of [stride]-byte
-/// vertices whose attributes are fed to the vertex shader's inputs by
-/// register ([registers]: input register → (DXGI format, byte offset)), such
-/// as the four-vertex screen quad of a post pass.
+/// A draw of vertices given inline, such as the four-vertex screen quad of
+/// a post pass. One vertex buffer holds vertices of [stride] bytes. Their
+/// attributes are fed to the inputs of the vertex shader by register.
+/// [registers] maps each input register to a DXGI format and a byte offset.
 class InlineGeometry extends DrawGeometry {
   const InlineGeometry(
     this.bytes,
@@ -516,19 +528,19 @@ class InlineGeometry extends DrawGeometry {
   final int stride, vertexCount, instances;
   final Map<int, (String, int)> registers;
 
-  /// U16 indices, when the draw is indexed ([vertexCount] of them).
+  /// The [vertexCount] U16 indices when the draw is indexed.
   final Uint8List? indices;
 }
 
-/// A full-screen draw of [vertexCount] vertices without buffers (a pass
-/// that builds its vertices from SV_VertexID).
+/// A full-screen draw of [vertexCount] vertices without buffers, for a pass
+/// that builds its vertices from SV_VertexID.
 class ScreenGeometry extends DrawGeometry {
   const ScreenGeometry(this.vertexCount, {this.instances = 1});
   final int vertexCount, instances;
 }
 
-/// One draw: its shaders (ids into the shader library), geometry,
-/// state, viewport and each stage's resources.
+/// One draw with its shaders as ids into the shader library, its geometry,
+/// state, viewport and the resources of each stage.
 class DrawPlan {
   DrawPlan({
     required this.vertex,
@@ -546,14 +558,15 @@ class DrawPlan {
   final DrawGeometry geometry;
   final DrawState state;
 
-  /// x, y, width, height, min depth, max depth.
+  /// The x, y, width, height, min depth and max depth.
   final List<double> viewport;
   final StageResources vertexResources, pixelResources;
   final String label;
   final int stencilRef;
 
-  /// What a frame runner keeps with this draw (its pipeline, vertex
-  /// sources and targets read): the runner's, not part of the plan, so a
-  /// kept draw finds them without a lookup per frame.
+  /// The state that a frame runner keeps with this draw, such as its
+  /// pipeline, vertex sources and the targets it reads. It belongs to the
+  /// runner and not to the plan. A kept draw finds them without a lookup
+  /// per frame.
   Object? runnerState;
 }

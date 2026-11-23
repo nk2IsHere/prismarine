@@ -10,7 +10,7 @@ import 'package:test/test.dart';
 final ogg = File('native/tests/data/synthetic.ogg').absolute.path;
 final mp3 = File('native/tests/data/synthetic.mp3').absolute.path;
 
-/// Every frame of [s], read in [chunk]-frame reads.
+/// Returns every frame of [s], read in reads of [chunk] frames.
 Float32List readAll(PcmSource s, {int chunk = 997}) {
   final out = Float32List(s.frames * s.channels);
   final buf = Float32List(chunk * s.channels);
@@ -78,7 +78,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 2));
     }
     expect(s.failed, isFalse);
-    // The head is decoded at open, so these frames are there already.
+    // The head is decoded at open and these frames are there already.
     final n = (StreamingPcmSource.headSeconds * whole.sampleRate).floor();
     final out = Float32List(n * 2);
     expect(s.read(out, 0, n), n);

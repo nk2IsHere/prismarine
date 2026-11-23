@@ -5,9 +5,9 @@ import 'dart:typed_data';
 import 'package:prismarine_frame/prismarine_frame.dart';
 import 'package:prismarine_render/prismarine_render.dart';
 
-/// Runs the frame plan in `<dir>/plan.json` (blobs in `<dir>/blob/`), of
-/// [format], on [runner] and writes every target's first mip and layer as
-/// stored to `<dir>/<out>/<target>.bin`.
+/// Runs the frame plan in `<dir>/plan.json` with its blobs in `<dir>/blob/`
+/// and of [format] on [runner]. Writes the first mip and layer of every
+/// target as stored to `<dir>/<out>/<target>.bin`.
 Future<void> replayPlan(
   String dir,
   FrameRunner runner, {
@@ -19,22 +19,22 @@ Future<void> replayPlan(
   final plan = planFromJson(
     jsonDecode(File('$dir/plan.json').readAsStringSync())
         as Map<String, Object?>,
-    // One object per distinct content, as the codec keeps a block's identity
-    // in play (the files name each write, not each block).
+    // Each distinct content gets one object, since the codec keeps the
+    // identity of a block. The files are per write and not per block.
     (name) => blobs[name] ??= () {
       final b = File('$dir/blob/$name').readAsBytesSync();
       return byContent[base64.encode(b)] ??= b;
     }(),
     format: format,
   );
-  // The plan's blocks are its own, read from its files: never changed.
+  // The blocks of the plan are read from its files and do not change.
   runner
     ..warn = log
     ..keepBlocks = true
-    // Its targets are read back after the runs.
+    // The targets are read back after the runs.
     ..keepStores = true;
-  // Read-back buffers (a compute pass's words) to
-  // `<dir>/readback/<name>.bin`, the name's bars as underscores.
+  // Read-back buffers, such as the words of a compute pass, go to
+  // `<dir>/readback/<name>.bin` with the bars of the name as underscores.
   final reads = <Future<void>>[];
   runner.onReadBack = (name, bytes) => reads.add(
     File(
@@ -49,9 +49,10 @@ Future<void> replayPlan(
     'pipelines ${_ms(runner.lastPipelineMs)}, '
     'loads ${_ms(runner.lastLoadMs)}; GPU ${_ms(runner.lastGpuMs)})',
   );
-  // PRISMARINE_REPLAY_BENCH=<n>: the plan recorded n times more, each after
-  // the last is done on the GPU, and the record's CPU time printed (a
-  // still frame's: every draw recorded before).
+  // With PRISMARINE_REPLAY_BENCH=<n> the plan is recorded n times more, each
+  // time after the last record is done on the GPU. The CPU time of the
+  // record is printed. It is the time of a still frame, with every draw
+  // recorded before.
   final bench = int.tryParse(
     Platform.environment['PRISMARINE_REPLAY_BENCH'] ??
         Platform.environment['MCSM_REPLAY_BENCH'] ??
@@ -81,7 +82,7 @@ Future<void> replayPlan(
       '${p(gpuOwn, .5)} p90 ${p(gpuOwn, .9)} ms',
     );
   }
-  // The read-backs land after the frame's completion, through an image.
+  // The read-backs arrive through an image after the frame completes.
   await Future<void>.delayed(const Duration(milliseconds: 500));
   await Future.wait(reads);
   final outDir = Directory('$dir/$out')..createSync(recursive: true);
@@ -98,8 +99,8 @@ Future<void> replayPlan(
       }
       final suffix = spec.layers > 1 ? '.L$layer' : '';
       File('${outDir.path}/$name$suffix.bin').writeAsBytesSync(bytes);
-      // PRISMARINE_REPLAY_MIP=<m>: that mip of each target that has it too
-      // (`<target>[.L<layer>].M<m>.bin`).
+      // With PRISMARINE_REPLAY_MIP=<m> the mip m of each target that has it
+      // is written too, as `<target>[.L<layer>].M<m>.bin`.
       final mip = int.tryParse(
         Platform.environment['PRISMARINE_REPLAY_MIP'] ??
             Platform.environment['MCSM_REPLAY_MIP'] ??
