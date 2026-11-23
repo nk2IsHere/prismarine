@@ -1,6 +1,6 @@
-// The files that the code lints check are our own code under the code roots
-// of the config, as tracked by git. The roots are packages/, apps/ and
-// tools/ by default.
+// The files that the code lints check are the code of the repository under the
+// code roots of the config, as tracked by git. The roots are packages/, apps/
+// and tools/ by default.
 import 'dart:io';
 
 import 'config.dart';
