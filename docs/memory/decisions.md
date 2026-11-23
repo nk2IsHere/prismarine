@@ -43,8 +43,9 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
   with D1 and the corpus. The generic half then moves. Runners, app scripts, CI and the workspace root are copied as
   templates. The 21 units that are specific to Telltale or to an exe stay in mcsm.
 - **The engine fork (2026-11-23).** prismarine owns the patched Flutter engine with its patches, its release scripts
-  and flutter_gpu. The first engine release of prismarine renames the `Mcsm*` native exports to prismarine forms. The
-  same release carries the patches of mcsm12, the compaction of the Dart old space at switch holds.
+  and flutter_gpu. The engine fork moves with its git history from mcsm, which keeps the history of every patch. The
+  first engine release of prismarine renames the `Mcsm*` native exports to prismarine forms. The same release carries
+  the patches of mcsm12, the compaction of the Dart old space at switch holds.
 - **The renderer core, now (2026-11-23).** The frame plan format and its codec, the builder framework, the GPU runner
   and the cook model move now, into `prismarine_frame` and `prismarine_render`. The builders of the game stay in mcsm.
 - **A slim scene layer in place of flutter_scene (2026-11-23).** prismarine carries no vendored flutter_scene. A slim

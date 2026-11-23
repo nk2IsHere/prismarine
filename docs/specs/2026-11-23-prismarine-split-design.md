@@ -97,7 +97,7 @@ A step's mcsm side is imports, pubspecs and deletions only, except the seams nam
 8. **Audio output:** cut `PcmSource` and the decode cache's key inside mcsm (land), then move the interfaces to `prismarine_audio` and split the Rust crate: output (prismarine) and mixer (mcsm). The parity test and D1's `audio.wav` stay identical.
 9. **Loop and debug:** `prismarine_loop`, then `prismarine_debug` with the panel shell; mcsm registers its sections. Checked with a real-time recording on the workstation.
 10. **Scene assets:** `FileAssetBundle`, paced loading and sampling become `prismarine_scene`; Telltale cameras and component types stay.
-11. **Engine:** `third_party/flutter_engine`, `flutter_gpu` and `tools/gpu_smoke` move; mcsm reads the release through the pin; the same release and archives (no build in this step).
+11. **Engine:** `third_party/flutter_engine`, `flutter_gpu` and `tools/gpu_smoke` move with their git history from mcsm. The commits that touched these paths are rewritten to the new paths and merged into prismarine, so the history of every engine patch stays in `git log`. mcsm reads the release through the pin; the same release and archives (no build in this step).
 12. **First engine release (prismarine's):** mcsm12's patches (Dart old-space compaction at switch holds: dart/0003, 0029, flutter_gpu G16, G17) plus the rename to prismarine names, built for every target incrementally, gpu_smoke on each.
 
 Later, each through its own spec and plan, in this order:
