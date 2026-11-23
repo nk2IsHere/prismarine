@@ -1,4 +1,4 @@
-/// The job system: worker isolates for loads and decodes (perf spec R4).
+/// The job system with worker isolates for loads and decodes.
 library;
 
 export 'src/job_pool.dart';
