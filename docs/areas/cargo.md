@@ -9,7 +9,7 @@ await buildCargoLibrary(input, output,
     crate: 'native', library: 'prismarine_pad', assetName: 'src/native.dart');
 ```
 
-Cargo comes from `$CARGO`, `PATH` or `~/.cargo/bin`. Each target needs its Rust standard library, and a macOS app build
+Cargo comes from `$CARGO`, `PATH` or `~/.cargo/bin`. Each target needs its Rust standard library. A macOS app build
 needs both `aarch64-apple-darwin` and `x86_64-apple-darwin`. Windows builds use the MSVC toolchain. Crates that build C
 with CMake need CMake, which comes from `$CMAKE`, `PATH`, Homebrew or the CMake app on macOS and Visual Studio on
 Windows.

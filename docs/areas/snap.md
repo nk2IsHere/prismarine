@@ -6,7 +6,7 @@ frames.
 
 You register a codec (`SnapCodec`) for each class with state. A codec writes what the constructor of the object needs
 where the object is first referenced and writes the rest of its state later. A cycle therefore never runs through a
-constructor. Typed lists are written byte for byte, and closures are written by a recipe that you register.
+constructor. Typed lists are written byte for byte. Closures are written by a recipe that you register.
 
 Objects that both sides already have, such as the roots of a fresh session or data loaded from files, are registered on
 the writer and the reader in the same order. The stream then holds only their state.

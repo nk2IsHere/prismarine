@@ -9,7 +9,7 @@ checkout of prismarine with its own config.
 | `privacy_check.dart` | Private material in the tree, from the patterns of the private repo |
 | `check_links.dart` | Markdown links to files that do not exist |
 | `docs_index.dart` | The generated indexes of doc folders with one file per entry |
-| `code_shape.dart` | File size, history in comments, long comments and functions, and the rule sets of the config |
+| `code_shape.dart` | File size, history in comments, long comments and functions and the rule sets of the config |
 | `analyze.dart` | The analyzer, clippy, `dart format` and `cargo fmt` |
 | `alloc.dart` | Places where code that a frame runs allocates |
 | `same_code.dart` | Proves that a range of commits changes only comments and layout |
@@ -22,7 +22,7 @@ The ratcheted lints compare their counts with a baseline per package. A count ma
 The config lists the code roots, the baselines, the roots and SDK verdicts of the allocation lint, the variable of the
 private repo, the files that `check_links` reads and the doc folders that `docs_index` indexes. Under `code_shape` it
 lists the agent words and pointer patterns of the history rule and the rule sets of the repository. The rule set
-`exe-address` counts addresses of shipped binaries in comments and strings, and `name-words` counts words that
+`exe-address` counts addresses of shipped binaries in comments and strings. The rule set `name-words` counts words that
 identifiers and paths must not contain.
 
 ## Private patterns
@@ -35,7 +35,7 @@ applies only to the files that the code lints check.
 
 `alloc_roots.txt` lists the functions that a frame calls from outside the code that the lint can follow. The lint walks
 every call from these roots and counts each place that allocates. A place that must allocate carries
-`// alloc: <reason>`, and a function that a steady frame does not run carries `// alloc-cold: <reason>`.
+`// alloc: <reason>`. A function that a steady frame does not run carries `// alloc-cold: <reason>`.
 
 ## Checks
 

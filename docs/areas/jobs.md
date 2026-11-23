@@ -4,7 +4,7 @@ The package runs work off the frame and sets the priority of threads on macOS, W
 
 ## Job pool
 
-`JobPool` is a bounded pool of one-shot worker isolates. Each job runs in its own `Isolate.run`, and its result returns
+`JobPool` is a bounded pool of one-shot worker isolates. Each job runs in its own `Isolate.run`. Its result returns
 through `Isolate.exit` without a copy. Queued jobs start by priority, then in order. A job takes a cancellation token,
 and the pool keeps counts of started, finished and failed jobs.
 
@@ -25,7 +25,7 @@ the role tries the slice once per isolate and then uses the nice and I/O calls.
 ## Memory room
 
 `MemoryRoom` answers whether the machine has memory to spare for reads far ahead of their use. A read made minutes
-early holds its parsed data that long, and a machine short of memory pays for it in paging. The answer comes from the
+early holds its parsed data that long. A machine short of memory pays for it in paging. The answer comes from the
 memory readings of the OS at most once a second: the memory pressure level and swap growth on macOS, available memory
 and the cgroup limit on Linux and the commit limit on Windows. A budget for the process applies as well.
 

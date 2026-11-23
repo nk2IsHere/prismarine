@@ -1,11 +1,11 @@
 # prismarine_pad
 
 The package reads the game pads of the host through the gamepad subsystem of SDL3. SDL is built from source and linked
-into a small Rust library, and players need no SDL installed. Every pad counts as an Xbox pad, by button position.
+into a small Rust library. Players need no SDL installed. Every pad counts as an Xbox pad, by button position.
 
 SDL runs on a thread of its own, which polls every few milliseconds and publishes a snapshot. Your app reads the pad
 in use once a frame with `HostPads.read` and turns the reading into its own pad state. `HostPads.devices` lists the
-connected pads, and `HostPads.chosen` picks one of them.
+connected pads. `HostPads.chosen` picks one of them.
 
 Building SDL needs CMake and a C compiler on every OS.
 
