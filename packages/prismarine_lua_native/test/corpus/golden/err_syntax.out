@@ -1,0 +1,30 @@
+nil	[string "x = = 1"]:1: unexpected symbol near '='
+nil	[string "local function end"]:1: <name> expected near 'end'
+nil	[string "for i = 1 do end"]:1: ',' expected near 'do'
+nil	[string "goto nowhere"]:1: no visible label 'nowhere' for <goto> at line 1
+nil	[string "::a:: ::a::"]:1: label 'a' already defined on line 1
+nil	[string "break"]:1: <break> at line 1 not inside a loop
+nil	[string "f("]:1: unexpected symbol near <eof>
+nil	[string "x = "abc"]:1: unfinished string near <eof>
+nil	[string "x = 3e"]:1: malformed number near '3e'
+nil	[string "x = "\q""]:1: invalid escape sequence near '\q'
+nil	[string "x = "\300""]:1: decimal escape too large near '\300'
+nil	[string "x = "\xZZ""]:1: hexadecimal digit expected near '\xZ'
+nil	[string "x = [==[ abc"]:1: unfinished long string near <eof>
+nil	[string "--[[ open"]:1: unfinished long comment near <eof>
+nil	[string "local x <const> = 1"]:1: unexpected symbol near '<'
+nil	[string "x = 1 2"]:1: unexpected symbol near '2'
+nil	[string "if x then"]:1: 'end' expected near <eof>
+nil	[string "return return"]:1: unexpected symbol near 'return'
+nil	[string "a.b:c = 1"]:1: function arguments expected near '='
+nil	[string "function f(a, 1) end"]:1: <name> or '...' expected near '1'
+nil	[string "x = {1, 2"]:1: '}' expected near <eof>
+nil	[string "local 1 = 2"]:1: <name> expected near '1'
+nil	[string "x = 0x"]:1: malformed number near '0x'
+nil	[string "x = 1e+"]:1: malformed number near '1e+'
+nil	[string "do local x; goto l; local y; ::l:: print(y) e..."]:1: <goto l> at line 1 jumps into the scope of local 'y'
+nil	[string "repeat local x until y z"]:1: syntax error near <eof>
+function
+nil	[string "function f() x = ... end"]:1: cannot use '...' outside a vararg function near '...'
+nil	[string "local v1 = 1..."]:201: too many local variables (limit is 200) in main function near '='
+nil	[string "local function f()..."]:519: too many upvalues (limit is 255) in function at line 263 near '+'

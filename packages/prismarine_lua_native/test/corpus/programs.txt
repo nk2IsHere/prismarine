@@ -1,0 +1,3 @@
+# Text-loading programs with oracle goldens (tool/goldens.sh); text_corpus_test.dart runs these.
+load_text
+err_syntax

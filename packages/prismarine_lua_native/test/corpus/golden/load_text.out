@@ -1,0 +1,18 @@
+2
+5
+3
+function
+nil	[string "5"]:1: unexpected symbol near '5'
+nil	attempt to load a text chunk (mode is 'b')
+nil	attempt to load a binary chunk (mode is 't')
+literal:2: attempt to index local 'x' (a nil value)
+file.lua:2: attempt to index local 'x' (a nil value)
+[string "short source"]:2: attempt to index local 'x' (a nil value)
+[string "multi..."]:2: attempt to index local 'x' (a nil value)
+[string "longlonglonglonglonglonglonglonglonglonglongl..."]:2: attempt to index local 'x' (a nil value)
+[string "local x = nil..."]:2: attempt to index local 'x' (a nil value)
+42
+12
+nil
+nil	[string "syntax error here"]:1: syntax error near 'error'
+1	2	3
