@@ -9,7 +9,9 @@ release of the engine or build the engine from its patches and then build the ap
 You need the Flutter SDK, Rust, CMake and a C compiler. The Flutter SDK must be 3.47.7, the version of the engine
 patches. Clone it at its tag.
 
-    git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/flutter
+```sh
+git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/flutter
+```
 
 Each platform needs its own compiler and build tools, which Flutter uses for the app's native runner. The build hooks of
 `prismarine_pad` and `prismarine_audio_out` also compile Rust crates, and `prismarine_pad` builds SDL with CMake and a
@@ -25,17 +27,21 @@ Install Rust with rustup. On Windows, run `rustup-init.exe` from [rustup.rs](htt
 toolchain. Keep the default folders of rustup, `~/.rustup` and `~/.cargo`, since a build hook does not read
 `RUSTUP_HOME` or `CARGO_HOME`.
 
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-    rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin    # macOS only
+```
 
 `tools/toolchain/env.sh` sets up a shell for prismarine. It looks for the Flutter SDK at `~/.prismarine/flutter`, keeps
 the pub cache in `~/.prismarine/pub-cache` and the engine in `~/.prismarine/engine`, so every repository on the machine
 shares them. Point `~/.prismarine/flutter` at the SDK you cloned with a symbolic link. Then source
 `env.sh` in every bash or zsh shell that builds, tests or fetches; it puts that Flutter first on your `PATH`.
 
-    mkdir -p ~/.prismarine/pub-cache
-    ln -s ~/flutter ~/.prismarine/flutter
-    source tools/toolchain/env.sh
+```sh
+mkdir -p ~/.prismarine/pub-cache
+ln -s ~/flutter ~/.prismarine/flutter
+source tools/toolchain/env.sh
+```
 
 To keep any of the three folders elsewhere, set `PRISMARINE_FLUTTER`, `PRISMARINE_PUB_CACHE` or
 `PRISMARINE_ENGINE_DIR` to its path before you source `env.sh`. The [toolchain
@@ -49,8 +55,10 @@ Flutter SDK to `PATH`. Set `PRISMARINE_ENGINE_DIR` if the engine should not be i
 lints. The Flutter packages `prismarine_render`, `prismarine_scene`, `prismarine_loop` and `prismarine_debug`, the
 sample app and gpu_smoke are outside the workspace. Run `flutter pub get` in the directory of each one that you use.
 
-    dart pub get
-    (cd packages/prismarine_render && flutter pub get)
+```sh
+dart pub get
+(cd packages/prismarine_render && flutter pub get)
+```
 
 ## Engine releases
 
@@ -66,9 +74,11 @@ A release holds one archive `prismarine-engine-<target>.tar.xz` with its `.sha25
 SHA-256 and unpacks it into `~/.prismarine/engine/<target>`. `gh` must be logged in, with
 `gh auth login` or a token in `GH_TOKEN`. Run the commands from the root of your checkout.
 
-    source tools/toolchain/env.sh
-    export PRISMARINE_ENGINE_REPO=<owner>/prismarine
-    third_party/flutter_engine/fetch.sh
+```sh
+source tools/toolchain/env.sh
+export PRISMARINE_ENGINE_REPO=<owner>/prismarine
+third_party/flutter_engine/fetch.sh
+```
 
 `fetch.sh` picks the target of the machine it runs on. To fetch the engine for another target, give the target as its
 argument, for example `fetch.sh macos-x64`.
@@ -79,9 +89,11 @@ On Windows, run `powershell -ExecutionPolicy Bypass -File third_party\flutter_en
 You can check an archive yourself. Download it with `SHA256SUMS` and compare the checksums, with `sha256sum` in place
 of `shasum -a 256` on Linux.
 
-    gh release download engine-deb287481e3c-prismarine1 -R "$PRISMARINE_ENGINE_REPO" \
-      -p SHA256SUMS -p prismarine-engine-macos-arm64.tar.xz
-    shasum -a 256 -c --ignore-missing SHA256SUMS
+```sh
+gh release download engine-deb287481e3c-prismarine1 -R "$PRISMARINE_ENGINE_REPO" \
+  -p SHA256SUMS -p prismarine-engine-macos-arm64.tar.xz
+shasum -a 256 -c --ignore-missing SHA256SUMS
+```
 
 Source `tools/toolchain/env.sh` again after a fetch. It finds the engine of your machine in the engine directory,
 sets the flags of a release `flutter build` in the array `prismarine_engine_args` and exports `PRISMARINE_IMPELLERC`,
@@ -122,41 +134,49 @@ README](../apps/prismarine_sample/README.md) lists its options.
 
 On macOS the commands build the app and start it.
 
-    source tools/toolchain/env.sh
-    cd apps/prismarine_sample
-    flutter pub get
-    dart tool/fetch.dart
-    tool/shaders.sh "$PRISMARINE_IMPELLERC"
-    flutter build macos --release "${prismarine_engine_args[@]}"
-    build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
+```sh
+source tools/toolchain/env.sh
+cd apps/prismarine_sample
+flutter pub get
+dart tool/fetch.dart
+tool/shaders.sh "$PRISMARINE_IMPELLERC"
+flutter build macos --release "${prismarine_engine_args[@]}"
+build/macos/Build/Products/Release/prismarine_sample.app/Contents/MacOS/prismarine_sample
+```
 
 On Linux the same commands take `flutter build linux` and start
 `build/linux/x64/release/bundle/prismarine_sample`, which runs with Vulkan.
 
-    source tools/toolchain/env.sh
-    cd apps/prismarine_sample
-    flutter pub get
-    dart tool/fetch.dart
-    tool/shaders.sh "$PRISMARINE_IMPELLERC"
-    flutter build linux --release "${prismarine_engine_args[@]}"
-    build/linux/x64/release/bundle/prismarine_sample
+```sh
+source tools/toolchain/env.sh
+cd apps/prismarine_sample
+flutter pub get
+dart tool/fetch.dart
+tool/shaders.sh "$PRISMARINE_IMPELLERC"
+flutter build linux --release "${prismarine_engine_args[@]}"
+build/linux/x64/release/bundle/prismarine_sample
+```
 
 On Windows the commands are for PowerShell on an x64 machine and build the app into
 `build\windows\x64\runner\Release\prismarine_sample.exe`. `tool/shaders.sh` is a bash script. On Windows the build of
 the shaders runs its Dart tool directly. These steps are not checked on a Windows machine. The build stopped in the
 build of SDL for `prismarine_pad`, whose file paths are longer than MSBuild accepts.
 
-    cd apps\prismarine_sample
-    flutter pub get
-    dart tool\fetch.dart
-    $E = "$env:USERPROFILE\.prismarine\engine\windows-x64\src"
-    dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
-    flutter build windows --release --local-engine-src-path=$E `
-      --local-engine=host_release --local-engine-host=host_release
+```powershell
+cd apps\prismarine_sample
+flutter pub get
+dart tool\fetch.dart
+$E = "$env:USERPROFILE\.prismarine\engine\windows-x64\src"
+dart ..\..\packages\prismarine_pbr\tool\build_shaders.dart shaders_generated --impellerc=$E\out\host_release\impellerc.exe
+flutter build windows --release --local-engine-src-path=$E `
+  --local-engine=host_release --local-engine-host=host_release
+```
 
 Run the tests of a package in its directory, `dart test` for a pure-Dart package and `flutter test` for a Flutter
 package. The first test run of `prismarine_pad` or `prismarine_audio_out` builds its Rust crate and SDL, which takes
 about a minute.
 
-    cd packages/prismarine_pad
-    dart test
+```sh
+cd packages/prismarine_pad
+dart test
+```
