@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:prismarine_lua/prismarine_lua.dart';
 import 'package:test/test.dart';
+import 'support/float_config.dart';
 
 void main() {
   final goldens = Directory('test/corpus/golden')
@@ -10,11 +11,11 @@ void main() {
       .where((f) => f.path.endsWith('.luac'))
       .toList();
 
-  for (final profile in LuaProfile.values) {
+  for (final config in const [FloatConfig(), FloatConfig(single: true)]) {
     test(
-      '$profile: loaded code has its mode\'s opcodes and dumps as loaded',
+      '${config.numberMode}: loaded code has its mode\'s opcodes and dumps as loaded',
       () {
-        final vm = LuaVm(config: profile);
+        final vm = LuaVm(config: config);
         var specialised = 0;
         for (final f in goldens) {
           final bytes = f.readAsBytesSync();
@@ -27,7 +28,7 @@ void main() {
               if (op >= opFloat32) specialised++;
             }
           }
-          expect(dumpChunk(p), bytes, reason: f.path);
+          expect(dumpFloat(p), bytes, reason: f.path);
         }
         expect(specialised, greaterThan(0));
       },

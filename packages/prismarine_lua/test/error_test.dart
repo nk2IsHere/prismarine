@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:prismarine_lua/prismarine_lua.dart';
 import 'package:test/test.dart';
+import 'support/float_config.dart';
 
 void main() {
   test('luaO_chunkid (LUA_IDSIZE 60)', () {
@@ -18,7 +19,7 @@ void main() {
   });
 
   test('a native argument error names the call site (luaL_argerror)', () {
-    final vm = LuaVm(config: LuaProfile.stock);
+    final vm = LuaVm(config: floatConfig);
     final fns = vm.call(
       vm.load(File('test/fixtures/multi.luac').readAsBytesSync(), '@multi.lua'),
       const [],
@@ -40,7 +41,7 @@ void main() {
   });
 
   test('errors carry a traceback taken before the stack unwound', () {
-    final vm = LuaVm(config: LuaProfile.stock);
+    final vm = LuaVm(config: floatConfig);
     final f = vm
         .call(
           vm.load(

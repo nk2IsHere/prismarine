@@ -20,4 +20,4 @@ export 'src/snapshot.dart';
 export 'src/state.dart';
 export 'src/table.dart';
 export 'src/value.dart';
-export 'src/vm.dart' show TM, arithSingle, equalObj, isFalse;
+export 'src/vm.dart' show TM, arithSingle, equalObj;

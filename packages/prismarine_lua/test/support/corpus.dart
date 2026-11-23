@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:prismarine_lua/prismarine_lua.dart';
+import 'float_config.dart';
 
 /// The corpus programs listed in test/corpus/programs.txt.
 List<String> corpusPrograms() => File('test/corpus/programs.txt')
@@ -13,7 +14,7 @@ List<String> corpusPrograms() => File('test/corpus/programs.txt')
 /// output (an uncaught error is printed as lua.c does, plus "exit 1").
 String runCorpus(String name) {
   final host = MemoryLuaHost();
-  final vm = LuaVm(config: LuaProfile.stock, host: host);
+  final vm = LuaVm(config: floatConfig, host: host);
   final bytes = File('test/corpus/golden/$name.luac').readAsBytesSync();
   try {
     vm.call(vm.load(bytes, '@golden/$name.luac'), const []);

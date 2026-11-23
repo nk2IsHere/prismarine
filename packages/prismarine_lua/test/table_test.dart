@@ -11,7 +11,7 @@ void main() {
   String show(Object? v) => switch (v) {
     null => 'nil',
     bool b => '$b',
-    double d => numberToString(d, LuaProfile.stock),
+    double d => const LuaCRuntime().numberToString(d),
     String s => s,
     _ => '?',
   };

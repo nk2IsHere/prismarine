@@ -5,6 +5,7 @@ import 'package:prismarine_lua/prismarine_lua.dart';
 // The arithmetic of the modes is internal to the VM.
 import 'package:prismarine_lua/src/vm.dart' show TM, arithOp64;
 import 'package:test/test.dart';
+import 'support/float_config.dart';
 
 /// The float64 mode. Its VMs run in this file's own isolate: the float
 /// tests make float VMs.
@@ -12,7 +13,7 @@ void main() {
   // A float chunk written again with doubles: the constants keep their
   // values and the code runs in a float64 VM.
   LuaClosure loadAsDouble(LuaVm vm, String golden) {
-    final p = undumpChunk(
+    final p = undumpFloat(
       File('test/corpus/golden/$golden.luac').readAsBytesSync(),
       '=x',
     );
@@ -48,7 +49,7 @@ void main() {
 
   test('a float VM in a double isolate fails', () {
     LuaVm();
-    expect(() => LuaVm(config: LuaProfile.gameApp), throwsStateError);
+    expect(() => LuaVm(config: floatConfig), throwsStateError);
   });
 
   test('the defaults are the stock 64-bit build', () {
@@ -63,7 +64,7 @@ void main() {
   });
 
   test('chunks round-trip with 8-byte numbers and size_t', () {
-    final p = undumpChunk(
+    final p = undumpFloat(
       File('test/corpus/golden/vm_loops.luac').readAsBytesSync(),
       '=x',
     );
@@ -83,7 +84,7 @@ void main() {
     // A loop of 0.1 steps sums in double.
     final f = vm.load(
       dumpLua(
-        undumpChunk(File('test/fixtures/mod.luac').readAsBytesSync(), '=mod'),
+        undumpFloat(File('test/fixtures/mod.luac').readAsBytesSync(), '=mod'),
       ),
       '=mod',
     );

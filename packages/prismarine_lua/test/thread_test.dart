@@ -2,12 +2,13 @@ import 'dart:io';
 
 import 'package:prismarine_lua/prismarine_lua.dart';
 import 'package:test/test.dart';
+import 'support/float_config.dart';
 
 void main() {
   late LuaVm vm;
   late List<Object?> fns;
   setUp(() {
-    vm = LuaVm(config: LuaProfile.stock);
+    vm = LuaVm(config: floatConfig);
     final wait = LuaNative((L) => L.yield(1), 'wait');
     fns = vm.call(
       vm.load(
