@@ -1,6 +1,6 @@
 # Building
 
-This page takes you from a fresh machine to an app that runs on the patched engine. You set up the toolchain, fetch a
+This page takes you from a fresh computer to an app that runs on the patched engine. You set up the toolchain, fetch a
 release of the engine or build the engine from its patches and then build the app. The sample app in
 `apps/prismarine_sample` is the example throughout.
 
@@ -110,11 +110,11 @@ about an hour and several GB of disk.
 | Linux | `third_party/flutter_engine/linux.sh setup`, then `linux.sh build` | `host_release` for x64, `linux_release_arm64` for arm64 |
 | Windows | `windows-toolchain.ps1` for the tools, then `windows.ps1 -EngineDir <dir>` | `host_release` for x64, `host_release_arm64` for arm64 |
 
-The sources and the out dirs are in `<engine dir>/flutter`. `env.sh` takes a fetched engine before a built one. A
-machine that holds the tree of the previous release builds the next release incrementally in a few minutes. Apply only
+The sources and the out dirs are in `<engine dir>/flutter`. `env.sh` takes a fetched engine before a built one. Once you have
+built one release, the next one builds incrementally in a few minutes. Apply only
 the new patches, with `git am <patch>` in `<engine dir>/flutter` and `git apply <patch>` for a new Dart patch in
 `engine/src/flutter/third_party/dart`. Then run the build step alone, `build.sh build` on macOS or `linux.sh build` on
-Linux. Do not run the setup again on a machine that has the tree. [The engine
+Linux. Do not run the setup again once you have the tree. [The engine
 README](../third_party/flutter_engine/README.md) lists the requirements of each platform, every patch, the packaging
 of a release and its publishing.
 
@@ -151,10 +151,9 @@ flutter build linux --release "${prismarine_engine_args[@]}"
 build/linux/x64/release/bundle/prismarine_sample
 ```
 
-On Windows the commands are for PowerShell on an x64 machine and build the app into
+On Windows the commands are for PowerShell on an x64 PC and build the app into
 `build\windows\x64\runner\Release\prismarine_sample.exe`. `tool/shaders.sh` is a bash script. On Windows the build of
-the shaders runs its Dart tool directly. These steps are not checked on a Windows machine. The build stopped in the
-build of SDL for `prismarine_pad`, whose file paths are longer than MSBuild accepts.
+the shaders runs its Dart tool directly. The sample builds on Windows, but it has not run on a Windows GPU yet.
 
 ```powershell
 cd apps\prismarine_sample
