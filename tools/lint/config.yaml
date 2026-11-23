@@ -7,6 +7,10 @@ vendored_files:
   - packages/prismarine_lua_native/native/f32/luaconf.h
 loose_dirs: [tools/lint]
 comment_check_exempt: [tools/lint/]
+# The checks of analyze that may skip a package, each of the form <check>:<dir>.
+# Every other skip fails analyze. The gate does not resolve gpu_smoke.
+analyze:
+  allowed_skips: [flutter:tools/gpu_smoke]
 baselines:
   code_shape: tools/lint/baseline.json
   analyze: tools/lint/analyze_baseline.json
