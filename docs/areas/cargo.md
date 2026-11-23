@@ -17,6 +17,11 @@ Windows.
 The build runs `cargo rustc --release` in a clean environment with one target directory for every configuration of the
 package. On macOS the library is not stripped, since the strip of Xcode 27 leaves a dylib that dyld refuses.
 
+The crate may also be outside the package, given as an absolute path. Cargo runs in the directory of the crate and
+reads the `.cargo/config.toml` files there and in its parents, such as a `[patch]` that points a git dependency at a
+local checkout. Git dependencies are fetched with the git command line, which uses the URL mappings and credentials of
+the machine.
+
 ## Checks
 
 The package has no tests of its own. A build of `prismarine_pad` or of the sample app runs it.

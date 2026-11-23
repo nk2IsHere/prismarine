@@ -15,5 +15,6 @@ private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`
 mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout with its own
 config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both repositories
 use. The first half of step 9 and step 10 are done. `prismarine_loop` and `prismarine_scene` are Flutter packages
-outside the pub workspace, each with a page in `docs/areas/`. Step 5, the runner behind a `RenderAssets` interface,
-follows.
+outside the pub workspace, each with a page in `docs/areas/`. Step 8 adds `prismarine_audio` and
+`prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of `prismarine_audio_out` and links it.
+Step 5, the runner behind a `RenderAssets` interface, follows.
