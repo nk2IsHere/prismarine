@@ -35,8 +35,19 @@ moves to prismarine and loses every FMOD and game word on the way. mcsm's output
 
 | Package | Contents after the change |
 |---|---|
-| `prismarine_audio` | `PcmSource`, `WavWriter`, the project model with its JSON and binary codecs, the Dart engine with its commands, `LockstepAudio`, `AudioClock`, and the parity writer |
-| `prismarine_audio_out` | The output device, the push ring, the decoders and the cache as today, plus the native engine in the crate, `NativeAudioEngine`, `NativeMixerPort`, `AudioOutput` and the parity replay example |
+| `prismarine_audio` | `PcmSource`, `WavWriter`, the project model with its JSON and binary codecs, the Dart engine with its commands, `LockstepAudio` and `AudioClock`. The parity writer is in a separate library, `package:prismarine_audio/testing.dart`, which a game does not import. |
+| `prismarine_audio_out` | The output device, the push ring, the decoders and the cache as today, plus the native engine in the crate, `NativeAudioEngine` and `NativeMixerPort`. The parity replay is an example of the crate and not part of its library. |
+
+## Two renders
+
+The engine has a Dart render and a native render, and both stay. They have different jobs. The native render plays in
+real time. It runs in the callback of the output device, outside the Dart heap, and a pause of an isolate or a
+collection of its heap does not starve it. The Dart render is for offline and lockstep work. It renders on any isolate
+and on any platform without the native library, for captures that step with the game, for tools that render one event
+to a file and for tests. A capture can use either render, and both give the same bits. The Dart render is also the
+reference that the native one is checked against, and a change to one is made in the other in the same float order.
+
+## The native library
 
 The native engine joins the crate of `prismarine_audio_out`. The decoded-audio cache and the engine must be in one
 library. A separate crate would need the user defines that mcsm uses today, and every app would have to set them.
@@ -108,20 +119,22 @@ The engine takes `AudioCommand`s, each with the id of an instance that the game 
 
 `keepTail` is a time in seconds. A one-shot event with less time left than `keepTail` ignores a stop, and a zero volume
 after its first block. The time left counts from the reported position, which trails the render by
-`EngineRules.reportLag` frames.
+`AudioRules.reportLag` frames.
 
 `late` holds a tolerance in seconds. The engine starts at the wanted position only when the position is past the
-tolerance and past `EngineRules.lateStartMinimum`, and the event or its sound is longer than the tolerance. A start
-whose wanted position is past the end of the event or of its sound does not play. The length of a sound is rounded
-down to `EngineRules.soundLengthStep`.
+tolerance and past `AudioRules.lateStartMinimum`, and the event or its sound is longer than the tolerance. A start
+whose wanted position is past the end of the event or of its sound does not play. With `AudioRules.wholeMsLengths`
+the length of a sound is rounded down to whole milliseconds.
 
-`EngineRules` holds these values for the whole engine. The defaults are zero. mcsm sets a lag of 1024 frames, a minimum
-of 0.1 s and a step of 1 ms, and the command forms of its sound rules.
+`AudioRules` holds these values for the whole engine. The defaults are zero and false. mcsm sets a lag of 1024 frames,
+a minimum of 0.1 s and whole milliseconds, and the command forms of its sound rules.
 
 The commands are plain values that any isolate can send. `AudioRenderer` is the interface of a render with a frame
 position, `schedule`, `apply` and `render`. `AudioEngine` implements it in Dart and `NativeAudioEngine` implements it
 over the native engine. `LockstepAudio` advances a renderer to a time and applies commands at their frames.
-`AudioOutput` plays a renderer in real time with a given lead and command latency.
+A game plays the native engine in real time with `NativeAudioEngine.startDevice`, or a Dart engine on a
+`RenderIsolate` into a `PcmPushStream`. mcsm's `AudioOutput`, which adds the command latency of FMOD's ring, stays in
+mcsm.
 
 ## The native engine
 
@@ -139,8 +152,8 @@ engine class of mcsm. The poster resolves the sound key of a start against a sou
 The move changes no arithmetic. Every function keeps its float order, and the render code changes only where the
 model gives typed values in place of FMOD records. The checks:
 
-- The parity writer of `prismarine_audio` renders a project and a command script in Dart and writes the blob, the
-  script and the render. The `parity` example of the crate replays them natively and compares the bits.
+- The parity writer of `package:prismarine_audio/testing.dart` renders a project and a command script in Dart and
+  writes the blob, the script and the render. The `parity` example of the crate replays them natively and compares the bits.
 - prismarine has a synthetic project with generated samples, which covers every effect kind, each instrument kind,
   5.1 strips, mix states and sidechains. Its render checksum is stored and holds on every platform.
 - mcsm's `native_parity.dart` builds the project from a slice through the adapter and calls the parity writer. The

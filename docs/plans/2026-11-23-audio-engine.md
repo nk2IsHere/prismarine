@@ -18,7 +18,7 @@ same checksum, with the native replay identical.
 3. The render code reads the typed model: strips, the graph, snapshots, the event formats, the instance, its sounds
    and its timeline, the player and the blob writer. The blob carries the typed model. The crate's `model.rs` reads
    the new blob, and the crate's render takes the behaviour fields in place of version flags.
-4. The generic commands with `EngineRules`. The bridge, the session log, the snapshot codec of the bridge, the
+4. The generic commands with `AudioRules`. The bridge, the session log, the snapshot codec of the bridge, the
    output, `NativeMixerPort` and the parity tool use them. The codec keeps its tags and bytes, checked by a test that
    writes every command form and compares the bytes with a stored copy.
 5. The parity sets and the synthetic checksum, unchanged.
@@ -26,10 +26,10 @@ same checksum, with the native replay identical.
 ## Step 2: the move
 
 1. prismarine: the model, the mixer, the events and the engine into `prismarine_audio/lib/src/`, the parity writer
-   into `prismarine_audio/lib/src/parity/`. Comments follow prismarine's writing rules and hold no game or FMOD words.
-   Tests that need no game data move with the code.
+   into the separate library `package:prismarine_audio/testing.dart`. Comments follow prismarine's writing rules and
+   hold no game or FMOD words. Tests that need no game data move with the code.
 2. prismarine: the crate's engine into `prismarine_audio_out/native/src/mix/` with `dmath.rs`, the FFI as
-   `prismarine_mix_*`, `NativeAudioEngine`, `NativeMixerPort` and `AudioOutput` into `prismarine_audio_out/lib/`, the
+   `prismarine_mix_*`, `NativeAudioEngine` and `NativeMixerPort` into `prismarine_audio_out/lib/`, the
    `parity` example into the crate.
 3. mcsm: imports from the two packages, the copies deleted, `mcsm_audio_out/native` deleted with the user defines in
    the pubspecs of `mcsm_audio_out` and the player. The rules of mcsm that name `dmath.rs` point to prismarine.
