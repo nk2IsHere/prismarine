@@ -1,18 +1,52 @@
 <img alt="prismarine" src="docs/logo/lockup.png" height="96">
 
-# prismarine
+prismarine is a toolkit for making games with Flutter and Dart. It gives you a renderer on Flutter GPU, a patched
+Flutter engine and the parts that a real-time game needs around them, from worker threads to deterministic replay.
+The code that a frame runs keeps its storage between frames. Every part runs on macOS, Linux and Windows.
 
-A toolkit for making games with Flutter and Dart.
+## Packages
 
-- A renderer on Flutter GPU: frames described as plans of passes, recorded without per-frame allocation.
-- A patched Flutter engine: faster GPU draws, compute, texture arrays and 3D textures, Vulkan on Linux and Windows.
-- Jobs on worker isolates, with thread priorities per OS.
-- Collections that keep their storage, for allocation-free frames.
-- Snapshots of object graphs, and deterministic replay.
-- Audio output and decoding, gamepads, a real-time loop with frame and GC pacing.
-- Debug tools: frame history, a profiler, glitch capture.
+The packages arrive in the repository one by one. None of them is published yet.
 
-BSD-3 licensed.
+| Package | Contents |
+|---|---|
+| `prismarine_frame` | Frame plans of passes, targets and buffers, with a codec that moves a plan between isolates |
+| `prismarine_render` | The runner that records a frame plan on Flutter GPU and skips a pass whose inputs are unchanged |
+| `prismarine_scene` | A glTF importer, a scene-node layer and paced loading of assets |
+| `prismarine_shaders` | Shader bundles for impellerc, a cache of compiled shaders and precompiled Metal libraries |
+| `prismarine_assets` | Readers and writers for glTF, KTX2 and PNG, with decoding of BC textures |
+| `prismarine_jobs` | A pool of worker isolates with priorities and cancellation, thread roles per OS and a check of free memory |
+| `prismarine_kept` | Maps, sets and lists that keep their storage when cleared |
+| `prismarine_snap` | Snapshots of object graphs that keep shared objects shared |
+| `prismarine_replay` | Recording of input, deterministic replay and a schedule of snapshots |
+| `prismarine_math` | Maths functions that give the same bits on every OS |
+| `prismarine_lua` | An embeddable Lua 5.2 for Dart |
+| `prismarine_audio` | Audio interfaces and an engine of events and buses |
+| `prismarine_audio_out` | Audio output, decoding of MP3 and Vorbis and a cache of decoded sounds |
+| `prismarine_pad` | Gamepads through SDL3 |
+| `prismarine_loop` | Frame pacing, GC pacing, a frame limiter, window focus, cursor capture and mouse look |
+| `prismarine_debug` | Frame history, a profiler per frame, a log of GPU passes, glitch capture and a debug panel |
+| `prismarine_cargo` | A build hook that compiles the Rust crate of a package |
+
+## Engine
+
+The patched Flutter engine extends Flutter GPU with cheaper draws, retained draws, multiple render targets,
+instancing, compute, texel buffers, texture arrays and 3D textures. It adds Vulkan for Linux and Windows. The Dart VM
+gets collections at idle points of the frame and heap figures for the debug tools. Each engine release passes a set of
+GPU smoke tests on every platform.
+
+## Platforms
+
+prismarine draws through Metal on macOS and through Vulkan on Linux and Windows. OpenGL ES is not supported.
+
+## Tools
+
+The repository carries the lints that keep frames free of allocation, a heap and allocation profiler and the release
+scripts of the engine.
+
+## Licence
+
+prismarine is licensed under the [BSD-3 licence](LICENSE).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/logo/flutter/built_with_flutter_white.svg">
