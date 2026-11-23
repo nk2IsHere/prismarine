@@ -5,3 +5,6 @@
 # gpu_smoke has the names of the engine exports and releases. The first engine
 # release of prismarine renames them.
 tools/gpu_smoke/
+# prismarine_render calls flutter_gpu's McsmSampler and mcsmRelease. The first
+# engine release of prismarine renames them.
+packages/prismarine_render/
