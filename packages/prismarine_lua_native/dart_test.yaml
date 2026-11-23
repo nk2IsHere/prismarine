@@ -1,0 +1,5 @@
+tags:
+  oracle:
+    timeout: 10m
+  gamedata:
+    timeout: 10m
