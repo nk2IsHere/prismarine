@@ -7,8 +7,10 @@ import 'package:prismarine_scene/model.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import 'pbr_blocks.dart';
+import 'pbr_point_shadows.dart';
 import 'pbr_post.dart';
 import 'pbr_settings.dart';
+import 'pbr_volume.dart';
 
 /// A scene that the builder draws: its model and the prefix of the stems of
 /// its meshes and textures in the render assets.
@@ -66,6 +68,8 @@ class PbrBuilder {
   int _width = 0, _height = 0, _shadowSize = 0;
   bool _shadowView = false;
   late final _post = PbrPost(settings);
+  late final _points = PbrPointShadows(settings);
+  late final _volume = PbrVolume(settings);
 
   /// The count of frames so far, for the temporal noise of passes.
   int frameIndex = 0;
@@ -92,9 +96,13 @@ class PbrBuilder {
 
   final _frame = FrameBlock(), _shadowFrame = FrameBlock();
   Map<int, SamplerState> _samplers = _plainSamplers;
-  final _retained = <String, int>{'shadow': 0};
+  final _retained = <String, int>{'shadow': 0, 'pointShadows': 0};
   final _blend = <_BlendDraw>[];
   List<DrawPlan> _blendDraws = const [];
+
+  /// The draws of the point shadows in this frame, which [drawCount] does
+  /// not count.
+  int get pointShadowDraws => _points.drawCount;
 
   /// The number of draws in the plan, counted once for each pass.
   int drawCount = 0;
@@ -112,7 +120,9 @@ class PbrBuilder {
         height != _height ||
         settings.shadowSize != _shadowSize ||
         settings.showShadowMap != _shadowView ||
-        _post.changed()) {
+        _post.changed() ||
+        _points.changed() ||
+        _volume.changed()) {
       _plan = _make(width, height);
       _reset = true;
     }
@@ -156,6 +166,7 @@ class PbrBuilder {
     _samplers = settings.post.taa ? _taaSamplers : _plainSamplers;
     final opaque = <(int, DrawPlan)>[];
     final shadow = <DrawPlan>[];
+    final casters = <PbrCaster>[];
     _blend.clear();
     for (final scene in scenes) {
       final model = scene.model;
@@ -198,26 +209,26 @@ class PbrBuilder {
           opaque.add((key, lit));
         }
         if (blended) continue;
-        shadow.add(
-          DrawPlan(
-            vertex: PbrShaderIds.shadowVertex,
-            pixel: masked ? PbrShaderIds.shadowMaskedPixel : null,
-            geometry: geometry,
-            state: _shadowState,
-            viewport: shadowView,
-            vertexResources: StageResources(
-              blocks: {'Frame': shadowRole.block, 'Draw': block},
-            ),
-            pixelResources: masked
-                ? StageResources(
-                    blocks: {'Frame': shadowRole.block, 'Draw': block},
-                    textures: {'baseColor': pixel['baseColor']!},
-                    samplers: _samplers,
-                  )
-                : StageResources(),
-            label: m.name,
+        final caster = DrawPlan(
+          vertex: PbrShaderIds.shadowVertex,
+          pixel: masked ? PbrShaderIds.shadowMaskedPixel : null,
+          geometry: geometry,
+          state: _shadowState,
+          viewport: shadowView,
+          vertexResources: StageResources(
+            blocks: {'Frame': shadowRole.block, 'Draw': block},
           ),
+          pixelResources: masked
+              ? StageResources(
+                  blocks: {'Frame': shadowRole.block, 'Draw': block},
+                  textures: {'baseColor': pixel['baseColor']!},
+                  samplers: _samplers,
+                )
+              : StageResources(),
+          label: m.name,
         );
+        shadow.add(caster);
+        casters.add(PbrCaster(caster, d.center, d.radius));
       }
     }
     opaque.sort((a, b) => a.$1.compareTo(b.$1));
@@ -254,6 +265,35 @@ class PbrBuilder {
           label: 'shadow map view',
         ),
       );
+      final budget = settings.pointShadows.budget.clamp(0, maxPointShadows);
+      if (budget > 0) {
+        // The atlas has six faces in each row and a row for each slot.
+        final w = (side * 2).roundToDouble();
+        overlay.add(
+          DrawPlan(
+            vertex: PbrShaderIds.tonemapVertex,
+            pixel: PbrShaderIds.pointDepthViewPixel,
+            geometry: InlineGeometry(_screenTriangle, 8, const {
+              0: ('R32G32_FLOAT', 0),
+            }, 3),
+            state: _overlayState,
+            viewport: [
+              16,
+              side + 24,
+              w,
+              (w * budget / 6).roundToDouble(),
+              0,
+              1,
+            ],
+            vertexResources: StageResources(),
+            pixelResources: StageResources(
+              textures: {'shadowMap': const TargetTexture(pointShadowAtlas)},
+              samplers: {0: _clampSampler},
+            ),
+            label: 'point shadow atlas view',
+          ),
+        );
+      }
     }
     final targets = {
       PbrTargets.shadowMap: TargetSpec(_shadowSize, _shadowSize, 'D32_FLOAT'),
@@ -272,6 +312,7 @@ class PbrBuilder {
         const Attachment(PbrTargets.shadowMap, clearDepth: 1),
         shadow,
       ),
+      _points.make(casters, targets, blocks),
       RenderPassPlan(
         'opaque',
         [
@@ -300,6 +341,19 @@ class PbrBuilder {
         const Attachment(PbrTargets.depth),
         [markers],
       ),
+      ..._volume.make(
+        width: width,
+        height: height,
+        scene: PbrTargets.hdr,
+        depth: PbrTargets.depth,
+        frame: frameRole.block,
+        shadows: {
+          'shadowMap': const TargetTexture(PbrTargets.shadowMap),
+          'pointShadowAtlas': const TargetTexture(pointShadowAtlas),
+        },
+        targets: targets,
+        blocks: blocks,
+      ),
     ];
     _post.make(
       width: width,
@@ -317,7 +371,13 @@ class PbrBuilder {
     for (final p in passes) {
       if (p is RenderPassPlan) drawCount += p.draws.length;
     }
-    final parts = [('shadows', ''), ('scene', 'opaque'), ..._post.parts];
+    final parts = [
+      ('shadows', ''),
+      ('point shadows', 'pointShadows'),
+      ('scene', 'opaque'),
+      if (_volume.enabled) ('fog', 'volumeInject'),
+      ..._post.parts,
+    ];
     partLabels = [for (final (label, _) in parts) label];
     timedPasses = [for (final (_, pass) in parts.skip(1)) pass];
     return FramePlan(
@@ -340,6 +400,7 @@ class PbrBuilder {
       'metallicRoughness': file(m.metallicRoughness, _white),
       'emissiveMap': file(m.emission, _white, srgb: true),
       'shadowMap': const TargetTexture(PbrTargets.shadowMap),
+      'pointShadowAtlas': const TargetTexture(pointShadowAtlas),
     };
   }
 
@@ -372,6 +433,13 @@ class PbrBuilder {
       dt: dt,
       reset: _reset,
     );
+    _volume.write(
+      camera,
+      aspect,
+      previousViewProjection,
+      frameIndex,
+      reset: _reset,
+    );
     previousViewProjection.setFrom(_plain);
     _sunMatrices();
     final f = _frame;
@@ -383,6 +451,12 @@ class PbrBuilder {
       ..vec(40, _scaled(settings.sunColor, settings.sunIntensity), 0)
       ..vec(44, settings.sky, 0);
     final count = math.min(lights.length, maxPointLights);
+    _retained['pointShadows'] = _points.select(
+      lights,
+      count,
+      camera.position,
+      _plain,
+    );
     f
       ..vec(48, settings.ground, count.toDouble())
       ..floats(
@@ -390,14 +464,18 @@ class PbrBuilder {
         1 / _shadowSize,
         settings.shadowBias,
         settings.normalOffset,
-        0,
+        settings.pointShadows.bias,
       );
     for (var i = 0; i < maxPointLights; i++) {
       if (i < count) {
         final l = lights[i];
         f
           ..vec(56 + 4 * i, l.position, l.range)
-          ..vec(120 + 4 * i, _scaled(l.color, l.intensity), 0);
+          ..vec(
+            120 + 4 * i,
+            _scaled(l.color, l.intensity),
+            _points.slotOfLight[i].toDouble(),
+          );
       } else {
         f
           ..floats(56 + 4 * i, 0, 0, 0, 0)

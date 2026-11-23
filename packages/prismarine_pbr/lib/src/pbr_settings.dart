@@ -16,7 +16,8 @@ abstract final class PbrShaderIds {
       tonemapPixel = 'Pbr/tonemap.frag',
       markerVertex = 'Pbr/marker.vert',
       markerPixel = 'Pbr/marker.frag',
-      depthViewPixel = 'Pbr/depth_view.frag';
+      depthViewPixel = 'Pbr/depth_view.frag',
+      pointDepthViewPixel = 'Pbr/point_depth_view.frag';
 
   static const all = [
     litVertex,
@@ -30,6 +31,7 @@ abstract final class PbrShaderIds {
     markerVertex,
     markerPixel,
     depthViewPixel,
+    pointDepthViewPixel,
   ];
 }
 
@@ -99,8 +101,8 @@ class PbrSettings {
   /// The radius of a light's disc in metres, 0.2 by default.
   double markerSize = 0.2;
 
-  /// Shows the shadow map in the top left corner of the view. Off by default. A change
-  /// makes a new plan.
+  /// Shows the shadow map in the top left corner of the view and the atlas of
+  /// the point shadows below it. Off by default. A change makes a new plan.
   bool showShadowMap = false;
 
   /// The depth bias of the shadow test and the offset along the normal in

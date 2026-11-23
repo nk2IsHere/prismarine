@@ -44,8 +44,8 @@ class PbrPostSettings {
   /// Off, `PbrSettings.exposure` applies.
   bool autoExposure = true;
 
-  /// The exposure compensation in EV for auto exposure, 0 by default.
-  double compensation = 0;
+  /// The exposure compensation in EV for auto exposure, -0.5 by default.
+  double compensation = -0.5;
 
   /// The lowest and highest exposure of auto exposure in EV, as the log2 of
   /// the mean luminance that maps to grey. -4 and 8 by default.
@@ -72,6 +72,10 @@ class PbrPointShadowSettings {
 
   /// The depth bias in texels of a face, 1.5 by default.
   double bias = 1.5;
+
+  /// The share of the range of a light within which objects cast shadows,
+  /// 0.5 by default. Objects further from the light cast none.
+  double reach = 0.5;
 }
 
 /// The most point lights that cast shadows.
@@ -87,9 +91,9 @@ class PbrVolumeSettings {
   /// 240 by 135 by 128 at high quality. Medium by default.
   PbrQuality quality = PbrQuality.medium;
 
-  /// The extinction of the fog per metre at the height [base], 0.02 by
+  /// The extinction of the fog per metre at the height [base], 0.006 by
   /// default.
-  double density = 0.02;
+  double density = 0.006;
 
   /// The falloff of the density per metre above [base], 0.08 by default.
   double heightFalloff = 0.08;
@@ -98,8 +102,8 @@ class PbrVolumeSettings {
   double base = 0;
 
   /// The anisotropy of the Henyey-Greenstein phase function, from -1 back
-  /// to 1 forward. 0.4 by default.
-  double anisotropy = 0.4;
+  /// to 1 forward. 0.5 by default.
+  double anisotropy = 0.5;
 
   /// The distance of the far end of the grid in metres, 60 by default.
   double range = 60;

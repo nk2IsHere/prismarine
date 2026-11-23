@@ -12,11 +12,12 @@ uniform Frame {
   vec4 skyColor;
   // rgb the ambient colour from below, w the count of point lights
   vec4 groundColor;
-  // x the texel size of the shadow map, y the depth bias, z the normal offset
+  // x the texel size of the shadow map, y the depth bias, z the normal
+  // offset, w the depth bias of the point shadows in texels
   vec4 shadowParams;
   // xyz the position, w the range, 0 for none
   vec4 lightPosition[16];
-  // rgb the colour times the intensity
+  // rgb the colour times the intensity, w the shadow slot plus one or 0
   vec4 lightColor[16];
   // x and y the scale of the projection, z the radius of a light's marker,
   // w 1 with markers
