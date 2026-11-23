@@ -11,13 +11,14 @@ import 'pbr_settings.dart';
 /// The name of the depth atlas of the point light shadows.
 const pointShadowAtlas = 'pointShadowAtlas';
 
-/// A draw that casts shadows, with its draw for the sun and its bounding
-/// sphere in the world.
+/// A draw that casts shadows, with its draw for the sun, its bounding
+/// sphere in the world and whether its material is double sided.
 class PbrCaster {
-  PbrCaster(this.sun, this.center, this.radius);
+  PbrCaster(this.sun, this.center, this.radius, {this.doubleSided = true});
   final DrawPlan sun;
   final Vector3 center;
   final double radius;
+  final bool doubleSided;
 }
 
 /// The shadows of the point lights in one depth atlas. Each light with a
@@ -216,14 +217,17 @@ class PbrPointShadows {
 
   // alloc-cold: a face draws a caster for the first time.
   DrawPlan _drawOf(int k, int s, int f, int c) {
-    final sun = _casters[c].sun;
+    final caster = _casters[c];
+    final sun = caster.sun;
     final t = _tile.toDouble();
     final blocks = sun.vertexResources.blocks;
     return DrawPlan(
       vertex: sun.vertex,
       pixel: sun.pixel,
       geometry: sun.geometry,
-      state: sun.state,
+      // A one-sided caster draws its front faces only, which halves the
+      // triangles that the faces rasterize.
+      state: caster.doubleSided ? sun.state : _oneSided,
       viewport: [f * t, s * t, t, t, 0, 1],
       vertexResources: StageResources(
         blocks: {'Frame': _roles[k].block, 'Draw': blocks['Draw']!},
@@ -264,6 +268,8 @@ class PbrPointShadows {
     return true;
   }
 }
+
+const _oneSided = DrawState();
 
 /// The near plane of the faces of a point light in metres.
 const pointShadowNear = 0.05;

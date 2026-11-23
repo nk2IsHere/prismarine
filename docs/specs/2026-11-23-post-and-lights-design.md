@@ -13,7 +13,7 @@ package. Both designs share the HDR target, the depth target, the pass order bel
 - Anti-aliasing that resolves the fine threads of the curtains, the alpha-masked leaves and the specular highlights of
   the normal maps without crawling while the camera moves.
 - Bloom that spreads bright light without a threshold and keeps the energy of the image.
-- Auto exposure from the luminance of the frame, with compensation, limits and a speed of adaptation, and the tone maps
+- Auto exposure from the luminance of the frame, with compensation, limits and a speed of adaptation and the tone maps
   ACES fitted, the current fit of Narkowicz, AgX and the Khronos PBR Neutral curve.
 - Shadows for the point lights with a budget of lights that cast them.
 - Light shafts and fog from the sun and the point lights, shadowed by both shadow maps.
@@ -36,17 +36,17 @@ package. Both designs share the HDR target, the depth target, the pass order bel
 | `shadow` | render | `shadowMap` | The sun, retained while the sun holds still. |
 | `pointShadows` | render | `pointShadowAtlas`, D32_FLOAT | Six faces for each point light with a shadow slot. |
 | GI passes | compute and render | their own | The probes and the environment of the other design. |
-| `opaque` | render | `hdr`, R16G16B16A16_FLOAT, `depth`, D32_FLOAT, and the G-buffer of the other design | The lit draws with a jittered projection. |
+| `opaque` | render | `hdr`, R16G16B16A16_FLOAT, `depth`, D32_FLOAT and the G-buffer of the other design | The lit draws with a jittered projection. |
 | indirect passes | render | `hdr` | Ambient occlusion, reflections and the indirect light of the other design. |
 | `blend`, `markers` | render | `hdr` | As before. |
 | `volumeInject`, `volumeIntegrate` | compute | `volumeScatter`, `volumeIntegrated`, `volumeHistory` | The froxel grid. |
 | `volumeApply` | render | `hdr` | The fog in front of each pixel. |
 | `taa` | render | `resolved`, R16G16B16A16_FLOAT | The temporal resolve. |
-| `exposureHistogram`, `exposureAdapt`, `exposureKeep` | compute | `exposure`, `exposurePrevious` | The auto exposure. |
+| `exposureHistogram`, `exposureAdapt` | compute | `exposure` | The auto exposure. |
 | `bloomDown<n>`, `bloomUp<n>` | render | `bloom<n>` | The bloom chain. |
-| `tonemap` | render | `backbuffer`, and `taaHistory` with TAA on | Exposure, bloom, the tone map and the sRGB encoding, then the overlays. |
+| `tonemap` | render | `backbuffer` and `taaHistory` with TAA on | Exposure, bloom, the tone map and the sRGB encoding, then the overlays. |
 
-An effect that is off leaves its passes out of the plan, and the next pass reads the target before it. Without TAA the
+An effect that is off leaves its passes out of the plan and the next pass reads the target before it. Without TAA the
 bloom and the histogram read `hdr`. A switch of an effect or of its quality makes a new plan. Values such as the bloom
 strength or the fog density apply to the next frame.
 
@@ -71,9 +71,9 @@ temporal noise of other passes.
 The resolve finds the nearest depth of the 3 by 3 pixels around each pixel and reprojects that point into the last
 frame with the matrices without jitter. A static camera then reads the history at the same pixel. The history is read
 with a five-tap Catmull-Rom filter at high quality and bilinear filtering below it. The 3 by 3 neighbourhood of the
-current frame in YCoCg gives the mean and the deviation, and the history is clipped towards the mean into the box of
+current frame in YCoCg gives the mean and the deviation and the history is clipped towards the mean into the box of
 1.25 deviations. Colours are weighted by the inverse of their luminance before the blend, which keeps a single bright
-pixel from flickering. The blend takes 1/12 of the current frame. A history outside the view or a reset takes the
+pixel from flickering. A colour that is not a finite number counts as black and does not enter the history. The blend takes 1/12 of the current frame. A history outside the view or a reset takes the
 current frame alone. Low quality uses a clamp to the minimum and maximum of the 5 neighbours of a cross.
 
 The history is `taaHistory`, a copy of `resolved` that the tone map pass writes as its second colour target. A copy
@@ -99,9 +99,9 @@ bloom has no threshold. The mix keeps the energy of the image.
 256 bins between -10 and 6 EV, with a weight that falls from the centre of the view. The bins are a frame buffer whose
 zeros the CPU uploads each frame. `exposureAdapt` is one group that drops the darkest 50 % and the brightest 2 % of the
 weight, takes the mean of the rest and gives the exposure of a grey card at 0.18 with the compensation. It moves the
-exposure of the last frame towards it at the speed of adaptation, 3 per second up and 1.5 per second down, and clamps
-it to the limits. A reset or the first frame takes the target at once. `exposure` and `exposurePrevious` are 1 by 1
-R32_FLOAT storage targets. `exposureKeep` copies the one into the other for the next frame. With auto exposure off,
+exposure of the last frame towards it at the speed of adaptation, 3 per second up and 1.5 per second down and clamps
+it to the limits. A reset or the first frame takes the target at once. `exposure` is a 1 by 1 R32_FLOAT storage target
+that the adapt pass reads and writes. A value that is not a finite number counts as a reset. With auto exposure off,
 the tone map uses `settings.exposure`.
 
 The tone map pass reads the exposure, adds the bloom, applies the tone map of `settings.post.toneMap` and encodes sRGB.
@@ -115,7 +115,8 @@ The tone map pass reads the exposure, adds the bloom, applies the tone map of `s
 
 ## Point light shadows
 
-A budget, 2 by default, sets the most point lights that cast shadows. Each frame the builder scores the lights whose
+A budget, 2 by default, sets the most point lights that cast shadows. The sample starts with none on macOS, where
+each shadowed light costs about 1.5 ms of the GPU of an M2 Pro. Each frame the builder scores the lights whose
 sphere of range touches the view by intensity over the squared distance to the camera and gives the shadow slots to
 the best. A light that holds a slot keeps it while it stays in the budget. `lightColor[i].w` of the `Frame` block holds
 the slot of light i plus one, 0 for none.
@@ -123,8 +124,10 @@ the slot of light i plus one, 0 for none.
 The atlas has a row for each slot and six tiles in each row, one per face of a cube. A tile is 256, 512 or 1024 texels
 at low, medium and high quality. A face draws with the shadow shaders of the sun and a perspective projection of 90
 degrees from 0.05 m to the range of the light. Its draws are the opaque and masked draws whose bounding sphere is
-inside the range and touches the frustum of the face. A kept list for each face holds them, refilled each frame with
-no allocation. The draws of a face are made on its first use and kept.
+inside the reach of the light, half its range by default, and touches the frustum of the face. A one-sided material
+draws its front faces only. A kept list holds the draws of the atlas, refilled each frame with no allocation. The
+draws of a face are made on its first use and kept. The pass is retained with a stamp of the slots and the places of
+their lights, which skips it while the lights hold still.
 
 `bodies/point_shadow.glsl` has `pointShadow(light, worldPos, normal)`, which reads only the `Frame` block and the atlas
 with the comparison sampler s4. It works in any stage. It finds the major axis, turns the distance along it into the
@@ -140,24 +143,31 @@ The fog is a froxel grid aligned to the view, 96 by 54 by 64 at low, 160 by 90 b
 at high quality, with slices that grow exponentially from 0.25 m to the range of the fog, 60 m by default.
 
 `volumeInject` is a compute pass over every froxel. It places a point in the froxel with a depth offset from the frame
-index, takes the density of a uniform fog with an exponential falloff over height, and adds the light of the sun with
-its shadow map, of each point light with its range falloff and its point shadow, and an ambient term from the sky and
+index, takes the density of a uniform fog with an exponential falloff over height and adds the light of the sun with
+its shadow map, of each point light with its range falloff and its point shadow and an ambient term from the sky and
 ground colours, each with the Henyey-Greenstein phase function of the anisotropy setting, 0.4 by default. The result
 is blended with the last frame's froxel at the reprojected point, 1/10 of the new value, in `volumeScatter`.
 `volumeIntegrate` walks each column from near to far with the energy-conserving integration of Hillaire and writes the
-in-scattered light and the transmittance into `volumeIntegrated`, and the froxel values into `volumeHistory` for the
+in-scattered light and the transmittance into `volumeIntegrated` and the froxel values into `volumeHistory` for the
 next frame. Both are RGBA16_FLOAT volume textures. `volumeApply` is a full-screen draw that reads the depth of each
 pixel, finds its froxel with trilinear filtering and blends the light in front of the pixel over `hdr`.
 
 Ray marching each pixel at half resolution was considered. It costs one walk per pixel and point light. The froxel grid
-costs one sample per froxel and light, about a tenth of the work at 1920 by 1080, and handles any number of lights.
+costs one sample per froxel and light, about a tenth of the work at 1920 by 1080 and handles any number of lights.
 
 ## Settings
 
 The settings are groups of `PbrSettings`: `post` for TAA, bloom, exposure and the tone map, `pointShadows` and
 `volume`. `PbrQuality` has `low`, `medium` and `high`. The defaults are TAA on at medium, bloom on at medium, auto
-exposure on, the tone map AgX, two point light shadows at medium and the fog on at medium. The measured costs and the
-final defaults are in [the pbr area page](../areas/pbr.md).
+exposure on with a compensation of -0.5 EV, the tone map AgX, two point light shadows at medium and the fog on at
+medium with an extinction of 0.006 per metre. The owner chose AgX. The measured costs are in
+[the pbr area page](../areas/pbr.md#costs).
+
+## Specular anti-aliasing
+
+TAA averages a highlight that moves between pixels. It does not remove a highlight that a normal map makes smaller
+than a pixel, such as the pits of the stone. The lit shader widens the GGX lobe by the change of the normal within the
+pixel, after Kaplanyan and Tokuyoshi, with the added roughness squared capped at 0.18.
 
 ## Allocation
 
@@ -174,7 +184,7 @@ the exposure converge to a fixed image. The references of each OS change with th
 
 - The time between completions of command buffers includes the latency of the completion handlers. Small parts read
   a few tens of µs high. The performance run measures each effect by its switch as well.
-- The point shadows draw the scene again for each face. The draws of Sponza are large chunks, and a light with a range
+- The point shadows draw the scene again for each face. The draws of Sponza are large chunks and a light with a range
   of 12 m reaches most of the hall. The budget and the tile size bound the cost.
 - A storage image in a 3D texture and its sampling in the next pass need the layouts of Vulkan to change between the
   passes. The runner places barriers between dispatches. The first run on each backend checks it.

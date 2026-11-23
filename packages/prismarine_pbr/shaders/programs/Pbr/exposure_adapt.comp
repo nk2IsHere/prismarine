@@ -1,6 +1,6 @@
 #version 460
 // The mean log2 luminance of the histogram without its darkest half and its
-// brightest 2 %, clamped to the limits, and the adapted value of the last
+// brightest 2 %, clamped to the limits and the adapted value of the last
 // frame moved towards it.
 layout(local_size_x = 1) in;
 #include "Pbr/bodies/exposure_block.glsl"

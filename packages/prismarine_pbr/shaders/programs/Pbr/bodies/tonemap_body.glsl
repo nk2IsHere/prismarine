@@ -1,5 +1,5 @@
-// The tone map pass: bloom, exposure, a tone map curve, the sRGB encoding and
-// a dither of half a level. With HISTORY the pass also keeps the resolved
+// The tone map pass with bloom, exposure, a tone map curve, the sRGB
+// encoding and a dither of half a level. With HISTORY the pass also keeps the resolved
 // image for the next frame's TAA.
 precision highp float;
 #include "Pbr/bodies/exposure.glsl"

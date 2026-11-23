@@ -25,10 +25,10 @@ abstract final class PbrVolumeTargets {
 /// The near end of the froxel grid in metres.
 const volumeNear = 0.25;
 
-/// The volumetric light: a froxel grid along the view that a compute pass
-/// fills with the light that the fog scatters towards the camera, a second
-/// one that sums it from near to far and a full-screen draw that lays the
-/// sum over the scene.
+/// The volumetric light. A compute pass fills a froxel grid along the view
+/// with the light that the fog scatters towards the camera. A second one
+/// sums it from near to far and a full-screen draw lays the sum over the
+/// scene.
 class PbrVolume {
   PbrVolume(this.settings);
   final PbrSettings settings;
@@ -230,7 +230,7 @@ const _compare = SamplerState(
   mipLinear: false,
 );
 
-// The light in front of a pixel adds to it, and its transmittance scales
+// The light in front of a pixel adds to it and its transmittance scales
 // what was there.
 const _applyState = DrawState(
   cull: 'none',

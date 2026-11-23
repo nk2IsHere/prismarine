@@ -67,6 +67,9 @@ class SampleRenderer {
         break;
       }
     }
+    // Each shadowed point light costs about 1.5 ms of the GPU of an M2 Pro
+    // at 1920 by 1080, more than the frame of 120 Hz leaves.
+    if (Platform.isMacOS) builder.settings.pointShadows.budget = 0;
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
     final credits = [
@@ -134,7 +137,7 @@ class SampleRenderer {
   List<String> _labels = const [];
 
   /// Builds the plan of camera [camera] at [width] by [height], [dt]
-  /// seconds after the last frame, and runs it. Returns the future of the
+  /// seconds after the last frame and runs it. Returns the future of the
   /// run, which completes when the GPU is done.
   Future<bool> submit(
     PbrCamera camera,

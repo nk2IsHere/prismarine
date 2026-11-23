@@ -31,7 +31,7 @@ abstract final class PbrPostTargets {
   static final _bloom = [for (var i = 0; i < 8; i++) 'bloom$i'];
 }
 
-/// The passes after the scene: the TAA resolve, the auto exposure, the
+/// The passes after the scene, the TAA resolve, the auto exposure, the
 /// bloom chain and the tone map into the backbuffer, with the overlays of
 /// the builder.
 class PbrPost {

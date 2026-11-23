@@ -31,6 +31,12 @@ uniform texture2D exposure; // t3
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 color;
 
+// A colour that is not a finite number becomes black. It would stay in the
+// history for good.
+vec3 finite(vec3 c) {
+  return any(isnan(c)) || any(isinf(c)) ? vec3(0.0) : max(c, vec3(0.0));
+}
+
 vec3 toYCoCg(vec3 c) {
   return vec3(dot(c, vec3(0.25, 0.5, 0.25)), dot(c, vec3(0.5, 0.0, -0.5)),
               dot(c, vec3(-0.25, 0.5, -0.25)));
@@ -43,7 +49,7 @@ vec3 fromYCoCg(vec3 c) {
 // The colour of the pixel at [p] in YCoCg, after the exposure and a
 // compression that keeps a bright pixel from ruling the box.
 vec3 sampleAt(ivec2 p, ivec2 last, float e) {
-  vec3 c = texelFetch(sampler2D(hdr, s0), clamp(p, ivec2(0), last), 0).rgb * e;
+  vec3 c = finite(texelFetch(sampler2D(hdr, s0), clamp(p, ivec2(0), last), 0).rgb) * e;
   return toYCoCg(c / (1.0 + max(c.r, max(c.g, c.b))));
 }
 
@@ -123,7 +129,7 @@ void main() {
   if (any(lessThan(at, vec2(0.0))) || any(greaterThan(at, vec2(1.0)))) weight = 1.0;
   vec3 h = quality == 2 ? historyCatmullRom(at, 1.0 / texel)
                         : texture(sampler2D(history, s3), at).rgb;
-  h *= e;
+  h = finite(h) * e;
   h = toYCoCg(h / (1.0 + max(h.r, max(h.g, h.b))));
   if (quality == 0) {
     h = clamp(h, lo, hi);

@@ -1,7 +1,8 @@
 # prismarine_sample
 
 The sample of prismarine shows Intel's Sponza, the palace atrium with its arches, columns and coloured curtains. A sun
-with a shadow map and eight coloured point lights that move through the hall light it. You fly through it with the
+with a shadow map and eight coloured point lights that move through the hall light it, two of them with shadows, in a
+light fog. TAA, auto exposure, bloom and the AgX tone map finish the frame. You fly through it with the
 mouse and keyboard or with a gamepad. [prismarine_pbr](../../docs/areas/pbr.md) builds the frames and
 [prismarine_render](../../docs/areas/render.md) records them on Flutter GPU, on Metal on macOS and on Vulkan on Linux
 and Windows. The same app is the smoke test of the gate and a performance scene.
@@ -43,13 +44,14 @@ platform.
 The app starts at the first camera of the scene. W, A, S and D move, Q and E move down and up, Shift moves faster, a
 mouse drag turns the view and the wheel sets the speed. A gamepad moves with the left stick, turns with the right
 stick and moves down and up with the triggers. Space stops and starts the lights. F1 shows the debug panel with the
-frame graph and the settings of the lights and their markers, the sun, the shadow map with a view of it and the
-camera.
+frame graph and the settings of the lights and their markers, the sun, the shadow maps with a view of them, the camera
+and each effect of the renderer. While the panel shows, the frame graph splits the GPU time into the parts of the
+frame and the title of each effect gives its GPU time.
 
 | Option | Effect |
 |---|---|
 | `--data=<dir>` | The data directory. The default is `PRISMARINE_SAMPLE_DATA`, else `data/sample` of the repository. |
-| `--smoke` | Renders a frame from each camera of the scene at 1280 by 720 and compares it with the reference in `smoke/<os>` of the data directory. A frame passes with the same hash, or with at most 0.1 % of its pixels more than 2 levels away. Prints one `SMOKE` line per frame and exits with 0 when every frame passed. |
+| `--smoke` | Renders 24 frames from each camera of the scene at 1280 by 720, after a reset of the temporal passes and compares the last with the reference in `smoke/<os>` of the data directory. A frame passes with the same hash, or with at most 0.1 % of its pixels more than 2 levels away. Prints one `SMOKE` line per frame and exits with 0 when every frame passed. |
 | `--record` | With `--smoke`, writes the frames as the new references. |
 | `--perf=<seconds>` | Flies a fixed path at 1920 by 1080 and writes the frame times into `--out`. Prints a `PERF` line with the frame interval, the build, record and GPU times. |
 | `--shot=<png>` | Lays the view out at 1600 by 900 points and writes a picture of it after `--shot-after=<seconds>`, 8 by default. `--panel` opens the panel. |
@@ -57,10 +59,21 @@ camera.
 | `--no-shadows` | Starts with the sun's shadows off. |
 | `--sun=<elevation>,<azimuth>` | The direction of the sun in degrees. The default is the scene's directional light when its intensity is above 0, else a high sun. |
 | `--background` | A small window that does not take focus, for unattended runs. |
+| `--timed` | Splits the frames of `--perf` into timed parts and prints the GPU time of each part. |
+| `--taa=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
+| `--bloom=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
+| `--exposure=<e>` | `auto`, or a fixed factor such as `1.5`. Auto by default. |
+| `--ev=<ev>` | The compensation of auto exposure in EV, -0.5 by default. |
+| `--tonemap=<t>` | `agx`, `aces`, `acesFit` or `neutral`. AgX by default. |
+| `--point-shadows=<n>[,<q>]` | The point lights that cast shadows and their quality, such as `4,high`. 2 at medium by default, 0 on macOS. |
+| `--fog=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
+| `--fog-density=<d>`, `--fog-anisotropy=<g>` | The extinction of the fog per metre, 0.006 by default and its forward scattering, 0.5. |
 
-At 1920 by 1080 the scene holds 120 Hz on a Mac with an Apple GPU, with about 6.1 ms on the GPU, and 60 Hz on Linux
-with an RTX 4060 Ti, with about 5.4 ms on the GPU. A frame has 904 draws and records the shadow pass only when the sun
-moves.
+At 1920 by 1080 with the default effects the scene holds 120 Hz on a Mac with an M2 Pro, with about 6.9 ms on the GPU,
+and 60 Hz on Linux with an RTX 4060 Ti, with about 5.6 ms on the GPU. A frame has about 920 draws and 670 more for the
+two shadowed point lights. It records the shadow pass of the sun only when the sun moves and the pass of the point
+shadows only when the lights move. Each shadowed point light costs about 1.5 ms of the GPU of the Mac, which is why
+the Mac starts without them. The costs of the effects are on [the pbr page](../../docs/areas/pbr.md#costs).
 
 ## Example
 

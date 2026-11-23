@@ -4,7 +4,7 @@ import 'package:prismarine_pbr/prismarine_pbr.dart';
 
 import 'sample_renderer.dart';
 
-/// The sections of the panel for the effects of the renderer: anti-aliasing,
+/// The sections of the panel for the effects of the renderer, anti-aliasing,
 /// exposure and bloom, the point light shadows and the fog. Each title holds
 /// the GPU time of the effect in the last frame. [changed] runs a change and
 /// rebuilds the panel.
