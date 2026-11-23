@@ -1,0 +1,5 @@
+{
+  "about": "code_shape ratchet: files over 1,000 lines may not grow; per-package hit counts may not grow. Lower it with `dart tools/lint/code_shape.dart --update-baseline`.",
+  "size": {},
+  "packages": {}
+}

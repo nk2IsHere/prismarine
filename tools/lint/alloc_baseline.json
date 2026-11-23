@@ -1,0 +1,20 @@
+{
+  "about": "alloc ratchet: per-package counts of allocation places in per-frame code may not grow. Lower it with `dart tools/lint/alloc.dart --update-baseline`.",
+  "packages": {
+    "packages/prismarine_jobs": {
+      "new": 8,
+      "closure": 3,
+      "iterate": 1,
+      "async": 1,
+      "sdk": 7
+    },
+    "packages/prismarine_snap": {
+      "new": 18,
+      "literal": 11,
+      "string": 9,
+      "closure": 6,
+      "box": 1,
+      "iterate": 2
+    }
+  }
+}

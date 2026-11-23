@@ -1,0 +1,27 @@
+# The frame's entry points: what a steady frame calls from outside the code
+# the lint can follow (an app's frame loop, an isolate's message loop).
+# <file>[#<Member>]  <who calls it>
+#
+# The job pool and the snapshot codec are reached from an app's frame:
+# a load queued or polled each frame, a snapshot written or read between
+# two frames.
+packages/prismarine_jobs/lib/src/job_pool.dart#JobPool.run  an app's frame, queueing a load
+packages/prismarine_jobs/lib/src/job_pool.dart#JobPool._pump  the pool, as a job ends
+packages/prismarine_jobs/lib/src/job_pool.dart#JobPool._checkIdle  the pool, as a job ends
+packages/prismarine_jobs/lib/src/job_pool.dart#_Job.start  the pool, starting a job
+packages/prismarine_jobs/lib/src/job_pool.dart#_Job.fail  the pool, failing a job
+packages/prismarine_jobs/lib/src/job_pool.dart#_Job.new  the pool, making a job
+packages/prismarine_jobs/lib/src/job_pool.dart#_Queued.new  the pool, queueing a job
+packages/prismarine_jobs/lib/src/job_pool.dart#_background  a worker isolate, at its start
+packages/prismarine_snap/lib/src/snap_writer.dart#SnapWriter.values  an app's snapshot, between two frames
+packages/prismarine_snap/lib/src/snap_writer.dart#SnapWriter.strs  an app's snapshot
+packages/prismarine_snap/lib/src/snap_writer.dart#SnapWriter.map  an app's snapshot
+packages/prismarine_snap/lib/src/snap_writer.dart#SnapWriter.iter  an app's snapshot
+packages/prismarine_snap/lib/src/snap_writer.dart#SnapWriter._grow  the writer, as its buffer fills
+packages/prismarine_snap/lib/src/snap_writer_graph.dart#_SnapWriterGraph._object  the writer, at an object's first reference
+packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.value  an app's snapshot restore
+packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.values  an app's snapshot restore
+packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.list  an app's snapshot restore
+packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.str  an app's snapshot restore
+packages/prismarine_snap/lib/src/snap_reader.dart#SnapReader.bytes  an app's snapshot restore
+packages/prismarine_snap/lib/src/snap_registry.dart#snapFn  a codec, naming a function
