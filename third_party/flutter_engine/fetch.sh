@@ -7,8 +7,8 @@
 # machine. Windows uses fetch.ps1.
 #
 # The settings below are also read in their MCSM_ form.
-#   PRISMARINE_ENGINE_DIR      the engine directory, by default $MCSM_DATA/engine
-#                              or else data/engine of this checkout
+#   PRISMARINE_ENGINE_DIR      the engine directory, by default
+#                              ~/.prismarine/engine, the one of the toolchain
 #   PRISMARINE_FLUTTER         the Flutter SDK, by default the flutter on PATH
 #   PRISMARINE_ENGINE_REPO     owner/name of the release repository, by default
 #                              its value in a private/config/*.env above this
@@ -19,7 +19,6 @@
 # The unpacking needs tar and xz.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-repo_root=$(cd "$here/../.." && pwd)
 # setting <key> prints the value of the key in the nearest private/config/*.env
 # above this directory that has it.
 setting() {
@@ -35,8 +34,7 @@ setting() {
     d=$(dirname "$d")
   done
 }
-dest=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
-dest=${dest:-$repo_root/data/engine}
+dest=${PRISMARINE_ENGINE_DIR:-$HOME/.prismarine/engine}
 flutter_sdk=${PRISMARINE_FLUTTER:-${MCSM_FLUTTER:-}}
 if [[ -z $flutter_sdk ]]; then
   command -v flutter >/dev/null || { echo "fetch.sh: no Flutter SDK. Set PRISMARINE_FLUTTER or put flutter on PATH." >&2; exit 1; }
