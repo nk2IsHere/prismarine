@@ -14,4 +14,6 @@ private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`
 `prismarine_jobs`, `prismarine_cargo`, `prismarine_pad` and `prismarine_frame`, each with a page in `docs/areas/`.
 mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout with its own
 config. The heavy-job and measure locks of each machine are the scripts in `tools/machine/`, which both repositories
-use. Step 5, the runner behind a `RenderAssets` interface, follows.
+use. The first half of step 9 and step 10 are done. `prismarine_loop` and `prismarine_scene` are Flutter packages
+outside the pub workspace, each with a page in `docs/areas/`. Step 5, the runner behind a `RenderAssets` interface,
+follows.
