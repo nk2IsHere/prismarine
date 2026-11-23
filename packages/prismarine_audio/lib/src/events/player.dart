@@ -6,16 +6,15 @@ import '../pcm_source.dart';
 import 'instance.dart';
 import 'rng.dart';
 
-/// Loads a waveform's samples (decoding is the host's: `mcsm_audio_out`);
-/// null when it can't.
+/// Returns the decoded samples of a waveform, or null when it does not load.
 typedef SampleLoader = PcmSource? Function(WaveformDef w);
 
-/// Plays FMOD Studio events from the slice's converted banks, deterministically
-/// at 48 kHz (plan 3d Task 4). Each instance renders into its input bus's
-/// mixer bus; the mixer graph (Task 5) takes it from there.
+/// Plays the events of a project, deterministically at 48 kHz. Each instance
+/// renders into the mixer bus of its input bus, and a [MixerGraph] mixes the
+/// buses.
 class EventPlayer {
-  /// [events] by path. An instance without an input bus plays into the
-  /// mixer bus [defaultBus].
+  /// [events] are keyed by path. An instance without an input bus plays into
+  /// the mixer bus [defaultBus].
   EventPlayer(
     Map<String, EventDef> events,
     this.loadSample, {
@@ -32,20 +31,18 @@ class EventPlayer {
   final _samples = <String, PcmSource?>{};
   int _started = 0;
 
-  /// The most low-level channels played at once so far (after a block):
-  /// FMOD 1.06 virtualises the quietest past 64 (GameApp.exe initializes
-  /// Studio with 128 channels and keeps the 64 software ones; see
-  /// formats/telltale/fmod-runtime.md, "Polyphony").
+  /// The most sounds played at once so far, counted after each block.
   int peakChannels = 0;
 
-  /// Starts a snapshot on the mixer (an event instrument on a snapshot);
-  /// null when there is no mixer.
+  /// Starts a mix state on the mixer for a mix state instrument, null
+  /// without a mixer.
   MixStateInstance? Function(EventDef def)? startMixState;
 
-  /// Live instances, in start order.
+  /// The live instances in start order.
   final instances = <EventInstance>[];
 
-  /// Each problem once: unknown events, missing samples, unsupported content.
+  /// Each problem once, such as an unknown event, a missing sample or an
+  /// unsupported instrument.
   final problems = <String>{};
 
   void problem(String message) {
@@ -55,9 +52,9 @@ class EventPlayer {
   bool has(String path) => _events.containsKey(path);
   EventDef? event(String path) => _events[path];
 
-  /// Starts [path] [seek] seconds into its timeline; [programmer] is the
-  /// sound its programmer instruments play. Null (and a problem) for an
-  /// unknown event.
+  /// Starts [path] [seek] seconds into its timeline. [slot] is the sound that
+  /// its slot instruments play. Returns null for an unknown event, with a
+  /// problem, and for a start that the polyphony limit refuses.
   EventInstance? start(String path, {double seek = 0, PcmSource? slot}) {
     final hit = _events[path];
     if (hit == null) {
@@ -76,11 +73,10 @@ class EventPlayer {
     return i;
   }
 
-  /// FMOD's event polyphony (O, fmod.dll 1.06.02 with patched banks;
-  /// docs/formats/fmod-bank.md "Polyphony"): with [EventDef.maxPolyphony]
-  /// instances live, a new start fails (behaviour 0: the instance reports
-  /// stopped and plays nothing) or stops the oldest (2: it is cut one mix
-  /// block later). Instances already cut don't count. False: refused.
+  /// Applies the polyphony limit of [d]. With [EventDef.maxPolyphony]
+  /// instances live, a new start fails or stops the oldest, which is cut one
+  /// block later. Instances already cut do not count. Returns false for a
+  /// refused start.
   bool _admit(EventDef d) {
     if (d.maxPolyphony <= 0) return true;
     EventInstance? oldest;
@@ -100,24 +96,23 @@ class EventPlayer {
     }
   }
 
-  /// [w]'s samples, loaded once.
+  /// Returns the samples of [w], loaded once.
   PcmSource? sample(WaveformDef w) => _samples.putIfAbsent(w.key, () {
     final s = loadSample(w);
     if (s == null) problem('no sample ${w.label}');
     return s;
   });
 
-  /// Forgets the loaded samples (a scene change in real time: the host's
-  /// cache keeps what is still wanted; playing instances keep their own).
+  /// Forgets the loaded samples. Playing instances keep their own.
   void forgetSamples() => _samples.clear();
 
-  /// The last [render]'s 5.1 outputs (S2 events whose output is 5.1),
-  /// summed per output bus path.
+  /// The 5.1 outputs of the last [render], of the events whose output is
+  /// 5.1, summed by output bus path.
   final outputs51 = <String, Float32List>{};
 
-  /// Renders [frames] of every live instance, summed per output bus path
-  /// (stereo, interleaved; 5.1 ones in [outputs51]); finished instances are
-  /// dropped.
+  /// Renders [frames] frames of every live instance, summed by output bus
+  /// path in interleaved stereo, with the 5.1 ones in [outputs51]. Finished
+  /// instances are dropped.
   Map<String, Float32List> render(int frames) {
     final out = <String, Float32List>{};
     outputs51.clear();

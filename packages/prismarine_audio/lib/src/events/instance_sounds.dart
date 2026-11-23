@@ -1,7 +1,7 @@
 part of 'instance.dart';
 
-/// A source into a strip: mono into stereo upmixes; stereo into mono
-/// downmixes (BusStrip's rule).
+/// Returns the gain of a source into a strip. Mono into stereo upmixes and
+/// stereo into mono downmixes, as in [BusStrip.add].
 (double, bool) _format(PcmSource src, BusStrip bus) {
   final mono = src.channels == 1;
   if (mono && !bus.mono) return (upmixGain, false);
@@ -22,46 +22,48 @@ class _Locked {
   final BusStrip bus;
   final double rate, gain;
 
-  /// The waveform repeats to fill its box (Placement.fill).
+  /// The waveform repeats to fill its box, from [Placement.fill].
   final bool fill;
 
-  /// The start offset in source frames (property 9).
+  /// The start offset in source frames, from [Prop.startOffset].
   final double seek;
 }
 
-/// Something an instrument trigger started: a sample voice, a nested event
-/// or a scatterer.
+/// A sound that a trigger of an instrument started, a sample voice, a nested
+/// event or a scatterer.
 abstract class _Sound {
   _Sound(this.owner, {required this.cutoff});
   final Object owner;
   final bool cutoff;
   bool ended = false;
 
-  /// The instruments it was played through (a multi, then its entry…), for
-  /// their polyphony.
+  /// The instruments that it was played through, a playlist and then its
+  /// entry, for their polyphony limits.
   List<InstrumentDef> via = const [];
 
-  /// Stopped by a polyphony limit (no longer counted), and the instance's
-  /// raw pass it last rendered in.
+  /// The sound was stopped by a polyphony limit and no longer counts. [pass]
+  /// is the last pass of the instance that rendered it.
   bool stolen = false;
   int pass = 0;
 
-  /// Stopped by a polyphony limit at block frame [at] of [i]'s pass.
+  /// Stops the sound for a polyphony limit at block frame [at] of the pass
+  /// of [i].
   void steal(EventInstance i, int at) => stolen = ended = true;
 
-  /// Renders this block; false once finished.
+  /// Renders this block. Returns false once finished.
   bool render(EventInstance i, int frames);
 
-  /// Its instance finished.
+  /// Ends the sound when its instance finished.
   void dispose() {}
 
-  /// Its trigger region was left.
+  /// Ends the sound or its cutoff when its trigger region was left.
   void untrigger() {
     if (cutoff) ended = true;
   }
 }
 
-/// A triggered (async, parameter-sheet or spawned) sample playing to its end.
+/// A triggered sample that plays to its end, from the timeline, a parameter
+/// sheet or a scatterer.
 class _Voice extends _Sound {
   _Voice(
     this.reader,
@@ -79,25 +81,26 @@ class _Voice extends _Sound {
   final double rate, gain;
   final bool loop;
 
-  /// Left/right gains replacing the mono upmix (a spawned sound's 3D
-  /// position), or null.
+  /// The left and right gains in place of the mono upmix, from the position
+  /// of a spawned sound, or null.
   final (double, double)? pan;
   int delay;
   double pos = 0;
 
-  /// Semitones on top of [rate] this block: a scatterer's pitch envelope
-  /// moving its spawn.
+  /// The semitones on top of [rate] in this block, from the pitch envelope
+  /// of the scatterer that spawned it.
   double bend = 0;
 
-  /// A stolen voice's declick: the pass frame it starts at (this pass or,
-  /// once rendered, the next one's start) and the frames of it done.
+  /// The declick of a stolen voice, the pass frame that it starts at and the
+  /// frames of it that are done. The start is in this pass, or at the start
+  /// of the next pass once this one rendered.
   int? fadeFrom;
   int faded = 0;
 
   @override
   void steal(EventInstance i, int at) {
     stolen = true;
-    // Not started yet: it never sounds.
+    // The voice was stopped before it started and does not sound.
     if (delay > at || !pcmReady(reader.source)) {
       ended = true;
       return;
@@ -108,7 +111,8 @@ class _Voice extends _Sound {
   @override
   bool render(EventInstance i, int frames) {
     if (ended) return false;
-    // Its data is still loading: it starts late, from its first sample.
+    // The data is still loading, and the voice starts late from its first
+    // sample.
     if (!pcmReady(reader.source)) {
       delay = math.max(0, delay - frames);
       return true;
@@ -122,14 +126,15 @@ class _Voice extends _Sound {
     final r = bend == 0 ? rate : rate * libm.dpow(2, bend / 12);
     var (k, down) = _format(reader.source, bus);
     var gl = 1.0, gr = 1.0;
-    // A quad source's rear pair goes to a 5.1 strip's SL and SR.
+    // The rear pair of a quad source goes to SL and SR of a 5.1 strip.
     final rear = bus.wide && reader.source.channels >= 4 ? bus.input51 : null;
     if (pan case (final l, final r)) {
       if (bus.mono) {
-        // A mono bus hears the distance only.
+        // A mono bus takes the distance gain only.
         k *= math.sqrt(l * l + r * r);
       } else {
-        // Mono sources pan at constant power; stereo ones balance (×√2).
+        // Mono sources pan at constant power, and stereo ones balance with
+        // a factor of √2.
         final s = reader.source.channels == 1 ? 1.0 : math.sqrt2;
         k = 1;
         gl = l * s;
@@ -138,8 +143,7 @@ class _Voice extends _Sound {
     }
     final from = fadeFrom;
     if (from != null) {
-      // Up to the fade at full gain, then 64 frames down to silence (O:
-      // FMOD's stolen spawns fade within ~2–3 ms) [I: linear].
+      // Full gain up to the fade, then 64 frames down to silence, linearly.
       final f0 = math.max(at, from);
       if (f0 > at) {
         final next = reader.addInto(
@@ -200,8 +204,8 @@ class _Voice extends _Sound {
   }
 }
 
-/// An event instrument's nested event, rendered into the instrument's bus;
-/// its parameter stubs follow the instrument's automation.
+/// The nested event of an event instrument, rendered into the bus of the
+/// instrument. Its parameter stubs follow the automation of the instrument.
 class _Nested extends _Sound {
   _Nested(
     this.event,
@@ -219,7 +223,7 @@ class _Nested extends _Sound {
 
   @override
   void untrigger() {
-    // [I] an event instrument left with cutoff stops its event (fading).
+    // An event instrument left with cutoff stops its event with a fade.
     if (cutoff) event.stop();
   }
 
@@ -249,7 +253,7 @@ class _Nested extends _Sound {
       _buf.fillRange(0, _buf.length, 0);
     }
     if (event.outputChannels == 6) {
-      // A 5.1 nested event (S2) goes in through the strip's 5.1 rule.
+      // A 5.1 nested event goes in through the 5.1 rule of the strip.
       final b = Float32List(frames * 6);
       final o = Float32List(n * 6);
       event.render(o, n);
@@ -275,7 +279,7 @@ class _Nested extends _Sound {
     return !event.isDone;
   }
 
-  /// The nested event's sends to mixer returns, into the parent's.
+  /// Adds the sends of the nested event to mixer returns into the parent's.
   void _sends(EventInstance i, int frames, int at) {
     for (final MapEntry(:key, :value) in event.sendOutputs.entries) {
       final o = i.sendOutputs.putIfAbsent(key, () => Float32List(frames * 2));
@@ -286,12 +290,11 @@ class _Nested extends _Sound {
   }
 }
 
-/// An event instrument on a snapshot: the snapshot applies to the mixer while
-/// the instrument plays, at the instrument's snapshot intensity, with its stubs
-/// (initial values, then their automation) and its automatic parameters from
-/// the event's 3D position; it stops when the instrument is cut or its event
-/// ends (107's InVR/OutOfVR; see formats/telltale/fmod-runtime.md, "Snapshot
-/// instruments").
+/// A mix state instrument. The mix state applies to the mixer while the
+/// instrument plays, at the intensity of the instrument, with its stubs at
+/// their initial values and then their automation, and with its distance
+/// and cone parameters from the position of the event. It stops when the
+/// instrument is cut or its event ends.
 class _SnapshotSound extends _Sound {
   _SnapshotSound(
     this.inst,
@@ -353,11 +356,10 @@ class _SnapshotSound extends _Sound {
   }
 }
 
-/// A scatterer: spawns its playlist's entries, the first at once, then
-/// after uniform random intervals (seconds), while triggered; at most
-/// maxSpawnPolyphony spawned sounds live at a time (a spawn past it is
-/// skipped [INF]); spawnCount 0 spawns without limit. Spawned sounds play
-/// on when it stops (see formats/telltale/fmod-runtime.md, "Scatterers").
+/// A scatterer. While triggered it spawns the entries of its playlist, the
+/// first at once and the next after uniform random intervals in seconds.
+/// At most maxSpawnPolyphony spawned sounds are live at a time, and
+/// spawnCount 0 spawns without limit. Spawned sounds play on when it stops.
 class _Scatter extends _Sound {
   _Scatter(this.inst, this.bus, {required Object owner, required this.delay})
     : super(owner, cutoff: false);
@@ -365,21 +367,22 @@ class _Scatter extends _Sound {
   final BusStrip bus;
   final live = <_Sound>[];
 
-  /// Frames from this block's start to the next spawn.
+  /// The frames from the start of this block to the next spawn.
   int delay;
   int spawned = 0;
   bool stopped = false;
 
-  /// An AHDSR on its pitch (`amb_Wool`), its property and the pitch it was
-  /// played at (semitones); seconds since it started and into its release
-  /// (null: not releasing), the level the release started from, and
-  /// scatterer-time frames to the next spawn (null: not started).
+  /// An AHDSR on its pitch, with its property and the pitch in semitones
+  /// that it was played at. Then the seconds since the start and into the
+  /// release, null while not releasing, the level that the release started
+  /// from, and the frames in scatterer time to the next spawn, null before
+  /// the start.
   ModulatorDef? env;
   PropertyDef? pitchProp;
   double s0 = 0, age = 0, releaseFrom = 0;
   double? released, clock;
 
-  /// The envelope's level now (percent of the pitch's UI span).
+  /// The level of the envelope now, in percent of the UI span of the pitch.
   double get _level {
     final e = env!, r = released;
     if (r == null) return EventInstance.ahdsrLevel(e, age);
@@ -416,8 +419,8 @@ class _Scatter extends _Sound {
       if (max > 0 &&
           live.length >= max &&
           inst.spawnPolyphonyMode == PolyphonyMode.stealOldest) {
-        // O: `WLA_Crowd_Laugh_soft_disperse` at max 1 cuts the older
-        // spawn as the new one starts (behaviour 0 skips the new one).
+        // Stealing cuts the older spawn as the new one starts. The other
+        // mode skips the new one.
         live.removeAt(0).steal(i, delay);
       }
       if (max <= 0 || live.length < max) {
@@ -431,14 +434,13 @@ class _Scatter extends _Sound {
     return true;
   }
 
-  /// With a pitch AHDSR (O, the oracle's `amb_Wool` with the envelope
-  /// patched: per-block playback positions): the level is percent of the
-  /// pitch's UI span (−50 → −24 st), linear; it adds to the pitch the
-  /// scatterer played at and the sum stays within the property's range
-  /// (±24 st); it moves the live spawns as they play; the spawn clock runs
-  /// at that pitch (spawns 7.2–9.6 s apart came 3.8–4.6 s apart at +11 st);
-  /// leaving its region releases it from its level to 0 over the release
-  /// time, spawning on, then it stops.
+  /// Advances a scatterer with a pitch AHDSR. The level is linear in percent
+  /// of the UI span of the pitch, where −50 is −24 semitones. It adds to the
+  /// pitch that the scatterer played at, and the sum stays within the range
+  /// of the property. It moves the live spawns as they play, and the spawn
+  /// clock runs at that pitch. Leaving its region releases the envelope from
+  /// its level to 0 over the release time while it spawns on, and then the
+  /// scatterer stops.
   bool _renderEnv(EventInstance i, int frames) {
     final e = env!;
     final r = released;
@@ -491,14 +493,15 @@ class _Scatter extends _Sound {
   }
 }
 
-/// An event's output played at a pitch ratio: the event renders ahead by
-/// the ratio, and each output (its bus and every send) is read back with
+/// The output of an event played at a pitch ratio. The event renders ahead
+/// by the ratio, and each output, its bus and every send, is read back with
 /// linear interpolation.
 class _Pitched {
   _Pitched(this.ratio);
   final double ratio;
 
-  /// Frames rendered but not yet consumed, per output ('' = the bus).
+  /// The frames rendered and not yet consumed, by output, where '' is the
+  /// bus.
   final _held = <String, Float32List>{};
   int _count = 0;
   double _pos = 0;
@@ -514,7 +517,7 @@ class _Pitched {
         _append(key, value, n, 2);
       }
       for (final k in _held.keys) {
-        // Outputs this block didn't reach hold silence.
+        // Outputs that this block did not reach hold silence.
         final ch = k.isEmpty ? e.outputChannels : 2;
         if (_held[k]!.length < (_count + n) * ch) _append(k, null, n, ch);
       }

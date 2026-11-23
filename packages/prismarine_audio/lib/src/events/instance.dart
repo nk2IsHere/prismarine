@@ -16,26 +16,25 @@ import 'voice.dart';
 part 'instance_sounds.dart';
 part 'instance_timeline.dart';
 
-/// Quantized transitions take a grid point only when their condition holds at
-/// least this long before it (O: 0.459–0.502 s on `mus_autoChickenFarm`).
+/// The timeline frames by which the condition of a quantized transition
+/// must hold before a grid point for the transition to take it.
 const transitionLookahead = 0.48 * timelineRate;
 
-/// The pitch span (semitones) a random pitch modulator's percent refers to
-/// (O: ±4.1667 → ±2 st).
+/// The pitch span in semitones that the percent of a random pitch modulator
+/// refers to. ±4.1667 % is ±2 semitones.
 const _pitchSpan = 48.0;
 
 const _declick = 64;
 
-/// A stolen instance plays on for one FMOD mix block, then is cut (O: the
-/// oldest of `Destr_Wood_LightDebris_01` at max 2 ends at the block after
-/// the new start's).
+/// The frames that a stolen instance plays on, one mix block, before it is
+/// cut.
 const _stealDelay = 1024;
 
-/// A playing event (FMOD Studio EventInstance): a 48 kHz timeline cursor,
-/// parameters, voices, and the event's tracks (with their effects, automation
-/// and sends) into its master track and input bus.
+/// A playing event with a 48 kHz timeline cursor, parameters and voices.
+/// The tracks of the event, with their effects, automation and sends, mix
+/// into its master track and input bus.
 class EventInstance implements StripSink {
-  /// FMOD's paused flag: no output, no advance.
+  /// A paused instance has no output and does not advance.
   bool paused = false;
 
   EventInstance(this.player, this.def, this._rng, {this.slot, double seek = 0})
@@ -89,11 +88,10 @@ class EventInstance implements StripSink {
     _modulate();
   }
 
-  /// The master track's modulators, drawn or armed at the start: random
-  /// volume (dB) and pitch (percent of the UI span), the AHDSR on volume;
-  /// and random modulators on effect parameters (percent of their UI span,
-  /// added to the stored value's UI position) [I: by analogy with the
-  /// instrument rules, O].
+  /// Draws or arms the modulators of the master track at the start. They
+  /// are the random volume in dB and pitch in percent of the UI span, the
+  /// AHDSR on the volume, and random modulators on effect parameters in
+  /// percent of their UI span, added to the UI position of the stored value.
   void _modulate() {
     final master = def.masterTrack;
     for (final p in master.properties) {
@@ -143,8 +141,8 @@ class EventInstance implements StripSink {
     }
   }
 
-  /// A random modulator's draw [pct] (percent of [p]'s UI span) in property
-  /// units relative to the UI centre (pitch: ±4.1667 % of 48 st = ±2 st, O).
+  /// Returns the draw [pct] of a random modulator, in percent of the UI span
+  /// of [p], as property units relative to the UI centre.
   static double _uiOffset(PropertyDef p, double pct) {
     final m = p.mapping;
     if (m == null) return pct;
@@ -155,17 +153,17 @@ class EventInstance implements StripSink {
   final EventDef def;
   final Rng _rng;
 
-  /// The sound programmer instruments play (a voice line).
+  /// The sound that the slot instruments play.
   final PcmSource? slot;
 
-  /// The timeline position in 48 kHz samples.
+  /// The timeline position in 48 kHz frames.
   int cursor;
   bool _stopping = false, _done = false, _stolen = false;
 
-  /// Stopped with FMOD's immediate mode (not a fade-out or a steal).
+  /// Stopped at once, not with a fade or a steal.
   bool _immediate = false;
 
-  /// Frames into the declick (negative: frames before it starts).
+  /// The frames into the declick, negative before it starts.
   int _stopAt = 0;
 
   final _params = <String, double>{};
@@ -176,53 +174,48 @@ class EventInstance implements StripSink {
   late final List<BusStrip> _order;
   final _props = <(String, int), PropertyDef>{};
 
-  /// This block's sends into mixer returns outside the event, by path.
+  /// The sends of this block into mixer returns outside the event, by path.
   final sendOutputs = <String, Float32List>{};
   final _voices = <_Sound>[];
 
-  /// Master volume (dB) and pitch (semitones) from random modulators.
+  /// The master volume in dB and pitch in semitones from random modulators.
   double _baseDb = 0, _pitch = 0;
 
-  /// The AHDSR on the master volume (UI units through [_envMap]).
+  /// The AHDSR on the master volume, in UI units through [_envMap].
   ModulatorDef? _env;
   PiecewiseMap? _envMap;
 
-  /// Seconds since the start (the AHDSR's clock) and since the release
-  /// began (null: not releasing).
+  /// The seconds since the start, the clock of the AHDSR, and since the
+  /// release began, null while not releasing.
   double _age = 0;
   double? _released;
   double _releaseFrom = 0;
 
-  /// Pitched output: rendered frames not yet resampled, per output (main
-  /// and each send path), and the read position in them.
+  /// The pitched output, the rendered frames not yet resampled by output,
+  /// the bus and each send path, with the read position in them.
   _Pitched? _pitched;
   final _asyncInside = <bool>[];
   final _locked = <_Locked?>[];
   final _sheetInside = <SheetPlacement>{};
   final _playlists = <String, int>{};
 
-  /// Raw passes rendered (a stolen sound knows whether it has rendered
-  /// this one).
+  /// The raw passes rendered, which tells a stolen sound whether it has
+  /// rendered this one.
   int _pass = 0;
   (TransitionDef, int)? _pending;
 
   String get outputPath => def.inputBus?.outputPath ?? player.defaultBus;
 
-  /// EventInstance volume (linear), ramped over a block.
+  /// The linear volume of the instance, ramped over a block.
   double volume = 1;
   double? _volume;
 
-  /// Whether it has rendered: until then a volume is the one it starts
-  /// with (the audio thread's start sets the channel's volume before
-  /// `start()`; see formats/telltale/sound-runtime.md, "A channel starts
-  /// with its volume").
+  /// The instance has rendered. Until then a volume is its start volume.
   bool get hasPlayed => _volume != null;
   bool get isDone => _done;
 
-  /// The low-level channels it plays now (FMOD 1.06 has 64 real ones, the
-  /// rest go virtual by audibility: not modelled, measured with
-  /// [EventPlayer.peakChannels]): started sample voices, timelocked sounds
-  /// under the cursor, and its nested events' channels.
+  /// The sounds that the instance plays now, the started sample voices, the
+  /// timelocked sounds under the cursor and the sounds of its nested events.
   int get channels {
     if (_done) return 0;
     var n = 0;
@@ -237,11 +230,12 @@ class EventInstance implements StripSink {
     return n;
   }
 
-  /// Cut by its event's polyphony (it no longer counts against it).
+  /// The instance was cut by the polyphony limit of its event and no longer
+  /// counts against it.
   bool get isStolen => _stolen;
 
-  /// Stopped by a newer instance past its event's polyphony: one mix block
-  /// later it is cut with the declick.
+  /// Stops the instance for a newer one past the polyphony limit of its
+  /// event. One mix block later it is cut with the declick.
   void steal() {
     if (_done || _stolen) return;
     _stolen = true;
@@ -250,9 +244,8 @@ class EventInstance implements StripSink {
     _stopAt = -_stealDelay;
   }
 
-  /// Seconds left on the programmer sound (a dialog channel's length and
-  /// position are its sound's): its whole length before it
-  /// starts, 0 once it has finished; null without one.
+  /// The seconds left on the slot sound, its whole length before it starts
+  /// and 0 once it has finished. Null without a slot sound.
   double? get slotLeft {
     final src = slot;
     if (src == null) return null;
@@ -266,16 +259,14 @@ class EventInstance implements StripSink {
 
   bool _slotStarted = false;
 
-  /// The event's position relative to the listener (FMOD Studio's 3D
-  /// attributes, recomputed each update): direction in degrees (0 ahead,
-  /// +90 right), distance and cone angle; null until set.
+  /// The position of the event relative to the listener, the direction in
+  /// degrees with 0 ahead and +90 to the right, the distance and the cone
+  /// angle. Null until set.
   (double, double, double)? spatial;
 
-  /// Sets the event's relative position: its automatic distance parameters
-  /// (type 1, clamped to their range; O: `sfx_TempleInt_Torch_lp` reads 0.5,
-  /// 1, …, 8 then 10 for distances 0.5–30 on [0, 10]) and cone-angle
-  /// parameters (type 2, the same way; O: `SFX_furnaceFire_3D`), its PAN
-  /// DSPs, and its nested events (they play where their parent does).
+  /// Sets the position of the event relative to the listener. It sets the
+  /// distance and cone parameters, clamped to their ranges, the pan DSPs
+  /// and the nested events, which play where their parent does.
   void setSpatial(double azimuth, double distance, [double cone = 0]) {
     spatial = (azimuth, distance, cone);
     for (final p in def.parameters) {
@@ -301,8 +292,8 @@ class EventInstance implements StripSink {
   double parameter(String name) =>
       _params[_paramByName[name.toLowerCase()]?.guid] ?? 0;
 
-  /// Sets a game parameter (clamped to its range, applied at the next
-  /// render: seek speed 0); false for a name the event lacks.
+  /// Sets a game parameter, clamped to its range, from the next render on.
+  /// Returns false for a name that the event lacks.
   bool setParameter(String name, double value) {
     final p = _paramByName[name.toLowerCase()];
     if (p == null) return false;
@@ -310,9 +301,9 @@ class EventInstance implements StripSink {
     return true;
   }
 
-  /// Stops: with [fade] and an AHDSR on the master volume, through its
-  /// release (O: `AMB_FieldNightLoop` fades over its 1 s release, then
-  /// ends); else after a short declick.
+  /// Stops the instance. With [fade] and an AHDSR on the master volume it
+  /// fades over the release and then ends, else it ends after a short
+  /// declick.
   void stop({bool fade = true}) {
     if (_stopping || _done || _released != null) return;
     final env = _env;
@@ -326,13 +317,12 @@ class EventInstance implements StripSink {
     _stopAt = 0;
   }
 
-  /// The AHDSR's level (UI units) [t] seconds after the start, before any
-  /// release.
+  /// Returns the level of the AHDSR in UI units [t] seconds after the start,
+  /// before any release.
   double _envLevel(double t) => ahdsrLevel(_env!, t);
 
-  /// An AHDSR's level (UI units) [t] seconds after its start, before any
-  /// release: linear segments (O: FMOD 1.06 ignores the attack shape; a
-  /// pitch envelope's ramp is linear to 0.05 st).
+  /// Returns the level of [e] in UI units [t] seconds after its start, before
+  /// any release, in linear segments.
   static double ahdsrLevel(ModulatorDef e, double t) {
     if (t < e.attack) return e.initial + (e.peak - e.initial) * t / e.attack;
     t -= e.attack;
@@ -342,7 +332,7 @@ class EventInstance implements StripSink {
     return e.sustain;
   }
 
-  /// The master's modulated gain [dt] seconds into this block.
+  /// Returns the modulated gain of the master [dt] seconds into this block.
   double _envGain(double dt) {
     final e = _env;
     if (e == null) return 1;
@@ -356,7 +346,7 @@ class EventInstance implements StripSink {
     return dbToGain(_envMap?.map(ui) ?? ui);
   }
 
-  /// Nested events take their parameter values from their stubs.
+  /// Sets a parameter by id, for the stubs of a nested event.
   void setParameterGuid(String guid, double value) {
     final p = def.parameters.where((p) => p.guid == guid).firstOrNull;
     if (p == null) return;
@@ -369,19 +359,16 @@ class EventInstance implements StripSink {
     return v != null && v >= lo && v <= hi;
   }
 
-  /// Adds [frames] stereo frames of the event's output into [out]; sends to
-  /// mixer returns land in [sendOutputs]. A pitched event (its master's
-  /// pitch modulation, or an event instrument's pitch) plays its whole
-  /// output resampled, as its channel group's pitch does [I: effects inside
-  /// it are resampled too].
+  /// Adds [frames] stereo frames of the event's output into [out], with the
+  /// sends to mixer returns in [sendOutputs]. A pitched event, by the pitch
+  /// modulation of its master or the pitch of an event instrument, plays its
+  /// whole output resampled, effects included.
   void render(Float32List out, int frames) {
     sendOutputs.clear();
     if (_done) return;
     if (paused) {
-      // FMOD's immediate stop ends a paused instance at once, its nested
-      // snapshots with it; a fade-out waits for the resume [O: FMOD 1.09,
-      // a paused MIXEvent_MUS stopped with mode 1 lets the music bus up in
-      // that update, with mode 0 not].
+      // A stop at once ends a paused instance at once, with its nested mix
+      // states. A fading stop waits for the resume.
       if (_immediate) _finish();
       return;
     }
@@ -403,15 +390,15 @@ class EventInstance implements StripSink {
     _inputBus?.begin(frames);
     _triggerSheets();
     _timeline(frames);
-    // Sounds started while rendering (scatterer spawns) render this block.
+    // Sounds started while rendering, such as spawns, render this block.
     for (var k = 0; k < _voices.length; k++) {
       final v = _voices[k];
       v.pass = _pass;
       if (!v.render(this, frames)) v.ended = true;
     }
     _voices.removeWhere((v) => v.ended);
-    // The instance volume (with the master's random volume and AHDSR) is
-    // the master track's fader gain (BusStrip.faderFrom/To).
+    // The instance volume, with the random volume and the AHDSR of the
+    // master, is the fader gain of the master track.
     final base = dbToGain(_baseDb);
     _master
       ..faderFrom = (_volume ?? volume) * base * _envGain(0)
@@ -468,8 +455,7 @@ class EventInstance implements StripSink {
       if (_released! >= _env!.release) _finish();
       return;
     }
-    // An event plays on while its tracks' effects ring out (O: the Echo
-    // return of `sfx_bigGhast_moan` repeats for 4 s after its sound).
+    // An event plays on while the effects of its tracks ring out.
     if (cursor >= def.timeline.length &&
         _voices.isEmpty &&
         _pending == null &&
@@ -479,7 +465,7 @@ class EventInstance implements StripSink {
     }
   }
 
-  /// The output's channels: 6 for an event whose output is 5.1 (S2).
+  /// The channels of the output, 6 for an event whose output is 5.1.
   int get outputChannels => (_inputBus ?? _master).outputChannels;
 
   @override
@@ -496,8 +482,7 @@ class EventInstance implements StripSink {
       return;
     }
     if (channels == 6) {
-      // Sends out of an event leave it in stereo [I: no S2 event sends
-      // after a surround PAN].
+      // Sends out of an event leave it in stereo.
       buf = downmix51(buf, buf.length ~/ 6);
       mono = false;
     }
@@ -513,7 +498,7 @@ class EventInstance implements StripSink {
   void sidechain(List<String> targets, Float32List buf) =>
       player.problem('sidechain inside an event: ${def.path}');
 
-  /// An automated property's value now (mapped), or null.
+  /// Returns the mapped value of an automated property now, or null.
   double? _prop(String owner, int index) => _automated(_props[(owner, index)]);
 
   void _finish() {
@@ -532,7 +517,8 @@ class EventInstance implements StripSink {
             _params[_paramByName[a.parameterName?.toLowerCase()]?.guid] ??
             0);
 
-  /// [p]'s automated value in property units, or null when not automated.
+  /// Returns the automated value of [p] in property units, or null when it
+  /// has no automation.
   double? _automated(PropertyDef? p, [double Function(AutomationDef)? x]) {
     if (p == null || p.automation.isEmpty) return null;
     double? r;
@@ -552,8 +538,9 @@ class EventInstance implements StripSink {
 
   // --- triggering --------------------------------------------------------
 
-  /// Parameter-sheet instruments start when their parameter enters their
-  /// range (default values included) and, with cutoff, stop when it leaves.
+  /// Starts the instruments of parameter sheets when their parameter enters
+  /// their range, the default values included. With cutoff they stop when it
+  /// leaves.
   void _triggerSheets() {
     for (final p in def.parameters) {
       final v = _params[p.guid] ?? p.defaultValue;
@@ -571,8 +558,9 @@ class EventInstance implements StripSink {
     }
   }
 
-  /// [owner]'s trigger region was left: cutoff sounds end, nested events
-  /// with cutoff stop, scatterers stop spawning.
+  /// Ends the sounds of [owner] whose trigger region was left. Cutoff
+  /// sounds end, nested events with cutoff stop and scatterers stop
+  /// spawning.
   void _cut(Object owner) {
     for (final v in _voices) {
       if (v.owner == owner) v.untrigger();
@@ -580,8 +568,8 @@ class EventInstance implements StripSink {
     _voices.removeWhere((v) => v.ended);
   }
 
-  /// Starts [inst] at block frame [at]: its trigger chance and delay are
-  /// drawn first [I: chance in %, delay in ms, uniform].
+  /// Starts [inst] at block frame [at] after drawing its trigger chance in
+  /// percent and its delay in ms, both uniform.
   void _trigger(InstrumentDef inst, int at, {required Object owner}) {
     if (inst.triggerChance < 100 && _rng.next() * 100 >= inst.triggerChance) {
       return;
@@ -599,11 +587,10 @@ class EventInstance implements StripSink {
     );
   }
 
-  /// FMOD's instrument polyphony, counted per event instance (O: a limit
-  /// on `Destr_Wood_LightDebris_01`'s instrument doesn't limit four
-  /// instances): with [InstrumentDef.maxPolyphony] of its sounds live, a
-  /// trigger fails (behaviour 0) or stops the oldest at block frame [at]
-  /// (2) [I: as events and scatterer spawns do]. False: refused.
+  /// Applies the polyphony limit of [inst], counted per event instance.
+  /// With [InstrumentDef.maxPolyphony] of its sounds live, a trigger fails
+  /// or stops the oldest at block frame [at]. Returns false for a refused
+  /// trigger.
   bool _admit(InstrumentDef inst, int at) {
     _Sound? oldest;
     var live = 0;
@@ -624,9 +611,8 @@ class EventInstance implements StripSink {
     }
   }
 
-  /// Plays [inst] (single, programmer, multi, event or scatterer) into
-  /// [bus] at block frame [at], with [volume] dB and [pitch] semitones from
-  /// the instruments around it (a multi's or a scatterer's).
+  /// Plays [inst] into [bus] at block frame [at], with [volume] dB and
+  /// [pitch] semitones from the playlist or scatterer around it.
   void _play(
     InstrumentDef inst,
     int at, {
@@ -716,13 +702,13 @@ class EventInstance implements StripSink {
     }
     final PcmSource? src;
     if (inst.kind == 'slot') {
-      // Without a sound (non-dialog channels get none) it plays nothing.
+      // Without a slot sound it plays nothing.
       src = slot;
       if (src == null) return;
       _slotStarted = true;
     } else {
       final w = inst.waveform;
-      if (w == null) return; // an empty single
+      if (w == null) return;
       src = player.sample(w);
       if (src == null) return;
     }
@@ -743,11 +729,9 @@ class EventInstance implements StripSink {
     );
   }
 
-  /// The start offset (property 9) of [inst] in ms: its initial seek
-  /// position, moved by its random modulators by percent of the UI span (O:
-  /// `SFX_Building_Explosions`' ricochet multi with the modulator fixed at
-  /// 30, 45 and 60 starts its take 144,000, 216,000 and 288,000 samples in,
-  /// modulo the take's length; −10 clamps to 0).
+  /// Returns the start offset of [inst] in ms, its initial seek position
+  /// moved by its random modulators in percent of the UI span. A negative
+  /// offset is 0.
   double _startOffset(InstrumentDef inst) {
     final base = inst.initialSeekPosition;
     final p = inst.property(9);
@@ -764,16 +748,15 @@ class EventInstance implements StripSink {
     return m?.map(ui) ?? math.max(0, ui);
   }
 
-  /// A start offset of [ms] into [src], in its frames: seeking past the
-  /// end wraps (O).
+  /// Returns the start offset [ms] into [src] in its frames. An offset past
+  /// the end wraps.
   static double _seekFrames(PcmSource src, double ms) {
     if (ms <= 0 || src.frames <= 0) return 0;
     return (ms * src.sampleRate / 1000) % src.frames;
   }
 
-  /// One scatterer spawn at block frame [at]: the scatterer's playlist entry
-  /// (a multi, single or event) with the entry's random 3D offset turned
-  /// into a pan and a distance gain.
+  /// Spawns one sound of [sc] at block frame [at], an entry of its playlist
+  /// with the random 3D offset of the entry as a pan and a distance gain.
   void _spawn(_Scatter sc, int at) {
     final inst = sc.inst;
     final e = _pick(inst);
@@ -794,18 +777,14 @@ class EventInstance implements StripSink {
     }
   }
 
-  /// A spawned instrument's position: direction (property 5, UI 0–1 →
-  /// ±180°), elevation (6, ±90°) and distance (7, around
-  /// offset3dDistance), each moved by its random modulator. It pans by
-  /// direction (from behind folded to the sides, linear in angle) at
-  /// constant power, and its level is 0.5·min(1, 1/distance). [I: fitted to
-  /// the oracle's `SFX_Bat_Scatter` over 300 s (140 spawns): its levels form
-  /// the samples' two clusters ~15.5 dB under a centred mono sound, which a
-  /// fixed distance of 3 with this gain gives and a distance drawn over the
-  /// UI span (±1 UI unit) smears out; so the distance's random draw is read
-  /// as a percentage of the distance. Pans spread evenly from left to right
-  /// in both, independent of level. docs/formats/fmod-bank.md.] Null when
-  /// the instrument has no 3D offset.
+  /// Returns the left and right gains of a spawned instrument from its
+  /// direction, elevation and distance, each moved by its random modulator.
+  /// The direction maps UI 0 to 1 to ±180°, and the elevation is drawn
+  /// without effect in stereo. The random draw of the distance is a
+  /// percentage of the 3D offset distance. The sound pans by direction at
+  /// constant power, with sounds from behind folded to the sides, linear in
+  /// angle, and its level is 0.5·min(1, 1/distance). Null when the
+  /// instrument has no 3D offset.
   (double, double)? _position(InstrumentDef inst) {
     final pd = inst.property(5), pe = inst.property(6), pr = inst.property(7);
     if (pd == null && pe == null && pr == null && inst.offset3dDistance == 0) {
@@ -819,8 +798,8 @@ class EventInstance implements StripSink {
       return pct / 100;
     }
 
-    final dir = draw(pd) * 360; // UI centre 0.5 = straight ahead
-    draw(pe); // elevation: drawn, not heard in stereo [I]
+    final dir = draw(pd) * 360;
+    draw(pe);
     final dist = inst.offset3dDistance * (1 + draw(pr));
     var a = dir % 360;
     if (a > 180) a -= 360;
@@ -830,8 +809,9 @@ class EventInstance implements StripSink {
     return (libm.cos(th) * g, libm.sin(th) * g);
   }
 
-  /// A multi's next entry: weighted random, never the previous pick when
-  /// there is another (a shuffled playlist), else in order [I].
+  /// Returns the next entry of a playlist. A shuffled playlist picks at
+  /// random by weight and never the previous pick when there is another,
+  /// and another playlist goes in order.
   InstrumentDef? _pick(InstrumentDef multi) {
     final entries = multi.entries;
     if (entries.isEmpty) return null;
@@ -859,15 +839,15 @@ class EventInstance implements StripSink {
     return entries[pick].$2;
   }
 
-  /// Random modulation of property [index] on [inst], drawn now: volume in
-  /// dB, pitch as ±percent of 48 semitones (O).
+  /// Draws the random modulation of property [index] on [inst], the volume
+  /// in dB and the pitch in percent of 48 semitones.
   double _modulation(InstrumentDef inst, int index) {
     final p = inst.property(index);
     if (p == null) return 0;
     var sum = 0.0;
     for (final m in p.modulators) {
       if (m.type == 'ahdsr' && index == 1 && inst.kind == 'scatterer') {
-        continue; // _Scatter plays it
+        continue;
       }
       if (m.type != 'random') {
         player.problem('unsupported modulator ${m.type} in ${def.path}');

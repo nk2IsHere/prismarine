@@ -1,13 +1,13 @@
 part of 'instance.dart';
 
 extension _EventTimeline on EventInstance {
-  /// Advances the cursor over [frames]: loop regions, transition markers and
-  /// quantized transition regions jump it; timelocked instruments render
-  /// from its position; async ones start when it enters them.
+  /// Advances the cursor over [frames]. Loop regions, transition markers and
+  /// quantized transition regions jump it. Timelocked instruments render
+  /// from its position, and the others start when it enters them.
   void _timeline(int frames) {
     final tl = def.timeline;
     // A timelocked instrument at the cursor whose data is still loading
-    // holds the timeline (as FMOD 1.06 holds a stream's).
+    // holds the timeline.
     for (final (k, p) in tl.placements.indexed) {
       if (!p.timelocked || cursor < p.start || cursor >= p.end) continue;
       final s = _locked[k] ??= _lock(p);
@@ -72,7 +72,7 @@ extension _EventTimeline on EventInstance {
         if (run == 0) break;
       }
     }
-    // Async instruments the cursor ran past.
+    // The instruments that are not timelocked that the cursor ran past.
     for (final (k, p) in tl.placements.indexed) {
       if (!p.timelocked &&
           _asyncInside[k] &&
@@ -84,7 +84,7 @@ extension _EventTimeline on EventInstance {
   }
 
   /// Latches a quantized transition when its region holds the cursor and its
-  /// condition holds; drops it when the condition stops holding.
+  /// condition holds. Drops it when the condition stops holding.
   void _evaluateRegions() {
     final c = cursor;
     if (_pending case (final t, _)) {
@@ -107,7 +107,7 @@ extension _EventTimeline on EventInstance {
     }
   }
 
-  /// The first quantization point of [t] at or after [x].
+  /// Returns the first quantization point of [t] at or after [x].
   int _grid(TransitionDef t, double x) {
     final markers = def.timeline.tempo;
     final m = markers.lastWhere(
@@ -140,8 +140,8 @@ extension _EventTimeline on EventInstance {
     }
   }
 
-  /// A jump from [from] to [to]: async instruments left behind are cut (with
-  /// cutoff) and re-arm.
+  /// Jumps from [from] to [to]. The instruments that are not timelocked and
+  /// that the jump leaves are cut with cutoff, and they are armed again.
   void _leaveAsync(int from, int to) {
     for (final (k, p) in def.timeline.placements.indexed) {
       if (p.timelocked || !_asyncInside[k]) continue;
@@ -151,9 +151,9 @@ extension _EventTimeline on EventInstance {
     }
   }
 
-  /// Timelocked instruments over timeline [c, c + run) at block frame [at]:
-  /// each plays from (position − box start), its waveform repeating, cut at
-  /// its box end.
+  /// Renders the timelocked instruments over the timeline from [c] to
+  /// [c] + [run] at block frame [at]. Each plays from its position in its
+  /// box, its waveform repeating, cut at the end of the box.
   void _renderLocked(int c, int run, int at) {
     if (run <= 0) return;
     for (final (k, p) in def.timeline.placements.indexed) {
@@ -179,11 +179,8 @@ extension _EventTimeline on EventInstance {
       final rear = s.bus.wide && s.reader.source.channels >= 4
           ? s.bus.input51
           : null;
-      // The waveform repeats to fill its box (a 3 s loop on a 10.2 s box
-      // plays on without a gap) [O: FMOD 1.06, `SFX_Waterfall` plays
-      // continuously, `SFX_metal_move_1` repeats its 0.41 s sound over its
-      // 1.41 s box; loop_count is 0 on both], unless the bank plays it once
-      // (Placement.fill).
+      // With Placement.fill the waveform repeats to fill its box without a
+      // gap, also when its loop count is 0.
       final len = s.reader.source.frames;
       var pos = (lo - p.start) * s.rate + s.seek;
       var done = 0;
@@ -219,10 +216,9 @@ extension _EventTimeline on EventInstance {
     var inst = p.instrument;
     var volume = 0.0, pitch = 0.0;
     if (inst.kind == 'playlist') {
-      // A timelocked multi (S2) picks an entry each time its box is
-      // entered and plays it as a timelocked single, with the multi's
-      // volume and pitch on top [O: FMOD 1.09, `vo aaron wolf puppy dog bark
-      // Multi`: another entry per seed, cut at its box end].
+      // A timelocked playlist picks an entry each time its box is entered
+      // and plays it as a timelocked sample, with the volume and pitch of
+      // the playlist on top.
       volume = inst.volume + _modulation(inst, 0);
       pitch = inst.pitch + _modulation(inst, 1);
       final e = _pick(inst);
