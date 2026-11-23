@@ -7,6 +7,9 @@ that do not change and the passes whose retained stamp is unchanged. It needs th
 package's pubspec takes from `third_party/flutter_gpu`. `onGpuSubmit` receives the number of each command buffer that
 the runner submits, before the submit, for a GPU pass log.
 
+A draw's `frontCounterClockwise` counts the winding on the render target with y down, as Direct3D does. The
+counter-clockwise front faces of glTF and OpenGL in clip space are clockwise there and need `false`, the default.
+
 ## Assets
 
 The runner asks a `RenderAssets` of your application for everything that a plan names by string: shaders by id with

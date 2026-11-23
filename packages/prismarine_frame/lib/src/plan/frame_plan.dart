@@ -452,7 +452,12 @@ class Stencil {
   final int readMask, writeMask;
 }
 
-/// The raster and depth state of a draw.
+/// Raster and depth state of a draw.
+///
+/// [frontCounterClockwise] has the meaning of Direct3D 11. The winding is
+/// counted on the render target, with y down. A triangle that is
+/// counter-clockwise in clip space with y up, the front face of glTF and
+/// OpenGL, is clockwise there, which the default `false` makes the front.
 class DrawState {
   const DrawState({
     this.cull = 'back',
