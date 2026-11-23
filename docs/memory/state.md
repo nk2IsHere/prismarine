@@ -26,3 +26,7 @@ precompiled Metal libraries and a command line. mcsm keeps the settings of its s
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
 and texture arrays of the cook.
+The sample app shows Intel's Sponza, which a script fetches outside git, through the new `prismarine_pbr`, a forward
+renderer on `prismarine_render`, with `prismarine_scene` loading the glTF that `prepareGltf` of `prismarine_assets`
+writes. Its `--smoke` mode is the smoke test of the gate and its `--perf` mode a performance scene, proven on macOS
+and on Linux. The design is in [the sample scene design](../specs/2026-11-23-sample-scene-design.md).
