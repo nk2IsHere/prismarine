@@ -39,6 +39,12 @@ class Win32Window {
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
+  // Unattended runs (mcsm): the window never activates or takes focus, stays
+  // on top and out of the taskbar, and doesn't take mouse clicks. Set before
+  // Create.
+  void SetBackground(bool background) { background_ = background; }
+  bool IsBackground() const { return background_; }
+
   // Release OS resources associated with window.
   void Destroy();
 
@@ -91,6 +97,8 @@ class Win32Window {
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+
+  bool background_ = false;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

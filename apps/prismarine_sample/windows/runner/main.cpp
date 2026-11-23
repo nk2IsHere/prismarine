@@ -1,5 +1,6 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter_windows.h>
 #include <windows.h>
 
 #include "flutter_window.h"
@@ -18,15 +19,37 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   flutter::DartProject project(L"data");
+  project.set_enable_flutter_gpu(true);
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+
+  // --background runs unattended: a small window in the bottom-right corner
+  // of the work area that does not activate or take focus. The smoke test
+  // and the performance run use it.
+  bool show = true;
+  for (const auto& a : command_line_arguments) {
+    if (a == "--background") show = false;
+  }
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
+  if (!show) {
+    const unsigned w = 160, h = 90;
+    RECT work{};
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0);
+    HMONITOR monitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    const double scale = FlutterDesktopGetDpiForMonitor(monitor) / 96.0;
+    const double right = work.right / scale, bottom = work.bottom / scale;
+    size = Win32Window::Size(w, h);
+    origin = Win32Window::Point(
+        static_cast<unsigned>(right > w + 12 ? right - w - 12 : 0),
+        static_cast<unsigned>(bottom > h + 12 ? bottom - h - 12 : 0));
+  }
+  window.SetBackground(!show);
   if (!window.Create(L"prismarine_sample", origin, size)) {
     return EXIT_FAILURE;
   }
