@@ -21,4 +21,6 @@ Step 11 brings the patched engine with its git history from mcsm: `third_party/f
 `third_party/flutter_gpu` and `tools/gpu_smoke`, described in [engine](../areas/engine.md). mcsm reads the release and
 flutter_gpu through its pin. Step 6 adds `prismarine_shaders`, the impellerc bundle build with its shard cache, the
 precompiled Metal libraries and a command line. mcsm keeps the settings of its slices and calls it. Step 5 adds
-`prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface.
+`prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
+`prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
+and texture arrays of the cook.
