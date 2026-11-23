@@ -1,14 +1,15 @@
-// What the lint knows about `dart:` members: the ones that never allocate
-// and the ones that always do (tools/lint/alloc_sdk.txt, a verdict and a
-// member per line). A member not listed is reported as kind `sdk`.
+// The verdicts of the lint on `dart:` members, the ones that do not allocate
+// and the ones that always do. tools/lint/alloc_sdk.txt holds a verdict and a
+// member per line. A member not listed is reported as kind `sdk`.
 import 'dart:io';
 
 class SdkVerdicts {
   SdkVerdicts(this._byMember);
   final Map<String, String> _byMember;
 
-  /// `<verdict> <library>::<Class>.<member>` lines; `#` starts a comment.
-  /// Verdicts: `ok`, or the kind the call counts as.
+  /// Reads lines of the form `<verdict> <library>::<Class>.<member>` from
+  /// [path], where `#` starts a comment. A verdict is `ok` or the kind of the
+  /// call.
   static SdkVerdicts read(String path) {
     final out = <String, String>{};
     for (final raw in File(path).readAsLinesSync()) {
@@ -21,10 +22,10 @@ class SdkVerdicts {
     return SdkVerdicts(out);
   }
 
-  /// The verdict for a member id, looked up on the classes the receiver's
-  /// type implements ([onClasses], nearest first: `List.any` before
-  /// `Iterable.any`, and `List.add` covers a typed list's), then on the
-  /// declaring class.
+  /// Returns the verdict for the [member] id with the [name], looked up on
+  /// the classes [onClasses] that the type of the receiver implements and
+  /// then on the declaring class. [onClasses] is nearest first, `List.any`
+  /// before `Iterable.any`. `List.add` covers the add of a typed list.
   String? of(String member, String name, Iterable<String> onClasses) {
     for (final c in onClasses) {
       final v = _byMember['$c.$name'];

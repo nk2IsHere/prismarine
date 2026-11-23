@@ -1,12 +1,12 @@
-// privacy_check: fails when the public tree holds private material — the
-// owner's account names, hosts, home paths, emails, secrets, or a
+// privacy_check fails when the public tree holds private material, such as
+// the account names, hosts, home paths, emails or secrets of the owner or a
 // password-like assignment.
 //
 //   dart tools/lint/privacy_check.dart [--root=<tree>] [--strict] [--generic-only]
 //
-// Scans the tree's tracked files plus untracked ones that are not ignored.
-// The private patterns are not in this file: they come from
-// <private>/config/privacy-patterns.txt, and every value in
+// It scans the tracked files of the tree and the untracked ones that are not
+// ignored. The private patterns are not in this file. They come from
+// <private>/config/privacy-patterns.txt. Every value in
 // <private>/secrets/*.env is added as a plain-text pattern. A pattern line
 // that starts with `code: ` applies only to the files that the code lints
 // check, outside the comment_check_exempt paths of the config, where the
@@ -23,7 +23,7 @@
 // fail the check only with --strict. Without private config the check exits
 // with 2, unless --generic-only is given.
 //
-// Exit codes: 0 clean, 1 findings, 2 no private config.
+// The exit code is 0 when clean, 1 for findings and 2 without private config.
 import 'dart:convert';
 import 'dart:io';
 
@@ -35,14 +35,14 @@ class Pattern {
   final RegExp re;
   final String label;
 
-  /// A secret's value: the report masks the matched text.
+  /// True for the value of a secret. The report masks the matched text.
   final bool secret;
 
-  /// Applies to code files only.
+  /// True when the pattern applies to code files only.
   final bool codeOnly;
 }
 
-/// Password-like assignments and key material, whatever the machine.
+/// Password-like assignments and key material, on every machine.
 final generic = <Pattern>[
   Pattern(
     RegExp(
@@ -122,7 +122,7 @@ void main(List<String> args) {
   for (final rel in files) {
     final file = File('$root/$rel');
     if (!file.existsSync()) continue; // deleted in the work tree
-    // Its own generic patterns would match themselves.
+    // The generic patterns of this file would match themselves.
     if (rel == 'tools/lint/privacy_check.dart') continue;
     final bytes = file.readAsBytesSync();
     if (bytes.length > 8 << 20 || bytes.take(8000).contains(0)) continue;
@@ -176,7 +176,7 @@ String? privateDir(String root, String envName) {
   final env = Platform.environment[envName];
   if (env != null && env.isNotEmpty) return env;
   // A worktree outside the main checkout takes the private repo beside the
-  // main checkout before any other `private/` above it.
+  // main checkout before any other `private/` above the worktree.
   final common = Process.runSync('git', [
     '-C',
     root,
@@ -231,7 +231,8 @@ List<Pattern> readPatterns(File f) {
   return out;
 }
 
-/// Every value in secrets/*.env (4 characters or more) as a plain pattern.
+/// Returns every value of 4 characters or more in the secrets/*.env files of
+/// [priv] as a plain pattern.
 List<Pattern> secretPatterns(String priv) {
   final d = Directory('$priv/secrets');
   if (!d.existsSync()) return const [];
@@ -295,7 +296,7 @@ List<String> listFiles(String root) {
     ..sort();
 }
 
-/// The line around the match, the match itself masked for a secret.
+/// Returns the line around [m] with the match masked for a secret.
 String excerpt(String line, RegExpMatch m, Pattern p) {
   final from = (m.start - 40).clamp(0, line.length);
   final to = (m.end + 40).clamp(0, line.length);

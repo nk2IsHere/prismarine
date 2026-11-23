@@ -1,4 +1,4 @@
-// What the roots reach, and the allocation places in it.
+// The code that the roots reach and the allocation places in it.
 import 'package:analyzer/dart/ast/ast.dart';
 
 import 'markers.dart';
@@ -38,16 +38,17 @@ class Walk {
   final Program program;
   final SdkVerdicts sdk;
 
-  /// Each reached function and the function it was first reached from
-  /// (null: a root).
+  /// Each reached function with the function that first reached it, or null
+  /// for a root.
   final from = <String, String?>{};
   final hits = <Hit>[];
 
-  /// Functions the walk stopped at, with their reasons.
+  /// The functions where the walk stopped, with their reasons.
   final cold = <String, String>{};
 
-  /// Calls to members of our code the program holds no body for (abstract
-  /// with no override loaded, or outside the files in scope).
+  /// The calls to members of the code of the repository without a body in
+  /// the program. These members are abstract without a loaded override or
+  /// outside the files in scope.
   final unresolved = <String>{};
   final _queue = <String>[];
   final _seen = <String>{};
@@ -86,8 +87,8 @@ class Walk {
     for (final init in decl.fieldInits) {
       _readIn(init, decl.file, id, markers);
     }
-    // A generative constructor without a super initializer runs the
-    // superclass's unnamed one.
+    // A generative constructor without a super initializer runs the unnamed
+    // constructor of the superclass.
     final node = decl.node;
     if (node is ConstructorDeclaration &&
         node.factoryKeyword == null &&
@@ -119,8 +120,8 @@ class Walk {
     if (s != null) _reach('$s.new', id);
   }
 
-  /// A class with reachable code: the functions its fields keep tear-offs
-  /// of are reachable too.
+  /// Marks the class [cid] as reached from [via]. The functions whose
+  /// tear-offs its fields keep are reachable too.
   void _class(String? cid, String via) {
     if (cid == null || !_classesSeen.add(cid)) return;
     for (final t in program.classTearOffs[cid] ?? const <String>{}) {
@@ -163,7 +164,7 @@ class Walk {
           any = true;
           _reach(impl, id);
         }
-        // The member the receiver's class inherits.
+        // The member that the class of the receiver inherits.
         if (program.decls.containsKey(c.target)) {
           _reach(c.target, id);
         } else if (!any) {
@@ -178,7 +179,7 @@ class Walk {
     }
   }
 
-  /// The chain of functions from a root to [id], root first.
+  /// Returns the chain of functions from a root to [id], root first.
   List<String> chain(String id) {
     final out = <String>[];
     String? at = id;

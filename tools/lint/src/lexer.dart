@@ -1,12 +1,12 @@
-// A small lexer for the lint: it splits source into code tokens, string
-// literals and comments, with line numbers.
+// A small lexer for the lint. It splits source into code tokens, string
+// literals and comments with line numbers.
 //
-// Dart, Rust and C-like files (GLSL, .fmat, C headers) are lexed exactly
-// enough that dropping the comments and whitespace leaves the tokens the
-// compiler sees, with operators grouped as each language groups them
-// (see [_dartOperators]); same_code relies on that. The other languages
-// (shell, Python, Lua, cdb, gdb, PowerShell) only have their comments found,
-// line by line.
+// Dart, Rust and C-like files, such as GLSL, .fmat and C headers, are lexed
+// exactly enough that dropping the comments and whitespace leaves the tokens
+// that the compiler sees. Operators are grouped as each language groups them
+// ([_dartOperators]). same_code relies on that. In the other languages, such
+// as shell, Python, Lua, cdb, gdb and PowerShell, only the comments are
+// found, line by line.
 
 part 'line_comments.dart';
 
@@ -19,7 +19,7 @@ class Tok {
   final TokKind kind;
   final String text;
 
-  /// 1-based first and last line.
+  /// The first and last line, counted from 1.
   final int line;
   final int endLine;
 
@@ -29,7 +29,8 @@ class Tok {
   String toString() => '$line:${kind.name}:$text';
 }
 
-/// The language of [path] by extension, or null for files the lint skips.
+/// Returns the language of [path] by extension, or null for files that the
+/// lint skips.
 Lang? langOf(String path) {
   final dot = path.lastIndexOf('.');
   if (dot < 0) return null;
@@ -52,7 +53,8 @@ Lang? langOf(String path) {
   return null;
 }
 
-/// Whether [lang] is lexed exactly (code tokens are trustworthy).
+/// Returns true when [lang] is lexed exactly and its code tokens are
+/// trustworthy.
 bool isExact(Lang lang) =>
     lang == Lang.dart || lang == Lang.rust || lang == Lang.cLike;
 
@@ -61,9 +63,9 @@ List<Tok> lex(String src, Lang lang) => switch (lang) {
   Lang.hash || Lang.lua || Lang.cdb || Lang.ps1 => lineComments(src, lang),
 };
 
-// Multi-character operators, longest first. Both sides of a same_code
-// comparison use the same table, so a missing entry only makes the
-// comparison stricter, never looser.
+// The multi-character operators, longest first. Both sides of a same_code
+// comparison use the same table. A missing entry only makes the comparison
+// stricter and not looser.
 const _dartOperators = [
   '>>>=',
   '...?',
@@ -185,7 +187,7 @@ class _Lexer {
     return out;
   }
 
-  // Scans tokens until the end, or (inside a Dart interpolation) until the
+  // Scans tokens until the end, or inside a Dart interpolation until the
   // unmatched closing brace, which is consumed but not emitted.
   void _scan({required bool stopAtBrace}) {
     var depth = 0;
@@ -233,7 +235,8 @@ class _Lexer {
         out.add(Tok(TokKind.word, s.substring(start, i), line, line));
         continue;
       }
-      // A leading `.5` is a number in Dart and C; Rust's `x.0` is a field.
+      // A leading `.5` is a number in Dart and C. The `x.0` of Rust is a
+      // field.
       if (_isDigit(c) ||
           (lang != Lang.rust && c == 0x2e && _isDigit(_at(i + 1)))) {
         _number();
@@ -314,7 +317,7 @@ class _Lexer {
           }
         }
       }
-      // Suffixes (Rust `u32`, `f32`; C `f`, `u`).
+      // Suffixes, such as `u32` and `f32` in Rust and `f` and `u` in C.
       while (i < s.length && _isIdent(s.codeUnitAt(i))) {
         i++;
       }
@@ -322,7 +325,8 @@ class _Lexer {
     out.add(Tok(TokKind.number, s.substring(start, i), line, line));
   }
 
-  // Rust: a char literal ('a', '\n', '\u{1F600}') or a lifetime ('a).
+  // Scans a Rust char literal, such as 'a', '\n' or '\u{1F600}', or a
+  // lifetime such as 'a.
   bool _rustCharOrLifetime() {
     final start = i;
     if (_at(i + 1) == 0x5c) {
@@ -336,7 +340,7 @@ class _Lexer {
       out.add(Tok(TokKind.string, s.substring(start, i), line, line));
       return true;
     }
-    // One code point (possibly a surrogate pair), then a quote.
+    // One code point, possibly a surrogate pair, and then a quote.
     final next = _at(i + 1);
     final width = (next >= 0xd800 && next <= 0xdbff) ? 2 : 1;
     if (_at(i + 1 + width) == 0x27) {
@@ -344,7 +348,7 @@ class _Lexer {
       out.add(Tok(TokKind.string, s.substring(start, i), line, line));
       return true;
     }
-    // A lifetime: emit it as one word.
+    // A lifetime is emitted as one word.
     i++;
     while (i < s.length && _isIdent(s.codeUnitAt(i))) {
       i++;
@@ -353,7 +357,7 @@ class _Lexer {
     return true;
   }
 
-  // Scans a string literal if one starts here; returns whether it did.
+  // Scans a string literal if one starts here. Returns true if it did.
   bool _stringStart() {
     switch (lang) {
       case Lang.dart:
@@ -391,7 +395,7 @@ class _Lexer {
   bool _rustString() {
     final start = i;
     var k = i;
-    // Prefixes: b, c, r, br, cr.
+    // The prefixes b, c, r, br and cr.
     if (_at(k) == 0x62 || _at(k) == 0x63) k++;
     var raw = false;
     if (_at(k) == 0x72) {
@@ -406,7 +410,7 @@ class _Lexer {
       }
     }
     if (_at(k) == 0x27 && k == start + 1 && _at(start) == 0x62) {
-      // b'x' byte literal
+      // A b'x' byte literal.
       i = k;
       final ok = _rustCharOrLifetime();
       final t = out.removeLast();
@@ -414,7 +418,7 @@ class _Lexer {
       return ok;
     }
     if (_at(k) != 0x22) return false;
-    // A prefix must start the token (not the tail of an identifier).
+    // A prefix must start the token and not be the tail of an identifier.
     if (k != start && start > 0 && _isIdent(s.codeUnitAt(start - 1))) {
       return false;
     }
@@ -472,8 +476,9 @@ class _Lexer {
         continue;
       }
       if (!raw && c == 0x24 && _at(i + 1) == 0x7b) {
-        // ${ expression }: lex it to find its end (strings and braces nest),
-        // then drop the inner tokens: the literal is kept verbatim.
+        // A ${ expression } is lexed to find its end, since strings and
+        // braces nest. The inner tokens are then dropped and the literal is
+        // kept verbatim.
         final mark = out.length;
         i += 2;
         _scan(stopAtBrace: true);

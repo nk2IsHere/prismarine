@@ -1,5 +1,5 @@
-// same_code: proves that a commit range changes only comments, whitespace
-// and docs, so it cannot change behaviour. Usage: --help.
+// same_code proves that a commit range changes only comments, whitespace and
+// docs, which cannot change behaviour. Run it with --help for the usage.
 import 'dart:convert';
 import 'dart:io';
 
@@ -143,8 +143,8 @@ RangeResult compareRange(String base, String head) {
   return RangeResult(same, files, lines);
 }
 
-/// Where the code tokens of [a] and [b] first differ, or null when they are
-/// the same.
+/// Returns the place where the code tokens of [a] and [b] first differ, or
+/// null when they are the same.
 String? firstCodeDifference(String a, String b, Lang lang) {
   final ta = normalise(lex(a, lang), lang);
   final tb = normalise(lex(b, lang), lang);
@@ -163,14 +163,14 @@ String? firstCodeDifference(String a, String b, Lang lang) {
   return null;
 }
 
-/// The code tokens of [toks] as the comparison sees them: no comments, `>>`
-/// and `>>>` as single `>` tokens, trailing commas dropped where they don't
-/// count, Dart strings in single quotes where that keeps their value (see
-/// [singleQuoted]), and a Dart file's leading import, export and part
-/// directives in sorted order (their order has no meaning; `dart fix` sorts
-/// them for directives_ordering). Splitting `>` runs is safe because both versions
-/// compile: `> >` only parses where it closes type arguments, which is what
-/// a formatter splits.
+/// Returns the code tokens of [toks] as the comparison sees them. Comments
+/// are dropped. `>>` and `>>>` become single `>` tokens. Trailing commas are
+/// dropped where they do not count. Dart strings are in single quotes where
+/// that keeps their value ([singleQuoted]). The leading import, export and
+/// part directives of a Dart file are sorted, since their order has no
+/// meaning and `dart fix` sorts them for directives_ordering. Splitting `>`
+/// runs is safe while both versions compile. `> >` only parses where it
+/// closes type arguments, which a formatter splits.
 List<Tok> normalise(List<Tok> toks, Lang lang) {
   final code = <Tok>[];
   for (final t in toks) {
@@ -189,9 +189,9 @@ List<Tok> normalise(List<Tok> toks, Lang lang) {
   return lang == Lang.dart ? sortDirectives(out) : out;
 }
 
-/// A double-quoted Dart string with no quote or backslash inside, written
-/// with single quotes (the same value; `dart fix` makes this change for
-/// prefer_single_quotes). Other literals are returned as they are.
+/// Returns a double-quoted Dart string with no quote or backslash inside in
+/// single quotes, with the same value. `dart fix` makes this change for
+/// prefer_single_quotes. Other literals are returned as they are.
 String singleQuoted(String lit) {
   if (lit.length < 2 || !lit.startsWith('"') || lit.startsWith('"""')) {
     return lit;
@@ -203,9 +203,9 @@ String singleQuoted(String lit) {
   return "'$inner'";
 }
 
-/// [code] with the run of import/export/part directives at the top of a
-/// Dart file (after an optional `library` directive and its annotations)
-/// sorted by their text.
+/// Returns [code] with the run of import, export and part directives at the
+/// top of a Dart file sorted by their text. The run starts after an optional
+/// `library` directive and its annotations.
 List<Tok> sortDirectives(List<Tok> code) {
   var k = 0;
   bool startsDirective(int at) =>
@@ -248,8 +248,8 @@ List<Tok> sortDirectives(List<Tok> code) {
   ];
 }
 
-// Words before `(` that make a parenthesised group an expression, a pattern
-// or a condition rather than an argument or parameter list.
+// The words before `(` that make a parenthesised group an expression, a
+// pattern or a condition and not an argument or parameter list.
 const _notCallee = {
   'return',
   'yield',
@@ -279,10 +279,11 @@ const _notCallee = {
   'not',
 };
 
-/// [code] without the trailing commas that don't change meaning: before `]`
-/// and `}` always, and before `)` when the group holds another comma or is
-/// an argument or parameter list (the `(` follows a callee name, `)`, `]` or
-/// `>`). `(x,)` stays: in Dart a one-field record, in Rust a one-tuple.
+/// Returns [code] without the trailing commas that do not change meaning.
+/// These are the commas before `]` and `}` and the commas before `)` when the
+/// group holds another comma or is an argument or parameter list, where the
+/// `(` follows a callee name, `)`, `]` or `>`. `(x,)` stays, since it is a
+/// one-field record in Dart and a one-tuple in Rust.
 List<Tok> dropTrailingCommas(List<Tok> code) {
   final drop = <int>{};
   final open = <int>[]; // indices of unclosed brackets
@@ -329,13 +330,14 @@ List<Tok> dropTrailingCommas(List<Tok> code) {
   ];
 }
 
-/// [src] formatted by rustfmt for [edition], or null when rustfmt fails
-/// (not installed, or the source doesn't parse).
+/// Returns [src] formatted by rustfmt for [edition], or null when rustfmt
+/// fails because it is not installed or the source does not parse.
 String? rustfmt(String src, String edition) {
   final dir = Directory.systemTemp.createTempSync('same_code');
   try {
     final f = File('${dir.path}/in.rs')..writeAsStringSync(src);
-    // Through stdin, so rustfmt formats this file alone (not its `mod`s).
+    // Through stdin, which makes rustfmt format this file alone without its
+    // `mod`s.
     final r = Process.runSync('sh', [
       '-c',
       'rustfmt --edition "\$1" --emit stdout < "\$2"',
@@ -349,7 +351,8 @@ String? rustfmt(String src, String edition) {
   }
 }
 
-// The edition in the Cargo.toml nearest to [path] at [rev] (default 2021).
+// Returns the edition in the Cargo.toml nearest to [path] at [rev], 2021 by
+// default.
 String _edition(String rev, String path) {
   var dir = path;
   while (dir.contains('/')) {

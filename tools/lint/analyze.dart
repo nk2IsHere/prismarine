@@ -1,5 +1,6 @@
-// analyze runs the analyzer, clippy and the formatters over our code and
-// ratchets the results against the analyze baseline. Usage --help.
+// analyze runs the analyzer, clippy and the formatters over the code of the
+// repository and ratchets the results against the analyze baseline. Run it
+// with --help for the usage.
 import 'dart:convert';
 import 'dart:io';
 
@@ -45,14 +46,15 @@ Exit codes: 0 clean against the baseline, 1 something grew, 2 usage.
 String get baselinePath => LintConfig.of(repoRoot()).baseline('analyze');
 const checks = ['dart', 'flutter', 'clippy', 'format'];
 
-// Extra cargo arguments for crates that only build for one target.
+// The extra cargo arguments for crates that only build for one target.
 Map<String, List<String>> get crateArgs => LintConfig.of(repoRoot()).crateArgs;
 
 class Diag {
   Diag(this.package, this.key, this.where, this.message);
   final String package;
 
-  /// `<check>:<code>`, e.g. `dart:unused_import`, `clippy:needless_range_loop`.
+  /// The key of the form `<check>:<code>`, such as `dart:unused_import` or
+  /// `clippy:needless_range_loop`.
   final String key;
   final String where;
   final String message;
@@ -126,7 +128,8 @@ void main(List<String> args) {
   _ratchet(run, update: opt('update-baseline') != null);
 }
 
-/// One run of the checks: what was found, what was analysed, what skipped.
+/// One run of the checks with the findings and the packages that were
+/// analysed and skipped.
 class _Run {
   _Run(this.root, String? flutterRoot, this.targetDir)
     : flutterRoot = flutterRoot ?? root,
@@ -137,11 +140,12 @@ class _Run {
   final Set<String> pkgDirs;
   final diags = <Diag>[];
 
-  /// `<check>|<package>` for every package a check looked at.
+  /// `<check>|<package>` for every package that a check analysed.
   final ran = <String>{};
   final skipped = <String>[];
 
-  // Directories with Dart code outside any package, analysed from the root.
+  // The directories with Dart code outside any package, analysed from the
+  // root.
   static List<String> get looseDirs => LintConfig.of(repoRoot()).looseDirs;
 
   void dart() {
@@ -334,8 +338,8 @@ List<String> _crates(String root) => packageDirs(
   root,
 ).where((p) => File('$root/$p/Cargo.toml').existsSync()).toList()..sort();
 
-// `dart analyze --format=machine`:
-// SEVERITY|TYPE|CODE|FILE|LINE|COLUMN|LENGTH|MESSAGE
+// Parses the lines of `dart analyze --format=machine`, each of the form
+// SEVERITY|TYPE|CODE|FILE|LINE|COLUMN|LENGTH|MESSAGE.
 Iterable<Diag> _machine(
   String out,
   String dir,
@@ -361,8 +365,8 @@ Iterable<Diag> _machine(
   }
 }
 
-// `cargo clippy --message-format=json`: diagnostics whose primary span is in
-// the crate (not in a dependency).
+// Parses the output of `cargo clippy --message-format=json` into the
+// diagnostics whose primary span is in the crate and not in a dependency.
 List<Diag> _clippy(String out, String crate) {
   final diags = <Diag>[];
   final seen = <String>{};
@@ -380,7 +384,8 @@ List<Diag> _clippy(String out, String crate) {
     if (file.startsWith('/')) continue; // a dependency's source
     final code = (m['code'] as Map?)?['code'] as String? ?? level as String;
     final where = '$crate/$file:${primary['line_start']}';
-    // --all-targets reports a lib's warning once per target that builds it.
+    // --all-targets reports the warning of a lib once per target that builds
+    // it.
     if (!seen.add('$where $code')) continue;
     diags.add(
       Diag(
