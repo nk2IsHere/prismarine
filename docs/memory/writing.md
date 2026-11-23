@@ -138,7 +138,7 @@ A page for users is read by one person on their own computer, who follows it ste
 reviews of such pages.
 
 - Say what to do in concrete terms. "Each platform needs the tools of a Flutter desktop app" or "link your SDK there
-  once" leave the reader guessing; name the tools, or say which link to make from where to where.
+  once" leave the reader guessing; list the tools, or say which link to make from where to where.
 - Explain what a file or a setting is for before you give its name, as in "each version of prismarine works with one
   engine release, and `RELEASE` holds its name".
 - Leave out what the reader does not act on: how a value is stored ("the array"), how a tool works inside ("compiles
