@@ -1,4 +1,5 @@
-// The snapshot writer: primitives, object bookkeeping, typed collections.
+// The snapshot writer with its primitives, object bookkeeping and typed
+// collections.
 part of 'snap.dart';
 
 /// Writes a snapshot stream.
@@ -7,8 +8,7 @@ class SnapWriter {
 
   final SnapRegistry registry;
 
-  /// What codecs share during one write (e.g. a Lua state's boot objects),
-  /// by key.
+  /// The values that codecs share during one write, by key.
   final env = <Object, Object?>{};
   Uint8List _buf = Uint8List(1 << 16);
   int _len = 0;
@@ -19,8 +19,9 @@ class SnapWriter {
   final _strings = HashMap<String, int>();
   final _queue = Queue<(Object, SnapCodec)>();
 
-  // For error messages: the object whose state (or constructor inputs) was
-  // being written when each object was first met, and each object's tag.
+  // The parent of each object is the object whose state or constructor
+  // inputs were being written when it was first met. Error messages show
+  // the chain of parents with the tag of each object.
   final _parent = <int>[];
   final _tag = <String>[];
   final _current = <int>[];
@@ -39,13 +40,14 @@ class SnapWriter {
 
   int _originsOff = 0;
 
-  /// Container types no kind names, written as `Object?` ones (a kind to
-  /// add: their element type comes back wider).
+  /// The container types without a kind. They are written as containers of
+  /// `Object?` and their element type is read back wider. Add a kind for
+  /// each of them.
   final unknownKinds = <String>{};
 
-  /// Runs [write] with origins off: objects are written as they are, even
-  /// where [SnapRegistry.originOf] names them (the data that names them is
-  /// being written).
+  /// Runs [write] with origins off. Objects are written as they are, even
+  /// where [SnapRegistry.originOf] gives them an origin. Use it to write the
+  /// data that the origins refer to.
   void noOrigins(void Function() write) {
     _originsOff++;
     try {
@@ -55,7 +57,7 @@ class SnapWriter {
     }
   }
 
-  /// Records, at each object's start, the byte offset (debugging: [at]).
+  /// Records the byte offset at the start of each object, for [at].
   bool trace = false;
   final _traceAt = <int>[];
   final _traceObj = <int>[];
@@ -68,12 +70,13 @@ class SnapWriter {
     _traceWhat.add(what);
   }
 
-  /// A trace mark of the caller's ([at] names it).
+  /// Adds the trace mark [what] of the caller, which [at] reports.
   void traceMark(String what) =>
       _mark(_current.isEmpty ? -1 : _current.last, what);
 
-  /// With [trace] on: bytes and objects per traced kind (what each object's
-  /// start mark names, up to the next mark), largest first.
+  /// Returns the bytes and objects of each traced kind, largest first, with
+  /// [trace] on. The kind of an object is its start mark. It covers the
+  /// bytes up to the next mark.
   List<(String, int, int)> traceStats() {
     final bytes = <String, int>{}, count = <String, int>{};
     for (var i = 0; i < _traceAt.length; i++) {
@@ -86,8 +89,8 @@ class SnapWriter {
       ..sort((a, b) => b.$2.compareTo(a.$2));
   }
 
-  /// The object being written at byte [offset] (with [trace] on), as its
-  /// path.
+  /// Returns the path of the object that was written at byte [offset], with
+  /// [trace] on.
   String at(int offset) {
     var lo = 0, hi = _traceAt.length - 1, best = -1;
     while (lo <= hi) {
@@ -111,7 +114,7 @@ class SnapWriter {
     return '${_traceWhat[best]} at +${offset - _traceAt[best]}: $p';
   }
 
-  /// The chain of objects that led to [o]'s first writing (debugging).
+  /// Returns the chain of objects that led to the first write of [o].
   String pathOf(Object o) {
     final id = _ids[o];
     if (id == null) return '(not written)';
@@ -137,10 +140,10 @@ class SnapWriter {
     return out.reversed.join(' > ');
   }
 
-  /// Objects written so far (known ones included).
+  /// The number of objects written so far, the known ones included.
   int get objects => _next;
 
-  /// Bytes written so far.
+  /// The number of bytes written so far.
   int get length => _len;
 
   void _grow(int n) {
@@ -154,7 +157,7 @@ class SnapWriter {
     _bd = ByteData.sublistView(_buf);
   }
 
-  /// The stream so far.
+  /// Returns the stream written so far.
   Uint8List takeBytes() => Uint8List.sublistView(_buf, 0, _len);
 
   // --- primitives ------------------------------------------------------------
@@ -164,7 +167,7 @@ class SnapWriter {
     _buf[_len++] = b;
   }
 
-  /// A non-negative int.
+  /// Writes a non-negative int.
   void uint(int v) {
     if (v < 0) throw SnapError('uint $v < 0 (${_where()})');
     _grow(10);
@@ -175,7 +178,7 @@ class SnapWriter {
     _buf[_len++] = v;
   }
 
-  /// Any int (64-bit, zigzag).
+  /// Writes any 64-bit int in zigzag form.
   void int_(int v) {
     var z = (v << 1) ^ (v >> 63);
     _grow(10);
@@ -188,7 +191,7 @@ class SnapWriter {
 
   void boolean(bool b) => byte(b ? 1 : 0);
 
-  /// A double, every bit (NaN payloads and −0 too).
+  /// Writes every bit of a double, NaN payloads and −0 included.
   void f64(double v) {
     _grow(8);
     _bd.setFloat64(_len, v, Endian.little);
@@ -206,7 +209,7 @@ class SnapWriter {
     uint(n);
     uint(s.length);
     _grow(s.length * 3);
-    // Code units as uint16 (Dart strings are UTF-16; Lua's hold bytes).
+    // A Dart string holds UTF-16 code units. Each is written as a uint16.
     for (var k = 0; k < s.length; k++) {
       final c = s.codeUnitAt(k);
       if (c < 0x80) {
@@ -238,35 +241,38 @@ class SnapWriter {
     _len += b.length;
   }
 
-  /// A section marker the reader checks ([SnapReader.mark]).
+  /// Writes a section marker that [SnapReader.mark] checks.
   void mark(int m) => uint(m);
 
   // --- objects ---------------------------------------------------------------
 
-  /// Registers an object the reader has already (same order on both sides).
+  /// Registers an object that the reader already has. Both sides register
+  /// in the same order.
   void known(Object o) {
     if (_ids.containsKey(o)) throw SnapError('known object registered twice');
     _assign(o, 'known ${o.runtimeType}');
   }
 
-  /// Whether [o] has been written or registered.
+  /// Returns true when [o] has been written or registered.
   bool has(Object o) => _ids.containsKey(o);
 
   int _strong = -1;
 
-  /// Marks the objects written so far as the strongly held graph: weak
-  /// tables written after it list only entries whose keys are in it (an
-  /// entry whose key another weak table's value holds is garbage-to-be).
+  /// Marks the objects written so far as the strongly held graph. Weak
+  /// tables written after it list only the entries whose keys are in it. An
+  /// entry whose key only the value of another weak table holds is garbage
+  /// that is not yet collected.
   void sealStrong() => _strong = _next;
 
-  /// Whether [o] is in the strongly held graph ([sealStrong]; before it,
-  /// whether it was written).
+  /// Returns true when [o] is in the strongly held graph of [sealStrong].
+  /// Before [sealStrong], returns true when [o] was written.
   bool heldStrongly(Object o) {
     final id = _ids[o];
     return id != null && (_strong < 0 || id < _strong);
   }
 
-  /// Queues [o]'s state ([SnapCodec.write], by its codec or [codec]).
+  /// Queues the state of [o] for [SnapCodec.write] by [codec] or by the
+  /// codec of its class.
   void fillKnown(Object o, [SnapCodec? codec]) {
     final c = codec ?? registry.codecOf(o);
     if (c == null) throw SnapError('no codec for ${o.runtimeType}');
@@ -292,14 +298,14 @@ class SnapWriter {
     uint(0x7fffffff);
   }
 
-  /// What is being written now (for error messages).
+  /// The path of the object being written now, for error messages.
   String get where => _where();
 
   String _where() => 'path ${_current.isEmpty ? 'top' : path}';
 
-  /// A value: null, bool, int, double, String, a container (identity kept)
-  /// of values, typed data, a function with a recipe, or an object with a
-  /// codec.
+  /// Writes a value. A value is null, a bool, an int, a double, a String, a
+  /// container of values with its identity kept, typed data, a function with
+  /// a recipe or an object with a codec.
   void value(Object? v) {
     switch (v) {
       case null:
@@ -322,9 +328,13 @@ class SnapWriter {
     }
   }
 
-  /// An object reference (identity kept); same as [value].
+  /// Writes an object reference with its identity kept, as [value] does.
   void ref(Object? o) => value(o);
 
+  /// Starts an object that the caller writes, such as a typed collection kept
+  /// by identity or an object of a class without a codec. Returns true when
+  /// [o] is new and the caller writes it now. Returns false when a reference
+  /// was written.
   bool begin(Object o) {
     final id = _ids[o];
     if (id != null) {
@@ -366,7 +376,7 @@ class SnapWriter {
     });
   }
 
-  /// A list of values (refs and values alike).
+  /// Writes a list of values and references.
   void values(Iterable<Object?> l) => iter<Object?>(l, value);
 
   void doubles(List<double> l) => list<double>(l, f64);
