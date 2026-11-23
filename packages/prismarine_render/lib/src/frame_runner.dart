@@ -24,6 +24,7 @@ part 'runner_compute.dart';
 part 'runner_first_uses.dart';
 part 'runner_kept.dart';
 part 'runner_passes.dart';
+part 'runner_present.dart';
 part 'runner_prepare.dart';
 part 'runner_pulled.dart';
 part 'runner_pulled_data.dart';
@@ -569,28 +570,6 @@ class FrameRunner {
   /// The draws of the last [prepare] that the assets cannot feed, left to
   /// their frame.
   int lastPrepareErrors = 0;
-
-  gpu.Texture _presentCopy(gpu.Texture t) {
-    final k = _presentTurn++ % 3;
-    if (k < _presented.length) {
-      final had = _presented[k];
-      if (had.width == t.width && had.height == t.height) return had;
-    }
-    final copy = gpu.gpuContext.createTexture(
-      gpu.StorageMode.devicePrivate,
-      t.width,
-      t.height,
-      format: t.format,
-      enableRenderTargetUsage: true,
-      enableShaderReadUsage: true,
-    );
-    if (k < _presented.length) {
-      _presented[k] = copy;
-    } else {
-      _presented.add(copy);
-    }
-    return copy;
-  }
 
   void _render(
     gpu.CommandBuffer cb,
