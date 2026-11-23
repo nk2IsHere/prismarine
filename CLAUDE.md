@@ -7,6 +7,7 @@ commit.
 
 - [docs/memory/state.md](docs/memory/state.md) has the current state.
 - [docs/memory/decisions.md](docs/memory/decisions.md) lists the decisions in force.
+- [docs/memory/goals.md](docs/memory/goals.md) lists wanted work that no plan covers yet.
 - [docs/memory/rules.md](docs/memory/rules.md) and [docs/memory/writing.md](docs/memory/writing.md) are the rules for
   all work here.
 - [docs/specs/2026-11-23-prismarine-split-design.md](docs/specs/2026-11-23-prismarine-split-design.md) is the design
