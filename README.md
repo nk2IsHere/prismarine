@@ -12,6 +12,7 @@ Every part runs on macOS, Linux and Windows.
 |---|---|
 | `prismarine_frame` | Frame plans of passes, targets and buffers, with a codec that moves a plan between isolates |
 | `prismarine_render` | The runner that records a frame plan on Flutter GPU and skips a pass whose inputs are unchanged |
+| `prismarine_pbr` | A forward renderer of glTF scenes with metallic-roughness materials, a shadowed sun, point lights and a tone map |
 | `prismarine_scene` | A glTF importer, a scene-node layer and paced loading of assets |
 | `prismarine_shaders` | Shader bundles for impellerc, a cache of compiled shaders and precompiled Metal libraries |
 | `prismarine_assets` | Readers and writers for glTF, KTX2 and PNG, with decoding of BC textures |
