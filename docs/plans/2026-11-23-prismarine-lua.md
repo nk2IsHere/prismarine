@@ -17,7 +17,7 @@ Each item is one commit in `mcsm_lua`. The tests of `mcsm_lua`, `mcsm_lua_native
    arithmetic of the x64 profile as a built-in mode, the table key rule and the rule of one mode per isolate.
    Library results round through the mode.
 4. The library hooks. The engine patches run from `patchLibs`. The math library of the x64 profile and the stock
-   random functions come from `openMath`. Mixed-type equality, the global function names and the missing-file text
+   random functions come from `openMath`. Mixed-type equality and the missing-file text
    read the configuration.
 5. A file split. The files of the generic core import nothing of the profiles, the exe runtimes or `mcsm_math`.
 

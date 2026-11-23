@@ -24,3 +24,5 @@ Each entry is wanted work that no plan covers yet. A done entry is removed. The 
   compression levels and formats. One encoder with options replaces both.
 - **Memory readings on every OS.** `physFootprint` returns no value outside macOS, and the window surface reader runs
   on macOS only. Both need real paths on Linux and Windows.
+- **Unboxed Lua numbers.** The stack of `prismarine_lua` holds every number as a boxed double, and a Lua-heavy frame
+  spends much of its time there. A stack of numbers beside the stack of values would remove the boxes.
