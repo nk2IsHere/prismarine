@@ -1,13 +1,18 @@
-# fetch.ps1 [-Target windows-x64|windows-arm64] [-Data <dir>] [-Archive <file>]:
-# the Windows twin of fetch.sh. Downloads the patched Flutter engine from the
-# repo's GitHub release (the tag in .\RELEASE; needs `gh` logged in to an
-# account that can read the repo), checks its SHA-256, unpacks it to
-# <Data>\engine\<target>\ (Data: $env:MCSM_DATA, else the repo's data\) and
-# links its out dir's dart-sdk to the Flutter SDK's own (the `flutter` on
-# PATH, or $env:MCSM_FLUTTER). -Archive: unpack that local .tar.xz instead
-# (its .sha256 beside it). Prints the flags for `flutter build windows`.
-# The release repo (owner/name): $env:MCSM_ENGINE_REPO, else MCSM_ENGINE_REPO in
-# a private/config/*.env found walking up from here (tools/toolchain/private_env.sh).
+# fetch.ps1 [-Target windows-x64|windows-arm64] [-Data <dir>] [-Archive <file>]
+# is the Windows form of fetch.sh. It downloads the patched Flutter engine from
+# the GitHub release that RELEASE gives, checks its SHA-256 and unpacks it to
+# <engine dir>\<target>\. It links the dart-sdk of the out dir to the one of
+# the Flutter SDK and prints the flags for `flutter build windows`.
+#
+# The engine directory is <Data>\engine when -Data is given, else
+# $env:PRISMARINE_ENGINE_DIR, else $env:MCSM_DATA\engine, else data\engine of
+# this checkout. The Flutter SDK is $env:PRISMARINE_FLUTTER or
+# $env:MCSM_FLUTTER, else the flutter on PATH. The release repository, as
+# owner/name, is PRISMARINE_ENGINE_REPO or MCSM_ENGINE_REPO from the
+# environment or from the first private\config\*.env above this directory. The
+# download needs gh, logged in to an account that can read the repository.
+# -Archive unpacks a downloaded archive with its .sha256 beside it in place of
+# the download.
 param(
   [string] $Target,
   [string] $Data,
@@ -35,7 +40,7 @@ function Get-PrivateSetting([string] $Key) {
 $repo = Get-PrivateSetting 'PRISMARINE_ENGINE_REPO'
 if (!$repo) { $repo = Get-PrivateSetting 'MCSM_ENGINE_REPO' }
 if (!$repo -and !$Archive) {
-  throw "mcsm: missing machine setting MCSM_ENGINE_REPO (the engine release repo, owner/name): set it in the environment or in <repo>\private\config\*.env, or pass -Archive"
+  throw "fetch.ps1: no release repository. Set PRISMARINE_ENGINE_REPO to owner/name in the environment or in private\config\*.env, or pass -Archive."
 }
 $tag = (Get-Content "$here\RELEASE").Trim()
 if (!$Target) {
@@ -57,7 +62,7 @@ try {
     Copy-Item $Archive "$tmp\$asset"
     Copy-Item "$Archive.sha256" "$tmp\$asset.sha256"
   } else {
-    "mcsm: fetching $asset from $repo release $tag"
+    "fetch.ps1: fetching $asset from $repo release $tag"
     gh release download $tag -R $repo -p $asset -p "$asset.sha256" -D $tmp
     if ($LASTEXITCODE -ne 0) { throw "gh release download failed" }
   }
@@ -74,6 +79,6 @@ try {
 $flutter = if ($env:PRISMARINE_FLUTTER) { $env:PRISMARINE_FLUTTER } elseif ($env:MCSM_FLUTTER) { $env:MCSM_FLUTTER } else { Split-Path -Parent (Split-Path -Parent (Get-Command flutter).Source) }
 $out = Get-ChildItem "$dest\$Target\src\out" -Directory | Select-Object -First 1
 cmd /c mklink /J "$($out.FullName)\dart-sdk" "$flutter\bin\cache\dart-sdk" | Out-Null
-"mcsm: engine $Target in $dest\$Target"
+"fetch.ps1: engine $Target in $dest\$Target"
 "Build with:"
 "  flutter build windows --release --local-engine-src-path=$dest\$Target\src --local-engine=$($out.Name) --local-engine-host=$($out.Name)"

@@ -1,23 +1,26 @@
 #!/bin/zsh
-# build.sh [setup|patch|build|all]: the patched Flutter engine for mcsm (perf E).
-#   setup  depot_tools, a shared clone of $MCSM_FLUTTER at the engine revision,
-#          .gclient (no Android, JDK, esbuild, Fuchsia) and `gclient sync`
-#          (~13 GB in $MCSM_DATA/engine; network, 20–40 min).
-#   patch  applies patches/*.patch on a branch `mcsm-engine` (idempotent: a
-#          fresh branch from the revision each time), and patches/dart/*.patch
-#          to the Dart SDK's files at its DEPS revision, uncommitted: the
-#          engine stamps its Dart SDK hash from that checkout's HEAD, which
-#          must stay the revision the Flutter tool's kernel files carry.
-#   build  gn + ninja for out/host_release_arm64 (MCSM_ENGINE_CPU=x64:
-#          out/host_release, an x86_64 engine): only the targets a release
-#          `flutter build macos --local-engine` reads (~4.5 GB; ~1 h the first
-#          time on the M2 Pro, a few minutes after a lib/gpu edit).
-#          MCSM_ENGINE_MODE=profile: out/host_profile_arm64 (or host_profile)
-#          for `flutter build macos --profile` (tool/profile.sh; Dart flags
-#          like --no-inline-alloc and --profile_vm, patch 0007).
-#   all    the three in order.
-# Then set MCSM_LOCAL_ENGINE=$MCSM_DATA/engine/flutter/engine/src in .env.
-# Needs the Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`).
+# build.sh [setup|patch|build|all] builds the patched Flutter engine on macOS
+# into the engine directory, PRISMARINE_ENGINE_DIR.
+#   setup  installs depot_tools, makes a shared clone of the Flutter SDK at its
+#          engine revision, writes .gclient without Android, JDK, esbuild and
+#          Fuchsia and runs gclient sync. This takes about 13 GB and 20 to 40
+#          minutes of downloads.
+#   patch  applies patches/*.patch on a fresh branch mcsm-engine at the
+#          revision, and patches/dart/*.patch to the Dart SDK at its DEPS
+#          revision, uncommitted. The engine stamps its Dart SDK hash from the
+#          HEAD of that checkout, which must stay the revision that the kernel
+#          files of the Flutter tool carry.
+#   build  runs gn and ninja for out/host_release_arm64, or out/host_release
+#          with PRISMARINE_ENGINE_CPU=x64. It builds only the targets that a
+#          release `flutter build macos --local-engine` reads, about 4.5 GB and
+#          an hour the first time on an M2 Pro. PRISMARINE_ENGINE_MODE=profile
+#          builds out/host_profile_arm64 for profile builds, which take Dart
+#          flags such as --no-inline-alloc and --profile_vm (patch 0007).
+#   all    runs the three in order.
+# The Flutter SDK is PRISMARINE_FLUTTER, by default the flutter on PATH. The
+# build needs the Metal Toolchain, `xcodebuild -downloadComponent MetalToolchain`.
+# Every PRISMARINE_ setting is also read in its MCSM_ form, and the engine
+# directory defaults to $MCSM_DATA/engine or else data/engine of this checkout.
 set -e
 here=${0:A:h}
 E=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
@@ -88,11 +91,11 @@ if [[ $step == build || $step == all ]]; then
     flutter/tools/font_subset \
     flutter/tools/const_finder \
     flutter/impeller/compiler:impellerc
-  # A release out dir's patched SDK is the product one; the Flutter tool looks
-  # for it under the cache's name.
+  # The patched SDK of a release out dir is the product one. The Flutter tool
+  # looks for it under the name of its cache.
   [[ $mode == release ]] && ln -sfn flutter_patched_sdk $out/flutter_patched_sdk_product
-  # MCSM_ENGINE_TRIM=1: drop the object files (~2–4 GB); the next build of
-  # this out dir is then a full one.
+  # PRISMARINE_ENGINE_TRIM=1 deletes the object files, 2 to 4 GB. The next
+  # build of this out dir is then a full one.
   [[ -n ${PRISMARINE_ENGINE_TRIM:-$MCSM_ENGINE_TRIM} ]] && rm -rf "${src:?}/$out/obj"
   true
 fi

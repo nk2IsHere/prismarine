@@ -1,12 +1,14 @@
 #!/bin/bash
-# linux.sh [setup|build|test|all] on a Linux x86_64 host, with
-# MCSM_ENGINE_DIR=<a dir with ~30 GB free> (e.g. $HOME/mcsm-engine): the patched engine for Linux
-# x64 (out/host_release) and arm64 (cross, out/linux_release_arm64, with the
-# engine's Debian sysroot), plus a debug test build (out/host_debug_unopt_tests:
-# gpu_unittests, impeller_unittests on SwiftShader). Needs git, python3, curl,
-# xz-utils and pkg-config (gclient brings the compiler and the Debian sysroots);
-# patches from this directory. ~11 GB of sources, ~1 GB per release out dir,
-# 5.4 GB for the test build; ~10 + 13 min on 16 cores (MCSM_ENGINE_JOBS, default 10).
+# linux.sh [setup|build|test|all] builds the patched engine for Linux on an
+# x86_64 Linux host, in PRISMARINE_ENGINE_DIR, a directory with about 30 GB
+# free. It builds x64 in out/host_release and arm64 in out/linux_release_arm64,
+# cross-built with the Debian sysroot of the engine. The test step builds
+# out/host_debug_unopt_tests with gpu_unittests and impeller_unittests on
+# SwiftShader. The host needs git, python3, curl, xz-utils and pkg-config.
+# gclient brings the compiler and the sysroots. The sources take about 11 GB,
+# a release out dir about 1 GB and the test build 5.4 GB. The builds take about
+# 10 and 13 minutes on 16 cores, with PRISMARINE_ENGINE_JOBS jobs, 10 by
+# default. Every PRISMARINE_ setting is also read in its MCSM_ form.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 E=${PRISMARINE_ENGINE_DIR:-${MCSM_ENGINE_DIR:?set PRISMARINE_ENGINE_DIR}}
@@ -29,9 +31,9 @@ solutions = [{"name": ".", "url": "https://github.com/flutter/flutter.git",
 target_os = ["linux"]
 G
   gclient sync --no-history -j8
-  # The Dart SDK's patches, uncommitted at its DEPS revision (build.sh
-  # "patch"): patch 0028 calls the VM's Dart_McsmIdle (dart/0002), 0029
-  # its Dart_McsmOldSpace (dart/0003).
+  # The patches of the Dart SDK, uncommitted at its DEPS revision as in the
+  # patch step of build.sh. Patch 0028 calls Dart_McsmIdle of dart/0002 and
+  # 0029 calls Dart_McsmOldSpace of dart/0003.
   dart=engine/src/flutter/third_party/dart
   git -C $dart checkout -q -f --detach \
     $(sed -n "s/^  'dart_revision': '\([0-9a-f]*\)',/\1/p" DEPS)
@@ -53,8 +55,9 @@ fi
 if [[ $step == test || $step == all ]]; then
   ./flutter/tools/gn --runtime-mode=debug --unoptimized --prebuilt-dart-sdk --use-glfw-swiftshader --target-dir=host_debug_unopt_tests
   ninja -C out/host_debug_unopt_tests -j$J flutter/lib/gpu:gpu_unittests flutter/impeller:impeller_unittests
-  # The CommandBuffer suite aborts in debug builds on an upstream test bug (a
-  # ref-counted object on the stack); the suites our patches touch:
+  # The CommandBuffer suite aborts in debug builds on an upstream test bug, a
+  # ref-counted object on the stack. These are the suites that the patches
+  # touch.
   out/host_debug_unopt_tests/gpu_unittests '--gtest_filter=FlutterGpuRenderPassTest.*:FlutterGpuShaderLibraryTest.*'
   echo "impeller_unittests (Vulkan on SwiftShader) need a display: see README.md (Building on Linux)."
 fi

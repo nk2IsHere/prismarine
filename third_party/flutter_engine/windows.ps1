@@ -55,9 +55,9 @@ target_os = ["win"]
 '@ | Set-Content -Encoding ascii .gclient
 "== $(Get-Date -Format T) gclient"
 gclient sync --no-history -j8
-# The Dart SDK's patches, uncommitted at its DEPS revision (build.sh "patch"):
-# patch 0028 calls the VM's Dart_McsmIdle (dart/0002), 0029 its
-# Dart_McsmOldSpace (dart/0003).
+# The patches of the Dart SDK, uncommitted at its DEPS revision as in the patch
+# step of build.sh. Patch 0028 calls Dart_McsmIdle of dart/0002 and 0029 calls
+# Dart_McsmOldSpace of dart/0003.
 $dart = 'engine\src\flutter\third_party\dart'
 $dartRev = (Select-String -Path DEPS -Pattern "^  'dart_revision': '([0-9a-f]+)'").Matches[0].Groups[1].Value
 git -C $dart checkout -q -f --detach $dartRev

@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
-# fetch.sh [target]: downloads the patched Flutter engine (macOS, Linux) from
-# the repo's GitHub release (the tag in ./RELEASE), checks its SHA-256, unpacks
-# it to $MCSM_DATA/engine/<target>/ and links its out dir's dart-sdk to the
-# Flutter SDK's own (the same Dart). target: macos-arm64, macos-x64,
-# linux-x64, linux-arm64 (default: this machine's).
+# fetch.sh [target] downloads the patched Flutter engine for macOS or Linux from
+# the GitHub release that RELEASE gives, checks its SHA-256 and unpacks it to
+# <engine dir>/<target>/. It links the dart-sdk of each out dir to the one of
+# the Flutter SDK, which has the same Dart. The targets are macos-arm64,
+# macos-x64, linux-x64 and linux-arm64. The default is the target of this
+# machine. Windows uses fetch.ps1.
 #
-# On macOS, tools/toolchain/env.sh then finds it by itself (play.sh builds on
-# it; MCSM_LOCAL_ENGINE=off in .env goes back to the stock engine). Elsewhere
-# it prints the `flutter build` flags. Needs `gh` logged in to an account that
-# can read the release repo, MCSM_ENGINE_REPO (owner/name: the environment, else
-# the private config, tools/toolchain/private_env.sh), or
-# MCSM_ENGINE_ARCHIVE=<a downloaded .tar.xz>, its .sha256
-# beside it), plus tar and xz. MCSM_DATA: the environment, else .env,
-# else the repo's data/. The Flutter SDK: $MCSM_FLUTTER, else data/flutter,
-# else the `flutter` on PATH. Windows: fetch.ps1.
+# The settings below are also read in their MCSM_ form.
+#   PRISMARINE_ENGINE_DIR      the engine directory, by default $MCSM_DATA/engine
+#                              or else data/engine of this checkout
+#   PRISMARINE_FLUTTER         the Flutter SDK, by default the flutter on PATH
+#   PRISMARINE_ENGINE_REPO     owner/name of the release repository, by default
+#                              the value in the first private/config/*.env above
+#                              this directory
+#   PRISMARINE_ENGINE_ARCHIVE  a downloaded archive with its .sha256 beside it,
+#                              unpacked in place of the download
+# The download needs gh, logged in to an account that can read the repository.
+# The unpacking needs tar and xz.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$here/../.." && pwd)
-# setting <key>…: the first value of a key in the private config, the first
-# private/config/*.env found walking up from here.
+# setting <key>… prints the first value of the keys in the first
+# private/config/*.env above this directory.
 setting() {
   local d=$here f k
   while [[ $d != / ]]; do
@@ -38,14 +41,14 @@ dest=${PRISMARINE_ENGINE_DIR:-${MCSM_DATA:+$MCSM_DATA/engine}}
 dest=${dest:-$repo_root/data/engine}
 flutter_sdk=${PRISMARINE_FLUTTER:-${MCSM_FLUTTER:-}}
 if [[ -z $flutter_sdk ]]; then
-  command -v flutter >/dev/null || { echo "mcsm: no Flutter SDK: set PRISMARINE_FLUTTER or put flutter on PATH" >&2; exit 1; }
+  command -v flutter >/dev/null || { echo "fetch.sh: no Flutter SDK. Set PRISMARINE_FLUTTER or put flutter on PATH." >&2; exit 1; }
   flutter_sdk=$(cd "$(dirname "$(command -v flutter)")/.." && pwd)
 fi
 archive=${PRISMARINE_ENGINE_ARCHIVE:-${MCSM_ENGINE_ARCHIVE:-}}
 repo=${PRISMARINE_ENGINE_REPO:-${MCSM_ENGINE_REPO:-}}
 [[ -n $repo ]] || repo=$(setting PRISMARINE_ENGINE_REPO MCSM_ENGINE_REPO)
 if [[ -z $repo && -z $archive ]]; then
-  echo "mcsm: missing machine setting MCSM_ENGINE_REPO (the engine release repo, owner/name)" >&2
+  echo "fetch.sh: no release repository. Set PRISMARINE_ENGINE_REPO to owner/name, or PRISMARINE_ENGINE_ARCHIVE to a downloaded archive." >&2
   exit 1
 fi
 tag=$(cat "$here/RELEASE")
@@ -68,7 +71,7 @@ if [[ -n $archive ]]; then
   cp "$archive" "$tmp/$asset"
   cp "$archive.sha256" "$tmp/$asset.sha256"
 else
-  echo "mcsm: fetching $asset from $repo release $tag"
+  echo "fetch.sh: fetching $asset from $repo release $tag"
   gh release download "$tag" -R "$repo" -p "$asset" -p "$asset.sha256" -D "$tmp"
 fi
 (cd "$tmp" && sha256 -c "$asset.sha256")
@@ -83,9 +86,10 @@ for out in "$dest/$target"/src/out/*/; do
 done
 want=$(sed -n 's/^engine_revision=//p' "$dest/$target/mcsm-engine.txt")
 have=$(cat "$flutter_sdk/bin/internal/engine.version" 2>/dev/null || true)
-[[ $want == "$have" ]] || echo "mcsm: warning: the engine is for Flutter engine $want, the Flutter SDK has ${have:-unknown}" >&2
-echo "mcsm: engine $target in $dest/$target ($(du -sh "$dest/$target" | cut -f1))"
+[[ $want == "$have" ]] || echo "fetch.sh: warning: the engine is for Flutter engine $want and the Flutter SDK has ${have:-an unknown one}" >&2
+echo "fetch.sh: engine $target in $dest/$target ($(du -sh "$dest/$target" | cut -f1))"
 case $target in
-  macos-*) echo "mcsm: play.sh and tools/toolchain/env.sh use it from now on (MCSM_LOCAL_ENGINE=off in .env to stop)" ;;
-  *) echo "mcsm: build with: flutter build linux --release --local-engine-src-path=$dest/$target/src --local-engine=${outs[0]} --local-engine-host=${outs[0]}" ;;
+  macos-*) os=macos ;;
+  *) os=linux ;;
 esac
+echo "fetch.sh: build with: flutter build $os --release --local-engine-src-path=$dest/$target/src --local-engine=${outs[0]} --local-engine-host=${outs[0]}"
