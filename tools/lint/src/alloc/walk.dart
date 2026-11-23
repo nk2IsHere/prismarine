@@ -24,7 +24,7 @@ class Hit {
   final int line, column;
   final String what;
 
-  /// The function it is in.
+  /// The function that holds it.
   final String inside;
 
   /// The reason of its `// alloc:` marker, if any.

@@ -340,7 +340,7 @@ class _Lexer {
       out.add(Tok(TokKind.string, s.substring(start, i), line, line));
       return true;
     }
-    // One code point, possibly a surrogate pair, and then a quote.
+    // One code point, possibly a surrogate pair, then a quote.
     final next = _at(i + 1);
     final width = (next >= 0xd800 && next <= 0xdbff) ? 2 : 1;
     if (_at(i + 1 + width) == 0x27) {
@@ -469,7 +469,7 @@ class _Lexer {
         break;
       }
       final c = s.codeUnitAt(i);
-      if (!triple && c == 0x0a) break; // unterminated; let the caller go on
+      if (!triple && c == 0x0a) break; // unterminated, the caller continues
       if (!raw && c == 0x5c) {
         if (_at(i + 1) == 0x0a) line++;
         i += 2;

@@ -20,7 +20,7 @@ class Site {
 class Call {
   Call(this.target, this.offset, {this.onClass, this.name});
 
-  /// The member the call resolves to.
+  /// The resolved member of the call.
   final String target;
   final int offset;
 

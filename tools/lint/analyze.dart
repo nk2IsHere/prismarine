@@ -286,7 +286,7 @@ void _ratchet(_Run run, {required bool update}) {
       listGrown('analyze: baseline not updated, these grew:');
       return;
     }
-    // Entries of checks that ran are replaced; the rest are kept.
+    // The entries of checks that ran are replaced. The rest are kept.
     final next = <String, Map<String, int>>{};
     base.forEach((pkg, codes) {
       codes.forEach((key, n) {

@@ -5,12 +5,12 @@
 //   dart tools/lint/docs_index.dart [--root=<tree>] [--check]
 //
 // Each entry is a Markdown file <id>.md, which has the form
-// <prefix>-<area>-<slug>.md, and starts with a frontmatter block of
-// `key: value` lines between `---` lines. The index lists every entry,
-// grouped by area, the second part of the id, and sorted by id. The output
-// depends only on the entries. Two runs give the same bytes. Two branches
-// that add different entries do not touch the same line of an entry. The
-// indexes are regenerated at landing. Branches do not edit them.
+// <prefix>-<area>-<slug>.md. It starts with a frontmatter block of `key: value`
+// lines between `---` lines. The index lists every entry, grouped by area, the
+// second part of the id, then sorted by id. The output depends only on the
+// entries. Two runs give the same bytes. Two branches that add different
+// entries do not touch the same line of an entry. The indexes are regenerated
+// at landing. Branches do not edit them.
 //
 // --check writes nothing. It fails with exit code 1 when an index differs
 // from the generated one, an id differs from its file name or is not unique,

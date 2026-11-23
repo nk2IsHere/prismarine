@@ -92,7 +92,7 @@ class UniformRing {
 /// newest arena. The bytes that a frame on the GPU reads are not written again.
 /// [flush] writes the new bytes of each arena once a frame. Past [_limit]
 /// placed bytes the arenas start over at the start of the next run in [begin].
-/// [epoch] then moves on. A view of an older epoch is placed again on its next
+/// [epoch] then advances. A view of an older epoch is placed again on its next
 /// use. Blocks that no frame binds any more are dropped with the arenas, which
 /// are let go at once and not left to an old-space collection.
 class BlockStore {

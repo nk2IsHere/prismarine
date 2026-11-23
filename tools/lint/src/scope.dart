@@ -14,9 +14,8 @@ List<String> get codeRoots => _config.codeRoots;
 // The vendored or upstream-derived files outside a third_party/ directory.
 Set<String> get vendoredFiles => _config.vendoredFiles;
 
-// The rules and tests of the lint quote the patterns that they look for. Its
-// files are left out of the comment and string checks but not the size
-// check.
+// The rules and tests of the lint quote the patterns that they search. Its
+// files are left out of the comment and string checks but not the size check.
 List<String> get commentCheckExempt => _config.commentCheckExempt;
 
 // The `flutter create` runner scaffolding of an app or a tool app.

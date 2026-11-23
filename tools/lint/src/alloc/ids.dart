@@ -3,7 +3,7 @@
 import 'package:analyzer/dart/element/element.dart';
 
 /// Returns `<library uri>::<Class>` for a class, mixin, enum, extension or
-/// extension type, and null for anything else.
+/// extension type. Returns null for anything else.
 String? classId(Element? e) {
   if (e is! InstanceElement) return null;
   final lib = e.library.uri;

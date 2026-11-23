@@ -20,13 +20,13 @@ class Markers {
   String? accepted(int line) => _on(_accept, line);
 
   /// Returns the reason that a declaration starting on [line] is cold. The
-  /// reason is on that line or in the comment lines right above it. Any
-  /// comment line of the block counts, and the marker need not be below a doc
-  /// comment or an annotation.
+  /// reason is on that line or in the comment lines right above it. Any comment
+  /// line of the block counts. The marker need not be below a doc comment or an
+  /// annotation.
   String? cold(int line) => _above(_cold, line);
 
-  /// Returns the reason that a declaration starting on [line] is setup. It
-  /// runs once, and only the closures that it makes run per frame.
+  /// Returns the reason that a declaration starting on [line] is setup. It runs
+  /// once. Only the closures that it makes run per frame.
   String? setup(int line) => _above(_setup, line);
 
   String? _above(RegExp marker, int line) {

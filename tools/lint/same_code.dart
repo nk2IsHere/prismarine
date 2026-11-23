@@ -331,7 +331,7 @@ List<Tok> dropTrailingCommas(List<Tok> code) {
 }
 
 /// Returns [src] formatted by rustfmt for [edition], or null when rustfmt
-/// fails because it is not installed or the source does not parse.
+/// fails, such as when it is not installed or the source does not parse.
 String? rustfmt(String src, String edition) {
   final dir = Directory.systemTemp.createTempSync('same_code');
   try {
