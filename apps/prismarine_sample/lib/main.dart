@@ -29,8 +29,9 @@ class _SampleAppState extends State<SampleApp> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Center(child: RawImage(image: _frame, fit: BoxFit.contain));
+  Widget build(BuildContext context) => Center(
+    child: RawImage(image: _frame, fit: BoxFit.contain),
+  );
 }
 
 /// Clears a [width] by [height] texture to [clearColour] in one render pass.
