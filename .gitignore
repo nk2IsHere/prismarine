@@ -1,0 +1,7 @@
+/private/
+/data/
+.dart_tool/
+build/
+target/
+pubspec_overrides.yaml
+.DS_Store
