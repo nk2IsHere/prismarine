@@ -41,7 +41,7 @@ impl Inst {
             *rate * dpow(2.0, *bend / 12.0)
         };
         let bus_mono = self.strips[bus].mono;
-        // A quad source's rear pair goes to a 5.1 strip's SL and SR.
+        // The rear pair of a quad source goes to SL and SR of a 5.1 strip.
         let rear = self.strips[bus].wide && src.channels() >= 4;
         let (mut k, down) = src_format(src, bus_mono);
         let (mut gl, mut gr) = (1.0, 1.0);
@@ -57,8 +57,8 @@ impl Inst {
         }
         let mut p = *pos;
         if let Some(from) = *fade_from {
-            // A stolen voice: full gain up to the fade, then 64 frames down
-            // to silence (Dart `_Voice.render`).
+            // A stolen voice has full gain up to the fade, then 64 frames
+            // down to silence, as Dart's `_Voice.render`.
             let f0 = at.max(from);
             if f0 > at {
                 let st = &mut self.strips[bus];
@@ -196,7 +196,7 @@ impl Inst {
         let at = at as usize;
         let strip = &mut self.strips[bus];
         if ch == 6 {
-            // A 5.1 nested event (S2) goes in through the strip's 5.1 rule.
+            // A 5.1 nested event goes in through the 5.1 rule of the strip.
             if strip.wide {
                 let inp = &mut strip.input51[at * 6..(at + n) * 6];
                 for f in 0..n * 6 {

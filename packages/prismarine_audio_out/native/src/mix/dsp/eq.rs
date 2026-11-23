@@ -1,10 +1,11 @@
-//! FMOD 1.09's multiband EQ and channel mix (dsp_eq.dart, dsp_mix.dart),
+//! The multiband EQ and the channel mix, as dsp_eq.dart and dsp_mix.dart
 //! operation for operation.
 
 use super::*;
 
-/// One multiband EQ band (Dart `EqBand`): up to four identical TDF2
-/// sections whose shared coefficients glide to a new design over a block.
+/// One band of the multiband EQ as Dart's `EqBand`, up to four identical
+/// TDF2 sections whose shared coefficients glide to a new design over a
+/// block.
 #[derive(Clone, Copy)]
 pub(crate) struct EqBand {
     sections: usize,
@@ -139,7 +140,8 @@ impl EqBand {
         self.gliding = false;
     }
 
-    /// `frames` of `buf` (`ch` channels interleaved) through the sections.
+    /// Runs `frames` frames of `buf`, `ch` channels interleaved, through the
+    /// sections.
     pub(crate) fn run(&mut self, buf: &mut [f32], frames: usize, ch: usize) {
         if self.sections == 0 {
             return;
@@ -189,8 +191,8 @@ impl EqBand {
     }
 }
 
-/// The channel mix's gains (Dart `ChannelMix`): now, their targets, the
-/// ramp's start and how far into its 64 samples it is.
+/// The gains of the channel mix as Dart's `ChannelMix`, the gains now, their
+/// targets, the start of the ramp and its progress into its 64 samples.
 pub(crate) struct Mix {
     g: [f64; 32],
     to: [f64; 32],
@@ -238,8 +240,8 @@ impl Mix {
         self.ramp = false;
     }
 
-    /// `frames` of `buf` (`ch` channels); `dual`: a mono signal held
-    /// dual-mono takes channel 0's gain on both.
+    /// Mixes `frames` frames of `buf` with `ch` channels. With `dual` a mono
+    /// signal in both channels takes the gain of channel 0 on both.
     pub(crate) fn run(&mut self, buf: &mut [f32], frames: usize, ch: usize, dual: bool) {
         let mut i = 0;
         if self.ramp {

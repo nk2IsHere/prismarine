@@ -77,18 +77,19 @@ pub(crate) fn comp_smooth() -> f64 {
     one_pole(opaque(2.0))
 }
 
-/// A stereo delay line (_Line). Its buffer is allocated once, at its
-/// largest size, when the DSP is built; growing it (Dart's `size`, a new
-/// zeroed buffer) clears it within that room.
+/// A stereo delay line as Dart's `_Line`. Its buffer is allocated once at
+/// its largest size when the DSP is built. Growing it clears it within that
+/// room, as the new zeroed buffer of Dart's `size`.
 pub(crate) struct Line {
     pub(crate) b: Vec<f32>,
     w: i64,
-    /// A delay the room couldn't hold was asked for (reported, kept short).
+    /// A delay longer than the room was asked for. It is reported and kept
+    /// short.
     pub(crate) refused: bool,
 }
 
 impl Line {
-    /// Room for delays of up to [frames] frames.
+    /// Makes room for delays of up to [frames] frames.
     pub(crate) fn with_room(frames: i64) -> Self {
         let mut b = Vec::with_capacity(((frames.max(0) + 2) * 2) as usize);
         b.resize(2, 0.0);
@@ -98,14 +99,15 @@ impl Line {
             refused: false,
         }
     }
-    /// Back to Dart's new `_Line` (two zeroed samples), keeping the room.
+    /// Resets the line to a new `_Line` of two zeroed samples and keeps the
+    /// room.
     pub(crate) fn reset(&mut self) {
         self.b.clear();
         self.b.resize(2, 0.0);
         self.w = 0;
     }
-    /// Room for a delay of [frames]; the delay it holds (less when the room
-    /// is too small: refused).
+    /// Sizes the line for a delay of [frames]. Returns the delay that it
+    /// holds, less when the room is too small.
     pub(crate) fn size(&mut self, frames: i64) -> i64 {
         let mut need = ((frames + 2) * 2) as usize;
         if need > self.b.capacity() {

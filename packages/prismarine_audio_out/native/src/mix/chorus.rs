@@ -1,14 +1,12 @@
-//! FMOD_DSP_TYPE_CHORUS as mcsm_audio's `Chorus` (lib/src/mixer/
-//! dsp_effects.dart) transcribes fmod.dll 1.06.02's create, reset and read
-//! (formats/telltale/fmod-runtime.md "14 chorus"), operation for operation:
-//! float32 where the exe uses SSE, the read position in double, the delay
-//! line in 16 bits.
+//! The chorus, as prismarine_audio's `Chorus` operation for operation. The
+//! arithmetic is float32 except for the read position, which is double, and
+//! the delay line holds 16-bit samples.
 
 use crate::mix::dmath::cos;
 use std::sync::OnceLock;
 
-/// The delay line's frames (fmod.dll: 120 ms rounded up to whole 1,024-frame
-/// blocks, plus one).
+/// The frames of the delay line, 120 ms rounded up to whole 1,024-frame
+/// blocks, plus one block.
 pub const LINE_FRAMES: i64 = 6144;
 
 pub const DEFAULTS: &[f64] = &[100.0, 0.8, 3.0];
@@ -59,7 +57,8 @@ fn depth_frames(depth: f64) -> f64 {
 }
 
 impl Chorus {
-    /// With all the memory it will use (off the render thread).
+    /// Makes a chorus with all the memory that it will use, off the render
+    /// thread.
     pub fn new(p: &[f64]) -> Chorus {
         let mut c = Chorus {
             table: table(),
@@ -81,7 +80,7 @@ impl Chorus {
         c
     }
 
-    /// As new, in the memory it has.
+    /// Resets the chorus to new in the memory that it has.
     pub fn renew(&mut self, p: &[f64]) {
         self.fresh = true;
         self.quiet = 1 << 30;

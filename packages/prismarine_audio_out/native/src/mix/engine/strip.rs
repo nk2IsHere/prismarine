@@ -1,4 +1,4 @@
-//! Bus strips and their DSP chains (strip.dart).
+//! Bus strips and their DSP chains, as strip.dart.
 
 use super::*;
 
@@ -6,12 +6,13 @@ use super::*;
 
 pub(crate) trait Sink {
     fn prop(&mut self, owner: i32, index: i64) -> Option<f64>;
-    /// [buf]: stereo ([mono]: dual-mono), or 5.1 when [ch] is 6.
+    /// [buf] is stereo, mono in both channels with [mono], or 5.1 when [ch]
+    /// is 6.
     fn send(&mut self, fx: &'static Fx, buf: &[f32], mono: bool, ch: usize);
     fn sidechain(&mut self, targets: &[i32], buf: &[f32], keys: &mut Keys);
     /// An echo was asked for a longer delay than it was built for.
     fn refused(&mut self, fx: &'static Fx);
-    /// An effect on a 5.1 strip has no 5.1 form (it passes the signal).
+    /// An effect on a 5.1 strip has no 5.1 form and passes the signal.
     fn no51(&mut self, fx: &'static Fx);
 }
 
@@ -39,8 +40,8 @@ static NO_BUS: Bus = Bus {
     props: Vec::new(),
 };
 
-/// What building needs: the model, and the collector instances' pools are
-/// handed to.
+/// The state that building needs, the model and the collector of the pools
+/// of instances.
 pub struct Build<'a> {
     pub m: &'static Model,
     pub garbage: &'a basedrop::Handle,
@@ -49,13 +50,14 @@ pub struct Build<'a> {
 pub struct Strip {
     pub(crate) def: &'static Bus,
     pub(crate) mono: bool,
-    /// It runs in 5.1 (Dart `BusStrip._wide`): an S2 5.1 bus or event strip.
+    /// The strip runs in 5.1 as a 5.1 bus or event strip, as Dart's
+    /// `BusStrip._wide`.
     pub(crate) wide: bool,
-    /// The stage index of its surround PAN (its output is 5.1 from there).
+    /// The stage index of its surround pan. Its output is 5.1 from there.
     pub(crate) surround: Option<usize>,
     /// The 5.1 input sum beside [input], on a strip that runs in 5.1.
     pub(crate) input51: Vec<f32>,
-    /// The stereo chain before a surround PAN on a strip that doesn't run
+    /// The stereo chain before a surround pan on a strip that does not run
     /// in 5.1.
     pub(crate) work: Vec<f32>,
     pub(crate) st: Vec<Stage>,
@@ -63,17 +65,18 @@ pub struct Strip {
     pub(crate) output: Vec<f32>,
     pub(crate) out_mono: bool,
     pub(crate) gain: Option<f64>,
-    /// Dart's BusStrip.faderFrom/To: a gain ramp the owner applies at the
-    /// fader this pass (an event's master track: the instance volume).
+    /// A gain ramp that the owner applies at the fader in this pass, as
+    /// Dart's BusStrip.faderFrom and faderTo. The master track of an event
+    /// takes the instance volume here.
     pub(crate) fader_from: f64,
     pub(crate) fader_to: f64,
     pub(crate) last_peak: f64,
     pub(crate) end_peak: f64,
 }
 
-/// The largest value automation, modulators or snapshots can give a
-/// property (an upper bound): a mapped property's map ends there; else the
-/// curves' and the modulators' largest values add to [base].
+/// Returns an upper bound of the value that automation, modulators or mix
+/// states can give a property. The map of a mapped property ends there, and
+/// else the largest values of the curves and the modulators add to [base].
 fn prop_max(p: &Prop, base: f64) -> f64 {
     if let Some(m) = &p.map {
         return m.y.iter().copied().fold(base, f64::max);
@@ -88,8 +91,9 @@ fn prop_max(p: &Prop, base: f64) -> f64 {
     v
 }
 
-/// The longest delay (frames) an echo can be asked for: its stored or
-/// default delay, its automation and modulators, snapshots of it.
+/// Returns the longest delay in frames that an echo can be asked for, from
+/// its stored or default delay, its automation and modulators and the mix
+/// states of it.
 fn echo_room(m: &Model, fx: &Fx, keys: &[(i32, i64, Prop)]) -> i64 {
     let mut ms: f64 = 500.0;
     if let Some(p) = fx.params.first() {
@@ -133,10 +137,10 @@ fn create_dsp(b: &Build, fx: &'static Fx, keys: &[(i32, i64, Prop)]) -> Option<D
     Some(d)
 }
 
-/// How many of an effect's parameters can be automated or snapshotted: all
-/// of them, but a 1.06 compressor's sidechain blob and 1.09's Linked only
-/// when the bank stores them (S1's compressors look up 5, as before the
-/// 1.09 parameters; Dart's lookups of the others find nothing).
+/// Returns how many parameters of an effect automation and mix states can
+/// address. A compressor with up to 6 stored parameters has 5, and its
+/// sidechain and link parameters count only when the model stores them.
+/// Dart's lookups of the others find nothing.
 pub(crate) fn props_of(fx: &Fx, dsp: &Dsp) -> usize {
     if dsp.is_compressor() && fx.params.len() <= 6 {
         5
@@ -145,7 +149,7 @@ pub(crate) fn props_of(fx: &Fx, dsp: &Dsp) -> usize {
     }
 }
 
-/// The effect's stored parameters, as a new DSP takes them.
+/// Sets the stored parameters of the effect, as a new DSP takes them.
 fn fx_params(d: &mut Dsp, fx: &'static Fx) {
     for (i, p) in fx.params.iter().enumerate() {
         if p.has_value {
@@ -178,9 +182,9 @@ impl Strip {
         }
     }
 
-    /// The strip of bus [def] for passes of up to [frames] frames; effects
-    /// the mixer doesn't have go to [unsupported]. [keys]: the automation
-    /// its effects can be given (an instance's).
+    /// Builds the strip of bus [def] for passes of up to [frames] frames.
+    /// Effects that the engine does not have go to [unsupported]. [keys] is
+    /// the automation of an instance that its effects can get.
     pub(crate) fn build(
         b: &Build,
         def: &'static Bus,
@@ -226,7 +230,7 @@ impl Strip {
         let surround = pre
             .iter()
             .position(|s| matches!(s, Stage::Effect { dsp, .. } if dsp.surround()));
-        // The DSPs that run 5.1 get their twins now (Dart's at first use).
+        // The DSPs that run 5.1 get their twins now, and Dart's at first use.
         let from = if wide { Some(0) } else { surround };
         if let Some(from) = from {
             for st in pre.iter_mut().skip(from) {
@@ -268,7 +272,8 @@ impl Strip {
         }
     }
 
-    /// As built (Dart's new strip), in the memory it has.
+    /// Resets the strip to new, as a new strip in Dart, in the memory that it
+    /// has.
     pub(crate) fn reset(&mut self) {
         self.out_mono = false;
         self.gain = None;
@@ -285,7 +290,7 @@ impl Strip {
         }
     }
 
-    /// The PAN DSPs here take the event's 3D position.
+    /// Sets the position of the event on the pan DSPs of the strip.
     pub(crate) fn set_spatial(&mut self, azimuth: f64, distance: f64) {
         for s in self.st.iter_mut() {
             if let Stage::Effect { dsp, .. } = s {
@@ -307,9 +312,9 @@ impl Strip {
         None
     }
 
-    /// A pass of [frames] (no more than the strip was built for).
-    /// The output's channels: 6 on a strip that runs in 5.1 or ends in 5.1
-    /// after a surround PAN, else 2.
+    /// Starts a pass of [frames] frames, no more than the strip was built
+    /// for. The output has 6 channels on a strip that runs in 5.1 or ends in
+    /// 5.1 after a surround pan, else 2.
     pub(crate) fn out_ch(&self) -> usize {
         if self.wide || self.surround.is_some() {
             6
@@ -325,10 +330,10 @@ impl Strip {
         }
     }
 
-    /// Adds [buf] (stereo, dual-mono when [src_mono], or 5.1 when [src_ch]
-    /// is 6) with BusStrip.add's format rules.
+    /// Adds [buf], stereo, mono in both channels with [src_mono] or 5.1 when
+    /// [src_ch] is 6, with the format rules of BusStrip.add.
     pub(crate) fn add(&mut self, buf: &[f32], frames: usize, src_mono: bool, src_ch: usize) {
-        // A strip taken out while it processes (a send into itself).
+        // A strip taken out while it processes, by a send into itself.
         if self.input.len() < frames * 2 {
             return;
         }

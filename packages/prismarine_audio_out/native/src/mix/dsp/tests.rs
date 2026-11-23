@@ -14,7 +14,7 @@ fn run(d: &mut Dsp, seed: u32) -> Vec<f32> {
     buf
 }
 
-/// A reset DSP (a recycled nested event's) runs as a new one.
+/// A reset DSP, as of a recycled nested event, runs as a new one.
 #[test]
 fn reset_is_new() {
     static TAPS: [f64; 64] = [0.0; 64];
@@ -56,7 +56,7 @@ fn echo_grows_within_its_room() {
         (line.b.as_ptr(), line.b.capacity(), line.b.len(), *delay),
         (p, cap, (48000 + 2) * 2, 48000)
     );
-    // A short room still plays (the longest delay it holds).
+    // A short room still plays the longest delay that it holds.
     let mut short = Dsp::new(ECHO, &[], 100).unwrap();
     assert!(short.take_refused());
     run(&mut short, 3);
@@ -76,8 +76,8 @@ fn keys_hold_one_buffer_each() {
     assert!(k.alloc(&[5.0; 9]).is_none());
 }
 
-/// FMOD 1.09's surround panner against the oracle's matrices (S2's
-/// fmod64.dll; the Dart test holds the full table).
+/// The surround panner against reference matrices. The Dart test holds the
+/// full table.
 #[test]
 fn surround_matches_the_oracle() {
     let cases: [(f64, f64, [f64; 6]); 4] = [
@@ -95,8 +95,8 @@ fn surround_matches_the_oracle() {
     }
 }
 
-/// The multiband EQ's peaking band: +12 dB at its centre, and a 0 dB band
-/// passes the input untouched.
+/// The peaking band of the multiband EQ gives +12 dB at its centre, and a
+/// 0 dB band passes the input untouched.
 #[test]
 fn mbeq_peak_and_bypass() {
     static TAPS: [f64; 64] = [0.0; 64];

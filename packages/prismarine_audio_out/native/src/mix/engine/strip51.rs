@@ -1,10 +1,10 @@
-//! Strips in 5.1 (strip51.dart): S2's 5.1 buses and event strips, and the
-//! chain after a surround PAN; six channels interleaved, FL FR C LFE SL SR.
+//! Strips in 5.1 as strip51.dart, the 5.1 buses and event strips and the
+//! chain after a surround pan, six channels interleaved in the order FL FR
+//! C LFE SL SR.
 
 use super::*;
 
-/// `buf` (5.1) folded to stereo into `out`, as FMOD's output stage folds it
-/// on a stereo device (Dart `downmix51`).
+/// Folds the 5.1 `buf` to stereo into `out`, as Dart's `downmix51`.
 pub(crate) fn downmix51(buf: &[f32], frames: usize, out: &mut [f32]) {
     let k = crate::mix::surround::DOWNMIX;
     for i in 0..frames {
@@ -33,7 +33,8 @@ impl Strip {
         }
     }
 
-    /// A stereo [buf] added at frame [at] (add's stereo rule, in pieces).
+    /// Adds a stereo [buf] at frame [at] in pieces, with the stereo rule of
+    /// add.
     pub(crate) fn add_stereo_at(&mut self, buf: &[f32], at: usize, n: usize) {
         let inp = &mut self.input[at * 2..(at + n) * 2];
         if !self.mono {

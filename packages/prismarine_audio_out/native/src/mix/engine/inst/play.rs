@@ -3,8 +3,8 @@
 use super::*;
 
 impl Inst {
-    /// Starts sound [body]; refused (a problem) when the instance plays its
-    /// most sounds already.
+    /// Starts sound [body]. A start is refused with a problem when the
+    /// instance plays its most sounds already.
     #[allow(clippy::too_many_arguments)]
     fn add_sound(
         &mut self,
@@ -41,9 +41,10 @@ impl Inst {
         });
     }
 
-    /// Stops sound [k] for a polyphony limit at block frame [at] (Dart
-    /// `_Sound.steal`): a voice fades out (one not started yet never
-    /// sounds), a nested event stops at once, a scatterer stops spawning.
+    /// Stops sound [k] for a polyphony limit at block frame [at], as Dart's
+    /// `_Sound.steal`. A voice fades out, and one that has not started does
+    /// not sound. A nested event stops at once, and a scatterer stops
+    /// spawning.
     pub(crate) fn steal_sound(&mut self, k: usize, at: i64) {
         let pass = self.pass;
         let s = &mut self.voices[k];
@@ -65,8 +66,8 @@ impl Inst {
         }
     }
 
-    /// FMOD's instrument polyphony per event instance (Dart `_admit`):
-    /// false when [inst] may not play now.
+    /// Applies the polyphony limit of [inst] per event instance, as Dart's
+    /// `_admit`. Returns false when [inst] may not play now.
     fn admit(&mut self, inst: &'static crate::mix::model::Inst, at: i64) -> bool {
         let mut oldest = None;
         let mut live = 0;
@@ -131,7 +132,7 @@ impl Inst {
         let mut sum = 0.0;
         for m in &p.mods {
             if m.kind == MOD_AHDSR && index == 1 && inst.kind == INST_SCATTERER {
-                continue; // render_scatter_env plays it
+                continue;
             }
             if m.kind != MOD_RANDOM {
                 problem!(
@@ -148,8 +149,8 @@ impl Inst {
         sum
     }
 
-    /// The start offset (property 9) of [inst] in ms (EventInstance
-    /// `_startOffset`).
+    /// Returns the start offset of [inst] in ms, as EventInstance
+    /// `_startOffset`.
     pub(crate) fn start_offset(
         &mut self,
         cx: &mut Cx,
@@ -460,8 +461,8 @@ impl Inst {
         Some((cos(th) * g, sin(th) * g))
     }
 
-    /// A scatterer's spawn, owned by [owner] (its live spawns are the
-    /// owner's sounds that haven't ended).
+    /// Spawns a sound of a scatterer owned by [owner]. Its live spawns are
+    /// the sounds of the owner that have not ended.
     pub(crate) fn spawn(
         &mut self,
         cx: &mut Cx,

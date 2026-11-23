@@ -1,5 +1,5 @@
-//! An event instance and its sounds (instance.dart): the types here, the
-//! methods in the child modules.
+//! An event instance and its sounds, as instance.dart, with the types here
+//! and the methods in the child modules.
 
 use super::*;
 
@@ -14,13 +14,13 @@ mod voice;
 // ---------------------------------------------------------------- instances
 
 enum Body {
-    /// A slot's stand-in while its sound renders.
+    /// The stand-in of a slot while its sound renders.
     Empty,
-    /// [fade_from]: a stolen voice's declick starts at this pass frame (then
-    /// at 0 in later passes); [faded]: frames of it done.
-    /// [bend]: semitones on top of [rate] this block (a scatterer's pitch
-    /// envelope moving its spawn).
-    /// [armed]: not rendered yet (a stream's start hold applies).
+    /// The declick of a stolen voice starts at the pass frame [fade_from],
+    /// and at 0 in later passes, with [faded] frames of it done. [bend] is
+    /// the semitones on top of [rate] in this block, from the pitch envelope
+    /// of the scatterer that spawned it. [armed] tells that it has not
+    /// rendered, and the start hold of a stream applies.
     Voice {
         reader: Reader,
         rate: f64,
@@ -33,23 +33,23 @@ enum Body {
         bend: f64,
         armed: bool,
     },
-    /// A nested event: an instance from its instrument's pool, back there
-    /// when the sound goes.
+    /// A nested event, an instance from the pool of its instrument that goes
+    /// back there with the sound.
     Nested {
         event: Owned<Inst>,
         inst: &'static crate::mix::model::Inst,
     },
-    /// Its live spawns are the sounds it owns ([spawn_owner]) that haven't
-    /// ended.
+    /// Its live spawns are the sounds that it owns, by [spawn_owner], that
+    /// have not ended.
     Scatter {
         inst: &'static crate::mix::model::Inst,
         spawned: i64,
         stopped: bool,
         env: Option<ScatEnv>,
     },
-    /// An event instrument on a snapshot (Dart `_SnapshotSound`): [key]
-    /// names its snapshot in the mixer once started; [at] the instance's
-    /// 3D position change it last sent (Inst::spatial_gen).
+    /// A mix state instrument, as Dart's `_SnapshotSound`. [key] identifies
+    /// its mix state in the mixer once started, and [at] is the change of the
+    /// position of the instance that it last sent, from Inst::spatial_gen.
     Snapshot {
         inst: &'static crate::mix::model::Inst,
         key: i64,
@@ -57,10 +57,10 @@ enum Body {
     },
 }
 
-/// A scatterer's pitch AHDSR (Dart `_Scatter.env` and its state): the
-/// pitch it was played at, seconds since it started and into its release
-/// (−1: not releasing), the release's starting level, and scatterer-time
-/// frames to the next spawn (−1: not started).
+/// The pitch AHDSR of a scatterer with its state, as Dart's `_Scatter.env`.
+/// It holds the pitch that it was played at, the seconds since its start and
+/// into its release, −1 while not releasing, the start level of the release
+/// and the frames in scatterer time to the next spawn, −1 before the start.
 #[derive(Clone, Copy)]
 struct ScatEnv {
     m: &'static crate::mix::model::Mod,
@@ -81,7 +81,7 @@ impl ScatEnv {
         }
     }
 
-    /// Leaving its region: true when it stops now (no release).
+    /// Leaves its region. Returns true when it stops now without a release.
     fn untrigger(&mut self) -> bool {
         if self.m.release > 0.0 {
             if self.released < 0.0 {
@@ -94,8 +94,8 @@ impl ScatEnv {
     }
 }
 
-/// What an instance's snapshot instruments ask of the mixer's snapshots,
-/// applied after the instance renders (in order).
+/// A request of a mix state instrument of an instance to the mix states of
+/// the mixer, applied in order after the instance renders.
 pub enum SnapOp {
     Start(Owned<Snap>),
     Set { key: i64, guid: i32, value: f64 },
@@ -103,8 +103,8 @@ pub enum SnapOp {
     Stop(i64),
 }
 
-/// Snapshot instances an instance's snapshot instruments can start: two
-/// each, built with it.
+/// The mix state instances that the mix state instruments of an instance
+/// can start, two each, built with it.
 struct SnapPool {
     inst: &'static crate::mix::model::Inst,
     free: Vec<Owned<Snap>>,
@@ -114,8 +114,8 @@ const SNAP_POOL: usize = 2;
 const SNAP_OPS: usize = 32;
 
 struct Sound {
-    /// The instance's count of sounds when it started (names a scatterer's
-    /// spawns).
+    /// The count of sounds of the instance when it started, which identifies
+    /// the spawns of a scatterer.
     serial: usize,
     owner: usize,
     cutoff: bool,
@@ -124,8 +124,8 @@ struct Sound {
     delay: i64,
     body: Body,
     via: Via,
-    /// Stopped by a polyphony limit (no longer counted), and the raw pass it
-    /// last rendered in.
+    /// The sound was stopped by a polyphony limit and no longer counts, with
+    /// the raw pass that it last rendered in.
     stolen: bool,
     pass: u64,
 }
@@ -143,8 +143,8 @@ const EMPTY: Sound = Sound {
     pass: 0,
 };
 
-/// The owner of a scatterer's spawns (placements and sheets own theirs by
-/// address, which never has the top bit set).
+/// The owner of the spawns of a scatterer. Placements and sheets own theirs
+/// by address, which does not have the top bit set.
 fn spawn_owner(serial: usize) -> usize {
     (1 << (usize::BITS - 1)) | serial
 }
@@ -154,22 +154,23 @@ struct Locked {
     bus: usize,
     rate: f64,
     gain: f64,
-    /// The start offset in source frames (property 9).
+    /// The start offset in source frames.
     seek: f64,
-    /// It has rendered (a stream's start hold is over).
+    /// The sound has rendered, and the start hold of a stream is over.
     started: bool,
-    /// The waveform repeats to fill its box (EventBank.fills).
+    /// The waveform repeats to fill its box, from Placement.fill.
     fill: bool,
 }
 
-/// A pitched instance's resampler, built with the instance (when its pitch
-/// can move) and started at its first pitched pass.
+/// The resampler of a pitched instance, built with the instance when its
+/// pitch can move and started at its first pitched pass.
 struct Pitched {
     ratio: f64,
     pos: f64,
     count: i64,
     held: Vec<(i32, Vec<f32>)>,
-    /// Buffers for [held] (each room for a raw pass and what is left over).
+    /// The buffers of [held], each with room for a raw pass and what is left
+    /// over.
     spare: Vec<Vec<f32>>,
     main: Vec<f32>,
     sends: OutMap,
@@ -181,8 +182,9 @@ struct Pool {
     free: Vec<Owned<Inst>>,
 }
 
-/// The most an instrument (and the multis it is picked from) raises a
-/// nested event's pitch, in semitones: its pitch and pitch modulators.
+/// Returns the most semitones by which an instrument and the playlists that
+/// it is picked from raise the pitch of a nested event, from their pitch
+/// and pitch modulators.
 fn inst_pitch(i: &crate::mix::model::Inst) -> f64 {
     let mut b = i.pitch.abs();
     if let Some(p) = i.prop(1) {
@@ -193,7 +195,8 @@ fn inst_pitch(i: &crate::mix::model::Inst) -> f64 {
     b
 }
 
-/// The most an event's own pitch modulators move it (semitones).
+/// Returns the most semitones by which the pitch modulators of an event move
+/// it.
 fn own_pitch(def: &Event) -> f64 {
     let mut b = 0.0;
     for p in &def.master.props {
@@ -217,7 +220,7 @@ fn own_pitch(def: &Event) -> f64 {
     b
 }
 
-/// Counts the multis and scatterers (their playlists) in [i].
+/// Counts the playlists and scatterers in [i].
 fn count_multis(i: &crate::mix::model::Inst, n: &mut usize) {
     if i.kind == INST_MULTI || i.kind == INST_SCATTERER {
         *n += 1;
@@ -227,8 +230,8 @@ fn count_multis(i: &crate::mix::model::Inst, n: &mut usize) {
     }
 }
 
-/// Calls [f] for every nested-event instrument [i] can play, with the
-/// pitch it can add on the way and how many can play at once.
+/// Calls [f] for every event instrument that [i] can play, with the pitch
+/// that it can add on the way and how many can play at once.
 fn nested_insts(
     i: &'static crate::mix::model::Inst,
     pitch: f64,
@@ -259,12 +262,12 @@ fn nested_insts(
 
 const KEY_MAIN: i32 = -2;
 
-/// A stolen instance plays on for one FMOD mix block, then is cut
-/// (Dart `_stealDelay`).
+/// The frames that a stolen instance plays on, one mix block, before it is
+/// cut, as Dart's `_stealDelay`.
 const STEAL_DELAY: i64 = 1024;
 
-/// The instruments a sound was played through (a multi, then its entry…),
-/// by address, for their polyphony (Dart `_Sound.via`).
+/// The instruments that a sound was played through by address, a playlist
+/// and then its entry, for their polyphony limits, as Dart's `_Sound.via`.
 #[derive(Clone, Copy)]
 struct Via {
     a: [usize; 4],
@@ -290,22 +293,22 @@ impl Via {
 pub struct Inst {
     pub(crate) def: &'static Event,
     rng: Rng,
-    /// A voice line (a programmer instrument's sound).
+    /// The slot sound.
     programmer: Option<SrcRef>,
-    /// The start that made it (the player's handle).
+    /// The start that made it, the handle of the player.
     pub(crate) serial: i64,
     pub(crate) paused: bool,
     stopping: bool,
-    /// Stopped with FMOD's immediate mode (Dart `_immediate`).
+    /// Stopped at once, as Dart's `_immediate`.
     cut: bool,
     pub(crate) done: bool,
-    /// Cut by its event's polyphony.
+    /// Cut by the polyphony limit of its event.
     pub(crate) stolen: bool,
     releasing: bool,
     cursor: i64,
-    /// Frames into the declick (negative: frames before it starts).
+    /// The frames into the declick, negative before it starts.
     stop_at: i64,
-    /// Raw passes rendered.
+    /// The raw passes rendered.
     pass: u64,
     pending: Option<(&'static Trans, i64)>,
     values: Vec<f64>,
@@ -317,7 +320,7 @@ pub struct Inst {
     input_bus: Option<Strip>,
     pub(crate) send_out: OutMap,
     voices: Vec<Sound>,
-    /// Sounds started so far.
+    /// The sounds started so far.
     sounds: usize,
     base_db: f64,
     pitch: f64,
@@ -327,7 +330,7 @@ pub struct Inst {
     released: f64,
     release_from: f64,
     pitched: Option<Box<Pitched>>,
-    /// The resampler is running (Dart: `_pitched != null`).
+    /// The resampler is running, as `_pitched != null` in Dart.
     pitched_on: bool,
     async_inside: Vec<bool>,
     sheet_inside: Vec<bool>,
@@ -336,30 +339,30 @@ pub struct Inst {
     pub(crate) volume: f64,
     pub(crate) vol_prev: Option<f64>,
     programmer_started: bool,
-    /// The relative position (azimuth, distance, cone angle), once set, and
-    /// how many times it was set.
+    /// The relative position as azimuth, distance and cone angle once set,
+    /// and how many times it was set.
     spatial: Option<(f64, f64, f64)>,
     spatial_gen: u64,
-    /// The most frames one render() is asked for, and one raw pass (more
-    /// when its pitch can rise).
+    /// The most frames that one render() is asked for, and of one raw pass,
+    /// which is more when its pitch can rise.
     outer: usize,
     cap: usize,
-    /// The nested events it can start.
+    /// The nested events that it can start.
     nested: Vec<Pool>,
-    /// The snapshots its snapshot instruments can start, and their asks
-    /// this pass (its nested events' come up into it).
+    /// The mix states that its mix state instruments can start, and their
+    /// requests in this pass, those of its nested events included.
     snaps: Vec<SnapPool>,
     pub(crate) snap_out: Vec<SnapOp>,
-    /// Effects the mixer doesn't have (reported when it starts).
+    /// The effects that the engine does not have, reported at the start.
     unsupported: Vec<&'static Fx>,
-    /// A pass's send scratch, fade gains, and (as a nested event) the
-    /// buffer its parent renders it into.
+    /// The send scratch and fade gains of a pass, and the buffer that the
+    /// parent of a nested event renders it into.
     scratch: Vec<f32>,
     gains: Vec<f32>,
     nest_buf: Vec<f32>,
 }
 
-/// The parameter values an instance's automation reads.
+/// The parameter values that the automation of an instance reads.
 struct Vals<'a> {
     def: &'static Event,
     values: &'a [f64],
@@ -396,7 +399,8 @@ impl Vals<'_> {
         }
         0.0
     }
-    /// _automated; [xt] replaces the cursor for timeline automation.
+    /// Returns the automated value as _automated. [xt] replaces the cursor
+    /// for timeline automation.
     fn automated(&self, p: Option<&Prop>, xt: Option<f64>) -> Option<f64> {
         let p = p?;
         if p.autos.is_empty() {
@@ -438,8 +442,8 @@ impl Vals<'_> {
     }
 }
 
-/// A start offset of [ms] into [src], in its frames: past the end wraps
-/// (EventInstance `_seekFrames`).
+/// Returns the start offset [ms] into [src] in its frames, as EventInstance
+/// `_seekFrames`. An offset past the end wraps.
 fn seek_frames(src: &SrcRef, ms: f64) -> f64 {
     let frames = src.frames();
     if ms <= 0.0 || frames <= 0 {
@@ -502,7 +506,7 @@ impl Sink for InstSink<'_, '_> {
             return;
         }
         if ch == 6 {
-            // Sends out of an event leave it in stereo (Dart: folded).
+            // Sends out of an event leave it in stereo, folded as in Dart.
             let mut st = [0.0f32; 2 * 64];
             let frames = buf.len() / 6;
             let mut at = 0;
@@ -548,8 +552,8 @@ impl Sink for InstSink<'_, '_> {
     }
 }
 impl InstSink<'_, '_> {
-    /// A folded 5.1 send's frames [at]..: into the instance's send output
-    /// of [frames] frames.
+    /// Adds the frames from [at] on of a folded 5.1 send into the send
+    /// output of [frames] frames of the instance.
     fn send_at(&mut self, fx: &'static Fx, buf: &[f32], at: usize, frames: usize) {
         let key = if fx.return_path >= 0 {
             fx.return_path
@@ -567,7 +571,8 @@ impl InstSink<'_, '_> {
     }
 }
 
-/// player.sample: the bound source of waveform [w], or a problem.
+/// Returns the bound source of waveform [w], as player.sample, or reports a
+/// problem.
 fn sample(cx: &mut Cx, w: i32) -> Option<SrcRef> {
     match cx.slots.get(w as usize)? {
         Some(s) if s.kind != Kind::Failed => Some(s.clone()),

@@ -3,11 +3,11 @@
 use super::*;
 
 impl Inst {
-    /// Builds an instance of [def] for render calls of up to [outer]
-    /// frames, with everything it can use while it plays; [pitch]: the most
-    /// a parent's instrument raises its pitch (semitones). Not on the
-    /// render thread: the poster builds a start's instance, an instance its
-    /// nested events'.
+    /// Builds an instance of [def] for render calls of up to [outer] frames,
+    /// with everything that it can use while it plays. [pitch] is the most
+    /// semitones by which the instrument of a parent raises its pitch. It
+    /// does not run on the render thread. The poster builds the instance of a
+    /// start, and an instance builds those of its nested events.
     pub fn build(b: &Build, def: &'static Event, outer: usize, pitch: f64) -> Inst {
         let np = def.params.len();
         let mut slot = vec![0usize; np];
@@ -53,7 +53,8 @@ impl Inst {
             .input_bus
             .as_ref()
             .map(|bus| Strip::build(b, bus, cap, &def.keys, &mut unsupported));
-        // The nested events it can start, each instrument's pool built.
+        // The nested events that it can start, with the pool of each
+        // instrument.
         let mut nested: Vec<Pool> = Vec::new();
         let mut snaps: Vec<SnapPool> = Vec::new();
         let mut multis = 0;
@@ -90,7 +91,8 @@ impl Inst {
                 }
             }
         }
-        // Its sends' keys, and its nested events' (theirs come up into it).
+        // The keys of its sends and of the sends of its nested events, which
+        // come up into it.
         let sends = (0..def.nbuses())
             .map(|bi| def.bus(bi))
             .chain(def.input_bus.iter())
@@ -102,7 +104,7 @@ impl Inst {
                 .iter()
                 .map(|q| q.free.first().map_or(0, |c| c.send_out.e.len()))
                 .sum::<usize>();
-        // A 5.1 strip's sends need a 5.1 scratch.
+        // The sends of a 5.1 strip need a 5.1 scratch.
         let any51 = strips
             .iter()
             .chain(input_bus.iter())
@@ -123,7 +125,7 @@ impl Inst {
                 sends: OutMap::with(keys, outer * 2),
             })
         });
-        // Room for its snapshot asks and its nested events' (theirs come up).
+        // Room for its mix state requests and those of its nested events.
         let nested_asks = nested
             .iter()
             .any(|p| p.free.first().is_some_and(|c| c.snap_out.capacity() > 0));
@@ -187,8 +189,9 @@ impl Inst {
         }
     }
 
-    /// Starts it as new (Dart's EventInstance constructor), in the memory it
-    /// was built with: a start's instance, or a nested event from its pool.
+    /// Starts it as new, as Dart's EventInstance constructor, in the memory
+    /// that it was built with, for the instance of a start or a nested event
+    /// from its pool.
     pub(crate) fn init(&mut self, cx: &mut Cx, rng: Rng, programmer: Option<SrcRef>, seek: f64) {
         let def = self.def;
         self.clear_sounds();

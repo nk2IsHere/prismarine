@@ -103,9 +103,9 @@ impl Inst {
         }
     }
 
-    /// FMOD Studio's 3D attributes as the relative position (mcsm_audio
-    /// `EventInstance.setSpatial`): automatic distance parameters, PAN
-    /// DSPs, nested events.
+    /// Sets the position relative to the listener, as Dart's
+    /// `EventInstance.setSpatial`, on the distance and cone parameters, the
+    /// pan DSPs and the nested events.
     pub fn set_spatial(&mut self, azimuth: f64, distance: f64, cone: f64) {
         self.spatial = Some((azimuth, distance, cone));
         self.spatial_gen += 1;
@@ -153,8 +153,9 @@ impl Inst {
         self.stop_at = 0;
     }
 
-    /// Stopped by a newer instance past its event's polyphony: one mix block
-    /// later it is cut with the declick (Dart `steal`).
+    /// Stops the instance for a newer one past the polyphony limit of its
+    /// event, as Dart's `steal`. One mix block later it is cut with the
+    /// declick.
     pub(crate) fn steal(&mut self) {
         if self.done || self.stolen {
             return;
@@ -185,15 +186,15 @@ impl Inst {
         })
     }
 
-    /// The instance's length minus its reported position, which trails the
-    /// render by [lag] frames (engine.dart `_left`).
+    /// Returns the length of the instance minus its reported position, which
+    /// trails the render by [lag] frames, as `_left` of engine.dart.
     pub(crate) fn left(&self, lag: i64) -> f64 {
         self.programmer_left()
             .unwrap_or((self.def.tl_length - self.cursor) as f64 / RATE_F)
             + lag as f64 / RATE_F
     }
 
-    /// programmerLeft.
+    /// The seconds left on the slot sound, as slotLeft.
     fn programmer_left(&self) -> Option<f64> {
         let prog = self.programmer.as_ref()?;
         let (frames, rate) = (prog.frames(), prog.rate());
@@ -216,8 +217,8 @@ impl Inst {
         self.clear_sounds();
     }
 
-    /// A sound that goes: a nested event's instance back to its pool (its
-    /// own sounds let go), anything else to the collector.
+    /// Lets a sound go. The instance of a nested event goes back to its pool
+    /// with its own sounds let go, and anything else to the collector.
     pub(super) fn release(&mut self, s: Sound) {
         if let Body::Snapshot { key, .. } = s.body {
             if key >= 0 {
@@ -243,7 +244,7 @@ impl Inst {
         }
     }
 
-    /// Removes the ended sounds (in order).
+    /// Removes the ended sounds in order.
     pub(crate) fn sweep(&mut self) {
         let mut k = 0;
         while k < self.voices.len() {

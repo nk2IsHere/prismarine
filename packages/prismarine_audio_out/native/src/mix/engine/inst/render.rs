@@ -1,4 +1,4 @@
-//! An instance's render: its strips, raw and pitched.
+//! The render of an instance, its strips, raw and pitched.
 
 use super::*;
 
@@ -80,8 +80,8 @@ impl Inst {
             k += 1;
         }
         self.sweep();
-        // The instance volume (with the master's random volume and AHDSR) is
-        // the master track's fader gain (Strip.fader_from/to).
+        // The instance volume, with the random volume and the AHDSR of the
+        // master, is the fader gain of the master track.
         let base = db_gain(self.base_db);
         let v0 = self.vol_prev.unwrap_or(self.volume) * base * self.env_gain(0.0);
         let v1 = self.volume * base * self.env_gain(frames as f64 / RATE_F);
@@ -195,8 +195,8 @@ impl Inst {
             main[..nm].fill(0.0);
             self.render_raw(cx, &mut main[..nm], n);
             let count = pt.count;
-            // The held buffer of [key] (Dart: putIfAbsent, zeros up to the
-            // frames held so far); None when it has no room.
+            // The held buffer of [key], as putIfAbsent with zeros up to the
+            // frames held so far in Dart, or None without room.
             let held_of = |pt: &mut Pitched, key: i32| -> Option<usize> {
                 if let Some(i) = pt.held.iter().position(|h| h.0 == key) {
                     return Some(i);
@@ -292,7 +292,7 @@ impl Inst {
         self.pitched = Some(pt);
     }
 
-    /// The output's channels: 6 for an event whose output is 5.1 (S2).
+    /// The channels of the output, 6 for an event whose output is 5.1.
     pub(crate) fn out_ch(&self) -> usize {
         match &self.input_bus {
             Some(ib) => ib.out_ch(),
@@ -306,8 +306,8 @@ impl Inst {
             return;
         }
         if self.paused {
-            // FMOD's immediate stop ends a paused instance at once, its
-            // nested snapshots with it (Dart `render`).
+            // A stop at once ends a paused instance at once, with its nested
+            // mix states.
             if self.cut {
                 self.finish();
             }
@@ -350,8 +350,9 @@ impl Inst {
     }
 }
 
-/// A pitched output's held frames (`C` channels) read back at `ratio` from
-/// `pos`, with linear interpolation, into `o` (Dart `_Pitched.render`).
+/// Reads back the held frames with `C` channels of a pitched output at
+/// `ratio` from `pos` with linear interpolation into `o`, as Dart's
+/// `_Pitched.render`.
 fn read_back<const C: usize>(tmp: &[f32], o: &mut [f32], pos: f64, ratio: f64, frames: usize) {
     let mut p = pos;
     for f in 0..frames {

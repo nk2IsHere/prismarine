@@ -1,5 +1,5 @@
-//! The engine (engine.dart, player.dart): instances, the command queue
-//! and the render call.
+//! The engine as engine.dart and player.dart, with the instances, the
+//! command queue and the render call.
 
 use super::*;
 
@@ -15,29 +15,30 @@ pub struct Core {
     pub(crate) snap_started: i64,
     snap_key: i64,
     pub(crate) insts: Vec<Owned<Inst>>,
-    /// Command ids → the instance's serial.
+    /// The serial of the instance of each command id.
     live: Vec<(i32, i64)>,
     ended: Vec<i64>,
     nended: usize,
-    /// Snapshot ids → the snapshot's order.
+    /// The order of the mix state of each command id.
     pub(crate) snaplive: Vec<(i32, i64)>,
-    /// The waveforms' bound sources.
+    /// The bound sources of the waveforms.
     slots: Vec<Option<SrcRef>>,
     pub(crate) graph: Graph,
     inputs: OutMap,
-    /// The instances' 5.1 outputs (S2), by bus path.
+    /// The 5.1 outputs of the instances by bus path.
     inputs51: OutMap,
     pub(crate) queue: Vec<Cmd>,
     scratch: Vec<f32>,
     chunk: Vec<f32>,
     pub position: i64,
     seen: Vec<u32>,
-    /// A scene change's marks: the waveforms still wanted (forget).
+    /// The marks of a new generation, the waveforms that are still wanted.
     pub(crate) keep: Vec<bool>,
 }
 
-/// The keys instances' outputs reach the mixer by: the root bus, input
-/// buses' outputs and every event's (and nested event's) sends.
+/// Counts the keys that the outputs of instances reach the mixer by, the
+/// default bus, the outputs of input buses and the sends of every event and
+/// nested event.
 fn input_keys(m: &Model) -> usize {
     pub(crate) fn add(k: &mut Vec<i32>, v: i32) {
         if !k.contains(&v) {
@@ -90,8 +91,8 @@ fn input_keys(m: &Model) -> usize {
     k.len()
 }
 
-/// An instance's snapshot ask, onto the mixer's snapshots (Dart: the
-/// SnapshotInstance an event instrument holds).
+/// Applies the mix state request of an instance to the mix states of the
+/// mixer, as the MixStateInstance that an instrument holds in Dart.
 fn snap_op(graph: &mut Graph, started: &mut i64, cx: &mut Cx, op: SnapOp) {
     fn find(g: &mut Graph, key: i64) -> Option<&mut Snap> {
         g.active
@@ -255,7 +256,8 @@ impl Core {
             };
         }
         if def.poly > 0 && !self.admit(def) {
-            // Refused by its polyphony: it plays nothing, quietly.
+            // Refused by the polyphony limit. Later commands to it are
+            // ignored without a problem.
             self.ended_add(c.id);
             return;
         }
@@ -287,8 +289,8 @@ impl Core {
         }
     }
 
-    /// FMOD's event polyphony (Dart `EventPlayer._admit`): with [Event::poly]
-    /// instances live, a start fails or stops the oldest.
+    /// Applies the polyphony limit of [def], as Dart's `EventPlayer._admit`.
+    /// With [Event::poly] instances live, a start fails or stops the oldest.
     fn admit(&mut self, def: &'static Event) -> bool {
         let mut oldest = None;
         let mut live = 0;
@@ -414,7 +416,8 @@ impl Core {
             }
             done += n;
             self.position += n;
-            // Ended ids; finished instances leave the player.
+            // The ids of ended instances. Finished instances leave the
+            // player.
             let mut k = 0;
             while k < self.live.len() {
                 let (id, serial) = self.live[k];

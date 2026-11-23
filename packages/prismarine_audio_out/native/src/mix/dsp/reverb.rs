@@ -1,4 +1,4 @@
-//! FMOD's SFX reverb: its delay network, decay and damping.
+//! The reverb, its delay network, decay and damping.
 
 use super::*;
 
@@ -171,8 +171,9 @@ fn rv_row(r: usize, j: usize) -> f64 {
     p
 }
 
-/// The 5.1 form (Dart `SfxReverb.process51`): the six channels' sum in,
-/// six uncorrelated outputs at the measured 5.1 level, dry per channel.
+/// The 5.1 form as Dart's `Reverb.process51`. The sum of the six channels
+/// goes in, and six uncorrelated outputs at the 5.1 level come out, with dry
+/// per channel.
 pub(crate) fn rv_process51(r: &mut Reverb, p: &[f64], buf: &mut [f32], frames: usize) {
     let (wet, dry) = (db_gain(p[11]), db_gain(p[12]));
     if wet == 0.0 && dry == 0.0 {
@@ -261,7 +262,7 @@ fn rv_diffuse(r: &mut Reverb, mut x: f64, diffusion: f64) -> f64 {
     x
 }
 
-/// Each line's damped, decayed output into `y`.
+/// Writes the damped and decayed output of each line into `y`.
 fn rv_read_lines(r: &mut Reverb, y: &mut [f64; RV_LINES]) {
     for (j, yj) in y.iter_mut().enumerate() {
         let n = r.line[j].len() as i64;
@@ -271,7 +272,7 @@ fn rv_read_lines(r: &mut Reverb, y: &mut [f64; RV_LINES]) {
     }
 }
 
-/// The fed-back `y` plus the input `x` (alternating signs) into the lines.
+/// Feeds back `y` plus the input `x` with alternating signs into the lines.
 fn rv_write_lines(r: &mut Reverb, y: &[f64; RV_LINES], x: f64, s: f64) {
     for (j, yj) in y.iter().enumerate() {
         let n = r.line[j].len() as i64;

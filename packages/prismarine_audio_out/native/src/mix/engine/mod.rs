@@ -1,10 +1,10 @@
-//! The render: mcsm_audio's AudioEngine (engine.dart), EventPlayer
+//! The render, as prismarine_audio's AudioEngine (engine.dart), EventPlayer
 //! (player.dart), EventInstance and its sounds (instance.dart), SourceReader
 //! (voice.dart), BusStrip (strip.dart), MixerGraph (graph.dart),
-//! SnapshotInstance (snapshot.dart), Curve/PiecewiseMap (curve.dart) and Rng
-//! (rng.dart), function for function and in the same float order. Runs on
-//! one thread at a time (the device's in real time, the caller's in
-//! lockstep).
+//! MixStateInstance (mix_state.dart), Curve and PiecewiseMap (curve.dart)
+//! and Rng (rng.dart), function for function and in the same float order.
+//! It runs on one thread at a time, the device's in real time and the
+//! caller's in lockstep.
 
 use std::fmt::Write as _;
 use std::sync::atomic::Ordering;

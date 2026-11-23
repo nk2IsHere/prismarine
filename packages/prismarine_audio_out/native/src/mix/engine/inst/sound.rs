@@ -1,11 +1,12 @@
-//! Rendering one sound; snapshot instruments and scatterers.
+//! Rendering one sound, mix state instruments and scatterers.
 
 use super::*;
 
 impl Inst {
     // --- sounds ------------------------------------------------------------
 
-    /// Renders sound [s] (taken out of its slot): false once it has ended.
+    /// Renders sound [s], taken out of its slot. Returns false once it has
+    /// ended.
     pub(super) fn render_sound(&mut self, cx: &mut Cx, s: &mut Sound, frames: i64) -> bool {
         if s.ended {
             return false;
@@ -41,7 +42,7 @@ impl Inst {
                             .count() as i64;
                         let max = inst.max_poly;
                         if max > 0 && live >= max && inst.spawn_steal {
-                            // The oldest live spawn is stopped (Dart: O).
+                            // The oldest live spawn is stopped.
                             if let Some(k) = self
                                 .voices
                                 .iter()
@@ -74,8 +75,8 @@ impl Inst {
         }
     }
 
-    /// A snapshot ask (dropped, with a problem later, when full: the pool
-    /// is sized for S1's few snapshot instruments).
+    /// Queues a mix state request. A full queue drops it with a problem
+    /// later.
     pub(crate) fn snap_ask(&mut self, op: SnapOp) {
         if self.snap_out.len() < self.snap_out.capacity() {
             self.snap_out.push(op);

@@ -1,12 +1,12 @@
-//! 5.1 processing (Dart `Dsp.process51` and the PAN DSP's `toSurround`), in
-//! the same float order.
+//! The 5.1 processing, as Dart's `Dsp.process51` and `Pan.toSurround` in the
+//! same float order.
 
 use super::*;
 
 impl Dsp {
-    /// Builds the twins a per-channel DSP runs a 5.1 buffer's other channel
-    /// pairs with (Dart builds them at their first use, in the same state),
-    /// for blocks of up to `frames`.
+    /// Builds the twins that run the other channel pairs of a 5.1 buffer, for
+    /// blocks of up to `frames`. Dart builds them at their first use, in the
+    /// same state.
     pub fn make_twins(&mut self, taps: &'static [f64], echo_frames: i64, frames: usize) {
         if !matches!(
             self.kind,
@@ -26,8 +26,8 @@ impl Dsp {
         self.pair = vec![0.0; frames * 2];
     }
 
-    /// Processes `frames` of a 5.1 buffer (FL FR C LFE SL SR) in place;
-    /// false when the DSP has no 5.1 form.
+    /// Processes `frames` frames of a 5.1 buffer in the order FL FR C LFE SL
+    /// SR in place. Returns false when the DSP has no 5.1 form.
     pub fn process51(&mut self, buf: &mut [f32], frames: usize) -> bool {
         let p = &self.p;
         match &mut self.st {
@@ -111,7 +111,7 @@ impl Dsp {
         }
     }
 
-    /// 5.1 as three stereo pairs through this DSP and its twins.
+    /// Processes 5.1 as three stereo pairs through this DSP and its twins.
     fn pairs51(&mut self, buf: &mut [f32], frames: usize) -> bool {
         let Some(mut twins) = self.twins.take() else {
             return false;
@@ -143,13 +143,13 @@ impl Dsp {
         true
     }
 
-    /// A surround PAN with a 5.1 target ("Output Speaker" 6, mode 2).
+    /// The DSP is a pan in surround mode with a 5.1 target.
     pub fn surround(&self) -> bool {
         self.kind == PAN && self.p[0].round() as i64 == 2 && self.p[20].round() as i64 == 6
     }
 
-    /// `frames` of `src` (stereo, or mono held dual-mono) panned onto 5.1
-    /// into `dst` (Dart `Pan.toSurround`).
+    /// Pans `frames` frames of `src`, stereo or mono in both channels, onto
+    /// 5.1 into `dst`, as Dart's `Pan.toSurround`.
     pub fn to_surround(&self, src: &[f32], mono: bool, dst: &mut [f32], frames: usize) {
         let p = &self.p;
         let (mut l, mut r) = ([0.0f64; 6], [0.0f64; 6]);

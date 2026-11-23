@@ -1,15 +1,15 @@
-//! Source readers over decoded and streamed waveforms (voice.dart).
+//! Source readers over decoded and streamed waveforms, as voice.dart.
 
 use super::*;
 
 // ---------------------------------------------------------------- sources
 
-/// SourceReader (its chunk is the render's, [Cx::chunk]).
+/// A SourceReader, whose chunk is [Cx::chunk] of the render.
 pub(crate) struct Reader {
     pub(crate) src: SrcRef,
     one: [f32; 16],
-    /// Real time, a stream: the tap this reader reads ([NO_TAP] until its
-    /// first read), and its id for the tap's owner mark.
+    /// The tap that this reader reads of a stream in real time, [NO_TAP]
+    /// before its first read, and its id for the owner mark of the tap.
     tap: usize,
     id: i64,
 }
@@ -28,7 +28,8 @@ impl Reader {
 }
 
 impl Drop for Reader {
-    /// Gives its tap back (atomics only: the render thread drops readers).
+    /// Gives its tap back with atomics only, since the render thread drops
+    /// readers.
     fn drop(&mut self) {
         if self.tap < crate::mix::source::TAPS {
             let _ = self.src.view.towner[self.tap].compare_exchange(
@@ -41,11 +42,11 @@ impl Drop for Reader {
     }
 }
 
-/// The tap reader [rd] reads at [frame] (a stream). A playing sound keeps a
-/// tap of its own, as each FMOD stream instance has its own decoder, so
-/// layers of one waveform at different positions don't seek each other's
-/// rings away. A jump the engine cued (stream_cue) moves the reader to the
-/// cued tap; with every tap owned, readers share by position.
+/// Returns the tap of a stream that reader [rd] reads at [frame]. A playing
+/// sound keeps a tap of its own with its own decoder, and layers of one
+/// waveform at different positions do not seek the rings of each other
+/// away. A jump that the engine cued with stream_cue moves the reader to the
+/// cued tap. With every tap owned, readers share by position.
 fn reader_tap(sh: &Shared, rd: &mut Reader, frame: i64) -> usize {
     let s = &rd.src;
     let v = &s.view;
@@ -59,8 +60,8 @@ fn reader_tap(sh: &Shared, rd: &mut Reader, frame: i64) -> usize {
     if mine && covers(rd.tap) {
         return rd.tap;
     }
-    // A free tap whose window holds the frame (a cue made for this jump, or
-    // one another reader let go), else any free tap, else a new one.
+    // A free tap whose window holds the frame, a cue made for this jump or
+    // one that another reader let go, else any free tap, else a new one.
     let mut pick = None;
     for i in 0..n {
         if g(&v.towner[i]) == 0 && covers(i) {
@@ -69,7 +70,7 @@ fn reader_tap(sh: &Shared, rd: &mut Reader, frame: i64) -> usize {
         }
     }
     if pick.is_none() && mine {
-        // Its own tap, moved (a jump nothing cued).
+        // Its own tap moves, for a jump that nothing cued.
         return rd.tap;
     }
     if pick.is_none() {
@@ -90,7 +91,7 @@ fn reader_tap(sh: &Shared, rd: &mut Reader, frame: i64) -> usize {
         }
     }
     let Some(t) = pick else {
-        // Every tap is some reader's: share by position.
+        // Every tap has a reader, and readers share by position.
         return stream_tap(sh, s, frame);
     };
     if mine {
@@ -122,7 +123,7 @@ fn stream_tap(sh: &Shared, s: &SrcRef, frame: i64) -> usize {
         }
     }
     if n < crate::mix::source::TAPS {
-        // Opened by the service thread; it reads silence until then, as a
+        // The service thread opens it, and it reads silence until then, as a
         // stream that is still opening does.
         let _ = sh.requests.push((s.clone(), n));
         v.ntaps.store(n + 1, Ordering::Relaxed);
@@ -137,11 +138,11 @@ fn stream_tap(sh: &Shared, s: &SrcRef, frame: i64) -> usize {
     least
 }
 
-/// Real time: a jump about to land at source frame [frame] of stream [s]
-/// gets a tap of its own with the ring there, so the read after the jump
-/// finds it decoded, as FMOD prepares a transition's destination over its
-/// 0.48 s lookahead and plays the jump without a gap. Takes no allocation:
-/// the tap is opened by the service thread.
+/// Gives a jump in real time that is about to reach source frame [frame] of
+/// stream [s] a tap of its own with the ring there. The read after the jump
+/// finds the destination decoded within the transition lookahead, and the
+/// jump plays without a gap. It does not allocate, since the service thread
+/// opens the tap.
 pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
     if s.kind != Kind::Stream || (frame as f64) < 0.5 * s.rate() as f64 || frame >= s.frames() {
         return;
@@ -149,14 +150,14 @@ pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
     let v = &s.view;
     let g = |a: &std::sync::atomic::AtomicI64| a.load(Ordering::Relaxed);
     let n = v.ntaps.load(Ordering::Relaxed);
-    // A tap no reader owns already there (another reader's own tap isn't
-    // one the jumping reader will read).
+    // A tap that no reader owns, already there. The own tap of another
+    // reader is not one that the jumping reader reads.
     for i in 0..n {
         if g(&v.towner[i]) == 0 && frame >= g(&v.tstart[i]) - 2 && frame <= g(&v.tend[i]) + 4096 {
             return;
         }
     }
-    // The tap read last plays now; take another.
+    // The tap read last plays now, and the jump takes another.
     let mut now = 0;
     for i in 0..n {
         if g(&v.tused[i]) > g(&v.tused[now]) {
@@ -193,10 +194,9 @@ pub(crate) fn stream_cue(sh: &Shared, s: &SrcRef, frame: i64) {
     v.tused[t].store(g(&v.clock), Ordering::Relaxed);
 }
 
-/// Real time: whether stream [s] can serve [frame] and the next block; if
-/// not, cues a tap there (stream_cue). A sound starting in a stream waits,
-/// as FMOD 1.06 holds a stream that isn't ready (formats/telltale/
-/// sound-runtime.md "Streamed sounds").
+/// Returns whether stream [s] can serve [frame] and the next block in real
+/// time, and cues a tap there with stream_cue when it cannot. A sound that
+/// starts in a stream waits for it.
 pub(crate) fn stream_ready_at(sh: &Shared, rd: &mut Reader, frame: i64) -> bool {
     if rd.src.kind != Kind::Stream || !sh.hold_streams {
         return true;
@@ -253,7 +253,8 @@ fn src_read(sh: &Shared, rd: &mut Reader, out: Option<&mut [f32]>, frame: i64, c
 }
 
 #[allow(clippy::too_many_arguments)]
-/// SourceReader.addInto: false once the source has ended.
+/// Adds frames as SourceReader.addInto. Returns false once the source has
+/// ended.
 pub(crate) fn reader_add(
     sh: &Shared,
     chunk: &mut [f32],
@@ -282,9 +283,9 @@ pub(crate) fn reader_add(
     let last = dfloor(pos + n as f64 * rate) + 1;
     let end = if last < frames { last } else { frames - 1 };
     let span = if lp { 0 } else { end - first + 1 };
-    // The frames in the chunk: [base, base + have). Dart reads the span at
-    // once; a span longer than the chunk is read in pieces (the same
-    // samples).
+    // The chunk holds the frames from base to base + have. Dart reads the
+    // span at once, and a span longer than the chunk is read in pieces with
+    // the same samples.
     let room = (chunk.len() as i64 / ch).max(2);
     let (mut base, mut have) = (first, 0i64);
     if span > 0 {
@@ -339,8 +340,8 @@ pub(crate) fn reader_add(
             }
         }
         let o = ((at + i) * 2) as usize;
-        // A quad source's third and fourth channels into a 5.1 strip's SL
-        // and SR (Dart `SourceReader._rears`).
+        // The third and fourth channels of a quad source go into SL and SR
+        // of a 5.1 strip, as Dart's `SourceReader._rears`.
         if let Some(rb) = rear.as_deref_mut() {
             if ch >= 4 {
                 let (sl0, sr0, sl1, sr1);
@@ -374,7 +375,7 @@ pub(crate) fn reader_add(
     !(pos >= frames as f64 && !lp)
 }
 
-/// _format: (gain, downmix).
+/// Returns the gain and the downmix flag, as _format.
 pub(crate) fn src_format(src: &Src, bus_mono: bool) -> (f64, bool) {
     let mono = src.channels() == 1;
     if mono && !bus_mono {

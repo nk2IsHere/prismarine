@@ -1,20 +1,21 @@
-//! mcsm_audio_out's native library: the audio mixer, mcsm_audio's Dart render
-//! (event instances, voices, bus strips, DSPs, the Master Bank graph,
-//! snapshots) on a thread outside the Dart heap, driven by commands any
-//! isolate posts, rendering the same bits.
+//! The native render of prismarine_audio's engine, with its event
+//! instances, voices, strips, DSPs, mixer graph and mix states. It runs on a
+//! thread outside the Dart heap, driven by commands that any isolate posts,
+//! and it renders the same bits as the Dart render. Each module mirrors a
+//! file of the Dart engine function for function and in the same float
+//! order.
 //!
-//! Threads: posters (Dart isolates) bind sources and push commands; the
-//! render thread (the device's IO callback, or the caller in lockstep)
-//! drains them and renders; the service thread opens stream taps and frees
-//! what the render thread let go.
+//! Posters on Dart isolates bind sources and push commands. The render
+//! thread, the callback of the device or the caller in lockstep, drains the
+//! commands and renders. The service thread opens stream taps and frees what
+//! the render thread let go.
 //!
-//! Memory: the render allocates and frees nothing — what it uses is built
-//! before it runs (engine/cmd.rs's limits) and what it lets go goes to
-//! the collector. Everything else uses the system allocator. Debug builds
-//! check the render: the global allocator is `assert_no_alloc`'s wrapper
-//! of the system's, and an allocation or free inside a render aborts.
+//! The render allocates and frees nothing. Its storage is built before it
+//! runs, within the limits of engine/cmd.rs, and what it lets go goes to the
+//! collector. In debug builds the global allocator is the checking wrapper
+//! of `assert_no_alloc`, and an allocation or free inside a render aborts.
 //!
-//! `unsafe` lives only at the FFI edge (the `extern "C"` functions here).
+//! `unsafe` is only at the FFI edge, in the `extern "C"` functions here.
 
 pub mod chorus;
 pub mod dmath;
@@ -41,27 +42,27 @@ use crate::device;
 use engine::{Cmd, Core, Shared, Stat};
 use source::{Kind, Src, SrcRef};
 
-/// Debug builds: the system allocator, checked (a render that allocates or
-/// frees aborts).
+/// The system allocator, checked in debug builds. A render that allocates
+/// or frees aborts.
 #[cfg(debug_assertions)]
 #[global_allocator]
 static CHECK: assert_no_alloc::AllocDisabler = assert_no_alloc::AllocDisabler;
 
-/// What renders: the device's callback owns it in real time, the engine's
-/// lock guards it in lockstep.
+/// The render state. The callback of the device owns it in real time, and
+/// the lock of the engine guards it in lockstep.
 struct Renderer {
     core: Core,
     sh: Arc<Shared>,
     broken: bool,
     start: Instant,
     last_cb: i64,
-    /// `MCSM_AUDIO_TAP`: a copy of each callback's mix for the tap's writer.
+    /// A copy of the mix of each callback for the writer of
+    /// `PRISMARINE_AUDIO_TAP`.
     tap: Option<rtrb::Producer<f32>>,
 }
 
 impl Renderer {
-    /// One render: allocates and frees nothing (debug builds abort if it
-    /// does).
+    /// Renders one block without allocating or freeing.
     fn render_block(&mut self, out: &mut [f32]) {
         if self.broken {
             out.fill(0.0);
@@ -86,7 +87,7 @@ impl Renderer {
 }
 
 impl device::Render for Renderer {
-    /// The device's callback.
+    /// Renders the block of a callback of the device.
     fn render(&mut self, out: &mut [f32]) {
         let t0 = Instant::now();
         let wall = t0.duration_since(self.start).as_micros() as i64;
@@ -97,8 +98,8 @@ impl device::Render for Renderer {
         }
         self.render_block(out);
         if let Some(tap) = &mut self.tap {
-            // What the mix rendered (also when muted); a full ring drops
-            // the rest (the writer fell behind).
+            // The rendered mix, also when muted. A full ring drops the rest
+            // when the writer fell behind.
             for &v in out.iter() {
                 if tap.push(v).is_err() {
                     break;
@@ -120,8 +121,8 @@ impl device::Render for Renderer {
     }
 }
 
-/// The posters' side (under one lock): which source each waveform is bound
-/// to, and problems found while posting.
+/// The state of the posters under one lock, the source that each waveform
+/// is bound to and the problems found while posting.
 struct Posters {
     bound: Vec<Option<SrcRef>>,
     problems: Vec<String>,
@@ -129,7 +130,7 @@ struct Posters {
 
 pub struct Engine {
     sh: Arc<Shared>,
-    /// The renderer while no device runs (lockstep).
+    /// The renderer while no device runs, in lockstep.
     lockstep: Mutex<Option<Box<Renderer>>>,
     device: Mutex<Option<device::Device>>,
     service: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -146,7 +147,7 @@ fn exists(path: &str) -> bool {
     Path::new(path).exists()
 }
 
-/// A source for waveform [w] of generation [gen] (posters only).
+/// Makes a source for waveform [w] of generation [gen], on a poster.
 fn make_src(sh: &Shared, w: usize, gen: i64) -> SrcRef {
     let m = sh.m;
     let wv = &m.waves[w];
@@ -167,14 +168,15 @@ fn make_src(sh: &Shared, w: usize, gen: i64) -> SrcRef {
     }
     let held = Held::acquire(path);
     if sh.streaming {
-        // Real time: it plays once decoded (the bank's format until then).
+        // In real time it plays once decoded, in the format of the model
+        // until then.
         return SrcRef::new(
             Src::new(Kind::Pcm, path, gen, wv.frames, wv.channels, wv.rate).with_pcm(held),
             &sh.garbage,
         );
     }
-    // Capture: decoded now, in its own format from the start (the Dart
-    // capture decodes whole files at load).
+    // In lockstep it is decoded now, in its own format from the start, as
+    // the Dart render decodes whole files at load.
     if held.wait() != READY {
         return failed(wv.frames, wv.channels, wv.rate);
     }
@@ -183,10 +185,10 @@ fn make_src(sh: &Shared, w: usize, gen: i64) -> SrcRef {
     SrcRef::new(s, &sh.garbage)
 }
 
-/// Binds waveform [w] for generation [gen]: a new source unless
-/// it is bound to a stream or to this generation already. The render
-/// thread takes the binding from the ring (in posting order: the posters'
-/// lock is held).
+/// Binds waveform [w] for generation [gen] to a new source, unless it is
+/// bound to a stream or to this generation already. The render thread takes
+/// the binding from the ring in posting order, under the lock of the
+/// posters.
 fn bind(sh: &Shared, p: &mut Posters, w: usize, gen: i64) {
     if let Some(cur) = &p.bound[w] {
         if cur.kind == Kind::Stream || cur.gen >= gen {
@@ -196,14 +198,15 @@ fn bind(sh: &Shared, p: &mut Posters, w: usize, gen: i64) {
     let s = make_src(sh, w, gen);
     let mut c = Cmd::new(engine::OP_BIND, w as i32, -1);
     c.src = Some(s.clone());
-    // A full ring keeps the render's binding; the next start tries again.
+    // A full ring keeps the binding of the render, and the next start tries
+    // again.
     if sh.ring.push(c).is_ok() {
         p.bound[w] = Some(s);
     }
 }
 
-/// A voice line, acquired and waited for (a programmer sound never starts
-/// half-loaded); None when it won't load.
+/// Acquires a slot sound and waits for it, which keeps a slot sound from
+/// starting half loaded. None when it does not load.
 fn voice(sh: &Shared, path: &str) -> Option<SrcRef> {
     if !exists(path) {
         return None;
@@ -217,11 +220,10 @@ fn voice(sh: &Shared, path: &str) -> Option<SrcRef> {
     Some(SrcRef::new(s, &sh.garbage))
 }
 
-/// `MCSM_AUDIO_TAP=<file>` (real time, a dev tool): every sample the device
-/// is handed, as raw float32 stereo at 48 kHz from the device's start
-/// (`ffmpeg -f f32le -ar 48000 -ac 2 -i <file> out.wav`), so a real-time
-/// run's audio can be listened to and measured; frame f is the audio
-/// position f / 48000 s (the trace's `audible` + the device buffer).
+/// Writes every sample that the device gets into the file of
+/// `PRISMARINE_AUDIO_TAP`, as raw float32 stereo at 48 kHz from the start of
+/// the device, for listening to a real-time run and measuring it. Frame f is
+/// the audio position f / 48000 s.
 fn tap_writer(path: &str, run: Arc<AtomicBool>) -> Option<rtrb::Producer<f32>> {
     use std::io::Write;
     let mut file = std::io::BufWriter::new(std::fs::File::create(path).ok()?);
@@ -249,12 +251,12 @@ fn tap_writer(path: &str, run: Arc<AtomicBool>) -> Option<rtrb::Producer<f32>> {
     Some(tx)
 }
 
-/// Frees what the render let go (never the render thread).
+/// Frees what the render let go, on any thread but the render thread.
 fn collect(sh: &Shared) {
     source::collect(&mut lock(&sh.collector));
 }
 
-/// The service thread: opens stream taps, frees garbage.
+/// Runs the service thread, which opens stream taps and frees garbage.
 fn service(sh: Arc<Shared>, run: Arc<AtomicBool>) {
     while run.load(Ordering::Acquire) {
         while let Some((s, tap)) = sh.requests.pop() {
@@ -318,8 +320,8 @@ impl Engine {
         })
     }
 
-    /// Stops everything and frees what the engine holds; the model is no
-    /// longer referenced once this returns true.
+    /// Stops everything and frees what the engine holds. Nothing refers to
+    /// the model once this returns true.
     fn shut_down(self) -> bool {
         *lock(&self.device) = None;
         self.run.store(false, Ordering::Release);
@@ -343,8 +345,8 @@ impl Engine {
             return false;
         };
         drop(garbage);
-        // Frees the collector itself once nothing is left with it (else
-        // it is leaked, a few bytes).
+        // Frees the collector once nothing is left with it, else it leaks a
+        // few bytes.
         let _ = collector
             .into_inner()
             .unwrap_or_else(|e| e.into_inner())
@@ -365,7 +367,8 @@ impl Engine {
                     -1
                 };
                 if c.event >= 0 {
-                    // The instance, built here: the render only starts it.
+                    // The poster builds the instance, and the render only
+                    // starts it.
                     let b = engine::Build {
                         m,
                         garbage: &sh.garbage,
@@ -508,8 +511,9 @@ impl Engine {
                     continue;
                 };
                 m += n;
-                // Where: which stream and tap, the frame it wanted and where
-                // the feeder's ring was (a stream underrun's cause).
+                // The stream and tap, the frame that it wanted and the
+                // position of the ring of the feeder, the cause of an
+                // underrun.
                 let r = f64::from(rate.max(1));
                 let file = s.path.rsplit('/').next().unwrap_or(&s.path);
                 notes.push(format!(
@@ -547,9 +551,10 @@ unsafe fn engine<'a>(e: *const Engine) -> &'a Engine {
     unsafe { &*e }
 }
 
-/// Creates an engine from a model blob. [streaming]: real time (streamed
-/// waveforms stream, decodes are not waited for). [report_lag],
-/// [late_min] and [whole_ms] are the engine's rules. Null on a bad blob.
+/// Creates an engine from a model blob. With [streaming] it plays in real
+/// time, streamed waveforms stream and decodes are not waited for.
+/// [report_lag], [late_min] and [whole_ms] are the rules of the engine.
+/// Returns null for a bad blob.
 ///
 /// # Safety
 /// [blob] holds [len] bytes.
@@ -568,8 +573,8 @@ pub unsafe extern "C" fn prismarine_mix_create(
     let Some(m) = model::read(bytes) else {
         return std::ptr::null_mut();
     };
-    // The model lives as long as the engine: prismarine_mix_destroy frees it once
-    // nothing refers to it.
+    // The model lasts as long as the engine. prismarine_mix_destroy frees it
+    // once nothing refers to it.
     let m: &'static model::Model = Box::leak(m);
     let rules = engine::Rules {
         report_lag,
@@ -605,12 +610,13 @@ pub unsafe extern "C" fn prismarine_mix_destroy(e: *mut Engine) {
     }
 }
 
-/// Posts a command (any thread). START: [name] the event path, [sound] the
-/// sound file or null. SET_PARAM / SET_SNAP_PARAM: [name] the lower-cased
-/// parameter name. START_SNAPSHOT: [name] the path. SET_VOLUME and STOP:
-/// [keep_tail] the tail a one-shot keeps (< 0: none); STOP: [flag] at once,
-/// [via] the lower-cased parameter a fading stop sets, or null. Returns 0,
-/// or −1 when the ring is full.
+/// Posts a command from any thread. For START [name] is the event path and
+/// [sound] the sound file or null. For SET_PARAM and SET_SNAP_PARAM [name] is
+/// the lower-cased parameter name, and for START_SNAPSHOT the path. For
+/// SET_VOLUME and STOP [keep_tail] is the tail that a one-shot keeps, below
+/// 0 for none. For STOP [flag] stops at once and [via] is the lower-cased
+/// parameter that a fading stop sets, or null. Returns 0, or −1 when the
+/// ring is full.
 ///
 /// # Safety
 /// [e] is a live engine; [name], [sound] and [via] are null or
@@ -644,8 +650,8 @@ pub unsafe extern "C" fn prismarine_mix_post(
     e.post(c, name, sound, via)
 }
 
-/// A scene change: bindings older than it are let go (playing voices keep
-/// theirs).
+/// Starts a new generation of bindings. The older bindings are let go, and
+/// playing voices keep theirs.
 ///
 /// # Safety
 /// [e] is a live engine.
@@ -655,9 +661,9 @@ pub unsafe extern "C" fn prismarine_mix_scene(e: *const Engine) {
     unsafe { engine(e) }.scene();
 }
 
-/// Lockstep: renders [frames] stereo frames into [out] on the caller's
-/// thread, then frees what the render let go (silence while a device
-/// renders).
+/// Renders [frames] stereo frames into [out] on the caller's thread in
+/// lockstep, then frees what the render let go. Writes silence while a
+/// device renders.
 ///
 /// # Safety
 /// [e] is a live engine; [out] has room for 2 × [frames] floats.
@@ -673,9 +679,9 @@ pub unsafe extern "C" fn prismarine_mix_render(e: *const Engine, out: *mut f32, 
     e.render_lockstep(buf);
 }
 
-/// Lockstep only: moves the render head to [frames] without rendering (a
-/// capture's fast-forward); commands at or before it apply at the next
-/// frame, as AudioEngine.position's setter does. −1 while a device renders.
+/// Moves the render head to [frames] without rendering, in lockstep only.
+/// Commands at or before it apply at the next frame, as with the setter of
+/// AudioEngine.position. Returns −1 while a device renders.
 ///
 /// # Safety
 /// [e] is a live engine.
@@ -693,8 +699,8 @@ pub unsafe extern "C" fn prismarine_mix_position(e: *const Engine) -> i64 {
     unsafe { engine(e) }.sh.position.load(Ordering::Acquire)
 }
 
-/// The next problem text into [out] (NUL-terminated); its length, 0 when
-/// none.
+/// Writes the next problem text into [out] with a NUL at its end. Returns
+/// its length, or 0 when there is none.
 ///
 /// # Safety
 /// [e] is a live engine; [out] has room for [cap] ≥ 1 bytes.
@@ -713,10 +719,11 @@ pub unsafe extern "C" fn prismarine_mix_problem(e: *const Engine, out: *mut u8, 
     n as i32
 }
 
-/// Real time: starts the service thread and the output device. 0 on
-/// success, else an error (−1 no output device, −3 no service thread, −4
-/// already started, −5 the stream wouldn't open, −6 nor play; the engine
-/// is silent then, its problems say why).
+/// Starts the service thread and the output device for real time. Returns
+/// 0, or −1 without an output device, −3 without a service thread, −4 when
+/// started already, −5 when the stream does not open and −6 when it does
+/// not play. The engine is silent after an error, and its problems give the
+/// cause.
 ///
 /// # Safety
 /// [e] is a live engine.
@@ -758,8 +765,9 @@ pub unsafe extern "C" fn prismarine_mix_set_muted(e: *const Engine, muted: i32) 
         .store(muted != 0, Ordering::Release);
 }
 
-/// Up to [max] callback records into [out] (wall µs, frames, render µs, gap
-/// µs each); the count.
+/// Writes up to [max] callback records into [out], each the wall time in
+/// µs, the frames, the render time in µs and the gap in µs. Returns the
+/// count.
 ///
 /// # Safety
 /// [e] is a live engine; [out] has room for 4 × [max] int64s.
@@ -805,9 +813,8 @@ pub(crate) fn env(name: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// The command ring: many posters, one render thread; a voice line's
-    /// source rides along and goes to the collector when the command is
-    /// done with.
+    /// The command ring with many posters and one render thread. The source
+    /// of a slot sound goes with its command and to the collector after it.
     #[test]
     fn commands_from_many_threads_reach_the_render_in_order() {
         let ring: Arc<ArrayQueue<Cmd>> = Arc::new(ArrayQueue::new(64));
@@ -838,7 +845,8 @@ mod tests {
             n += 1;
         }
         assert_eq!(n, 32);
-        // A full ring refuses (and the refused commands' sources are let go).
+        // A full ring refuses, and the sources of refused commands are let
+        // go.
         for i in 0..64 {
             assert!(ring.push(Cmd::new(engine::OP_STOP, 0, i)).is_ok());
         }

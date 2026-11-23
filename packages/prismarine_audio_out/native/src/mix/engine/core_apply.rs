@@ -15,9 +15,9 @@ impl Core {
                 let lag = cx.sh.rules.report_lag;
                 if let Some(e) = self.event(cx, c.id, true) {
                     // With a tail, a zero volume for a one-shot that has
-                    // played and has less than the tail left is dropped
-                    // (engine.dart SetVolume); before its first render a
-                    // volume is the start volume.
+                    // played and has less than the tail left is dropped, as
+                    // in engine.dart. Before its first render a volume is the
+                    // start volume.
                     if c.keep_tail >= 0.0
                         && c.value.abs() <= 1e-6
                         && e.def.oneshot
@@ -38,7 +38,7 @@ impl Core {
                     if c.keep_tail >= 0.0 && e.def.oneshot && e.left(lag) < c.keep_tail {
                         return;
                     }
-                    // The flag: stop at once, never through the parameter.
+                    // The flag stops at once and not through the parameter.
                     if c.flag {
                         e.stop(false);
                     } else if c.via < 0 || !e.set_param(c.via, 1.0) {
@@ -111,13 +111,13 @@ impl Core {
         }
     }
 
-    /// A scene change (OP_FORGET, applied when it arrives): the slots bound
-    /// for an older generation let go of their sources, except those a live
-    /// instance or a queued start can still play. Their sounds take
-    /// waveforms as they go (a multi's next entry, a scatterer's spawn, a
-    /// loop's next pass), and a start's sources are bound when it is posted,
-    /// up to 4,096 frames before it plays, so a sound started just before a
-    /// scene change keeps its samples. Streams stay bound.
+    /// Starts a new generation, for OP_FORGET when it arrives. The slots
+    /// bound for an older generation let go of their sources, except those
+    /// that a live instance or a queued start can still play. Their sounds
+    /// take waveforms as they go, as the next entry of a playlist, a spawn or
+    /// the next pass of a loop. The sources of a start are bound when it is
+    /// posted, up to 4,096 frames before it plays, and a sound started just
+    /// before a new generation keeps its samples. Streams stay bound.
     fn forget(&mut self, cx: &mut Cx, gen: i64) {
         let keep = &mut self.keep;
         keep.fill(false);

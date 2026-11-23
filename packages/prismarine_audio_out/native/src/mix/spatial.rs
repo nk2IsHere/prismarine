@@ -1,12 +1,11 @@
-//! FMOD 1.06's 3D panning on a stereo output (mcsm_audio `Spatial`, ported in
-//! the same float order): the PAN DSP in surround mode with a 3D pan blend.
+//! The 3D panning onto a stereo output of the pan DSP in surround mode with
+//! a 3D pan blend, as prismarine_audio's `Spatial` in the same float order.
 
 use std::f64::consts::PI;
 
 use crate::mix::dmath::sin;
 
-/// FMOD_DSP_PAN_3D_ROLLOFF `rolloff` at distance `d` (formats/telltale/
-/// fmod-runtime.md "3D events", Rolloff).
+/// Returns the attenuation of rolloff `rolloff` at distance `d`.
 pub fn attenuation(rolloff: i64, d: f64, min: f64, max: f64) -> f64 {
     if min >= d {
         return 1.0;
@@ -40,8 +39,7 @@ pub fn attenuation(rolloff: i64, d: f64, min: f64, max: f64) -> f64 {
     }
 }
 
-/// The 3D extent in degrees at distance `d` (fmod-runtime.md "3D events",
-/// Extent).
+/// Returns the 3D extent in degrees at distance `d`.
 pub fn extent(mode: i64, d: f64, min: f64, size: f64, min_extent: f64) -> f64 {
     let from_size = |s: f64| {
         if s > 0.0 && s * 5.0 > d {
@@ -64,7 +62,8 @@ pub fn extent(mode: i64, d: f64, min: f64, size: f64, min_extent: f64) -> f64 {
     }
 }
 
-/// A mono source at `direction` spread over `extent`: (left, right).
+/// Returns the left and right gains of a mono source at `direction` spread
+/// over `extent`.
 pub fn mono(direction: f64, extent: f64) -> (f64, f64) {
     let mut s = sin(direction * PI / 180.0);
     if extent >= 360.0 {
@@ -77,7 +76,7 @@ pub fn mono(direction: f64, extent: f64) -> (f64, f64) {
     ((g - s) * 0.5, (g + s) * 0.5)
 }
 
-/// `a` in [−180, 180).
+/// Returns `a` wrapped into [−180, 180).
 pub fn wrap(mut a: f64) -> f64 {
     while a < -180.0 {
         a += 360.0;
@@ -98,8 +97,8 @@ fn join(w1: f64, p1: (f64, f64), w2: f64, p2: (f64, f64)) -> (f64, f64) {
     }
 }
 
-/// A stereo source (fmod-runtime.md "3D events", Stereo source):
-/// ((L→left, L→right), (R→left, R→right)).
+/// Returns the gains of a stereo source as (L into left, L into right) and
+/// (R into left, R into right).
 pub fn stereo(direction: f64, extent: f64, rotation: f64) -> ((f64, f64), (f64, f64)) {
     let k = extent / 360.0;
     let rel = wrap(rotation - direction);
@@ -126,7 +125,8 @@ pub fn stereo(direction: f64, extent: f64, rotation: f64) -> ((f64, f64), (f64, 
     (l, r)
 }
 
-/// The PAN DSP's 3D gains: (L→left, R→left, L→right, R→right).
+/// Returns the 3D gains of the pan DSP as L into left, R into left, L into
+/// right and R into right.
 pub fn gains(p: &[f64], azimuth: f64, distance: f64, mono_in: bool) -> [f64; 4] {
     let (min, max) = (p[12], p[13]);
     let att = attenuation(p[11].round() as i64, distance, min, max);

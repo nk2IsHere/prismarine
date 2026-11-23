@@ -1,16 +1,15 @@
-//! Dart's double semantics where they differ from Rust's (the Dart VM's
-//! `pow` fast paths, `clamp`, `min`/`max`, `%`), so the mixer computes the
-//! same bits as mcsm_audio's Dart code. Rust never fuses multiply-adds and
-//! has no fast-math. `sin`, `cos`, `exp`, `log` and `pow` are the `libm`
-//! crate's (musl's fdlibm code), not the platform's C library, so every
-//! target computes the same bits; prismarine_math's lib/libm.dart is the same
-//! code in Dart. clippy.toml
-//! forbids f64's own `sin`/`cos`/`exp`/`ln`/`powf` and the rest of the
-//! platform maths in this crate.
+//! The double semantics of Dart where they differ from Rust's, the `pow` fast
+//! paths of the Dart VM, `clamp`, `min`, `max` and `%`. The engine computes
+//! the same bits as the Dart render with them. Rust does not fuse
+//! multiply-adds and has no fast maths. `sin`, `cos`, `exp`, `log` and `pow`
+//! come from the `libm` crate, musl's fdlibm code, in place of the C library
+//! of the platform, and every target computes the same bits. prismarine_math's
+//! lib/libm.dart is the same code in Dart, and a change here is made there
+//! too. clippy.toml forbids the maths of the platform in this crate.
 
 pub const RATE: i64 = 48000;
 pub const RATE_F: f64 = 48000.0;
-/// math.sqrt1_2 (Dart's constants are the same doubles as Rust's).
+/// math.sqrt1_2, the same double in Dart and Rust.
 pub const UPMIX: f64 = std::f64::consts::FRAC_1_SQRT_2;
 pub const LN10: f64 = std::f64::consts::LN_10;
 pub const PI: f64 = std::f64::consts::PI;
@@ -18,8 +17,8 @@ pub const SQRT2: f64 = std::f64::consts::SQRT_2;
 
 pub use libm::{cos, exp, log, sin};
 
-/// The Dart VM's double pow: its inlined fast paths, then libm's pow (as
-/// mcsm_audio's `dpow`).
+/// The double pow of the Dart VM, its inlined fast paths and then libm's
+/// pow, as prismarine_math's `dpow`.
 #[inline]
 pub fn dpow(b: f64, e: f64) -> f64 {
     if e == 0.0 {
@@ -129,7 +128,7 @@ pub fn dmin(a: f64, b: f64) -> f64 {
     a
 }
 
-/// double % double (the VM's DartModulo).
+/// double % double, as DartModulo of the VM.
 #[inline]
 pub fn dmod(a: f64, b: f64) -> f64 {
     let mut r = a % b;
@@ -142,7 +141,7 @@ pub fn dmod(a: f64, b: f64) -> f64 {
     r
 }
 
-/// int % int (Euclidean, as Dart's).
+/// int % int, Euclidean as in Dart.
 #[inline]
 pub fn imod(a: i64, b: i64) -> i64 {
     let r = a % b;
@@ -166,7 +165,7 @@ pub fn dceil(x: f64) -> i64 {
     x.ceil() as i64
 }
 
-/// dbGain / dbToGain: −80 dB and below is silence.
+/// dbGain and dbToGain. −80 dB and less is silence.
 #[inline]
 pub fn db_gain(db: f64) -> f64 {
     if db <= -80.0 {
@@ -186,8 +185,8 @@ pub fn one_pole(ms: f64) -> f64 {
     }
 }
 
-/// A value the optimizer can't see, so a maths call on a constant runs at
-/// run time (as Dart's does) rather than being folded at compile time.
+/// A value that the optimizer cannot see. A maths call on a constant runs at
+/// run time, as in Dart, and is not folded at compile time.
 #[inline]
 pub fn opaque(x: f64) -> f64 {
     std::hint::black_box(x)
@@ -197,14 +196,13 @@ pub fn opaque(x: f64) -> f64 {
 mod tests {
     use super::*;
 
-    /// The checksum prismarine_math's test/libm_test.dart computes over the same
-    /// inputs with lib/libm.dart: the two must stay bit-identical, on
+    /// The checksum that prismarine_math's test/libm_test.dart computes over
+    /// the same inputs with lib/libm.dart. The two stay bit-identical on
     /// every platform.
     pub const LIBM_SWEEP: u64 = 0x06f9_0047_c6d9_745b;
 
     fn fnv(h: &mut u64, v: f64) {
-        // NaN's bits depend on the CPU (x86 and ARM make different default
-        // NaNs): every NaN counts as one.
+        // The bits of a NaN depend on the CPU, and every NaN counts as one.
         let b = if v.is_nan() {
             0x7ff8_0000_0000_0000
         } else {
@@ -216,7 +214,8 @@ mod tests {
         }
     }
 
-    /// xorshift64*: the sweep's inputs (libm_test.dart has the same).
+    /// The xorshift64* generator of the inputs of the sweep, as in
+    /// libm_test.dart.
     struct Rng(u64);
     impl Rng {
         fn next(&mut self) -> u64 {
@@ -225,7 +224,7 @@ mod tests {
             self.0 ^= self.0 >> 27;
             self.0.wrapping_mul(0x2545F4914F6CDD1D)
         }
-        /// Any double (every exponent, NaN and infinities too).
+        /// Any double, with every exponent, NaN and infinities.
         fn any(&mut self) -> f64 {
             f64::from_bits(self.next())
         }
@@ -272,9 +271,9 @@ mod tests {
         h
     }
 
-    /// The checksum of prismarine_math's test/libm_test.dart over the functions
-    /// only the game simulation uses (tan, asin, acos, atan): the mixer
-    /// doesn't call them, but the libm crate is the reference for both.
+    /// The checksum of prismarine_math's test/libm_test.dart over tan, asin,
+    /// acos and atan, which the engine does not call. The libm crate is the
+    /// reference of both.
     pub const SIM_SWEEP: u64 = 0xaa1d_d63e_80aa_a7f4;
 
     pub fn sim_sweep() -> u64 {

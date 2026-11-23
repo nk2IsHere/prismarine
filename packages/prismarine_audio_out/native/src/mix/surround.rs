@@ -1,28 +1,28 @@
-//! FMOD 1.09's surround panning onto 5.1 (mcsm_audio `Surround`, ported in
-//! the same float order): the PAN DSP in surround mode with a 5.1 target, as
-//! S2's events set it. Channels are FL FR C LFE SL SR; the speakers sit at
-//! −30, 30, 0, −110 and 110 degrees (formats/telltale/fmod-runtime.md
-//! "FMOD 1.09 (S2)").
+//! The surround panning onto 5.1 of the pan DSP in surround mode with a 5.1
+//! target, as prismarine_audio's `Surround` in the same float order. The
+//! channels have the order FL FR C LFE SL SR, and the speakers are at −30,
+//! 30, 0, −110 and 110 degrees.
 
 use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
 use crate::mix::dmath::sin;
 
-/// Speakers by angle and their channels, the ring FMOD pans over.
+/// The speakers by angle with their channels, the ring of the panning.
 const ANGLE: [f64; 5] = [-110.0, -30.0, 0.0, 30.0, 110.0];
 const CHAN: [usize; 5] = [4, 0, 2, 1, 5];
 
-/// The 5.1 → stereo fold of FMOD's output stage: C, SL and SR at 1/√2.
+/// The gain of C, SL and SR in the fold from 5.1 to stereo.
 pub const DOWNMIX: f64 = FRAC_1_SQRT_2;
 
-/// A mono source at `direction` spread over `extent` degrees, times `gain`,
-/// added into `out`; the LFE gets `lfe` (linear) times `gain`.
+/// Adds the gains of a mono source at `direction` spread over `extent`
+/// degrees, times `gain`, into `out`. The LFE gets the linear `lfe` times
+/// `gain`.
 pub fn mono(direction: f64, extent: f64, gain: f64, lfe: f64, out: &mut [f64; 6]) {
     out[3] += lfe * gain;
     arc(direction, extent, gain, out, true);
 }
 
-/// A stereo source in distributed mode (stereo mode 0).
+/// Adds the gains of a stereo source in distributed mode, stereo mode 0.
 pub fn stereo_distributed(
     direction: f64,
     extent: f64,
@@ -78,8 +78,8 @@ pub fn stereo_distributed(
     out_r[3] += lfe * gain * FRAC_1_SQRT_2;
 }
 
-/// A stereo source in discrete mode (stereo mode 1): points at `axis` ∓
-/// separation/2.
+/// Adds the gains of a stereo source in discrete mode, stereo mode 1, with
+/// the channels as points at `axis` ∓ separation/2.
 pub fn stereo_discrete(
     axis: f64,
     separation: f64,
@@ -165,7 +165,7 @@ fn normalized(g: &[f64; 6], gain: f64, out: &mut [f64; 6]) {
     }
 }
 
-/// `a` in [−180, 180).
+/// Returns `a` wrapped into [−180, 180).
 pub fn wrap(mut a: f64) -> f64 {
     while a < -180.0 {
         a += 360.0;

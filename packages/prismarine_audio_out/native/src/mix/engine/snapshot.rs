@@ -1,4 +1,4 @@
-//! Snapshot instances (snapshot.dart).
+//! Mix state instances, as mix_state.dart.
 
 use super::*;
 
@@ -10,15 +10,15 @@ pub struct Snap {
     pub(crate) priority: i64,
     pub(crate) stopped: bool,
     pub(crate) values: Vec<f64>,
-    /// Started by an event instrument: its snapshot intensity (0–1), and
-    /// the key its asks use (−1 for a game's snapshot).
+    /// The intensity from 0 to 1 of the instrument that started it, and the
+    /// key of its requests, −1 for a mix state that the game started.
     pub(crate) scale: f64,
     pub(crate) key: i64,
 }
 
 impl Snap {
-    /// A snapshot instance of [def] (built by the poster; the render gives
-    /// it its order).
+    /// Makes a mix state instance of [def] on the poster. The render gives
+    /// it its order.
     pub fn build(def: &'static Event) -> Snap {
         Snap {
             def,
@@ -35,7 +35,7 @@ impl Snap {
         }
     }
 
-    /// SnapshotInstance.setParameterGuid.
+    /// MixStateInstance.setParameterGuid.
     pub(crate) fn set_guid(&mut self, guid: i32, value: f64) {
         let d = self.def;
         if let Some(i) = d
@@ -48,7 +48,7 @@ impl Snap {
         }
     }
 
-    /// SnapshotInstance.setAuto.
+    /// MixStateInstance.setAuto.
     pub(crate) fn set_auto(&mut self, dist: f64, cone: f64) {
         let d = self.def;
         for (i, sp) in d.snap_params.iter().enumerate() {
@@ -61,8 +61,8 @@ impl Snap {
         }
     }
 
-    /// SnapshotInstance.entryValue: the entry's automation at the
-    /// snapshot's parameters, else its stored value.
+    /// Returns the value of an entry as MixStateInstance.entryValue, its
+    /// automation at the parameters of the mix state, else its stored value.
     pub(crate) fn entry_value(&self, en: &SnapEntry) -> f64 {
         let Some(p) = &en.auto else {
             return en.value;
@@ -79,7 +79,8 @@ impl Snap {
         r.unwrap_or(en.value)
     }
 
-    /// SnapshotInstance._input: the parameter by GUID, else by name.
+    /// Returns the input of an automation as MixStateInstance._input, the
+    /// parameter by id, else by name.
     fn input(&self, a: &Auto) -> f64 {
         let d = self.def;
         if let Some(i) = d

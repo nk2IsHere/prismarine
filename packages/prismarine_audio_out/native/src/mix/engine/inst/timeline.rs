@@ -9,8 +9,8 @@ impl Inst {
         let mut inst = &p.inst;
         let (mut volume, mut pitch) = (0.0, 0.0);
         if inst.kind == INST_MULTI {
-            // A timelocked multi (S2) picks an entry each time its box is
-            // entered (Dart `_lock`).
+            // A timelocked playlist picks an entry each time its box is
+            // entered, as Dart's `_lock`.
             volume = inst.volume + self.modulation(cx, inst, 0);
             pitch = inst.pitch + self.modulation(cx, inst, 1);
             inst = self.pick(inst)?;
@@ -115,9 +115,10 @@ impl Inst {
         }
     }
 
-    /// Real time: the timelocked streams a jump in the next 0.5 s lands in
-    /// (a latched transition, a loop end, a transition marker) decode its
-    /// destination now (stream_cue). Reading only: the render is unchanged.
+    /// Cues in real time the timelocked streams that a jump in the next
+    /// 0.5 s reaches, from a latched transition, a loop end or a transition
+    /// marker, with stream_cue. They decode the destination now. It only
+    /// reads, and the render is unchanged.
     fn cue_jumps(&self, cx: &mut Cx) {
         let d = self.def;
         let c = self.cursor;
@@ -139,10 +140,10 @@ impl Inst {
                     stream_cue(cx.sh, &s.reader.src, dfloor(pos));
                     continue;
                 }
-                // A sound not entered yet (a new region or section the jump
-                // or the cursor reaches): its stream at the instrument's own
-                // start (one with a random start offset can't be foreseen),
-                // so a region that begins mid-file doesn't read silence.
+                // A sound not entered yet, in a new region or section that the
+                // jump or the cursor reaches, gets its stream at the start of
+                // the instrument. A random start offset cannot be foreseen.
+                // A region that begins inside a file does not read silence.
                 let inst = &p.inst;
                 if inst.kind != INST_SINGLE
                     || inst.wave < 0
@@ -168,7 +169,8 @@ impl Inst {
         if let Some((t, _)) = self.pending {
             cue(cx, t.dest);
         }
-        // Regions the cursor reaches by itself within the lookahead.
+        // The regions that the cursor reaches by itself within the
+        // lookahead.
         for p in d.place.iter() {
             if p.timelocked && c < p.start && p.start <= ahead {
                 cue(cx, p.start);
@@ -260,7 +262,7 @@ impl Inst {
             let mut pos = (lo - p.start) as f64 * s.rate + s.seek;
             let (rate, g) = (s.rate, s.gain * fk);
             let bus = s.bus;
-            // The waveform repeats to fill its box (Dart's _renderLocked).
+            // The waveform repeats to fill its box, as Dart's _renderLocked.
             let len = s.reader.src.frames();
             let mut done = 0i64;
             while done < n {
@@ -328,9 +330,10 @@ impl Inst {
                 if !s.reader.src.ready() {
                     return;
                 }
-                // Before the event's first timelocked sound plays, a stream
-                // that can't serve its start position holds the timeline
-                // (as its opening does); later ones read what is there.
+                // Before the first timelocked sound of the event plays, a
+                // stream that cannot serve its start position holds the
+                // timeline, as its opening does. Later ones read what is
+                // there.
                 if !s.started && first {
                     let len = s.reader.src.frames();
                     let mut pos = (self.cursor - p.start) as f64 * s.rate + s.seek;

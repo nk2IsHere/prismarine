@@ -1,6 +1,6 @@
-//! The mixer's model: the slice's banks as Dart parsed them, read once from
-//! the blob mcsm_audio's `NativeModelBlob` writes (strings interned; every
-//! list in Dart's order).
+//! The model of the engine, read once from the blob that prismarine_audio's
+//! `projectBlob` writes. Strings are interned, and every list is in the
+//! order of the Dart model.
 
 use std::collections::HashMap;
 
@@ -47,14 +47,14 @@ pub struct Mod {
 #[derive(Clone)]
 pub struct Prop {
     pub index: i64,
-    /// A volume in dB: several curves add.
+    /// A volume in dB. Several curves add up.
     pub volume: bool,
     pub map: Option<PMap>,
     pub autos: Vec<Auto>,
     pub mods: Vec<Mod>,
 }
 
-/// A DSP parameter's value: a number, an on or off switch, or nothing.
+/// The value of a DSP parameter, a number, an on or off switch or nothing.
 pub struct FxParam {
     pub has_value: bool,
     pub value: f64,
@@ -62,7 +62,8 @@ pub struct FxParam {
 }
 
 impl FxParam {
-    /// The value that snapshots and modulators start from: a number only.
+    /// Returns the value that mix states and modulators start from, set for
+    /// a number only.
     pub fn stored(&self) -> Option<f64> {
         (self.has_value && !self.switch).then_some(self.value)
     }
@@ -78,7 +79,7 @@ pub struct Fx {
     pub bypass: bool,
     pub prefader: bool,
     pub inactive: bool,
-    /// The DSP it makes (dsp::KIND_*), −1: none.
+    /// The kind of DSP that it makes, −1 for none.
     pub dsp: i32,
     pub label: i32,
     pub return_bus: i32,
@@ -99,17 +100,17 @@ pub const LAYOUT_SURROUND51: i64 = 3;
 
 pub struct Bus {
     pub guid: i32,
-    /// The mixer's master bus.
+    /// The master bus of the mixer.
     pub master: bool,
     pub output: i32,
     pub output_path: i32,
-    /// The mixer bus's path (strings bank), −1 elsewhere.
+    /// The path of a mixer bus, −1 elsewhere.
     pub path: i32,
     pub volume: f64,
-    /// LAYOUT_*: mono, stereo, quad, 5.1.
+    /// A LAYOUT_* value for mono, stereo, quad or 5.1.
     pub layout: i64,
-    /// The channel format an event strip runs in (1 mono, 2 stereo, 6 5.1;
-    /// 0: its layout's) (EventFormats).
+    /// The channel format of an event strip, 1 for mono, 2 for stereo and 6
+    /// for 5.1, or 0 for the format of its layout.
     pub format: i64,
     pub fx: Vec<Fx>,
     pub props: Vec<Prop>,
@@ -143,12 +144,11 @@ pub struct Inst {
     pub delay_min: f64,
     pub delay_max: f64,
     pub offset3d: f64,
-    /// The start offset in ms (the base of property 9).
+    /// The start offset in ms, the base of the start offset property.
     pub seek: f64,
-    /// FMOD 1.09's left trim: the waveform frames a timelocked placement
-    /// skips (InstrumentDef.leftTrim).
+    /// The waveform frames that a timelocked placement skips.
     pub left_trim: i64,
-    /// An event instrument on a snapshot: the snapshot's intensity, percent.
+    /// The intensity of a mix state instrument in percent.
     pub snap_intensity: f64,
     pub spawn_min: f64,
     pub spawn_max: f64,
@@ -157,8 +157,8 @@ pub struct Inst {
     /// A spawn past [max_poly] stops the oldest live spawn, else it is
     /// skipped.
     pub spawn_steal: bool,
-    /// The instrument's polyphony per event instance (0: none); a trigger
-    /// past it stops the oldest, else it fails.
+    /// The polyphony limit of the instrument per event instance, 0 for none.
+    /// A trigger past it stops the oldest, else it fails.
     pub poly: i64,
     pub poly_steal: bool,
     /// A playlist picks at random by weight, never the last pick twice.
@@ -169,7 +169,7 @@ pub struct Inst {
 }
 
 impl Inst {
-    /// InstrumentDef.property: the first with [index].
+    /// Returns the first property with [index].
     pub fn prop(&self, index: i64) -> Option<&Prop> {
         self.props.iter().find(|p| p.index == index)
     }
@@ -196,7 +196,8 @@ pub struct ParamDef {
     pub min: f64,
     pub max: f64,
     pub def: f64,
-    /// ParameterKind: 0 game, 1 distance, 2 cone, 3 other.
+    /// The ParameterKind, 0 for a game parameter, 1 for a distance, 2 for a
+    /// cone and 3 for another.
     pub kind: i32,
     pub sheets: Vec<Sheet>,
 }
@@ -225,18 +226,18 @@ pub struct SnapEntry {
     pub target: i32,
     pub prop: i64,
     pub value: f64,
-    /// SnapshotInstance.automation: the entry's automated property.
+    /// The automated property of the entry.
     pub auto: Option<Prop>,
 }
 
 pub struct Event {
     pub guid: i32,
     pub path: i32,
-    /// A snapshot (an event instrument on it applies it).
+    /// A mix state.
     pub snapshot: bool,
     pub oneshot: bool,
-    /// Instances that may play at once (0: no limit); a start past it stops
-    /// the oldest, else it fails.
+    /// The instances that may play at once, 0 for no limit. A start past it
+    /// stops the oldest, else it fails.
     pub poly: i64,
     pub poly_steal: bool,
     pub input_bus: Option<Bus>,
@@ -248,19 +249,19 @@ pub struct Event {
     pub tl_length: i64,
     pub tempo: Vec<Tempo>,
     pub trans: Vec<Trans>,
-    // A snapshot's.
+    // The mix state part.
     pub priority: i64,
-    /// Its own intensity (0–1).
+    /// Its own intensity from 0 to 1.
     pub intensity: f64,
     pub snap: Vec<SnapEntry>,
     pub intensity_prop: Option<Prop>,
-    /// Unique lower-cased parameter names (first-insertion order) and the
-    /// last parameter with each.
+    /// The unique lower-cased parameter names in the order of their first
+    /// insertion, with the last parameter of each.
     pub snap_params: Vec<(i32, usize)>,
-    /// EventInstance._props: (owner, index) → the automated property.
+    /// The automated properties by owner and index, as EventInstance._props.
     pub keys: Vec<(i32, i64, Prop)>,
     pub nsheets: usize,
-    /// Waveforms an instance may play (top-level events).
+    /// The waveforms that an instance of a top-level event may play.
     pub waves: Vec<i32>,
 }
 
@@ -296,7 +297,7 @@ pub struct Model {
     pub strings: Vec<String>,
     pub ids: HashMap<String, i32>,
     pub waves: Vec<Wave>,
-    /// The reverb's early taps (ms, gain L, gain R).
+    /// The early taps of the reverb as ms, left gain and right gain.
     pub taps: Vec<f64>,
     pub events: Vec<Box<Event>>,
     pub event_by_string: Vec<i32>,

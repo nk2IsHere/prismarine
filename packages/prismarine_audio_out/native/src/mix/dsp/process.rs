@@ -3,10 +3,10 @@
 use super::*;
 
 impl Dsp {
-    /// Processes [frames] of [buf] (stereo, in place); [mono]: held
-    /// dual-mono. Returns whether the output is still mono.
-    /// [key]: a compressor's sidechain key this block. (A compressor's key is
-    /// dropped by the caller afterwards.)
+    /// Processes [frames] frames of the stereo [buf] in place. With [mono]
+    /// the signal is mono in both channels. [key] is the sidechain key of a
+    /// compressor in this block, which the caller drops afterwards. Returns
+    /// whether the output is still mono.
     pub fn process(
         &mut self,
         buf: &mut [f32],
@@ -292,8 +292,8 @@ fn trem_lfo(p: &[f64], pp: f64) -> f64 {
     v
 }
 
-/// The compressor unlinked (FMOD 1.09's Linked off): each of [ch] channels
-/// detected and compressed on its own (Dart `Compressor._unlinked`).
+/// The unlinked compressor, which detects and compresses each of [ch]
+/// channels on its own, as Dart's `Compressor._unlinked`.
 pub(super) fn comp_unlinked(
     p: &[f64],
     envs: &mut [f64; 6],

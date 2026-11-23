@@ -1,18 +1,20 @@
-//! What render code reaches besides its object (Cx), the random generator
-//! (rng.dart), curves and parameter maps (curve.dart), and the output map.
+//! The context of the render code (Cx), the random generator (rng.dart),
+//! curves and parameter maps (curve.dart) and the output map.
 
 use super::*;
 
-/// What the render code reaches besides the object it works on.
+/// The state that the render code reaches besides the object that it works
+/// on.
 pub struct Cx<'a> {
     pub m: &'static Model,
     pub sh: &'a Shared,
     pub(crate) seen: &'a mut [u32],
-    /// The waveforms' bound sources (the render thread's own table).
+    /// The bound sources of the waveforms, the own table of the render
+    /// thread.
     pub(crate) slots: &'a mut Vec<Option<SrcRef>>,
-    /// Where voices read their sources' samples.
+    /// The buffer that voices read the samples of their sources into.
     pub(crate) chunk: &'a mut [f32],
-    /// The last key given to a snapshot an event instrument started.
+    /// The last key given to a mix state that an instrument started.
     pub(crate) snap_key: &'a mut i64,
 }
 
@@ -183,8 +185,8 @@ pub(crate) fn mapped(p: &Prop, ui: f64) -> f64 {
 
 // ---------------------------------------------------------------- buffers
 
-/// Map<key, Float32List> in insertion order, over buffers made with it;
-/// clearing keeps them.
+/// A Map<key, Float32List> in insertion order over buffers made with it. A
+/// clear keeps the buffers.
 #[derive(Default)]
 pub struct OutMap {
     pub(crate) e: Vec<(i32, Vec<f32>, usize)>,
@@ -192,7 +194,7 @@ pub struct OutMap {
 }
 
 impl OutMap {
-    /// Room for [keys] keys of up to [len] floats.
+    /// Makes room for [keys] keys of up to [len] floats.
     pub(crate) fn with(keys: usize, len: usize) -> OutMap {
         OutMap {
             e: (0..keys).map(|_| (-1, vec![0.0; len], 0)).collect(),
@@ -202,8 +204,9 @@ impl OutMap {
     pub(crate) fn clear(&mut self) {
         self.n = 0;
     }
-    /// putIfAbsent(key, () => Float32List(len)); None when it has no room
-    /// for another key or for [len].
+    /// Returns the buffer of [key] as putIfAbsent(key, () =>
+    /// Float32List(len)) does, or None without room for another key or for
+    /// [len].
     pub(crate) fn put(&mut self, key: i32, len: usize) -> Option<&mut [f32]> {
         if let Some(i) = self.e[..self.n].iter().position(|e| e.0 == key) {
             let e = &mut self.e[i];

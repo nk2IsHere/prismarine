@@ -1,5 +1,5 @@
-//! FMOD's built-in DSPs as mcsm_audio rebuilt them (lib/src/mixer/dsp*.dart,
-//! biquad.dart), operation for operation.
+//! The effect DSPs as prismarine_audio's lib/src/mixer/dsp*.dart and
+//! biquad.dart, operation for operation.
 
 use crate::mix::dmath::*;
 
@@ -41,8 +41,8 @@ enum State {
     },
     One(Biquad),
     Distortion,
-    /// The source's direction (degrees) and distance (the event's 3D
-    /// attributes relative to the listener).
+    /// The direction of the source in degrees and its distance, relative to
+    /// the listener.
     Pan {
         az: f64,
         dist: f64,
@@ -51,7 +51,7 @@ enum State {
         use_sidechain: bool,
         env: f64,
         gr: f64,
-        /// Unlinked (FMOD 1.09): each channel's follower and reduction.
+        /// The follower and reduction of each channel when unlinked.
         envs: [f64; 6],
         grs: [f64; 6],
     },
@@ -76,7 +76,7 @@ enum State {
     Reverb(Box<Reverb>),
     Eq(Box<[EqBand; 5]>),
     Mix(Box<Mix>),
-    /// The object panner: silent on an output without objects (ObjectPan).
+    /// The object panner, silent on an output without objects.
     Silence,
 }
 
@@ -84,12 +84,12 @@ pub struct Dsp {
     pub kind: i32,
     pub p: Vec<f64>,
     st: State,
-    /// The twins that run a per-channel DSP's other two channel pairs of a
-    /// 5.1 buffer (Dart `Dsp.processPairs51`), built with a 5.1 strip.
+    /// The twins that run the other two channel pairs of a 5.1 buffer, as in
+    /// Dart's `Dsp.processPairs51`, built with a 5.1 strip.
     twins: Option<Box<[Dsp; 2]>>,
-    /// The pair buffer [twins] run in.
+    /// The pair buffer that [twins] run in.
     pair: Vec<f32>,
-    /// FMOD 1.09's lowpass: no bypass at 22000 Hz (Dart `Lowpass.keep22k`).
+    /// The lowpass filters at 22000 Hz too, as Dart's `Lowpass.keep22k`.
     pub keep22k: bool,
 }
 
@@ -112,7 +112,8 @@ const D_PAN: &[f64] = &[
 const D_EQ3: &[f64] = &[0.0, 0.0, 0.0, 400.0, 4000.0, 1.0];
 const D_OBJPAN: &[f64] = &[0.0, 0.0, 1.0, 20.0, 0.0, 0.0, 0.0, 0.0, 1.0];
 
-/// A DSP kind's parameter defaults; None for a kind the mixer doesn't have.
+/// The parameter defaults of a DSP kind, None for a kind that the engine
+/// does not have.
 fn defaults(kind: i32) -> Option<&'static [f64]> {
     Some(match kind {
         LOWPASS => D_LOWPASS,
@@ -135,10 +136,10 @@ fn defaults(kind: i32) -> Option<&'static [f64]> {
     })
 }
 
-/// Compressors' sidechain keys (MixerGraph.sidechain): each compressor's
-/// key is a buffer of [pool] or none. As in Dart, one tap hands the same
-/// buffer to every target that has none yet, so a later tap adds into a
-/// shared buffer once per target.
+/// The sidechain keys of the compressors, as MixerGraph.sidechain. The key
+/// of each compressor is a buffer of [pool] or none. As in Dart, one tap
+/// hands the same buffer to every target that has none yet, and a later tap
+/// adds into a shared buffer once per target.
 #[derive(Default)]
 pub struct Keys {
     pub slot: Vec<Option<usize>>,
@@ -146,8 +147,8 @@ pub struct Keys {
 }
 
 impl Keys {
-    /// [slots] keys, each with a buffer of [len] floats ready (a key holds
-    /// one buffer at most, so one per key is always enough).
+    /// Makes [slots] keys, each with a buffer of [len] floats ready. A key
+    /// holds one buffer at most, and one per key is enough.
     pub fn with(slots: usize, len: usize) -> Keys {
         Keys {
             slot: vec![None; slots],
@@ -155,8 +156,9 @@ impl Keys {
         }
     }
 
-    /// A buffer no key holds, holding [buf]; None when the pool has no free
-    /// buffer of that size (never with [Keys::with]'s pool).
+    /// Returns a buffer that no key holds with [buf] in it, or None when the
+    /// pool has no free buffer of that size, which does not happen with the
+    /// pool of [Keys::with].
     pub fn alloc(&mut self, buf: &[f32]) -> Option<usize> {
         let i = (0..self.pool.len()).find(|i| !self.slot.contains(&Some(*i)))?;
         if buf.len() > self.pool[i].capacity() {
@@ -169,7 +171,8 @@ impl Keys {
 }
 
 impl Dsp {
-    /// A PAN DSP's source position relative to the listener.
+    /// Sets the position of the source of a pan DSP relative to the
+    /// listener.
     pub fn set_spatial(&mut self, azimuth: f64, distance: f64) {
         if let State::Pan { az, dist } = &mut self.st {
             *az = azimuth;
@@ -177,7 +180,7 @@ impl Dsp {
         }
     }
 
-    /// The DSP of [kind], built with all the memory it will use: an echo
+    /// Builds the DSP of [kind] with all the memory that it will use. An echo
     /// delays up to [echo_frames] frames.
     pub fn new(kind: i32, taps: &'static [f64], echo_frames: i64) -> Option<Dsp> {
         let st = match kind {
@@ -230,7 +233,8 @@ impl Dsp {
         Some(d)
     }
 
-    /// As new (Dart's constructor), in the memory it has.
+    /// Resets the DSP to new, as Dart's constructor, in the memory that it
+    /// has.
     pub fn reset(&mut self) {
         let Some(dflt) = defaults(self.kind) else {
             return;
@@ -319,8 +323,8 @@ impl Dsp {
         }
     }
 
-    /// The stored parameters are set (Dart `Dsp.start`): a DSP that glides
-    /// to new parameters starts at these.
+    /// Takes the parameters set so far as its start values, as Dart's
+    /// `Dsp.start`. A DSP that glides to new parameters starts at these.
     pub fn start(&mut self) {
         match &mut self.st {
             State::Eq(bands) => {
@@ -333,8 +337,8 @@ impl Dsp {
         }
     }
 
-    /// An echo was asked for a longer delay than it was built for (once;
-    /// the delay line stays as it was).
+    /// An echo was asked once for a longer delay than it was built for. The
+    /// delay line stays as it was.
     pub fn take_refused(&mut self) -> bool {
         match &mut self.st {
             State::Echo { line, .. } => std::mem::take(&mut line.refused),
@@ -420,7 +424,7 @@ impl Dsp {
         self.kind == COMPRESSOR
     }
 
-    /// Sound held inside that silence would bring out.
+    /// The DSP holds sound that silence at its input would bring out.
     pub fn ringing(&self) -> bool {
         match &self.st {
             State::Echo { d, quiet, .. } => quiet < d,
@@ -430,8 +434,9 @@ impl Dsp {
         }
     }
 
-    /// [frames] of silence went by unprocessed. [keyed]: a compressor has a
-    /// sidechain key. True when a compressor's key is to be dropped.
+    /// Advances over [frames] frames of silence that were not processed.
+    /// [keyed] tells that a compressor has a sidechain key. Returns true when
+    /// the key of a compressor is to be dropped.
     pub fn idle(&mut self, frames: i64, keyed: bool) -> bool {
         let p = &self.p;
         match &mut self.st {

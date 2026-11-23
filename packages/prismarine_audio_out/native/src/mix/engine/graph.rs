@@ -1,4 +1,4 @@
-//! The mixer graph: buses, VCAs and their properties (graph.dart).
+//! The mixer graph with its buses and their properties, as graph.dart.
 
 use super::*;
 
@@ -19,7 +19,7 @@ pub(crate) struct Graph {
     unique: Vec<usize>,
     order: Vec<usize>,
     pub(crate) master: Option<usize>,
-    /// Compressors by effect GUID: (guid, bus, key).
+    /// The compressors by effect id, as the id, the bus and the key.
     comps: Vec<(i32, usize, usize)>,
     keys: Keys,
     pkeys: Vec<PropSlot>,
@@ -83,7 +83,7 @@ impl Sink for GraphSink<'_, '_> {
                 }
             }
         }
-        // With no snapshot on it the stored value comes back (graph.dart).
+        // A property that no mix state touches returns to its stored value.
         let v = v.or(ps.base);
         ps.block = self.block;
         ps.value = v;
@@ -114,7 +114,7 @@ impl Sink for GraphSink<'_, '_> {
         problem!(self.cx, "no 5.1 form of effect {}", l);
     }
     fn sidechain(&mut self, targets: &[i32], buf: &[f32], keys: &mut Keys) {
-        // This tap's buffer, handed to every target without a key.
+        // The buffer of this tap goes to every target without a key.
         let mut shared: Option<usize> = None;
         for &t in targets {
             let Some(c) = self.comps.iter().rev().find(|c| c.0 == t) else {
@@ -211,8 +211,8 @@ impl Graph {
             g.buses.push(s);
         }
         g.keys = Keys::with(g.keys.slot.len(), BLOCK * 2);
-        // Kahn's order: children before parents, senders before returns,
-        // sidechain sources before their compressors' buses.
+        // Kahn's order puts children before parents, senders before returns
+        // and sidechain sources before the buses of their compressors.
         let nb = g.buses.len();
         let mut after: Vec<Vec<usize>> = vec![Vec::new(); nb];
         let mut need = vec![0usize; nb];
@@ -258,7 +258,8 @@ impl Graph {
                 g.order.push(u);
             }
         }
-        // The properties snapshots address: their stored values and kinds.
+        // The stored values and kinds of the properties that mix states
+        // address.
         const GAIN: [(i32, &[usize]); 6] = [
             (crate::mix::dsp::LIMITER, &[1, 2]),
             (crate::mix::dsp::COMPRESSOR, &[0, 4]),

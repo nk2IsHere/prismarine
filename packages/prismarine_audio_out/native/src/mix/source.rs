@@ -1,14 +1,13 @@
-//! Sample sources: the decoded-audio cache's entries and
-//! streams, bound to the engine's waveform slots by the thread that posts a
-//! start, read by the render thread, freed by the collector.
+//! Sample sources, the entries of the decoded-audio cache and streams. The
+//! thread that posts a start binds them to the waveform slots of the engine,
+//! the render thread reads them and the collector frees them.
 //!
-//! A source is shared through [SrcRef]s. Freeing one takes locks (the
-//! cache's, a stream's), which the render thread must not, so the last
-//! reference never goes away where it is dropped: a [SrcRef] is basedrop's
-//! `Shared`, whose last drop queues the source for the engine's collector
-//! (the service thread, or the lockstep caller after a render), which
-//! drops it there. Queueing allocates nothing (the node is made with the
-//! source, by the poster).
+//! A source is shared through [SrcRef]s. Freeing one takes the locks of the
+//! cache or of a stream, which the render thread must not take. A [SrcRef]
+//! is a `Shared` of basedrop, whose last drop queues the source for the
+//! collector of the engine, the service thread or the lockstep caller after
+//! a render, which drops it there. The queue does not allocate, since the
+//! poster makes its node with the source.
 
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering::Relaxed};
 use std::sync::OnceLock;
@@ -22,32 +21,33 @@ use crate::decode::stream::Stream;
 pub enum Kind {
     Pcm,
     Stream,
-    /// Not there (missing file, failed decode in capture): a problem when
-    /// played, as the Dart loader's null.
+    /// A missing file or a failed decode in lockstep. Playing it is a
+    /// problem, as for a null of the Dart loader.
     Failed,
 }
 
 pub const TAPS: usize = 6;
 
-/// The render thread's view of a source. Only the render thread writes it
-/// once the source is shared (atomics with relaxed order: plain loads and
-/// stores, no locks).
+/// The state of a source on the render thread. Only the render thread
+/// writes it once the source is shared, with relaxed atomics and no locks.
 pub struct View {
     frames: AtomicI64,
     channels: AtomicI64,
     rate: AtomicI64,
-    /// The decode's format replaced the bank's (or the decode failed).
+    /// The format of the decode replaced the format of the model, or the
+    /// decode failed.
     taken: AtomicBool,
-    /// Stream taps: the frames each read last, and when.
+    /// The frames that each stream tap read last, and when.
     pub tstart: [AtomicI64; TAPS],
     pub tend: [AtomicI64; TAPS],
     pub tused: [AtomicI64; TAPS],
     pub ntaps: AtomicUsize,
     pub clock: AtomicI64,
-    /// A tap opened for a prefetch: the frame its ring starts at (0: none).
+    /// The frame that the ring of a tap opened for a prefetch starts at, 0
+    /// for none.
     pub tcue: [AtomicI64; TAPS],
-    /// The reader that reads each tap (0: none): a playing sound keeps its
-    /// own stream, as each FMOD stream instance has its own decoder.
+    /// The reader of each tap, 0 for none. A playing sound keeps its own
+    /// stream with its own decoder.
     pub towner: [AtomicI64; TAPS],
     /// The last reader id given out.
     pub readers: AtomicI64,
@@ -57,10 +57,10 @@ pub struct Src {
     pub kind: Kind,
     pub gen: i64,
     pub path: String,
-    /// The cache entry it plays (Kind::Pcm).
+    /// The cache entry that it plays, for Kind::Pcm.
     pcm: Option<Held>,
-    /// Stream readers, opened by the service thread on the render thread's
-    /// request (tap 0 when bound).
+    /// The stream readers, which the service thread opens on a request of
+    /// the render thread. Tap 0 opens at the binding.
     pub taps: [OnceLock<Stream>; TAPS],
     pub view: View,
 }
@@ -90,7 +90,7 @@ impl Src {
         }
     }
 
-    /// Plays [held] (a cache entry).
+    /// Plays the cache entry [held].
     pub fn with_pcm(mut self, held: Held) -> Src {
         self.pcm = Some(held);
         self
@@ -110,7 +110,7 @@ impl Src {
         self.view.rate.load(Relaxed)
     }
 
-    /// The decoded samples once taken (None: not there, or failed).
+    /// The decoded samples once taken, None when missing or failed.
     pub fn data(&self) -> Option<&[f32]> {
         if !self.view.taken.load(Relaxed) {
             return None;
@@ -121,8 +121,9 @@ impl Src {
             .map(|p| &p.samples[..])
     }
 
-    /// CachedPcmSource._take on the render thread: the decode's format
-    /// replaces the bank's once the data is there.
+    /// Takes the decoded data on the render thread, as
+    /// CachedPcmSource._take does. The format of the decode replaces the
+    /// format of the model once the data is there.
     pub fn take(&self) {
         let v = &self.view;
         if v.taken.load(Relaxed) || self.kind != Kind::Pcm {
@@ -145,7 +146,7 @@ impl Src {
         }
     }
 
-    /// pcmReady.
+    /// The data is ready, as for pcmReady.
     pub fn ready(&self) -> bool {
         match self.kind {
             Kind::Pcm => {
@@ -158,13 +159,13 @@ impl Src {
     }
 }
 
-/// A shared reference to a source; its last drop never frees the source
-/// where it is dropped (see the module comment).
+/// A shared reference to a source. Its last drop queues the source for the
+/// collector in place of freeing it.
 #[derive(Clone)]
 pub struct SrcRef(Shared<Src>);
 
 impl SrcRef {
-    /// Shares [src]; its last drop queues it for [garbage]'s collector.
+    /// Shares [src]. Its last drop queues it for the collector of [garbage].
     pub fn new(src: Src, garbage: &Handle) -> SrcRef {
         SrcRef(Shared::new(garbage, src))
     }
@@ -181,8 +182,8 @@ impl std::ops::Deref for SrcRef {
     }
 }
 
-/// The collector: drops the sources whose last reference went (never the
-/// render thread).
+/// Drops the sources whose last reference went, on any thread but the render
+/// thread.
 pub fn collect(garbage: &mut Collector) {
     garbage.collect();
 }
@@ -201,12 +202,12 @@ mod tests {
         let a = src("x", &g.handle());
         let b = a.clone();
         drop(a);
-        // A share is left: nothing is queued.
+        // A share is left, and nothing is queued.
         g.collect();
         assert_eq!(g.alloc_count(), 1);
         assert_eq!(b.path, "x");
-        // The last share queues it; the source is still there until the
-        // collector runs.
+        // The last share queues it, and the source stays until the collector
+        // runs.
         drop(b);
         assert_eq!(g.alloc_count(), 1);
         collect(&mut g);

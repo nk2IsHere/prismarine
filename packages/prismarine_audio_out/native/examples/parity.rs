@@ -1,8 +1,8 @@
-//! Replays a session mcsm_audio's tool/native_parity.dart wrote through the
-//! native mixer and compares the bits with the Dart engine's render (dev
-//! only; the decoded PCM comes from the files the tool listed).
+//! Replays a parity session that prismarine_audio's `writeParitySession`
+//! wrote on the native engine and compares the bits with the Dart render.
+//! The decoded PCM comes from the files that the session lists.
 //!
-//! usage: `cargo run --release --example parity -- <dir>`
+//! Run it with `cargo run --release --example parity -- <dir>`.
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -11,11 +11,12 @@ use std::sync::Mutex;
 use prismarine_audio_out::decode::{cache, codec::Pcm};
 use prismarine_audio_out::mix::*;
 
-/// path → (decoded f32 file, channels, rate), from the session's pcm.tsv.
+/// The decoded f32 file, the channels and the rate of each path, from the
+/// pcm.tsv of the session.
 static PCM: Mutex<Option<HashMap<String, (String, i32, i32)>>> = Mutex::new(None);
 
-/// The cache's loader: the session's PCM (ffmpeg's decode the Dart engine
-/// played) instead of the vendored decoders.
+/// Loads the PCM of the session that the Dart render played, in place of the
+/// vendored decoders.
 fn load(path: &str) -> Option<Pcm> {
     let (file, channels, rate) = PCM.lock().unwrap().as_ref().unwrap().get(path)?.clone();
     let b = std::fs::read(file).ok()?;
@@ -56,7 +57,8 @@ fn main() {
     let mut it = meta.split_whitespace();
     let seed: i64 = it.next().unwrap().parse().unwrap();
     let total: i64 = it.next().unwrap().parse().unwrap();
-    // The engine's rules: report lag, late start minimum, whole-ms lengths.
+    // The rules of the engine, the report lag, the late start minimum and
+    // whole-ms lengths.
     let report_lag: i64 = it.next().map_or(0, |v| v.parse().unwrap());
     let late_min: f64 = it.next().map_or(0.0, |v| v.parse().unwrap());
     let whole_ms: i32 = it.next().map_or(0, |v| v.parse().unwrap());
@@ -99,7 +101,8 @@ fn main() {
             if at >= pos + n + 100000 {
                 break;
             }
-            // at op id value seek has_late late flag keep_tail name sound via
+            // The fields are at, op, id, value, seek, has_late, late, flag,
+            // keep_tail, name, sound and via.
             let text = |k: usize| CString::new(f[k].clone()).unwrap();
             let (name, sound, via) = (text(9), text(10), text(11));
             let ptr = |k: usize, c: &CString| {
