@@ -1,0 +1,7 @@
+analyzer:
+  exclude:
+    - build/**
+    - windows/**
+    - macos/**
+    - linux/**
+include: ../../tools/lint/analysis/flutter.yaml
