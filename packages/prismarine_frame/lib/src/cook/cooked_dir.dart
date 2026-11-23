@@ -3,14 +3,15 @@ import 'dart:io';
 
 import 'cooked.dart';
 
-/// The cooked cache the renderer's pulled passes draw from for [content]:
-/// `MCSM_PULLED` naming a directory, or
-/// `off` for none; else the content's own `<content>/cooked` when it holds its
-/// compiled programs and every scene's `cooked.json` is of [cookVersion]
-/// (a stale or partial cache could leave a row undrawable). The
-/// builder's rows and the runner's pulled passes go together by it.
+/// The cooked cache that the pulled passes of a renderer draw from for
+/// [content]. `PRISMARINE_PULLED`, else `MCSM_PULLED`, gives a directory, or
+/// `off` for none. Without either, the cache is `<content>/cooked` when it
+/// holds its compiled programs and every scene's `cooked.json` is of
+/// [cookVersion], else null. A stale or partial cache could leave a row
+/// undrawable.
 String? pulledDir(String content, {Map<String, String>? environment}) {
-  final env = (environment ?? Platform.environment)['MCSM_PULLED'];
+  final vars = environment ?? Platform.environment;
+  final env = vars['PRISMARINE_PULLED'] ?? vars['MCSM_PULLED'];
   if (env == 'off') return null;
   if (env != null && env.isNotEmpty) return env;
   final dir = Directory('$content/cooked');
