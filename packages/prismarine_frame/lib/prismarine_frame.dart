@@ -10,6 +10,8 @@ export 'src/plan/frame_plan.dart';
 export 'src/plan/frame_plan_json.dart';
 export 'src/plan/plan_codec.dart';
 export 'src/plan/plan_codec_read.dart';
+export 'src/plan/shader_record.dart';
+export 'src/plan/stencil_values.dart';
 export 'src/rows/row_layout.dart';
 export 'src/rows/row_table.dart';
 export 'src/rows/scene_rows.dart';

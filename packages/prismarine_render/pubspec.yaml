@@ -1,0 +1,23 @@
+name: prismarine_render
+description: Records frame plans on Flutter GPU. Shaders, textures and meshes come from a RenderAssets of the application.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_gpu:
+    sdk: flutter
+  prismarine_frame:
+    path: ../prismarine_frame
+  prismarine_kept:
+    path: ../prismarine_kept
+  vector_math: ^2.1.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+dependency_overrides:
+  # Flutter GPU with the patches of the engine fork.
+  flutter_gpu:
+    path: ../../third_party/flutter_gpu

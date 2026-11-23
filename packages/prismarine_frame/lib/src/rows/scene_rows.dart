@@ -1,41 +1,21 @@
 import 'row_layout.dart';
 
-/// One per drawn object. Its first members are the shaders' BufferObject
-/// block member for member, so the effects' pulled form reads
-/// `Object.<member>` from this row unchanged; the renderer's own fields
-/// follow: the object's light set, its flags and the union box of its
-/// meshes, culled as a whole.
-final objectRow = RowLayout('ObjectRow', const [
-  RowField('sWorldMatrix', FieldType.rows3x4),
-  RowField('sPrevWorldMatrix', FieldType.rows3x4),
-  RowField('sObjectAlpha', FieldType.float),
-  RowField('sObjectMaterialTime', FieldType.float),
-  RowField('sRecieveShadowsIntensity', FieldType.float),
-  RowField('sRecieveShadowsDoublesided', FieldType.float),
-  RowField('sObjectBrushNearDetailBias', FieldType.float),
-  RowField('sObjectBrushFarDetailBias', FieldType.float),
-  RowField('sObjectBrushScale', FieldType.float),
-  RowField('sObjectBrushScaleByVertex', FieldType.float),
-  RowField('sObjectDiffuseColor', FieldType.vec3),
-  RowField('sObjectRimBumpDepth', FieldType.float),
-  RowField('sObjectReflectionColor', FieldType.vec3),
-  RowField('sObjectReflectionMipCount', FieldType.float),
-  RowField('sEnlightenUVTransform', FieldType.vec4),
-  RowField('sReflectionMatrix0', FieldType.vec3),
-  RowField('sReflectionIntensityShadow', FieldType.float),
-  RowField('sReflectionMatrix1', FieldType.vec3),
-  RowField('sReflectionMatrix2', FieldType.vec3),
-  RowField('pad0', FieldType.float),
-  RowField('sStencilRef', FieldType.sint),
-  RowField('sStencilMask', FieldType.sint),
-  // The renderer's own.
+/// The row of one drawn object: the [members] of an application's object
+/// block, which the shaders read as `Object.<member>`, then the fields that
+/// the renderer fills. These are the object's light set, its flags and the
+/// box around its meshes, which are culled as a whole.
+RowLayout objectRowOf(List<RowField> members) =>
+    RowLayout('ObjectRow', [...members, ...objectRowFields]);
+
+/// The fields of [objectRowOf] that the renderer fills.
+const objectRowFields = [
   RowField('lightSet', FieldType.uint),
   RowField('flags', FieldType.uint),
   RowField('boundsMin', FieldType.vec3),
   RowField('boundsMax', FieldType.vec3),
-]);
+];
 
-/// Object flags ([objectRow] `flags`).
+/// Object flags ([objectRowOf] `flags`).
 abstract final class ObjectFlags {
   /// Never culled.
   static const noCull = 1 << 0;
@@ -50,29 +30,20 @@ abstract final class ObjectFlags {
   static const castsShadow = 1 << 3;
 }
 
-/// One per (object, mesh batch). Its first members are the shaders'
-/// BufferInstance block member for member, read as `Instance.<member>` by
-/// the pulled effects; the position decode members stay at identity, as
-/// the cooked pools hold the editable form's float positions. The
-/// renderer's own fields follow: the object row, the material's words, the
-/// pipeline bucket, where the batch's triangles are in its cooked pool, its
-/// skinning output and its bounding sphere.
-final instanceRow = RowLayout('InstanceRow', const [
-  RowField('sLightmapTransform', FieldType.vec4),
-  RowField('sTexCoordTransform0', FieldType.vec4),
-  RowField('sTexCoordTransform1', FieldType.vec4),
-  RowField('sTexCoordTransform2', FieldType.vec4),
-  RowField('sTexCoordTransform3', FieldType.vec4),
-  RowField('sMeshPositionScale', FieldType.vec3),
-  RowField('sBatchLightmapIntensity', FieldType.float),
-  RowField('sMeshPositionOffset', FieldType.vec3),
-  RowField('sAlphaRef', FieldType.float),
-  RowField('sMeshPositionWScale', FieldType.vec3),
-  RowField('sLightmapPageIndex', FieldType.float),
-  // The renderer's own.
+/// The row of one mesh batch of an object: the [members] of an
+/// application's instance block, which the shaders read as
+/// `Instance.<member>`, then the fields that the renderer fills. These are
+/// the object's row, the material's words, the pipeline bucket, the place of
+/// the batch's triangles in its cooked pool, its skinning output and its
+/// bounding sphere.
+RowLayout instanceRowOf(List<RowField> members) =>
+    RowLayout('InstanceRow', [...members, ...instanceRowFields]);
+
+/// The fields of [instanceRowOf] that the renderer fills.
+const instanceRowFields = [
   RowField('object', FieldType.uint),
-  // Word offsets in the material table: the material's BufferMaterialBase
-  // and BufferMaterialMain blocks and its texture inputs' array layers.
+  // Word offsets in the material table: the material's two blocks and the
+  // array layers of its texture inputs.
   RowField('materialBase', FieldType.uint),
   RowField('materialMain', FieldType.uint),
   RowField('materialTextures', FieldType.uint),
@@ -83,9 +54,9 @@ final instanceRow = RowLayout('InstanceRow', const [
   RowField('baseVertex', FieldType.uint),
   RowField('skinOutput', FieldType.uint),
   RowField('sphere', FieldType.vec4),
-]);
+];
 
-/// Instance flags ([instanceRow] `flags`): which pass kinds draw it.
+/// Instance flags ([instanceRowOf] `flags`): which pass kinds draw it.
 abstract final class InstanceFlags {
   static const gBuffer = 1 << 0;
   static const main = 1 << 1;

@@ -44,11 +44,17 @@ with another tag.
 
 `RowLayout` describes a row of a GPU table as typed fields with std430 offsets and generates the matching GLSL
 struct. `RowTable` keeps the rows in one byte buffer for a storage buffer and keeps the range of bytes written since
-the last upload. `objectRow` and `instanceRow` are the rows of the objects and of the mesh batches of a scene.
+the last upload. `objectRowOf` and `instanceRowOf` build the rows of the objects and of the mesh batches of a scene.
+Each row starts with the members of your object or instance block that your shaders read. The fields that the
+renderer fills follow, such as an object's light set and a batch's bounding sphere.
 
 `CookedScene` is the data model of a cooked scene as `cooked.json` describes it: its geometry pools, its texture
 arrays as KTX2 files and the place of each mesh batch and texture. `pulledDir` finds the cooked directory of some
 content. `PRISMARINE_PULLED` gives a directory or `off` for none. `MCSM_PULLED` is read when it is not set.
+
+`ShaderRecord` is the interface of one shader: its constant blocks, textures, samplers, vertex inputs and storage
+resources, read from the JSON form of the shader's reflection. `StencilValues` follows the values that a depth target's
+stencil can hold from the replacing writes since its clear.
 
 `sameFloat32Bits` and `scratchFloats` compare and read float lists without an allocation per value.
 
