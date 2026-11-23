@@ -6,7 +6,7 @@ Generic engine code, moved out of mcsm (the Minecraft: Story Mode port) unit by 
 - [docs/memory/state.md](docs/memory/state.md): where prismarine is now.
 - [docs/memory/decisions.md](docs/memory/decisions.md): what is decided.
 - [docs/specs/2026-11-23-prismarine-split-design.md](docs/specs/2026-11-23-prismarine-split-design.md): the split from mcsm, its packages, gates and migration steps.
-- mcsm's `docs/memory/rules.md` binds work here too (shared machines, git and landing, verification, engineering) until prismarine has its own rules page.
+- [docs/memory/rules.md](docs/memory/rules.md): how to write, document and engineer here (binding); shared machines and landing follow mcsm's rules for now.
 
 ## Hard rules
 - No game data in this repo, and no game names in code, identifiers or package names; docs name mcsm only as where code came from. The one exception is the logo (the owner's, 2026-11-23).
