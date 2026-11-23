@@ -21,15 +21,16 @@ const smokeShare = 0.001, smokeLevels = 2;
 /// The frames that the smoke test renders of each view.
 const smokeFrames = 24;
 
-/// Renders a fixed frame from each camera of the scene, writes it as a PNG
-/// into [out] and compares it with the reference in
-/// `<data>/smoke/<os>`. With [record] the frames become the references.
+/// Renders a fixed frame from each camera of the scene with the first
+/// [lightCount] point lights, all by default. Writes each frame as a PNG
+/// into [out] and compares it with the reference in `<data>/smoke/<os>`. With [record] the frames become the references.
 /// Returns 0 when every frame passed.
 Future<int> runSmoke(
   SampleRenderer r,
   String data, {
   bool record = false,
   String? out,
+  int? lightCount,
 }) async {
   final refs = Directory('$data/smoke/${Platform.operatingSystem}');
   final dir = Directory(out ?? '$data/smoke/last')..createSync(recursive: true);
@@ -41,7 +42,7 @@ Future<int> runSmoke(
   )..place(7.5);
   r.builder.lights
     ..clear()
-    ..addAll(lights.lights);
+    ..addAll(lights.lights.take(lightCount ?? lights.lights.length));
   final fly = FlyCamera();
   final view = PbrCamera();
   final cams = r.cameras;

@@ -13,6 +13,7 @@ const renderOptions = {
   'fog-density': 'The extinction of the fog per metre.',
   'fog-anisotropy': 'The forward scattering of the fog, from -1 to 1.',
   'ev': 'The exposure compensation of auto exposure in EV.',
+  'lights': 'The number of point lights of the smoke frames, 8 by default.',
   'gi': 'off, low, medium or high, the indirect light. Medium by default.',
   'gi-off':
       'The parts of the indirect light to switch off, of sky, probes, ao and ssr, such as ao,ssr.',

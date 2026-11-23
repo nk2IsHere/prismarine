@@ -160,6 +160,7 @@ class _SampleAppState extends State<SampleApp> {
             widget.data,
             record: widget.record,
             out: widget.out,
+            lightCount: int.tryParse(widget.options['lights'] ?? ''),
           ),
         );
       }
