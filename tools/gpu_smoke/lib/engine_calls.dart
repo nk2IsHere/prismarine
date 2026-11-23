@@ -1,10 +1,8 @@
-// P23: the mcsm6 engine's capabilities (prismarine's third_party/flutter_engine
-// patch 0006), found by symbol so this package still builds and runs on
-// Flutter's own engine (and against its flutter_gpu, which has none of this).
-// RenderPass and McsmDrawList pass as native pointers below (they extend
-// NativeFieldWrapperClass1, as flutter_gpu's own exports take them); Flutter's
-// analyzer can't resolve dart:nativewrappers and doesn't see that (the
-// compiler does).
+// The calls of the engine fork that the checks use, found by symbol. The
+// app then builds and runs on the engine of Flutter too. RenderPass and
+// McsmDrawList pass as native pointers. They extend
+// NativeFieldWrapperClass1 as the exports of flutter_gpu take them. The
+// analyzer does not resolve dart:nativewrappers and does not see that.
 // ignore_for_file: ffi_native_only_classes_extending_nativefieldwrapperclass1_can_be_pointer, must_be_a_subtype, extends_non_class
 
 import 'dart:ffi';
@@ -14,16 +12,12 @@ import 'dart:typed_data';
 
 import 'package:flutter_gpu/gpu.dart';
 
-/// The patched engine's feature bits (`InternalFlutterGpu_McsmFeatures`; 0
-/// on Flutter's prebuilt engine and on mcsm5):
-/// 1 = per-attachment colour formats in pipelines, 2 = colour write masks,
-/// 4 = release builds take GC sizing Dart flags, 8 = retained draws
-/// ([McsmDrawList]); mcsm7: 16, 64, 128, 256, 512 (see the getters below);
-/// mcsm8: 1024 = the bits are the running backend's (asked again until the
-/// engine knows it, i.e. until Flutter GPU made its context).
-/// `MCSM_ENGINE_FEATURES=<mask>` in the environment keeps only those bits
-/// (0: every caller takes the paths it takes on other engines; A/B runs in
-/// one build).
+/// The feature bits of the engine fork, 0 on the engine of Flutter. Bit 1
+/// is colour formats per attachment, 2 colour write masks, 4 the GC flags
+/// of release builds and 8 retained draws. Bits 16 to 512 are described
+/// at their getters. Bit 1024 marks bits of the running backend, which are
+/// read again until Flutter GPU has made its context.
+/// `MCSM_ENGINE_FEATURES=<mask>` keeps only the bits of the mask.
 int get mcsmEngineFeatures {
   final known = _mcsmFeaturesKnown;
   if (known != null) return known;
@@ -39,7 +33,7 @@ int get mcsmEngineFeatures {
     io.Platform.environment['MCSM_ENGINE_FEATURES'] ?? '',
   );
   final features = mask == null ? bits : bits & mask;
-  // An mcsm7 engine has no 1024 and never will: its bits are final too.
+  // An engine without bit 1024 has final bits.
   if ((bits & 1024) != 0 ||
       !lib.providesSymbol('InternalFlutterGpu_McsmBackend')) {
     _mcsmFeaturesKnown = features;
@@ -49,8 +43,8 @@ int get mcsmEngineFeatures {
 
 int? _mcsmFeaturesKnown;
 
-/// The backend Flutter GPU runs on (mcsm8 engines; null before its context
-/// exists or on other engines): 'metal', 'gles' or 'vulkan'.
+/// The backend of Flutter GPU, `metal`, `gles` or `vulkan`. Null before
+/// Flutter GPU has made its context and on other engines.
 String? get mcsmBackend {
   final lib = DynamicLibrary.process();
   if (!lib.providesSymbol('InternalFlutterGpu_McsmBackend')) return null;
@@ -66,18 +60,17 @@ String? get mcsmBackend {
   };
 }
 
-/// Whether a render pass's pipelines take each colour attachment's own
-/// format. Flutter's engine builds every attachment with attachment 0's
-/// format, so a pass whose attachments differ in format needs this (and a
-/// backend that binds more than one attachment: Metal, not Impeller's GLES).
+/// Returns true when the pipelines of a pass take the own format of each
+/// colour attachment. The engine of Flutter builds every attachment with
+/// the format of attachment 0.
 bool get mcsmMixedColorAttachmentFormats => (mcsmEngineFeatures & 1) != 0;
 
-/// Whether [mcsmSetColorWriteMask] is available.
+/// Returns true when [mcsmSetColorWriteMask] is available.
 bool get mcsmColorWriteMask => (mcsmEngineFeatures & 2) != 0;
 
-/// Which channels [pass]'s draws write to colour attachment
-/// [colorAttachmentIndex] (bits 0..3 = r, g, b, a; 0 writes none), part of
-/// the pipeline state like the blend. Needs [mcsmColorWriteMask].
+/// Sets the channels that the draws of [pass] write to colour attachment
+/// [colorAttachmentIndex]. Bits 0 to 3 are red, green, blue and alpha. The
+/// mask is part of the pipeline state. Needs [mcsmColorWriteMask].
 void mcsmSetColorWriteMask(
   RenderPass pass,
   int mask, {
@@ -98,15 +91,14 @@ external void _mcsmSetColorWriteMask(
   int writeMask,
 );
 
-/// Whether [McsmDrawList] is available (patch 0008).
+/// Returns true when [McsmDrawList] is available.
 bool get mcsmRetainedDraws => (mcsmEngineFeatures & 8) != 0;
 
-/// Draws recorded from a render pass ([mcsmBeginRecording]), everything each
-/// sent to the GPU (pipeline, bindings, vertex and index buffers, counts),
-/// to send again in later passes with the same targets' formats
-/// ([mcsmReplay]). The buffers and textures are kept alive; their contents
-/// may change between replays (a caller that rewrites a buffer the GPU may
-/// still read keeps one per frame in flight). Needs [mcsmRetainedDraws].
+/// Draws recorded from a render pass with [mcsmBeginRecording]. A draw keeps
+/// all that it sent, the pipeline, the bindings, the vertex and index
+/// buffers and the counts. [mcsmReplay] sends it again in a later pass with
+/// targets of the same formats. The buffers and textures stay alive and
+/// their contents may change between replays. Needs [mcsmRetainedDraws].
 base class McsmDrawList extends NativeFieldWrapperClass1 {
   McsmDrawList() {
     if (!mcsmRetainedDraws) {
@@ -138,15 +130,15 @@ base class McsmDrawList extends NativeFieldWrapperClass1 {
   external void _clear();
 }
 
-/// From now on every draw on [pass] is also appended to [list].
+/// Appends every later draw on [pass] to [list].
 void mcsmBeginRecording(RenderPass pass, McsmDrawList list) =>
     _mcsmBeginRecording(pass, list);
 
 void mcsmEndRecording(RenderPass pass) => _mcsmEndRecording(pass);
 
-/// Sends [list]'s draws at `indices[0, count)`, in that order, on [pass];
-/// the pass's own bindings are sent again with its next draw. False when an
-/// index was out of range or a draw failed.
+/// Sends the draws of [list] at the first [count] of [indices] on [pass],
+/// in that order. The pass sends its own bindings again with its next draw.
+/// Returns false when an index is out of range or a draw failed.
 bool mcsmReplay(
   RenderPass pass,
   McsmDrawList list,
@@ -179,20 +171,18 @@ external bool _mcsmReplay(
   int count,
 );
 
-/// Whether [mcsmWriteTextureDirect] can write (patch 0009, mcsm7, bit 16):
-/// Metal only (macOS, iOS); elsewhere textures upload the usual way.
+/// Returns true when [mcsmWriteTextureDirect] can write. Bit 16, on Metal
+/// only.
 bool get mcsmDirectTextureWrites =>
     (mcsmEngineFeatures & 16) != 0 &&
     (io.Platform.isMacOS || io.Platform.isIOS);
 
-/// Writes [bytes] (the whole base level) straight into [texture]'s memory:
-/// no staging buffer and no command buffer (Metal's replaceRegion on a
-/// host-visible texture). The write happens now, on the CPU, so the caller
-/// makes sure no submitted GPU work still reads [texture] (a ring of
-/// textures gated on [rendererSubmissions]' completion). Returns false, with
-/// nothing written, where the engine can't (another backend, a texture that
-/// isn't host-visible, a size that isn't the base level's): upload another
-/// way then.
+/// Writes [bytes], the whole base level, into the memory of [texture] with
+/// no staging buffer and no command buffer. The write happens now on the
+/// CPU, so the caller makes sure that no submitted work still reads
+/// [texture]. Returns false and writes nothing on another backend, for a
+/// texture that is not host-visible or for a size that is not the one of
+/// the base level.
 bool mcsmWriteTextureDirect(Texture texture, ByteData bytes, {int slice = 0}) {
   if (!mcsmDirectTextureWrites) return false;
   return _mcsmWriteDirect(texture, gpuContext, bytes, slice);
@@ -208,28 +198,21 @@ external bool _mcsmWriteDirect(
   int slice,
 );
 
-/// Whether a command buffer may hold several render passes in turn (patch
-/// 0009, mcsm7): creating a pass ends the encoder of the command buffer's
-/// previous one, which then refuses draws. On other engines Metal allows
-/// only one pass per command buffer, so each pass needs its own.
+/// Returns true when a command buffer may hold several render passes in
+/// turn. Bit 64. Making a pass ends the encoder of the previous one.
 bool get mcsmPassesPerCommandBuffer => (mcsmEngineFeatures & 64) != 0;
 
-/// Whether [mcsmSetViewports] can set several viewports (feature bit 256):
-/// Metal (patch 0011) and, on an mcsm8 engine, Vulkan where the device has
-/// multiViewport and the vertex viewport index. GLES draws per tile.
+/// Returns true when [mcsmSetViewports] can set several viewports. Bit 256,
+/// on Metal and on Vulkan devices with multiViewport.
 bool get mcsmViewportArrays {
   final bits = mcsmEngineFeatures;
   if ((bits & 256) == 0) return false;
-  // mcsm8 engines report the running backend's bits (1024); mcsm7's bit 256
-  // was Metal's only.
+  // Without bit 1024 the bit 256 is the one of Metal.
   return (bits & 1024) != 0 || io.Platform.isMacOS || io.Platform.isIOS;
 }
 
-/// Whether a render pass binds every colour attachment (perf3): Metal always
-/// (Flutter's own engine too); GLES with the mcsm7+ engine's bit 128
-/// (Impeller's GLES binds only the first otherwise); Vulkan (mcsm8). The
-/// shadow occlusion pass then writes the exe's layout and is the depth
-/// prepass (mcsm_look_scene TtShadows).
+/// Returns true when a render pass binds every colour attachment. Metal
+/// always does, Vulkan with bit 1024 and OpenGL ES with bit 128.
 bool get mcsmMultipleColorAttachments {
   if (io.Platform.isMacOS || io.Platform.isIOS) return true;
   final bits = mcsmEngineFeatures;
@@ -237,36 +220,26 @@ bool get mcsmMultipleColorAttachments {
   return (bits & 128) != 0;
 }
 
-/// Whether a uniform block may hold a large array that the backend binds as
-/// one buffer (perf3): Metal and Vulkan. Impeller's GLES sets a block member
-/// by member (glUniform*), where a big array runs into the stage's uniform
-/// vector limit, so GLES callers keep such data in a texture.
+/// Returns true when a uniform block may hold a large array that the
+/// backend binds as one buffer, on Metal and Vulkan.
 bool get mcsmUniformArraysInBlocks {
-  // MCSM_UNIFORM_ARRAYS=0: as on GLES (checks).
+  // MCSM_UNIFORM_ARRAYS=0 answers as OpenGL ES does.
   if (io.Platform.environment['MCSM_UNIFORM_ARRAYS'] == '0') return false;
   if (io.Platform.isMacOS || io.Platform.isIOS) return true;
   final bits = mcsmEngineFeatures;
   return (bits & 1024) != 0 && mcsmBackend == 'vulkan';
 }
 
-/// Whether the engine draws from a first instance itself (patch 0012,
-/// mcsm7, feature bit 512): `RenderPass.draw(…, firstInstance: n)` is one
-/// leaf call. flutter_gpu's draw takes `firstInstance` on every engine
-/// (others bind the instance buffers again at the offset).
+/// Returns true when the engine draws from a first instance in one call.
+/// Bit 512. Another engine binds the instance buffers again at the offset.
 bool get mcsmFirstInstanceDraws => (mcsmEngineFeatures & 512) != 0;
 
-/// Sets [viewports] (at most 16) and a scissor rect for each for the draws
-/// that follow on [pass]: each primitive goes to the viewport its vertex
-/// stage names in a `flat out uint mcsm_viewport_index` output (P34 makes it
-/// Metal's `[[viewport_array_index]]`; for Vulkan the shader also writes
-/// `gl_ViewportIndex` under `#ifdef IMPELLER_TARGET_VULKAN`, with
-/// `#extension GL_ARB_shader_viewport_layer_array : require` there), so an
-/// instanced draw can put each
-/// instance in its own atlas tile; the rasterizer maps each viewport exactly
-/// as a draw with that one viewport (prismarine's tools/gpu_smoke checks the bytes). An
-/// empty list goes back to one viewport (the draws' own, else the whole
-/// target). Returns false where the engine or backend can't (GLES): then
-/// draw per tile (with the index 0).
+/// Sets up to 16 [viewports] and a scissor rect for each for the later
+/// draws on [pass]. A primitive goes to the viewport that its vertex stage
+/// writes to a `flat out uint mcsm_viewport_index` output. On Vulkan the
+/// stage also writes `gl_ViewportIndex`. An empty list goes back to one
+/// viewport. Returns false where the engine or backend has no viewport
+/// arrays. The caller then draws tile by tile.
 bool mcsmSetViewports(
   RenderPass pass,
   List<Viewport> viewports, {
