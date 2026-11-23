@@ -7,8 +7,8 @@ import 'package:prismarine_audio/prismarine_audio.dart';
 import '../native.dart';
 
 /// A file decoded whole on the native worker thread. [channels],
-/// [sampleRate] and [frames] are the ones given until the decode lands, and
-/// reads give silence until [ready].
+/// [sampleRate] and [frames] are the given values until the decode is done.
+/// Reads give silence until [ready].
 class AsyncPcmSource implements LoadingPcmSource {
   AsyncPcmSource.start(
     this.path, {
@@ -26,8 +26,8 @@ class AsyncPcmSource implements LoadingPcmSource {
 
   final _since = Stopwatch();
 
-  /// Called once when the data lands: ms since the request, ms the copy into
-  /// the Dart heap took (the render isolate's audio trace).
+  /// Receives once, when the data arrives, the ms since the request and the
+  /// ms of the copy into the Dart heap.
   void Function(double waitMs, double copyMs)? onReady;
 
   final String path;
@@ -35,7 +35,7 @@ class AsyncPcmSource implements LoadingPcmSource {
   ffi.Pointer<NativeJob> _job;
   MemoryPcmSource? _data;
 
-  /// The decode failed: the source plays silence.
+  /// True when the decode failed. The source then plays silence.
   bool failed = false;
 
   @override

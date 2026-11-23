@@ -173,7 +173,7 @@ external ffi.Pointer<ffi.Float> pcmData(
 )
 external void pcmRelease(ffi.Pointer<ffi.Void> e);
 
-/// The release as a finalizer callback (a source's reference).
+/// The release of the reference of a source as a finalizer callback.
 final pcmReleasePtr =
     ffi.Native.addressOf<
       ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>

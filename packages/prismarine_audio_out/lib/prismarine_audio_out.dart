@@ -1,4 +1,4 @@
-/// Audio output: native decoders behind `PcmSource`, the decoded-audio
+/// Audio output with native decoders behind `PcmSource`, the decoded-audio
 /// cache, streams, a PCM push stream into the output device and a render
 /// isolate that keeps it filled.
 library;

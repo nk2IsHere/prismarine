@@ -1,10 +1,11 @@
 //! The decoded-audio cache. It holds whole-file decodes to interleaved
 //! float32, keyed by the path that the caller passes, for the whole process.
 //! Any isolate may ask for a file ahead of need ([want]) or take it to play
-//! ([Held::acquire]). The samples are outside the Dart heap, and neither the
-//! decode nor the data touch the heap that the isolates share. Decodes run on low-priority threads.
-//! Entries nobody holds are dropped two scene changes after they were last
-//! wanted, or oldest first while the cache is over its budget.
+//! ([Held::acquire]). The samples are outside the Dart heap. Neither the
+//! decode nor the data touch the heap that the isolates share. Decodes run on
+//! low-priority threads. Entries that nobody holds are dropped two scene
+//! changes after they were last wanted, or oldest first while the cache is
+//! over its budget.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -18,11 +19,13 @@ pub const READY: i32 = 1;
 pub const DECODING: i32 = 2;
 pub const FAILED: i32 = -1;
 
-// Under Miri decodes run on the waiting thread (no threads left running).
+// Under Miri decodes run on the waiting thread and no threads are left
+// running.
 const WORKERS: usize = if cfg!(miri) { 0 } else { 2 };
 
-/// One file's decode. Its state and data are read without the cache's lock
-/// (the render thread): the data is set once, before the state turns READY.
+/// The decode of one file. The render thread reads its state and data
+/// without the lock of the cache. The data is set once, before the state
+/// turns READY.
 pub struct Entry {
     path: String,
     state: AtomicI32,
@@ -47,14 +50,15 @@ impl Entry {
     }
 }
 
-/// What the cache keeps per entry (under its lock).
+/// The data that the cache keeps per entry, under its lock.
 struct Meta {
     entry: Arc<Entry>,
-    /// Holders ([Held]); never dropped while > 0.
+    /// The number of holders ([Held]). The entry is not dropped while it is
+    /// above 0.
     refs: i32,
     /// The newest scene generation that wanted or took it.
     gen: i64,
-    /// LRU stamp.
+    /// The LRU stamp.
     used: i64,
 }
 
@@ -75,7 +79,7 @@ struct Stats {
 
 struct Inner {
     map: HashMap<String, Meta>,
-    /// Entries waiting for a worker (state QUEUED), next first.
+    /// The entries that wait for a worker in the state QUEUED, next first.
     queue: VecDeque<Arc<Entry>>,
     workers: usize,
     gen: i64,
@@ -107,7 +111,7 @@ static CACHE: LazyLock<Cache> = LazyLock::new(|| Cache {
 });
 
 fn lock() -> MutexGuard<'static, Inner> {
-    // A panic under the lock leaves the counters as they were: keep going.
+    // A panic under the lock leaves the counters as they were. The cache continues.
     CACHE.inner.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -126,7 +130,8 @@ impl Inner {
         }
     }
 
-    /// Unlinks [path]'s entry (nobody holds it, not decoding).
+    /// Unlinks the entry of [path], which nobody holds and which is not
+    /// decoding.
     fn drop_entry(&mut self, path: &str) {
         if let Some(m) = self.map.remove(path) {
             self.unqueue(&m.entry);
@@ -136,7 +141,8 @@ impl Inner {
         }
     }
 
-    /// While over budget, drops the least recently used entry nobody holds.
+    /// Drops the least recently used entry that nobody holds while the cache
+    /// is over budget.
     fn trim_budget(&mut self) {
         while self.s.bytes > self.budget {
             let victim = self
@@ -152,8 +158,8 @@ impl Inner {
         }
     }
 
-    /// [path]'s entry, made (and queued) when new; [front]: ahead of earlier
-    /// asks.
+    /// Returns the entry of [path], made and queued when new. With [front] it
+    /// is queued ahead of earlier asks.
     fn get(&mut self, path: &str, front: bool) -> &mut Meta {
         if !self.map.contains_key(path) {
             let entry = Arc::new(Entry {
@@ -229,12 +235,13 @@ fn decode(e: &Entry) {
     CACHE.done.notify_all();
 }
 
-/// A dev tool's or test's decoder in place of the files' (set_loader).
+/// The decoder of a dev tool or test in place of the file decoders
+/// (set_loader).
 type Loader = fn(&str) -> Option<Pcm>;
 static LOADER: Mutex<Option<Loader>> = Mutex::new(None);
 
-/// Decodes through [f] instead of the vendored decoders from now on (dev
-/// tools that replay another engine's PCM, tests).
+/// Decodes through [f] in place of the vendored decoders from now on, for
+/// dev tools and tests.
 pub fn set_loader(f: Loader) {
     *LOADER.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
 }
@@ -248,7 +255,7 @@ fn decode_path(path: &str) -> Option<Pcm> {
 }
 
 fn worker() {
-    // Below the UI, raster and audio threads: preloading never competes
+    // Below the UI, raster and audio threads. Preloading does not compete
     // with a frame.
     super::os::take_role(super::os::Role::Background);
     loop {
@@ -256,7 +263,7 @@ fn worker() {
             let mut c = lock();
             loop {
                 if let Some(e) = c.queue.pop_front() {
-                    // Under the lock: a waiter sees it taken.
+                    // Under the lock. A waiter sees it taken.
                     e.state.store(DECODING, Ordering::Release);
                     break e;
                 }
@@ -267,22 +274,22 @@ fn worker() {
     }
 }
 
-/// Asks for [path] ahead of need (queued behind earlier asks; an entry that
-/// is there is kept for this scene). Its state.
+/// Asks for [path] ahead of need, queued behind earlier asks. An entry that
+/// is there is kept for this scene. Returns its state.
 pub fn want(path: &str) -> i32 {
     let mut c = lock();
     c.s.wanted += 1;
     c.get(path, false).entry.state()
 }
 
-/// A reference to a cache entry: it stays cached (and its data valid) while
-/// held. Dropping it gives the reference back (takes the cache's lock: never
-/// on the render thread).
+/// A reference to a cache entry. The entry stays cached and its data valid
+/// while held. Dropping it gives the reference back and takes the lock of
+/// the cache, which the render thread must not do.
 pub struct Held(Arc<Entry>);
 
 impl Held {
-    /// Takes [path] to play; a file not decoded yet moves to the front of
-    /// the queue.
+    /// Takes [path] to play. A file not decoded yet moves to the front of the
+    /// queue.
     pub fn acquire(path: &str) -> Held {
         let mut c = lock();
         let m = c.get(path, true);
@@ -301,7 +308,7 @@ impl Held {
     }
 
     /// Waits until it is decoded, decoding it on the calling thread when no
-    /// worker has started it. READY or FAILED.
+    /// worker has started it. Returns READY or FAILED.
     pub fn wait(&self) -> i32 {
         let e = &self.0;
         let t0 = Instant::now();
@@ -338,9 +345,9 @@ impl Drop for Held {
     }
 }
 
-/// A scene change: entries nobody holds and nobody wanted since the change
-/// before this one are dropped (queued ones leave the queue), so the scene
-/// being left and the next scene's preloads stay until the change after.
+/// Marks a scene change. Entries that nobody holds and nobody wanted since the change before this
+/// one are dropped. Queued ones leave the queue. The scene being left and the preloads of the next
+/// scene stay until the change after.
 pub fn scene_changed() {
     let mut c = lock();
     c.gen += 1;
@@ -356,14 +363,14 @@ pub fn scene_changed() {
     }
 }
 
-/// Decoded bytes kept before the oldest unheld entries are dropped.
+/// Sets the decoded bytes kept before the oldest unheld entries are dropped.
 pub fn set_budget(bytes: i64) {
     let mut c = lock();
     c.budget = bytes;
     c.trim_budget();
 }
 
-/// Drops every entry nobody holds (tests, shutdown).
+/// Drops every entry that nobody holds, for tests and shutdown.
 pub fn clear() {
     let mut c = lock();
     let all: Vec<String> = c
@@ -377,8 +384,9 @@ pub fn clear() {
     }
 }
 
-/// Entries, decoded bytes, queued, decodes done, decode µs, dropped,
-/// acquires ready, acquires not ready, waits, wait µs, wants, failed.
+/// Returns the entries, decoded bytes, queued entries, decodes done, decode
+/// µs, dropped entries, ready acquires, not ready acquires, waits, wait µs,
+/// wants and failed decodes.
 pub fn stats() -> [i64; 12] {
     let c = lock();
     let s = &c.s;

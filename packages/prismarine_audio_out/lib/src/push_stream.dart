@@ -5,23 +5,24 @@ import 'package:ffi/ffi.dart';
 
 import 'native.dart';
 
-/// Real-time output of PCM rendered in Dart, as f32 48 kHz interleaved
-/// stereo pushed into a ring that the system's default output device drains
-/// (native/src/push.rs). Its audio clock is the frames the device has
-/// taken: a paused stream takes nothing, a muted one takes and plays
-/// silence, a ring that runs dry plays silence without advancing the clock
-/// until 50 ms are queued again (each time is an underrun).
+/// Real-time output of PCM rendered in Dart, as f32 48 kHz interleaved stereo
+/// pushed into a ring that the default output device of the system drains
+/// (native/src/push.rs). Its audio clock counts the frames that the device has
+/// taken. A paused stream takes nothing. A muted stream takes and plays
+/// silence. A ring that runs dry plays silence without advancing the clock
+/// until 50 ms are queued again. Each time counts as an underrun.
 ///
-/// Any isolate may use a stream by its [address] ([PcmPushStream.at]); one
+/// Any isolate may use a stream by its [address] ([PcmPushStream.at]). One
 /// isolate pushes.
 class PcmPushStream {
   PcmPushStream._(this.address);
 
-  /// The stream another isolate opened (not owned: [dispose] there only).
+  /// The stream that another isolate opened. Only that isolate calls
+  /// [dispose].
   PcmPushStream.at(this.address);
 
-  /// Opens the default output device. Throws a [StateError] when none
-  /// opens (no sound device: a VM, a container).
+  /// Opens the default output device. Throws a [StateError] when none opens,
+  /// such as in a VM or a container without a sound device.
   factory PcmPushStream.start() {
     final err = malloc<ffi.Int32>();
     try {
@@ -40,12 +41,12 @@ class PcmPushStream {
 
   ffi.Pointer<NativePushStream> get _s => ffi.Pointer.fromAddress(address);
 
-  /// Queues [pcm] (interleaved stereo); the frames taken (fewer only when
-  /// the ring, two seconds long, is full).
+  /// Queues the interleaved stereo [pcm]. Returns the frames taken, fewer
+  /// only when the ring of two seconds is full.
   int push(Float32List pcm) =>
       _gone ? 0 : pushPcm(_s, pcm.address, pcm.length ~/ 2);
 
-  /// Frames the device has taken so far.
+  /// The number of frames that the device has taken so far.
   int get consumedFrames => _gone ? 0 : pushConsumed(_s);
 
   /// [consumedFrames] in seconds.
@@ -54,11 +55,11 @@ class PcmPushStream {
   set paused(bool v) => _gone ? null : pushSetPaused(_s, v ? 1 : 0);
   set muted(bool v) => _gone ? null : pushSetMuted(_s, v ? 1 : 0);
 
-  /// Times the ring ran dry since the last call.
+  /// Returns the number of times the ring ran dry since the last call.
   int takeUnderruns() => _gone ? 0 : pushUnderruns(_s);
 
-  /// Stops the device and frees the stream (the isolate that opened it,
-  /// once nothing pushes any more).
+  /// Stops the device and frees the stream. The isolate that opened it calls
+  /// this once nothing pushes any more.
   void dispose() {
     if (_gone) return;
     _gone = true;

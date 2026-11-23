@@ -1,5 +1,5 @@
-//! Background decodes. A file is decoded whole on a worker thread, never on
-//! the render thread, and the render polls the job until its data is there.
+//! Background decodes. A file is decoded whole on a worker thread and not on
+//! the render thread. The render polls the job until its data is there.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -9,7 +9,7 @@ use super::codec::{self, Pcm};
 
 pub struct Job {
     path: String,
-    /// 0 queued or decoding, 1 done, −1 failed.
+    /// 0 while queued or decoding, 1 when done and −1 when failed.
     state: AtomicI32,
     pcm: OnceLock<Pcm>,
 }
@@ -18,7 +18,7 @@ impl Job {
     pub fn state(&self) -> i32 {
         self.state.load(Ordering::Acquire)
     }
-    /// A done job's audio.
+    /// Returns the audio of a done job.
     pub fn pcm(&self) -> Option<&Pcm> {
         if self.state() == 1 {
             self.pcm.get()
@@ -50,7 +50,7 @@ fn worker() {
                 q = WORK.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
-        // A job its owner let go of before it ran is still decoded; its
+        // A job that its owner released before it ran is still decoded. Its
         // memory goes with the last reference.
         match codec::decode_file(&job.path) {
             Some(p) => {
@@ -62,7 +62,8 @@ fn worker() {
     }
 }
 
-/// Queues a whole-file decode of [path] (.ogg, or .mp3 by extension).
+/// Queues a whole-file decode of [path], an .ogg file or an .mp3 file by its
+/// extension.
 pub fn decode_async(path: &str) -> Arc<Job> {
     let job = Arc::new(Job {
         path: path.to_string(),

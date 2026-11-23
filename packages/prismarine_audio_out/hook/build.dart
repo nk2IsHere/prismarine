@@ -1,8 +1,8 @@
 import 'package:hooks/hooks.dart';
 import 'package:prismarine_cargo/prismarine_cargo.dart';
 
-/// Builds the package's native library from the Rust crate in native/, with
-/// the vendored minimp3 and stb_vorbis decoders compiled in.
+/// Builds the package's native library from the Rust crate in native/, with the
+/// vendored minimp3 and stb_vorbis decoders inside.
 ///
 /// An app with a Rust crate of its own that depends on the crate in native/
 /// sets two user defines in its root pubspec, `crate` with the directory of
