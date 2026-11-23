@@ -23,7 +23,7 @@ timeout=${PRISMARINE_OBSERVE_TIMEOUT:-${OBSERVE_TIMEOUT:-1800}}
 # The setpgrp of perl makes the program the leader of a process group. macOS
 # has no setsid.
 perl -e 'setpgrp(0, 0); exec @ARGV' -- dart ${=dart_flags} \
-  --no-pause-isolates-on-exit run --observe=0 --disable-service-auth-codes \
+  run --observe=0 --no-pause-isolates-on-exit --disable-service-auth-codes \
   $script "$@" > $out/stdout.txt 2>&1 &
 pg=$!
 watchdog=
