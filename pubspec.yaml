@@ -10,4 +10,6 @@ workspace:
   - packages/prismarine_cargo
   - packages/prismarine_pad
   - packages/prismarine_frame
+  - packages/prismarine_audio
+  - packages/prismarine_audio_out
   - tools/lint

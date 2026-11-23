@@ -1,0 +1,55 @@
+[package]
+name = "prismarine_audio_out"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "prismarine_audio_out's output library: the decoders (minimp3, stb_vorbis), the decoded-audio cache, streams, the output device and the push ring"
+
+[lib]
+name = "prismarine_audio_out"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# CachePadded: each writer's atomics on their own cache line (128 B on Apple Silicon).
+crossbeam-utils = "0.8"
+# The Dart mixer's PCM into the output device (push.rs): a wait-free
+# single-producer single-consumer ring.
+rtrb = "0.3"
+# The output device on every desktop platform (CoreAudio, WASAPI, ALSA).
+cpal = "0.18"
+# sin, cos, exp, log and pow in portable Rust (musl's fdlibm code) for
+# stb_vorbis's tables: the same bits on every target, where the platform's C
+# maths differ. Pinned with the mixer's dmath.rs.
+libm = { version = "=0.2.16", default-features = false }
+
+# The decode threads' roles (decode/os.rs): the nice and RLIMIT_NICE calls
+# on Linux, the priority and power throttling calls on Windows.
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+libc = "0.2"
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+# Linux: the device's thread at real-time priority, as CoreAudio's and
+# WASAPI's are.
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = { version = "0.18", features = ["realtime"] }
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+# No strip pass, here and for host-side proc-macros:
+# Xcode 27's strip leaves dylibs dyld refuses ("mis-aligned LINKEDIT string
+# pool"). In the manifest, so no build environment can lose it.
+strip = "none"
+opt-level = 3
+codegen-units = 1
+debug = false
+
+[profile.release.build-override]
+strip = "none"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+# clippy.toml: no platform maths (sin, exp, powf, …) and no mul_add.
+disallowed_methods = "deny"
