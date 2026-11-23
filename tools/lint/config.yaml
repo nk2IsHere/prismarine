@@ -20,7 +20,7 @@ alloc:
 privacy:
   private_env: PRISMARINE_PRIVATE
   pending: tools/lint/privacy_pending.txt
-links: [CLAUDE.md, README.md, docs/memory, docs/areas, packages, apps, tools, templates, third_party/flutter_engine/README.md]
+links: [CLAUDE.md, README.md, docs/building.md, docs/memory, docs/areas, packages, apps, tools, templates, third_party/flutter_engine/README.md]
 # The repository has no doc folders with one file per entry.
 docs_index: []
 code_shape:
