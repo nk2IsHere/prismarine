@@ -4,12 +4,11 @@ import 'dart:typed_data';
 import 'package:prismarine_audio/prismarine_audio.dart';
 import 'package:test/test.dart';
 
-/// FMOD 1.06's 3D panning against the oracle (the game's fmod.dll under
-/// CrossOver; docs/formats/fmod-bank.md "3D events").
+/// The 3D panning against reference gains.
 void main() {
   double deg(double l, double r) => math.atan2(r, l) * 180 / math.pi;
 
-  test('rolloffs as fmod.dll\'s 3D panner', () {
+  test('rolloffs of the 3D panner', () {
     // sfx_smolder_burn_costume_lp (linear, 3–18): 0.8 / 0.6 / 0.4 / 0.2 at
     // 6 / 9 / 12 / 15, 1 inside the min distance, 0 from the max on.
     expect(Spatial.attenuation(1, 6, 3, 18), closeTo(0.8, 1e-12));
@@ -29,8 +28,8 @@ void main() {
     expect(Spatial.extent(2, 1, 3, 0, 0), 0);
   });
 
-  test('the mono law matches the low-level oracle (degrees of pan)', () {
-    // (extent, direction) → the oracle's atan2(R, L) in degrees.
+  test('the mono law matches the reference (degrees of pan)', () {
+    // The atan2(R, L) of the reference in degrees by extent and direction.
     final cases = {
       (0.0, 30.0): 65.704,
       (30.0, 60.0): 82.258,
@@ -45,7 +44,7 @@ void main() {
     }
   });
 
-  test('the stereo image matches the low-level oracle', () {
+  test('the stereo image matches the reference', () {
     // extent 60, direction 30: L→(left, right), R→(left, right).
     final ((ll, lr), (rl, rr)) = Spatial.stereo(30, 60, 0);
     expect(ll, closeTo(0.5260, 0.001));
@@ -68,7 +67,8 @@ void main() {
       ..distance = 6;
     final buf = Float32List.fromList([1, 1]);
     pan.process(buf, 1, mono: true);
-    // The oracle's gains against the centred source inside the min distance.
+    // The gains of the reference against the centred source inside the
+    // minimum distance.
     expect(buf[0] / math.sqrt1_2, closeTo(1.0196, 0.0005));
     expect(buf[1] / math.sqrt1_2, closeTo(0.4904, 0.0005));
   });

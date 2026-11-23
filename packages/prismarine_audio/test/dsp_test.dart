@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:prismarine_audio/prismarine_audio.dart';
 import 'package:test/test.dart';
 
-/// The expected values are the FMOD oracle's measurements of the game's FMOD
-/// 1.06.02 DSPs (see formats/telltale/fmod-runtime.md, "Built-in DSPs").
+/// The expected values are measurements of a reference implementation of
+/// each DSP on the same test signals.
 const fs = 48000;
 
 /// [dsp]'s response in dB at [f] Hz: an impulse (both channels), DFT of the
@@ -179,7 +179,7 @@ void main() {
     test('a sidechain keys the gain: the input ducks while the key plays', () {
       final x = stairs([-12, -12, -12], 1);
       final key = Float32List(x.length);
-      // Gaussian noise of RMS 0.25, as the oracle's key.
+      // Gaussian noise of RMS 0.25, the key of the reference.
       final rnd = math.Random(1);
       for (var i = 48000; i < 96000; i++) {
         final v =
@@ -321,15 +321,15 @@ void main() {
       final h = impulse(jt, seconds: 1);
       expect(onset(h) / 48, closeTo(12.5, 0.5));
       expect(energyDb(h), closeTo(-0.02, 1.5));
-      const oracle = [-35.7, -38.5, -53.8, -79.1];
-      for (var k = 0; k < oracle.length; k++) {
+      const reference = [-35.7, -38.5, -53.8, -79.1];
+      for (var k = 0; k < reference.length; k++) {
         var e = 0.0;
         for (var i = k * 2400; i < (k + 1) * 2400; i++) {
           e += h[i * 2] * h[i * 2];
         }
         expect(
           10 * math.log(e / 2400) / math.ln10,
-          closeTo(oracle[k], 3),
+          closeTo(reference[k], 3),
           reason: 'window $k',
         );
       }
@@ -356,7 +356,7 @@ void main() {
   });
 
   test('tremolo duty ≥ 0.5 is a trapezoid; spread offsets L/R by ±spread/4 '
-      '(O: 0.1 Hz, depth 0.48, duty 0.765, spread 0.38)', () {
+      '(0.1 Hz, depth 0.48, duty 0.765, spread 0.38)', () {
     final t = Tremolo()
       ..set(0, 0.1)
       ..set(1, 0.48)
@@ -374,7 +374,7 @@ void main() {
       return sum / 4800;
     }
 
-    // The oracle's 100 ms windows (left, right).
+    // The 100 ms windows of the reference, left and right.
     final left = {0.0: 0.718, 1.0: 0.929, 3.0: 1.0, 7.0: 0.929, 9.0: 0.525};
     final right = {0.0: 0.697, 0.9: 0.525, 2.0: 0.745, 5.0: 1.0};
     for (final MapEntry(:key, :value) in left.entries) {
@@ -385,7 +385,7 @@ void main() {
     }
   });
 
-  group('oracle-measured effects (fmod.dll 1.06.02 on our test signals)', () {
+  group('effects against the reference on the same test signals', () {
     Float32List impulse(int n, {int at = 0, double v = 0.5}) =>
         Float32List(n * 2)
           ..[at * 2] = v
@@ -400,7 +400,7 @@ void main() {
         ..set(3, -12);
       final b = impulse(6000);
       e.process(b, 6000);
-      // The oracle's samples (16-bit): 0.25058, 0.12561, 0.03769.
+      // The 16-bit samples of the reference are 0.25058, 0.12561 and 0.03769.
       expect(b[0], closeTo(0.25058, 4e-5));
       expect(b[1776 * 2], closeTo(0.12561, 4e-5));
       expect(b[3552 * 2], closeTo(0.03769, 4e-5));
@@ -419,7 +419,7 @@ void main() {
       expect(e.ringing, isFalse);
     });
 
-    test('highpass: one RBJ biquad, Q = resonance (oracle at 500 Hz)', () {
+    test('highpass: one RBJ biquad, Q = resonance (reference at 500 Hz)', () {
       final h = Highpass()
         ..set(0, 500)
         ..set(1, 1);
@@ -446,7 +446,7 @@ void main() {
         peak = math.max(peak, b[i * 2].abs());
       }
       expect(20 * math.log(peak / 0.1) / math.ln10, closeTo(12, 0.05));
-      // The oracle's first impulse sample: 0.5 × 1.0944.
+      // The first impulse sample of the reference is 0.5 × 1.0944.
       final i = ParamEq()
         ..set(0, 1000)
         ..set(1, 1)
@@ -481,10 +481,11 @@ void main() {
       }
 
       final b = run(1);
-      // The oracle: 0.25 dry, then taps 95: 0.20642 and 96: 0.05734.
+      // The reference has 0.25 dry, then 0.20642 at tap 95 and 0.05734 at
+      // tap 96.
       expect(b[4800 * 2], closeTo(0.25, 1e-6));
-      // Its interpolated delay is 95.217 samples; ours lands within 0.02
-      // (the oracle's two taps sum 2 % over linear interpolation here).
+      // Its interpolated delay is 95.217 samples and this one is within
+      // 0.02. Its two taps sum 2 % over linear interpolation here.
       final a = b[4895 * 2], c = b[4896 * 2];
       expect(95 + c / (a + c), closeTo(95.217, 0.02));
       expect(a + c, closeTo(0.2638, 0.006));

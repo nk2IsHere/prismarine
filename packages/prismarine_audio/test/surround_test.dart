@@ -3,11 +3,10 @@ import 'dart:typed_data';
 import 'package:prismarine_audio/prismarine_audio.dart';
 import 'package:test/test.dart';
 
-/// FMOD 1.09's 2D surround panning onto 5.1 (FL FR C LFE SL SR), against
-/// the oracle: S2's fmod64.dll PAN DSP in surround mode with a 5.1 target,
-/// independent noise per input channel, each output channel's static mix
-/// solved by least squares (render_dsp.py and fit_matrix.py of the 1.09
-/// render oracle).
+/// The 2D surround panning onto 5.1 in the order FL FR C LFE SL SR, against
+/// reference gains. The reference rendered the pan DSP in surround mode with
+/// a 5.1 target from independent noise per input channel and solved the
+/// static mix of each output channel by least squares.
 const _mono = <(double, double, List<double>)>[
   (-135, 0, [0.0000, 0.0000, 0.0000, 0.0000, 0.9063, 0.4226]),
   (-135, 180, [0.3259, 0.0000, 0.0000, 0.0000, 0.8732, 0.3624]),
