@@ -15,3 +15,4 @@ workspace:
   - packages/prismarine_shaders
   - packages/prismarine_assets
   - tools/lint
+  - tools/profiler
