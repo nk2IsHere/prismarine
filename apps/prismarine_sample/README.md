@@ -2,7 +2,10 @@
 
 The sample of prismarine shows Intel's Sponza, the palace atrium with its arches, columns and coloured curtains. A sun
 with a shadow map and eight coloured point lights that move through the hall light it, two of them with shadows, in a
-light fog. TAA, auto exposure, bloom and the AgX tone map finish the frame. You fly through it with the
+light fog. The light of the sun, the lights and a procedural sky bounces off the walls, floors and curtains through
+irradiance probes, with ambient occlusion and reflections. TAA, auto exposure, bloom and the AgX tone map finish the
+frame. The app builds the voxel copy of the scene for the probes in about two seconds while it loads. The paths of
+the lights keep them away from its walls and columns. You fly through it with the
 mouse and keyboard or with a gamepad. [prismarine_pbr](../../docs/areas/pbr.md) builds the frames and
 [prismarine_render](../../docs/areas/render.md) records them on Flutter GPU, on Metal on macOS and on Vulkan on Linux
 and Windows. The same app is the smoke test of the gate and a performance scene.
@@ -70,11 +73,16 @@ frame and the title of each effect gives its GPU time.
 | `--point-shadows=<n>[,<q>]` | The point lights that cast shadows and their quality, such as `4,high`. 2 at medium by default. |
 | `--fog=<q>` | `off`, `low`, `medium` or `high`. Medium by default. |
 | `--fog-density=<d>`, `--fog-anisotropy=<g>` | The extinction of the fog per metre, 0.006 by default and its forward scattering, 0.5. |
+| `--gi=<q>` | The indirect light, `off`, `low`, `medium` or `high`. Medium by default. Off lights the scene with flat sky and ground colours. |
+| `--gi-off=<parts>` | Switches off parts of the indirect light, of `sky`, `probes`, `ao` and `ssr`, such as `ao,ssr`. |
+| `--gi-view=<view>` | Shows one part of the indirect light, `diffuse`, `occlusion`, `reflections` or `probes`. |
+| `--lights=<n>` | The number of point lights of the smoke frames, 8 by default. |
 
-At 1920 by 1080 with the default effects the scene holds 60 Hz on Linux with an RTX 4060 Ti, with about 5.6 ms on the
-GPU. A Mac with an M2 Pro needs about 8.8 ms on the GPU, a little more than a frame of 120 Hz. Each of the two
-shadowed point lights costs about 1.2 to 1.5 ms of it. Without them the Mac holds 120 Hz with about 6.6 ms. A frame
-has about 920 draws and 670 more for the two shadowed point lights. It records the shadow pass of the sun only when the
+At 1920 by 1080 with the default effects a Mac with an M2 Pro needs about 12 ms on the GPU and shows most frames at
+120 Hz, with a p95 interval of about 10 ms. The indirect light costs about 1.5 to 2 ms of it and each of the two
+shadowed point lights about 1.7 ms. Without the point shadows the Mac needs about 8.4 ms. On Linux with an RTX 4060 Ti
+the indirect light cost about 1 ms over 4.9 ms before the point shadows and the post effects joined. A frame has about
+930 draws and about 780 more for the two shadowed point lights. It records the shadow pass of the sun only when the
 sun moves and the pass of the point shadows only when the lights move. The costs of the effects are on
 [the pbr page](../../docs/areas/pbr.md#costs).
 

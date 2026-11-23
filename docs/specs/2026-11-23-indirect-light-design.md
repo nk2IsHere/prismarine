@@ -56,7 +56,7 @@ passes after opaque below, `blend`, `markers`, then fog, anti-aliasing, bloom an
 |---|---|---|---|
 | `gi.brdf` | compute | `brdfLut`, R16G16_FLOAT, 64 by 64 | Once |
 | `gi.sky` | compute | `skyEnv`, R16G16B16A16_FLOAT, 256 by 128 with mips | When the sun or the sky settings change |
-| `gi.skyMip1` … | compute | the next mip of `skyEnv` | With `gi.sky` |
+| `gi.skyMip1` … | compute | each further mip of `skyEnv`, from the model again | With `gi.sky` |
 | `gi.skySpecular0` … | compute | one mip of `skySpecular`, 128 by 64 with 6 mips | With `gi.sky` |
 | `gi.skyIrradiance` | compute | `skyIrradiance`, 32 by 16 | With `gi.sky` |
 | `gi.trace` | compute | `giRays`, one row of rays per probe of this frame | Each frame |
@@ -66,15 +66,18 @@ passes after opaque below, `blend`, `markers`, then fog, anti-aliasing, bloom an
 | `sky` | one triangle | `hdr` where `depth` is 1 | With the sky on |
 | `ao` | one triangle | `aoRaw`, R8_UNORM at half size | With occlusion on |
 | `aoBlur` | one triangle | `ao`, R8_UNORM at half size | With occlusion on |
-| `ssr` | one triangle | `ssr`, R16G16B16A16_FLOAT at half or full size | With reflections on |
+| `ssr`, `ssrBlur` | one triangle | `ssr` and `ssrBlur`, R16G16B16A16_FLOAT at half or full size | With reflections on |
+| `giResolve` | one triangle | `giDiffuseHalf` and `giSpecularHalf` at half size | Each frame |
 | `indirect` | one triangle | `hdr`, added | Each frame |
 | `history`, `historyMip1` … | one triangle | `history`, R16G16B16A16_FLOAT at half size with 5 mips | With reflections on |
 
 The pass `opaque` writes the direct light of the sun and the point lights and the emission into `hdr`. Its two more
 targets hold what `indirect` needs. `gbufferNormal` is R16G16B16A16_FLOAT with the normal in octahedral form, the
-roughness and the metallic value. `gbufferAlbedo` is R8G8B8A8_UNORM with the base colour. The pass `indirect` reads
-them with the depth and adds the diffuse light of the probes times the occlusion and the specular light of the
-reflections into `hdr`. The blended draws come after it and compute their indirect light in their own pixel shader.
+roughness and the metallic value. `gbufferAlbedo` is R8G8B8A8_UNORM with the base colour. The pass `indirect` reads them
+with the depth and adds the diffuse light of the probes times the occlusion and the specular light of the reflections
+into `hdr`. The light of the probes and the sky is read at half size by `giResolve`, with one set of probe weights for
+the normal and the reflected direction, and scaled up by depth. The blended draws come after it and compute their
+indirect light in their own pixel shader.
 
 A switched-off effect leaves its passes out of the plan. A change of a switch, of the quality or of the debug view
 makes a new plan.
@@ -104,18 +107,20 @@ A ray steps through the grid by the distance of its cell less one, or to the nex
 ## Probes
 
 The probes form a grid over the GI bounds, the bounds of the scenes or the box that the app sets. The spacing gives
-at most `maxProbes` probes, 4,096 by default. The CPU moves each probe within its cell away from the surfaces, to the
-point with the largest distance among 27 candidates. A probe without a candidate in an empty, reachable cell is off.
+at most `maxProbes` probes, 8,192 by default. The CPU moves each probe within its cell away from the surfaces. It
+tries the place on the grid and then the 26 places around it by their distance to the surfaces. It casts 64 rays from
+a place and takes the first place whose rays see the backs of surfaces less than a quarter of the time. A probe
+without such a place is inside a part and is off. In Sponza 4,322 of 7,560 probes are on.
 The probe data is a texel buffer of RGBA32F with the offset and the state of each probe, then the list of the probes
 that are on.
 
 Each frame `gi.trace` traces the rays of `probesPerFrame` probes of the list, the next ones after those of the last
-frame. A probe casts `raysPerProbe` rays in a spherical Fibonacci pattern, rotated at random each frame. A hit gets
-the light of the sun through the shadow map, the light of the point lights without shadows, and the light of the
-probes of the last update times the bounce factor, each times the base colour of the cell over pi. A miss gets the
-radiance of the sky in its direction. `gi.blend` weighs the rays into each texel of a probe's tiles and blends the
-result with the old value by the hysteresis. `gi.copy` copies the updated tiles into the textures that the passes
-read and fills their borders for bilinear reads.
+frame. A probe casts `raysPerProbe` rays in a spherical Fibonacci pattern, rotated at random each frame. A hit gets the
+light of the sun through the shadow map, the light of the point lights with the shadows of the point shadow atlas, and
+the light of the probes of the last update times the bounce factor, each times the base colour of the cell over pi. A
+miss gets the radiance of the sky in its direction. `gi.blend` weighs the rays into each texel of a probe's tiles and
+blends the result with the old value by the hysteresis. `gi.copy` copies the updated tiles into the textures that the
+passes read and fills their borders for bilinear reads.
 
 | Texture | Tile | Contents |
 |---|---|---|
@@ -124,9 +129,12 @@ read and fills their borders for bilinear reads.
 
 A pixel reads the eight probes around it. A probe's weight is the trilinear weight times a term for the side of the
 surface that it is on, times the Chebyshev visibility from the distance moments, times its state. The point that is
-read is moved along the normal and towards the camera by a share of the spacing. `bodies/gi_probes.glsl` holds the
-read as `giIrradiance(position, normal, view)`. A zero normal and a zero view direction leave out the side term and
-the move, for a reader without a surface such as fog.
+read is moved along the normal and towards the camera by a share of the spacing. The side term and the move take the
+face normal that the depth buffer gives. The vertex normals of some large faces in Sponza bend by more than ten
+degrees and would move the read into other cells. The visibility test has a floor on the variance of 0.15 of the
+spacing, which softens the edges of the shadows that the probes see. `bodies/gi_probes.glsl` holds the read as
+`probeIrradiance(position, direction, view)`. A zero view direction leaves out the side term and the move, for a
+reader without a surface such as fog, whose ambient light comes from it.
 
 ## Sky and environment
 
@@ -142,20 +150,21 @@ cosine of the view and the roughness.
 
 ## Ambient occlusion
 
-`ao` estimates the occlusion at half size from the depth and the normals in the manner of ground-truth ambient
-occlusion. Each pixel searches the horizon in two to four directions with three to eight steps each, within
-`aoRadius` in world units, rotated by a 4 by 4 pattern and the frame index. `aoBlur` filters the 4 by 4 pattern with
-weights by depth. The occlusion scales the diffuse indirect light. The specular indirect light gets the specular
-occlusion that follows from it, the roughness and the angle of view.
+`ao` estimates the occlusion at half size from the depth with the scalable ambient occlusion of McGuire, Mara and
+Luebke. Each pixel takes two to four turns of a spiral of `aoDirections` times `aoSteps` samples within `aoRadius` in
+world units, rotated by a 4 by 4 pattern and the frame index. It takes the face normal from the depth. `aoBlur` filters
+the 4 by 4 pattern with weights by depth. The occlusion scales the diffuse indirect light. The specular indirect light
+gets the specular occlusion that follows from it, the roughness and the angle of view.
 
 ## Reflections
 
 `ssr` marches the reflected ray of each pixel with a roughness below 0.6 through the depth buffer in screen space and
-refines a hit by bisection. A hit reads `history`, the light of the last frame at half size, at the place of the hit
-in the last frame and at a mip that follows the roughness and the length of the ray. Its weight falls off at the edges
-of the screen and with the roughness. The rest of the specular light comes from the probes and the sky: the radiance
-of the probes in the direction of the reflection, mixed towards the prefiltered sky by the share of the sky in that
-direction. The split-sum table scales the sum.
+refines a hit by bisection. A hit reads `history`, the light of the last frame at half size, at the place of the hit in
+the last frame and at a mip that follows the roughness and the length of the ray. Its weight falls off at the edges of
+the screen and with the roughness. `ssrBlur` filters the 4 by 4 pattern of the jittered rays. The first frame after new
+targets or a cut of the camera has no history and reflects nothing from the screen. The rest of the specular light comes
+from the probes and the sky: the radiance of the probes in the direction of the reflection, mixed towards the
+prefiltered sky by the share of the sky in that direction. The split-sum table scales the sum.
 
 ## Blocks
 
@@ -188,7 +197,20 @@ indirect diffuse light, the occlusion, the reflections or the probes as spheres 
   little light.
 - Probes in a regular grid leak light through walls thinner than their spacing. The visibility test and the moved
   probes reduce it. The spacing in Sponza is about 1.6 m.
-- The point lights reach the probes without shadows. Light reaches the far side of a column. Shadowed point lights in
-  the trace follow once point light shadows are in the plan.
+- Only the point lights with a slot in the shadow atlas, two by default, reach the probes with shadows.
 - Reflections of things off the screen or hidden behind others fall back to the probes, which are blurred.
-- The cost of the trace on the Mac decides the default numbers. They are set by measurement.
+
+## Verification
+
+Blender's Cycles renders a reference of four cameras of the smoke test with 1024 samples from a copy of the prepared
+scene with PNG textures, the same sun, the same sky as an environment map and the same point lights. Lit by the sun
+and the sky alone, the mean display brightness of the frames is within 5 to 25 % of the reference with the indirect
+light, against 2 to 10 times too bright with the flat ambient. The light show placed some lights inside columns, whose
+light the one-sided point shadow casters let out while Cycles kept it in. The paths of the light show fit the voxel copy
+and the casters draw both faces.
+
+## Costs
+
+At 1920 by 1080 on the Mac with an M2 Pro the indirect light costs about 1.5 to 2 ms at medium, about 1 ms at low and
+about 3.5 ms at high. The trace of the probes takes about half of it at medium and most of it at high. On the RTX 4060
+Ti it cost about 1 ms at medium before the point shadows and the post effects joined.

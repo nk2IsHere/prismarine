@@ -82,13 +82,12 @@ brightest 2 % and adapts towards a grey card at 0.18 with the compensation.
 `buildGiVolume` marks the cells of a grid of about two million cells, 0.2 m for Sponza, that the triangles of the
 scenes touch. Each cell gets the base colour of its triangles from a small mip of their textures and their normal.
 The empty cells get their distance to the next marked cell and the closed parts inside walls are filled. Probes on a
-grid of at most 8,192 move away from the surfaces, and a probe that sees the backs of surfaces is off. Each frame
+grid of at most 8,192 move away from the surfaces. A probe that sees the backs of surfaces is off. Each frame
 `gi.trace` sends `raysPerProbe` rays from `probesPerFrame` probes through the grid by the distances. A hit is lit by
 the sun through its shadow map, by the point lights with the shadows of the atlas and by the probes of the last
-update, which
-gives several bounces. A miss sees the sky. The irradiance and the distances of the rays blend into octahedral tiles
-of each probe. A pixel reads the eight probes around it, weighed by the side of the surface and a visibility test on
-the distances, as in DDGI.
+update, which gives several bounces. A miss sees the sky. The irradiance and the distances of the rays blend into
+octahedral tiles of each probe. A pixel reads the eight probes around it, weighed by the side of the surface and a
+visibility test on the distances, as in DDGI.
 
 The sky is single scattering in an atmosphere of Rayleigh and Mie particles for the sun's direction, in units of the
 sun's light. It is filtered for six roughness values and convolved for diffuse light. The reflections march the
@@ -103,12 +102,13 @@ from it. `settings.gi.debugView` shows the diffuse light, the occlusion, the ref
 
 ## Point light shadows
 
-Each frame the builder gives the shadow slots of the budget to the lights with the most light at the camera among
-those whose range touches the view. A light keeps its slot while it stays among the best. The six faces of a slot draw
-the opaque and masked draws whose bounding sphere touches the face within the reach of the light. A one-sided material
-draws its front faces only. The pass is retained while the lights hold still. Any stage can read a shadow with
-`pointShadow(light, worldPos, normal)` of `shaders/programs/Pbr/bodies/point_shadow.glsl`, which needs the `Frame`
-block, the texture `pointShadowAtlas` and the comparison sampler s4.
+Each frame the builder gives the shadow slots of the budget to the lights with the most light at the camera among those
+whose range touches the view. A light keeps its slot while it stays among the best. The six faces of a slot draw the
+opaque and masked draws whose bounding sphere touches the face within the reach of the light, with both faces. A light
+inside a closed part sees the backs of its faces, which keep its light inside. The pass is retained while the lights
+hold still. Any stage can read a shadow with `pointShadow(light, worldPos, normal)` of
+`shaders/programs/Pbr/bodies/point_shadow.glsl`, which needs the `Frame` block, the texture `pointShadowAtlas` and the
+comparison sampler s4.
 
 ## Fog
 
@@ -120,8 +120,9 @@ column from near to far. The apply pass lays the sum over the scene by the depth
 ## Timed parts
 
 `PbrBuilder.partLabels` and `timedPasses` split the plan into parts for `FrameRunner.timedParts`. The parts are
-`shadows`, `point shadows`, `probes and sky`, `scene`, `indirect light`, `fog`, `taa`, `exposure and bloom` and
-`tone map`, each present when its passes are. `lastPartGpuMs` of the runner then holds the GPU time of each part by the index of its label.
+`shadows`, `point shadows`, `probes and sky`, `scene`, `indirect light`, `fog`, `taa`, `exposure and bloom` and `tone
+map`, each present when its passes are. `lastPartGpuMs` of the runner then holds the GPU time of each part by the index
+of its label.
 
 ## Settings
 
@@ -151,11 +152,11 @@ column from near to far. The apply pass lays the sum over the scene by the depth
 | `gi.quality` | `medium` by default. It sets the counts below. |
 | `gi.raysPerProbe`, `gi.probesPerFrame` | 64 and 128 at low, 96 and 256 at medium, 192 and 768 at high. |
 | `gi.aoDirections`, `gi.aoSteps` | The samples of the occlusion, 2 by 4, 2 by 6 or 4 by 8. |
-| `gi.ssrSteps`, `gi.ssrFullSize` | The steps of a reflected ray, 16, 32 or 64, and reflections at full size at high. |
+| `gi.ssrSteps`, `gi.ssrFullSize` | The steps of a reflected ray, 16, 32 or 64. The reflections are at full size at high. |
 | `gi.intensity`, `gi.skyIntensity`, `gi.bounce` | The factors of the indirect light, of the sky and of each bounce, 1 by default. |
 | `gi.hysteresis` | The weight of a probe's old value in an update, 0.85 by default. |
 | `gi.aoRadius`, `gi.aoIntensity` | The radius of the occlusion in metres and its strength, 1 and 1. |
-| `gi.ssrMaxRoughness`, `gi.ssrThickness` | The roughness above which the screen is not reflected, 0.6, and the depth of a hit behind the depth buffer, 0.4 m. |
+| `gi.ssrMaxRoughness`, `gi.ssrThickness` | The roughness above which the screen is not reflected, 0.6. The depth of a hit behind the depth buffer, 0.4 m. |
 | `gi.debugView` | `none` by default, or `diffuse`, `occlusion`, `reflections` or `probes`. |
 
 A change of a switch, a quality, the point shadow budget, `gi.raysPerProbe`, `gi.probesPerFrame` or `gi.debugView`
@@ -170,7 +171,9 @@ with the effect on and off. The runs vary by about 0.2 ms.
 |---|---|---|
 | TAA, auto exposure, bloom and tone map at default | about 0.35 ms | about 0.15 ms |
 | Fog at medium | about 0.15 ms | about 0.25 ms |
-| Point shadows, each shadowed light at medium | about 1.2 to 1.5 ms | about 0.2 ms |
+| Point shadows, each shadowed light at medium with two-sided casters | about 1.7 ms | about 0.2 ms with one-sided casters |
+| Indirect light at medium | about 1.5 to 2 ms | about 1 ms |
+| Indirect light at low and at high | about 1 ms and about 3.5 ms | |
 
 ## Shaders
 

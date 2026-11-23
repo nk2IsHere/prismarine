@@ -20,7 +20,7 @@ mcsm does not change.
 6. **Occlusion.** `ao` and `aoBlur`.
 7. **Reflections.** `ssr` and the `history` mips.
 8. **Sample.** The voxel copy at load, a "Global illumination" section of the panel with the switches, the quality,
-   the debug views and the sliders, and options `--gi=off`, `--quality=<preset>` and `--debug-view=<view>` for
+   the debug views and the sliders, and options `--gi=<preset>`, `--gi-off=<parts>` and `--gi-view=<view>` for
    pictures.
 9. **Measure and tune.** Frame times at 1920 by 1080 on the Mac and on the RTX for each preset and with each effect
    off. The defaults follow the measurement.
