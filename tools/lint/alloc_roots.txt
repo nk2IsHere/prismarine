@@ -36,3 +36,9 @@ packages/prismarine_frame/lib/src/plan/frame_plan.dart#FrameRole.new  a builder,
 packages/prismarine_frame/lib/src/plan/frame_plan.dart#StageResources.new  a builder, a draw's resources
 packages/prismarine_frame/lib/src/plan/float_bits.dart#sameFloat32Bits  a builder, comparing a draw's floats
 packages/prismarine_frame/lib/src/plan/float_bits.dart#scratchFloats  a builder, reading floats
+#
+# The renderer of glTF scenes builds its plan each frame, and the sample
+# app steps its camera and lights and builds that plan in its ticker.
+packages/prismarine_pbr/lib/src/pbr_builder.dart#PbrBuilder.frame  an app's frame, building the plan
+apps/prismarine_sample/lib/src/sample_view.dart#_SampleViewState._tick  the ticker of the sample, each frame
+apps/prismarine_sample/lib/src/perf.dart#_PerfRunState._tick  the ticker of the performance run, each frame
