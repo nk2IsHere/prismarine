@@ -39,7 +39,7 @@ units #34, #35, #36 and #44 of mcsm's inventory. mcsm is its first user and regi
 `tool/corpus_remote.sh` in the package runs the corpus on another machine in a container. A game calls it with its
 own settings.
 
-`prismarine_lua` and the audio engine do not import `prismarine_replay`, and `prismarine_replay` imports neither. They
+`prismarine_lua` and the audio engine do not import `prismarine_replay`. `prismarine_replay` imports neither. They
 meet in the game, which registers their codecs into one `SnapRegistry`.
 
 ## Routes
@@ -74,7 +74,7 @@ with `next`. `skipTo` moves to a frame after a restore. `addLine` adds a frame t
 ### Route hash
 
 The hash after a line is 64-bit FNV-1a over the UTF-16 code units of the line and then a line feed. It starts at
-0xcbf29ce484222325. From hash h, each unit c gives h = (h xor c) · 0x100000001b3, and the line end gives
+0xcbf29ce484222325. From hash h, each unit c gives h = (h xor c) · 0x100000001b3. The line end gives
 h = (h xor 10) · 0x100000001b3. The header line is hashed first, then each frame line as written. A snapshot refers to
 its route by the hash after the header and its first frames, as 16 hex digits.
 
@@ -115,6 +115,7 @@ choosing within its input.
 | `readState(sim, body)` | Reads a body into a sim from `open` |
 | `snapshotFields(sim)` | The game's fields of a snapshot header |
 | `snapshotDirs(route)` | The folders that hold the snapshots of a route |
+| `close(sim)` | Releases the host resources of a sim at the end of a run |
 
 The interface covers the three parts that the decision asks for. `step` is the step. Host changes go through the
 recorder and the game's `input`. The state codecs are `writeState` and `readState` over the game's `SnapRegistry`.
@@ -123,7 +124,7 @@ recorder and the game's `input`. The state codecs are `writeState` and `readStat
 
 A `SnapshotFormat` holds the format string of the header and the version of the body. mcsm's is
 `SnapshotFormat('mcsm.snapshot/1', 15)`. A file is one JSON header line, then the body compressed with zlib at level 6.
-A reader reads the header up to the first line feed, at most 64 KiB, and skips a file whose format or version differs.
+A reader reads the header up to the first line feed, at most 64 KiB. It skips a file whose format or version differs.
 A file is written to `<name>.tmp` and renamed.
 
 The header keys come in this order. The game's fields follow the route hash.
@@ -140,7 +141,7 @@ The header keys come in this order. The game's fields follow the route hash.
 
 A snapshot of `frames` route frames has the file name of `frames` padded to nine digits with `.snap`. A snapshot
 belongs to a route when the route's hash after `frames` frame lines equals the header's `routeHash`. `latestFor` takes
-the matching snapshot with the most frames at or before a frame, and `latestBeforeTime` the one at or before a time.
+the matching snapshot with the most frames at or before a frame. `latestBeforeTime` takes the one at or before a time.
 
 `prune` keeps every snapshot of the last 600 s of simulated time and, before that, the latest of each 300 s span.
 `write` compresses and writes a file on a worker isolate and then prunes its folder.
@@ -150,7 +151,7 @@ the matching snapshot with the most frames at or before a frame, and `latestBefo
 The body is the game's. The game writes it with `prismarine_snap` and its own registry. The framework adds one
 section to the end, the tail. The tail is one object that the reader's host makes only after the restore, such as an
 audio bridge. `writeSnapshotTail` writes a boolean and, when the tail is there, the object as its own section.
-`SnapshotTail` reads it later into the object that the host made, and checks that no bytes are left.
+`SnapshotTail` reads it later into the object that the host made and checks that no bytes are left.
 
 The codec tags of `prismarine_snap` are part of the stream. A game keeps its snapshots readable by keeping its tags,
 its field order and the order of its known roots. `prismarine_lua` keeps the tags `lua.Table`, `lua.Closure`,
@@ -167,14 +168,14 @@ every s seconds and at scene opens at most that often, without the wait. The var
 ## Replay start and headless snapshots
 
 `openReplay` opens a route's sim at the latest snapshot before a target frame or time when one fits, else boots it
-from the start. A snapshot that does not read is logged, and the replay starts from the beginning.
+from the start. A snapshot that does not read is logged. The replay then starts from the beginning.
 `ReplaySnapshots` writes the snapshots of a headless replay into a folder after each frame that the schedule picks, or
 at a frame that the caller picks. It prunes the folder as a run does, or keeps every snapshot for a corpus baseline.
 
 ## Shadow
 
 The shadow is a second process that replays a run's route as it is recorded and writes the run's snapshots. The
-playing simulation does not stop to write one, and the collections of the shadow stay out of the player's isolate
+playing simulation does not stop to write one. The collections of the shadow stay out of the player's isolate
 group. A game runs it only in development builds. A run without a shadow writes no snapshots and pays nothing.
 
 The protocol is lines on the standard streams. The input is one JSON line of configuration, then the route's lines
@@ -200,7 +201,7 @@ the way a run is recorded are the game's.
 |---|---|
 | `record` | Records each run's route through the game into `<corpus>/runs/<id>/` with a `meta.json` |
 | `baseline`, `rebaseline` | Replays each route and writes its fingerprint, its result and its snapshots into `<corpus>/baseline/`, with `BASELINE.json` |
-| `check` | Replays the routes on this tree against the baseline, in chunks from the baseline's snapshots, and reports the first divergence per run and channel |
+| `check` | Replays the routes on this tree against the baseline, in chunks from the baseline's snapshots. It reports the first divergence per run and channel |
 | `snapshots` | Writes the baseline's snapshots again for a baseline made before |
 
 The runner compiles the game's corpus entry once with `dart build cli` and runs it as workers, one replay each. A run
@@ -208,20 +209,20 @@ is cut at its baseline snapshots into chunks that replay in parallel. Each chunk
 at its snapshot and plays to the next one. A chunk that diverges plays on as a whole run would.
 
 The worker protocol is a command line. The runner calls the worker with `replay <route>`, the game's arguments for the
-run, `--out=<fingerprint>`, `--result=<json>`, and as needed `--baseline=<fingerprint>`, `--from-snap=<snapshot>`,
+run, `--out=<fingerprint>`, `--result=<json>` and, as needed, `--baseline=<fingerprint>`, `--from-snap=<snapshot>`,
 `--to-frames=<n>`, `--snaps=<dir>`, `--snap-frames=<n>` and `--until=<s>`. The worker exits with 0 when the run is
 the same or has no baseline, 1 when it diverged, 2 on an error and 3 when the snapshot of the chunk does not read.
 The result JSON has the keys `route`, `frames`, `end`, `wall`, `first` (the divergences with `channel`, `frame`, `t`,
 `scene` and `detail`), `baselineLeft`, `fromFrame`, `snaps`, `stopped` and `sliceEnded`.
 
-`CorpusGame` is the game side of the runner.
+A game extends the abstract class `Corpus` with its side of the runner.
 
 | Member | Use |
 |---|---|
 | `sliceOf(run)`, `sliceId(slice)` | The data that a run plays and its identity. A changed identity adds a note to the report. |
-| `replayArgs(run)` | The worker's arguments for a run beyond the framework's |
+| `runArgs(run)` | The worker's arguments for a run beyond the framework's |
 | `passes(arg)` | True for a command-line option that the runner passes on to every worker, such as a tolerance |
-| `beforeRecord()`, `record(run, dir, meta)` | Records one run's route and fills its meta |
+| `beforeRecord()`, `recordRun(run, dir, meta)` | Records one run's route and fills its meta |
 
 The note of expected divergences has one line per entry, `<id or glob> [<channel>,…] # why`. A divergence that the
 note does not list fails the check.
@@ -242,7 +243,7 @@ mcsm keeps its formats and registers them.
 | Snapshot body | `GameSessionSnapshots` on `gameSnapRegistry`, with the Lua, runtime, flow and game codecs and the audio bridge as the tail |
 | Replay game | `GameReplay`, whose sim is the session with its audio bridge |
 | Shadow | `apps/mcsm_shadow` calls `shadowMain` with `GameReplay`. The player starts it through `ShadowProcess`. |
-| Corpus | `tool/corpus.dart` with `corpus.json`, the episode probe for new games, the fingerprint and its comparison as the worker. `corpus_ws.sh` sets the workstation, the container and the slice copy and calls `corpus_remote.sh`. |
+| Corpus | `tool/corpus.dart` with `McsmCorpus`, `corpus.json`, the episode probe for new games, the fingerprint and its comparison as the worker. `corpus_ws.sh` sets the workstation, the container and the slice copy and calls `corpus_remote.sh`. |
 | Stays | The user store, the event log, the run folder layout and its store snapshots, the fixed time seed |
 
 The code of mcsm keeps its paths, flags and outputs. The gate keeps calling `packages/mcsm_game/tool/corpus_ws.sh`.
@@ -265,9 +266,9 @@ The coordinator runs the whole corpus and D1 before landing.
 
 - **Route bytes.** A field built in another order or a number in another form forks every route. The recorder joins
   the game's map as given and the tests fix the text.
-- **Snapshot bytes.** A changed codec tag or field order makes every snapshot unreadable, and a reader skips files of
+- **Snapshot bytes.** A changed codec tag or field order makes every snapshot unreadable. A reader skips files of
   another version. The tail section keeps its framing.
 - **The corpus gate.** `corpus-same.sh` compares the compiled corpus tool of `main` and of the landing. Code that moves
-  to prismarine changes the program, and the corpus runs for the landing that moves it.
+  to prismarine changes the program. The corpus runs for the landing that moves it.
 - **The gate's scripts.** The land gate calls `corpus_ws.sh sync` and `check` and reads its exit code. Both keep their
   paths, arguments and exit codes.

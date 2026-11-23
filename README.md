@@ -20,7 +20,7 @@ The README of each linked package gives its use, a short example and its platfor
 | [`prismarine_jobs`](packages/prismarine_jobs/README.md) | A pool of worker isolates with priorities and cancellation, thread roles per OS and a check of free memory |
 | [`prismarine_kept`](packages/prismarine_kept/README.md) | Maps, sets and lists that keep their storage when cleared |
 | [`prismarine_snap`](packages/prismarine_snap/README.md) | Binary snapshots of object graphs that preserve the references between objects |
-| `prismarine_replay` | Recording of input, deterministic replay and a schedule of snapshots |
+| [`prismarine_replay`](packages/prismarine_replay/README.md) | Recording of input, deterministic replay, snapshots with a schedule, a snapshot shadow and a corpus runner |
 | [`prismarine_math`](packages/prismarine_math/README.md) | Maths functions that give the same bits on every OS |
 | `prismarine_lua` | An embeddable Lua 5.2 for Dart |
 | [`prismarine_audio`](packages/prismarine_audio/README.md) | Audio interfaces and an engine of events and buses |
