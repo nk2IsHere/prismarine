@@ -58,8 +58,9 @@ camera.
 | `--sun=<elevation>,<azimuth>` | The direction of the sun in degrees. The default is the scene's directional light when its intensity is above 0, else a high sun. |
 | `--background` | A small window that does not take focus, for unattended runs. |
 
-On a Mac with an Apple GPU the scene runs at 120 Hz at 1920 by 1080 with about 6 ms on the GPU. On Linux with an RTX
-4060 Ti it runs at 60 Hz with about 5.6 ms on the GPU. Both draw 903 draws a frame, the shadow pass recorded once.
+At 1920 by 1080 the scene holds 120 Hz on a Mac with an Apple GPU, with about 6.1 ms on the GPU, and 60 Hz on Linux
+with an RTX 4060 Ti, with about 5.4 ms on the GPU. A frame has 904 draws and records the shadow pass only when the sun
+moves.
 
 ## Credits
 
