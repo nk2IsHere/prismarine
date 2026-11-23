@@ -255,8 +255,8 @@ class _Kinds {
     constMap(const <String, double>{});
     constMap(const <String, int>{});
     constMap(const <int, Object?>{});
-    // Appended (earlier kinds keep their numbers): the chore engine's kept
-    // property maps, read back as the same kind.
+    // Appended at the end, which keeps the numbers of earlier kinds. Kept
+    // string-keyed maps are read back as the same kind.
     _addMap(KeptMap<String, Object?>(), () => KeptMap<String, Object?>(), null);
   }
 

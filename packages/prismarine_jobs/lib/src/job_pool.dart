@@ -1,6 +1,6 @@
 // The job system: a bounded pool of one-shot worker isolates. Each job runs in
 // its own Isolate.run, whose result returns through Isolate.exit, so a parsed
-// object graph (a chore, a clip) reaches the caller without a copy. Queued jobs
+// object graph (an animation, a clip) reaches the caller without a copy. Queued jobs
 // start by priority, then in order.
 import 'dart:async';
 import 'dart:collection';

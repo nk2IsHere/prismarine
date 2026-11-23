@@ -55,7 +55,7 @@ class SnapRegistry {
   }
 
   /// Where an object the reader has in its own data came from (a value
-  /// the slice's manifest holds, shared by a property set): its kind and
+  /// loaded data holds, shared by several objects): its kind and
   /// arguments, or null. Asked for each container before it is written.
   (String, List<Object?>)? Function(SnapWriter w, Object o)? originOf;
 

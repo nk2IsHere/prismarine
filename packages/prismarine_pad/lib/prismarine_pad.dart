@@ -1,6 +1,6 @@
 /// The host's game pads (desktop): SDL3's gamepad subsystem through a small
-/// Rust library (SDL runs on a thread of its own), read once a frame. The player turns a reading into the engine's pad state;
-/// what the game does with it is `mcsm_game`'s pad poll.
+/// Rust library (SDL runs on a thread of its own), read once a frame. The
+/// app turns a reading into its own pad state.
 library;
 
 import 'dart:convert';

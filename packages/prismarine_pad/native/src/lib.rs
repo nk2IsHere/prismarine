@@ -1,12 +1,10 @@
-//! The host's game pads for the player (see
-//! formats/telltale/engine-api/input.md, "Game pads"). SDL3's gamepad subsystem
+//! The host's game pads for an app. SDL3's gamepad subsystem
 //! reads the pads on every desktop platform (on macOS through its HIDAPI
 //! drivers for PlayStation, Xbox and Switch pads plus Apple's GameController
 //! framework; Windows.Gaming.Input, XInput and raw input on Windows; evdev on
 //! Linux) and maps every known pad onto the standard layout by button position.
 //! This crate picks the one the player uses and hands its state to Dart once a
-//! frame. What the game does with that state is the engine's poll in Dart
-//! (`mcsm_game`'s pad.dart), not here.
+//! frame. The app decides what a game does with that state.
 //!
 //! SDL lives on a thread of its own (`prismarine-pad`): it is started there, and
 //! every SDL call (pumping events, reading pads) happens there, as SDL asks

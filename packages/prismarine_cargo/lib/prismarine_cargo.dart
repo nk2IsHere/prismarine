@@ -1,6 +1,6 @@
 /// Builds a package's Rust crate from its Dart build hook (native code is
 /// Rust). A hook's `build` callback calls [buildCargoLibrary] with the crate's
-/// directory (`crate: 'native/mixer', library: 'mcsm_mixer', assetName:
+/// directory (`crate: 'native/mixer', library: 'mixer', assetName:
 /// 'src/mixer/native.dart'`); cargo builds the crate's `cdylib` for the
 /// hook's target, and the library ships as a bundled code asset that
 /// `@Native` declarations with [assetName] resolve against.

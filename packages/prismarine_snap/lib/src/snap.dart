@@ -1,14 +1,13 @@
-// The snapshot object-graph codec (formats/port/snapshot.md "Body"): a
-// binary stream of values in which every object is written once and named
-// by its index after that, so shared references and cycles come back as
-// they were. Classes are written by codecs ([SnapCodec]) that live in their
-// own libraries (private fields); a codec writes what the object's
-// constructor needs ([SnapCodec.writeNew]) where the object is first
-// referenced and the rest of its state ([SnapCodec.write]) later, in queue
-// order, so a cycle never runs through a constructor.
+// The snapshot object-graph codec writes a binary stream of values. Every
+// object is written once and is referred to by its index after that. Shared
+// references and cycles come back as they were. Classes are written by codecs
+// ([SnapCodec]) that live in their own libraries (private fields); a codec
+// writes what the object's constructor needs ([SnapCodec.writeNew]) where the
+// object is first referenced and the rest of its state ([SnapCodec.write])
+// later, in queue order, so a cycle never runs through a constructor.
 //
-// Objects the reader already has (the fresh session's roots, the slice's
-// data) are registered on both sides in the same order ([SnapWriter.known],
+// Objects the reader already has (a fresh session's roots, data loaded from
+// files) are registered on both sides in the same order ([SnapWriter.known],
 // [SnapReader.known]) and only their state is written.
 import 'dart:collection';
 import 'dart:typed_data';

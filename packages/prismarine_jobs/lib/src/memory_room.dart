@@ -1,8 +1,8 @@
 // Whether the machine has memory to spare for reads far ahead of their
 // use: a read made minutes early holds its parsed data that long, which a
 // machine short of memory pays for in paging on every switch (a 1.5 GB
-// scope: a coming scene's chores and clips read at the scene before's
-// open made its holds longer). A few system calls, at most once a second.
+// scope: a coming scene's animations read at the scene before's open made
+// its holds longer). A few system calls, at most once a second.
 import 'dart:io';
 
 import 'memory_readings.dart';

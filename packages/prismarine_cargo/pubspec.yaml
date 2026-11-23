@@ -1,5 +1,5 @@
 name: prismarine_cargo
-description: Builds a package's Rust crate with cargo from its Dart build hook and ships the library as a code asset (docs/memory/decision-native-rust.md).
+description: Builds a package's Rust crate with cargo from its Dart build hook and ships the library as a code asset.
 publish_to: none
 environment:
   sdk: ^3.10.0

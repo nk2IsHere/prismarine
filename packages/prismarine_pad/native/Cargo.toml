@@ -7,7 +7,7 @@ edition = "2021"
 rust-version = "1.88"
 resolver = "3"
 publish = false
-description = "prismarine_pad's native library: the host's game pads through SDL3's gamepad subsystem, read by the player each frame (docs/formats/engine-api.md \"Game pads\")"
+description = "The native library of prismarine_pad. Reads the host's game pads through SDL3's gamepad subsystem once a frame."
 
 [lib]
 name = "prismarine_pad"
@@ -45,7 +45,7 @@ sdl3-sys = { version = "0.7.2", default-features = false, features = [
 ] }
 
 [profile.release]
-# As mcsm_mixer: no strip pass (Xcode 27's strip leaves dylibs dyld refuses).
+# No strip pass (Xcode 27's strip leaves dylibs dyld refuses).
 strip = "none"
 opt-level = 3
 debug = false

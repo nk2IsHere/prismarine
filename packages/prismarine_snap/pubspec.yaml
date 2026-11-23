@@ -1,5 +1,5 @@
 name: prismarine_snap
-description: Game-state snapshots (spec 2026-10-29-state-snapshots) — an identity-preserving binary object-graph writer and reader with per-class codecs (pure Dart).
+description: An identity-preserving binary object-graph writer and reader for state snapshots, with per-class codecs. Pure Dart.
 publish_to: none
 environment:
   sdk: ^3.10.0

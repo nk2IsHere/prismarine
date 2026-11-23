@@ -1,6 +1,5 @@
-// lib/libm.dart against the Rust libm crate the native mixer uses: the same
-// sweeps as mcsm_audio_out's native/mixer/src/dmath.rs libm_sweep_is_stable
-// and sim_sweep_is_stable, the same checksums.
+// Checks lib/libm.dart against the Rust libm crate 0.2.16. A Rust test over
+// the same crate computes the same sweeps and checksums.
 import 'dart:typed_data';
 
 import 'package:prismarine_math/libm.dart' as libm;

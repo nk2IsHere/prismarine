@@ -1,5 +1,5 @@
 name: prismarine_pad
-description: The host's game pads for the mcsm player, read through SDL3's gamepad subsystem (a Rust crate the package's build hook builds, SDL built from source and linked in), in the standard Xbox layout.
+description: The host's game pads through SDL3's gamepad subsystem, in the standard Xbox layout. The build hook builds a Rust crate with SDL built from source and linked in.
 publish_to: none
 environment:
   sdk: ^3.10.0

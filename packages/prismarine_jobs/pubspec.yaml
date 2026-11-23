@@ -1,5 +1,5 @@
 name: prismarine_jobs
-description: The job system (perf spec R4) — a bounded pool of one-shot worker isolates with priorities, cancellation tokens and stats; results return through Isolate.exit (pure Dart).
+description: A bounded pool of one-shot worker isolates with priorities, cancellation tokens and stats. Results return through Isolate.exit. Pure Dart.
 publish_to: none
 environment:
   sdk: ^3.10.0
