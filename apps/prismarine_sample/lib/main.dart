@@ -119,10 +119,7 @@ class _SampleAppState extends State<SampleApp> {
   Future<void> _load() async {
     try {
       final sw = Stopwatch()..start();
-      final r = await SampleRenderer.load(
-        widget.data,
-        gi: !giOff((n) => widget.options[n]).contains('probes'),
-      );
+      final r = await SampleRenderer.load(widget.data);
       r.builder.settings
         ..showShadowMap = widget.shadowView
         ..shadows = !widget.noShadows;

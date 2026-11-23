@@ -16,9 +16,10 @@ class SampleRenderer {
   SampleRenderer._(this.scenes, this.builder, this.runner, this.credits);
 
   /// Loads every prepared package in `<dataDir>/prepared` and the shader
-  /// bundle of the app's assets, then reads every texture. With [gi] it
-  /// builds the voxel copy of the scenes for the probes meanwhile.
-  static Future<SampleRenderer> load(String dataDir, {bool gi = true}) async {
+  /// bundle of the app's assets, then reads every texture. It builds the
+  /// voxel copy of the scenes for the probes and the paths of the lights
+  /// meanwhile.
+  static Future<SampleRenderer> load(String dataDir) async {
     final root = Directory('$dataDir/prepared');
     if (!root.existsSync()) throw SampleDataMissing(dataDir);
     // The base scene first, then the add-ons in name order.
@@ -36,7 +37,7 @@ class SampleRenderer {
           });
     if (dirs.isEmpty) throw SampleDataMissing(dataDir);
     final paths = [for (final d in dirs) '${d.path}/scene.gltf'];
-    final volume = gi ? loadGiVolume(paths) : null;
+    final volume = loadGiVolume(paths);
     final scenes = <String, GpuScene>{
       for (final d in dirs) _name(d): GpuScene.load('${d.path}/scene.gltf'),
     };
@@ -68,15 +69,13 @@ class SampleRenderer {
         break;
       }
     }
-    if (volume != null) {
-      final sw = Stopwatch()..start();
-      final v = builder.giVolume = await volume;
-      stdout.writeln(
-        'sample: GI volume of ${v.nx}x${v.ny}x${v.nz} cells of '
-        '${v.cell.toStringAsFixed(3)} m, ${v.activeCount} of '
-        '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
-      );
-    }
+    final sw = Stopwatch()..start();
+    final v = builder.giVolume = await volume;
+    stdout.writeln(
+      'sample: GI volume of ${v.nx}x${v.ny}x${v.nz} cells of '
+      '${v.cell.toStringAsFixed(3)} m, ${v.activeCount} of '
+      '${v.probeCount} probes on, waited ${sw.elapsedMilliseconds} ms',
+    );
     final runner = FrameRunner(assets, pbrRunnerShaders)
       ..warn = (m) => stderr.writeln('sample: $m');
     final credits = [

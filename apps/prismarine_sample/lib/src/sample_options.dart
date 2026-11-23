@@ -22,7 +22,7 @@ const renderOptions = {
 };
 
 /// The parts of the indirect light that the options switch off.
-Set<String> giOff(String? Function(String name) opt) => opt('gi') == 'off'
+Set<String> _giOff(String? Function(String name) opt) => opt('gi') == 'off'
     ? const {'sky', 'probes', 'ao', 'ssr'}
     : {...?opt('gi-off')?.split(',')};
 
@@ -75,7 +75,7 @@ void applyRenderOptions(PbrSettings s, String? Function(String name) opt) {
       orElse: () => throw FormatException('no indirect light view $v'),
     );
   }
-  final off = giOff(opt);
+  final off = _giOff(opt);
   gi
     ..sky = !off.contains('sky')
     ..probes = !off.contains('probes')
