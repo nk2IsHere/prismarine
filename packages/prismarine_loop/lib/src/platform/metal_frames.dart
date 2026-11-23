@@ -15,7 +15,7 @@
 // whose arena frame k reuses; the wait is only the GPU backlog beyond it.
 //
 // Plain dart:ffi on the Objective-C runtime (objc.dart): no engine change.
-// `MCSM_GPU_FRAME_GATE=off`: no limiter (to show the race).
+// `PRISMARINE_GPU_FRAME_GATE=off`: no limiter (to show the race).
 import 'dart:ffi';
 import 'dart:io';
 
@@ -46,7 +46,10 @@ class MetalFrameLimiter {
   /// not on the main thread, or no Flutter view controller found yet).
   static MetalFrameLimiter? create() {
     if (!Platform.isMacOS) return null;
-    if (Platform.environment['MCSM_GPU_FRAME_GATE'] == 'off') return null;
+    final gate =
+        Platform.environment['PRISMARINE_GPU_FRAME_GATE'] ??
+        Platform.environment['MCSM_GPU_FRAME_GATE'];
+    if (gate == 'off') return null;
     if (msgSendBool(objcClass(cString('NSThread')), sel('isMainThread')) == 0) {
       return null;
     }

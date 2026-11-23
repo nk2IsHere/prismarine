@@ -1,7 +1,7 @@
 import 'dart:io';
 
-/// `MCSM_MEM_LOG=<seconds>`: each isolate's memory census line that often
-/// (what its caches hold by count), with the wall clock in ms so the
+/// `PRISMARINE_MEM_LOG=<seconds>`: each isolate's memory census line that
+/// often (what its caches hold by count), with the wall clock in ms so the
 /// isolates' lines line up (diagnostics).
 final class MemLog {
   MemLog(this.who, {this.figures});
@@ -12,7 +12,9 @@ final class MemLog {
   /// resident set. Null adds nothing.
   final String Function()? figures;
   static final _period = int.tryParse(
-    Platform.environment['MCSM_MEM_LOG'] ?? '',
+    Platform.environment['PRISMARINE_MEM_LOG'] ??
+        Platform.environment['MCSM_MEM_LOG'] ??
+        '',
   );
   final _clock = Stopwatch()..start();
   int _next = 0;
