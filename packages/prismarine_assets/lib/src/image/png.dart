@@ -9,7 +9,7 @@ final List<int> _crcTable = List<int>.generate(256, (n) {
   return c;
 }, growable: false);
 
-/// CRC-32 (ISO-HDLC), as used by PNG chunks.
+/// Returns the CRC-32 of [bytes] in the ISO-HDLC form that PNG chunks use.
 int crc32(List<int> bytes) {
   var c = 0xFFFFFFFF;
   for (final b in bytes) {
@@ -18,7 +18,8 @@ int crc32(List<int> bytes) {
   return c ^ 0xFFFFFFFF;
 }
 
-/// RGBA8 → PNG (filter 0 rows, zlib level 9). Our own minimal encoder.
+/// Encodes the RGBA8 pixels [rgba] of an image of [width] by [height] as a
+/// PNG. Each row has filter 0 and the image data has zlib level 9.
 Uint8List encodePng(int width, int height, Uint8List rgba) {
   if (rgba.length != width * height * 4) {
     throw ArgumentError('rgba length ${rgba.length} != $width x $height x 4');

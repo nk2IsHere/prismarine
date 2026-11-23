@@ -5,14 +5,16 @@ import 'package:prismarine_frame/prismarine_frame.dart';
 
 import '../image/ktx2.dart';
 
-/// A texture's group key: textures share an array only when every level's
-/// image has the same size and format, so a layer is the file's own bytes.
+/// The group of a texture. Textures share an array only when they have the
+/// same size, format and number of levels. Each layer then holds the bytes
+/// of its texture file unchanged.
 typedef TextureGroup = ({int width, int height, int vk, int levels});
 
-/// [stem]'s group from its KTX2 header, or null when it isn't a plain 2D
-/// texture (arrays, cubes and volumes stay as they are).
-TextureGroup? textureGroup(String slice, String stem) {
-  final f = File('$slice/textures/$stem.ktx2');
+/// Returns the group of `[dir]/textures/[stem].ktx2` from its header. Returns
+/// null when the file is missing or is not a plain 2D texture, such as an
+/// array, a cube or a volume.
+TextureGroup? textureGroup(String dir, String stem) {
+  final f = File('$dir/textures/$stem.ktx2');
   if (!f.existsSync()) return null;
   final raf = f.openSync();
   try {
@@ -26,20 +28,20 @@ TextureGroup? textureGroup(String slice, String stem) {
   }
 }
 
-/// Writes one KTX2 array per group of [stems] into `[outDir]/textures/`
-/// (named by the group, so the same group in two scenes is two files) and
-/// returns them
-/// in a stable order: groups by size then format, layers by stem. The
-/// key-value data of each array holds its layer stems under [layersKey].
+/// Writes one KTX2 array into `[outDir]/textures/` for each group of the
+/// textures `[dir]/textures/<stem>.ktx2` of [stems]. A file has the name of
+/// its group. The key-value data of each array holds its layer stems under
+/// [layersKey]. Returns the arrays ordered by size, format and levels, with
+/// the layers of each ordered by stem.
 List<CookedArray> cookTextureArrays(
-  String slice,
+  String dir,
   Iterable<String> stems,
   String outDir, {
   required String layersKey,
 }) {
   final groups = <TextureGroup, List<String>>{};
   for (final s in stems) {
-    final g = textureGroup(slice, s);
+    final g = textureGroup(dir, s);
     if (g != null) (groups[g] ??= []).add(s);
   }
   final keys = groups.keys.toList()
@@ -57,10 +59,13 @@ List<CookedArray> cookTextureArrays(
     final layers = groups[g]!..sort();
     final format = Ktx2Format.values.firstWhere(
       (f) => f.vk == g.vk,
-      orElse: () => throw StateError('no KTX2 format for vkFormat ${g.vk}'),
+      orElse: () => throw StateError(
+        'The texture arrays have no Ktx2Format for vkFormat ${g.vk}. '
+        'Add the format to Ktx2Format.',
+      ),
     );
     final files = [
-      for (final s in layers) File('$slice/textures/$s.ktx2').readAsBytesSync(),
+      for (final s in layers) File('$dir/textures/$s.ktx2').readAsBytesSync(),
     ];
     final levels = [
       for (var k = 0; k < g.levels; k++)
@@ -72,8 +77,8 @@ List<CookedArray> cookTextureArrays(
           return b.toBytes();
         }(),
     ];
-    // `textures/<stem>.ktx2`, as a slice keeps its textures, so the
-    // renderer's texture loader reads an array as it reads any texture.
+    // The array has the path of a texture, `textures/<stem>.ktx2`. A texture
+    // loader reads it as any other texture.
     final name = 'array_${g.width}x${g.height}_${g.vk}_${g.levels}';
     File('$outDir/textures/$name.ktx2')
       ..parent.createSync(recursive: true)

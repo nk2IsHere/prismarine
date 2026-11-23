@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Minimal glTF 2.0 builder with one binary buffer, written as GLB.
+/// A minimal glTF 2.0 builder with one binary buffer. [toGlb] returns the
+/// result as a GLB.
 class GltfBuilder {
   /// Starts an empty glTF with [generator] as its `asset.generator`.
   GltfBuilder({String generator = 'prismarine_assets'})
@@ -12,7 +13,7 @@ class GltfBuilder {
         'accessors': <Object?>[],
       };
 
-  /// Continues [glb]: its JSON and binary chunk, to add to.
+  /// Continues [glb]. Adds to its JSON and its binary chunk.
   GltfBuilder.fromGlb(Uint8List glb) : json = {} {
     final read = readGlb(glb);
     json.addAll(read.json);
@@ -25,7 +26,8 @@ class GltfBuilder {
   final _bin = BytesBuilder();
   final Map<String, Object?> json;
 
-  /// A buffer view over [bytes] as given; [stride] for interleaved vertices.
+  /// Adds a buffer view over [bytes] as given. Give [stride] for
+  /// interleaved vertices. Returns the index of the view.
   int addView(Uint8List bytes, {int? target, int? stride}) {
     final v = _view(bytes, target: target);
     if (stride != null) {
@@ -34,7 +36,8 @@ class GltfBuilder {
     return v;
   }
 
-  /// An accessor as given, over a view from [addView].
+  /// Adds the accessor [a] as given, over a view from [addView]. Returns
+  /// the index of the accessor.
   int addAccessor(Map<String, Object?> a) => _accessor(a);
 
   List<Object?> _list(String k) => (json[k] ??= <Object?>[]) as List<Object?>;
@@ -186,7 +189,8 @@ class GltfBuilder {
       _bin.addByte(0);
     }
     final bin = _bin.toBytes();
-    // glTF forbids empty arrays and zero-length buffers: omit them (and the BIN chunk).
+    // glTF forbids empty arrays and buffers of length 0. The GLB leaves them
+    // out, the BIN chunk included.
     json['buffers'] = bin.isEmpty
         ? null
         : [
@@ -218,6 +222,7 @@ class GltfBuilder {
   }
 }
 
+/// Splits [glb] into its JSON and its binary chunk.
 ({Map<String, Object?> json, Uint8List bin}) readGlb(Uint8List glb) {
   final bd = ByteData.sublistView(glb);
   final jl = bd.getUint32(12, Endian.little);

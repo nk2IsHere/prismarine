@@ -4,7 +4,9 @@ import 'dart:typed_data';
 const _compSize = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4};
 const _typeSize = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16};
 
-/// Structural checks we rely on (not a full Khronos validator).
+/// Checks the structure of a glTF with the JSON [json] and the binary chunk
+/// [bin]. Returns one line per problem. The checks cover a part of the
+/// glTF 2.0 rules and do not replace the Khronos validator.
 List<String> validateGltf(Map<String, Object?> json, Uint8List bin) {
   final p = <String>[];
   final views = (json['bufferViews'] as List? ?? const []).cast<Map>();
@@ -72,7 +74,8 @@ List<String> validateGltf(Map<String, Object?> json, Uint8List bin) {
         if (count(e.value) != vcount) {
           p.add('${m['name']}: ${e.key} count ${count(e.value)} != $vcount');
         }
-        // Indexed semantics (TEXCOORD_n, COLOR_n, ...) must be numbered contiguously from 0.
+        // Indexed semantics such as TEXCOORD_n and COLOR_n count up from 0
+        // without a gap.
         final us = e.key.lastIndexOf('_');
         final n = us > 0 ? int.tryParse(e.key.substring(us + 1)) : null;
         if (n != null && n > 0 && !e.key.startsWith('_')) {
@@ -134,7 +137,8 @@ List<String> validateGltf(Map<String, Object?> json, Uint8List bin) {
     }
   }
   final nodes = (json['nodes'] as List? ?? const []);
-  // glTF: a skinned mesh node's transform is ignored, so it must not be anyone's child.
+  // glTF ignores the transform of a skinned mesh node. Such a node must
+  // not be the child of another node.
   final childOf = {
     for (final n in nodes.cast<Map>())
       ...((n['children'] as List?) ?? const []),

@@ -17,7 +17,8 @@ List<int> px(Uint8List rgba, int w, int x, int y) =>
 void main() {
   group('BC1', () {
     test('4-colour block: endpoints and interpolants (c0 > c1)', () {
-      // c0 = pure red (0xF800), c1 = pure blue (0x001F); pixel i uses index i % 4 → row-major, LSB first
+      // c0 is pure red 0xF800 and c1 pure blue 0x001F. Pixel i uses index
+      // i % 4, in row-major order from the lowest bits.
       final rgba = decodeBc1(
         bc1Block(0xF800, 0x001F, 0xE4E4E4E4),
         4,
@@ -47,7 +48,9 @@ void main() {
   });
 
   test('BC3 alpha: 8-alpha mode endpoints and interpolation', () {
-    // alpha0=255, alpha1=0; index bits: pixel0=0 (255), pixel1=1 (0), pixel2=2 ((6*255+1*0)/7=219)
+    // alpha0 is 255 and alpha1 is 0. Pixel 0 has index 0 and alpha 255,
+    // pixel 1 index 1 and alpha 0, pixel 2 index 2 and alpha
+    // (6 * 255 + 1 * 0) / 7, which is 219.
     final alpha = ByteData(8)
       ..setUint8(0, 255)
       ..setUint8(1, 0);

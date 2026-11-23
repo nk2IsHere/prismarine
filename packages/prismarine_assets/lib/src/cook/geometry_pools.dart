@@ -8,8 +8,8 @@ import '../gltf/gltf_builder.dart';
 const _components = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4};
 const _counts = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16};
 
-/// One attribute stream of a pool: its glTF accessor shape and the bytes
-/// of every vertex so far, tightly packed.
+/// One attribute stream of a pool. It has the shape of a glTF accessor and
+/// the tightly packed bytes of every vertex added so far.
 class _Stream {
   _Stream(this.componentType, this.type, this.normalized);
   final int componentType;
@@ -123,8 +123,8 @@ class GeometryPools {
   }
 }
 
-/// Accessor [a]'s elements, tightly packed (a strided view is
-/// de-interleaved).
+/// Returns the elements of accessor [a] tightly packed. The elements of a
+/// strided view are de-interleaved.
 Uint8List _packed(
   Uint8List bin,
   Map<String, Object?> a,
@@ -146,7 +146,7 @@ Uint8List _packed(
   return out;
 }
 
-/// Accessor [a]'s indices as 32-bit values.
+/// Returns the indices of accessor [a] as 32-bit values.
 Uint32List _indices(
   Uint8List bin,
   Map<String, Object?> a,
@@ -169,9 +169,10 @@ Uint32List _indices(
   return out;
 }
 
-/// A pool as a viewable glTF: each stream an accessor over all vertices,
-/// one uint32 index accessor and one primitive drawing everything (indices
-/// are mesh-relative, so the viewer's picture is only a sanity check).
+/// Returns pool [p] as a GLB that a glTF viewer opens. Each stream is an
+/// accessor over all vertices, with one uint32 index accessor and one
+/// primitive over all indices. The indices are relative to their mesh. A
+/// viewer therefore shows a distorted picture.
 Uint8List _poolGlb(_Pool p, String generator) {
   final b = GltfBuilder(generator: generator);
   final attributes = <String, int>{};

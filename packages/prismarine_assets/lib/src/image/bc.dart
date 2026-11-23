@@ -52,7 +52,8 @@ void _colorBlock(
   }
 }
 
-/// BC1 (DXT1) blocks → RGBA8, cropping partial blocks.
+/// Decodes the BC1 [blocks] of an image of [width] by [height] to RGBA8.
+/// Pixels of a partial block outside the image are dropped.
 Uint8List decodeBc1(Uint8List blocks, int width, int height) {
   final bw = (width + 3) ~/ 4, bh = (height + 3) ~/ 4;
   if (blocks.length < bw * bh * 8) throw ArgumentError('BC1 data too short');
@@ -75,7 +76,7 @@ Uint8List decodeBc1(Uint8List blocks, int width, int height) {
   return out;
 }
 
-/// BC3 (DXT5) blocks → RGBA8.
+/// Decodes the BC3 [blocks] of an image of [width] by [height] to RGBA8.
 Uint8List decodeBc3(Uint8List blocks, int width, int height) {
   final bw = (width + 3) ~/ 4, bh = (height + 3) ~/ 4;
   if (blocks.length < bw * bh * 16) throw ArgumentError('BC3 data too short');

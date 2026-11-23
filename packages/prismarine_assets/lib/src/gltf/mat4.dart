@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+/// Returns the column-major matrix of the translation [t] and the unit
+/// quaternion [q] in x, y, z, w order.
 Float64List mat4Compose(List<double> t, List<double> q) {
   final x = q[0], y = q[1], z = q[2], w = q[3];
   return Float64List.fromList([
@@ -22,6 +24,7 @@ Float64List mat4Compose(List<double> t, List<double> q) {
   ]);
 }
 
+/// Returns the product [a] times [b] of two column-major matrices.
 Float64List mat4Mul(Float64List a, Float64List b) {
   final o = Float64List(16);
   for (var c = 0; c < 4; c++) {
@@ -36,7 +39,8 @@ Float64List mat4Mul(Float64List a, Float64List b) {
   return o;
 }
 
-/// Inverse of an affine matrix (rotation/scale + translation).
+/// Returns the inverse of an affine matrix [m] of rotation, scale and
+/// translation.
 Float64List mat4InvertAffine(Float64List m) {
   final a = m[0],
       b = m[4],

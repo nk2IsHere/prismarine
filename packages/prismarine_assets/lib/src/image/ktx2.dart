@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// A texture as KTX 2.0 (Khronos): its texels as stored, every level, layer
-/// and face, with a basic data format descriptor and [values] as key-value
-/// data under keys of their own. The key `KTXwriter` holds [writer].
+/// Encodes a texture as KTX 2.0 with its texels as given, every level, layer
+/// and face. The file has a basic data format descriptor. The key-value data holds
+/// [values] and the key `KTXwriter` with [writer].
 ///
-/// [levels] holds each mip level, largest first, as its images in KTX2's
-/// order: layer, then face, then depth slice.
+/// [levels] holds each mip level, largest first. A level holds its images in
+/// the order of KTX2, by layer, then by face, then by depth slice.
 Uint8List encodeKtx2({
   required Ktx2Format format,
   required int width,
@@ -25,8 +25,9 @@ Uint8List encodeKtx2({
   final dfdAt = header + index;
   final kvdAt = dfdAt + dfd.length;
   var at = kvdAt + kvd.length;
-  // Levels go smallest first, each on a boundary of the texel block size
-  // and 4 (the spec's lcm rule for these formats).
+  // The levels are stored smallest first. Each starts on a multiple of the
+  // least common multiple of the block size and 4, as the spec asks for
+  // these formats.
   final align = _lcm4(format.blockBytes);
   final offsets = List<int>.filled(levels.length, 0);
   for (var k = levels.length - 1; k >= 0; k--) {
@@ -55,7 +56,8 @@ Uint8List encodeKtx2({
   for (var i = 0; i < fields.length; i++) {
     d.setUint32(12 + 4 * i, fields[i], Endian.little);
   }
-  // No supercompression global data: offset and length stay zero.
+  // The file has no supercompression global data. Its offset and length
+  // stay zero.
   for (var k = 0; k < levels.length; k++) {
     final e = header + 24 * k;
     d.setUint64(e, offsets[k], Endian.little);
@@ -82,7 +84,8 @@ int _lcm4(int n) {
   return n * 4 ~/ a;
 }
 
-/// The formats S2's textures are stored in, by Vulkan's format number.
+/// The texture formats that [encodeKtx2] writes, with their Vulkan format
+/// numbers.
 enum Ktx2Format {
   rgba8(37, 1, 4),
   rgba8Srgb(43, 1, 4),
@@ -105,10 +108,12 @@ enum Ktx2Format {
   bool get block => vk >= 131 && vk <= 184;
 }
 
-/// A basic data format descriptor (Khronos Data Format 1.3, "Basic"), one
-/// sample per channel; block formats as their colour model's samples.
+/// Returns the basic data format descriptor of Khronos Data Format 1.3 for
+/// [f]. It has one sample per channel. A block format has the samples of
+/// its colour model.
 Uint8List _dfd(Ktx2Format f) {
-  // (bit offset, bit length, channel and qualifiers, lower, upper)
+  // Each sample has a bit offset, a bit length, a channel with qualifiers
+  // and a lower and an upper value.
   final List<(int, int, int, int, int)> samples;
   var model = 1, dims = [0, 0, 0, 0];
   const linear = 0x10, float = 0x80, signed = 0x40;
@@ -145,7 +150,7 @@ Uint8List _dfd(Ktx2Format f) {
     case Ktx2Format.bc1 || Ktx2Format.bc1Srgb:
       model = 128;
       dims = [3, 3, 0, 0];
-      // BC1 with punch-through alpha: its one sample says alpha is present.
+      // BC1 with punch-through alpha. Its one sample marks alpha as present.
       samples = [(0, 64, 1, 0, 0xffffffff)];
     case Ktx2Format.bc3 || Ktx2Format.bc3Srgb:
       model = 130;
@@ -180,8 +185,9 @@ Uint8List _dfd(Ktx2Format f) {
   return out;
 }
 
-/// Key-value data: each pair as its length, the key and value NUL-ended,
-/// padded to 4; keys in byte order, as the spec asks.
+/// Returns the key-value data of [values]. Each pair has its length, then
+/// the key and the value, each ended by NUL, padded to 4 bytes. The keys are
+/// in byte order, as the spec asks.
 Uint8List _kvd(Map<String, String> values) {
   final b = BytesBuilder();
   for (final k in values.keys.toList()..sort()) {
