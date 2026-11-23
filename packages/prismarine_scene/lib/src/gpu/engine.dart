@@ -29,5 +29,5 @@ int get gpuFeatures {
   )();
 }
 
-const _backend = 'InternalFlutterGpu_McsmBackend';
-const _features = 'InternalFlutterGpu_McsmFeatures';
+const _backend = 'InternalFlutterGpu_PrismarineBackend';
+const _features = 'InternalFlutterGpu_PrismarineFeatures';

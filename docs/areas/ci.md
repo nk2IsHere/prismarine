@@ -25,6 +25,6 @@ reads. Start one after a change of a toolchain or of a lock file.
 
 ## Privacy
 
-On GitHub the privacy check runs with `--generic-only`. The patterns of the private repo hold the accounts, the hosts
-and the values of secrets and are not copied to GitHub. The landing gate runs the full check. The workflow adds
-`--strict` once `tools/lint/privacy_pending.txt` lists no path.
+On GitHub the privacy check runs with `--generic-only --strict`. The patterns of the private repo hold the accounts,
+the hosts and the values of secrets and are not copied to GitHub. The landing gate runs the full check with `--strict`.
+A path in `tools/lint/privacy_pending.txt` fails both.

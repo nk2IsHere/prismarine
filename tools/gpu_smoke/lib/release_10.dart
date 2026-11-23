@@ -28,7 +28,7 @@ import 'release_10_more.dart';
 /// Runs the checks of release 10 with [log] for SMOKE lines. Returns true when
 /// all pass.
 Future<bool> release10Checks(void Function(String) log) async {
-  if (!gpu.mcsmEngine10) {
+  if (!gpu.prismarineBindingsSupported) {
     log('SMOKE release 10 not on this engine or backend (no feature 4096)');
     return true;
   }

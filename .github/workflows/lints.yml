@@ -37,15 +37,8 @@ jobs:
           restore-keys: pub-lints-${{ runner.os }}-
 
       - run: dart pub get
-      # The pending paths fail the check only with --strict. The flag is
-      # added once tools/lint/privacy_pending.txt lists no path.
       - name: privacy, generic patterns
-        run: |
-          if awk '!/^[[:space:]]*(#|$)/ { n++ } END { exit n == 0 }' tools/lint/privacy_pending.txt; then
-            dart tools/lint/privacy_check.dart --generic-only
-          else
-            dart tools/lint/privacy_check.dart --generic-only --strict
-          fi
+        run: dart tools/lint/privacy_check.dart --generic-only --strict
       - name: links
         run: dart tools/lint/check_links.dart
       - name: docs index

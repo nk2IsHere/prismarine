@@ -31,7 +31,7 @@ Future<String?> _samplers(_Kit kit) async {
       p.bindTexture(
         f.getUniformSlot('shadow'),
         depth,
-        sampler: gpu.McsmSampler(compare: gpu.CompareFunction.less),
+        sampler: gpu.PrismarineSampler(compare: gpu.CompareFunction.less),
       );
       p.bindUniform(f.getUniformSlot('Ref'), kit.floats([ref, 0, 0, 0]));
     });
@@ -48,31 +48,31 @@ Future<String?> _samplers(_Kit kit) async {
   );
   t.overwrite(_texels(64, [200, 40, 40, 255]));
   t.overwrite(_texels(16, [40, 40, 200, 255]), mipLevel: 1);
-  final cases = <(List<double>, gpu.McsmSampler, List<int>, String)>[
+  final cases = <(List<double>, gpu.PrismarineSampler, List<int>, String)>[
     (
       [1.5, 0.5, 0, 0],
-      gpu.McsmSampler(
+      gpu.PrismarineSampler(
         widthAddressMode: gpu.SamplerAddressMode.clampToBorder,
-        borderColor: gpu.McsmBorderColor.opaqueWhite,
+        borderColor: gpu.PrismarineBorderColor.opaqueWhite,
       ),
       [255, 255, 255, 255],
       'border',
     ),
     (
       [0.5, 0.5, 1, 0],
-      gpu.McsmSampler(mipFilter: gpu.MipFilter.nearest, maxLod: 0),
+      gpu.PrismarineSampler(mipFilter: gpu.MipFilter.nearest, maxLod: 0),
       [200, 40, 40, 255],
       'max LOD',
     ),
     (
       [0.5, 0.5, 0, 0],
-      gpu.McsmSampler(mipFilter: gpu.MipFilter.nearest, minLod: 1),
+      gpu.PrismarineSampler(mipFilter: gpu.MipFilter.nearest, minLod: 1),
       [40, 40, 200, 255],
       'min LOD',
     ),
     (
       [-0.25, 0.5, 0, 0],
-      gpu.McsmSampler(
+      gpu.PrismarineSampler(
         widthAddressMode: gpu.SamplerAddressMode.mirrorClampToEdge,
       ),
       [200, 40, 40, 255],

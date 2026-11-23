@@ -272,9 +272,9 @@ class _CookedSceneGpu {
   void free() {
     dead = true;
     for (final p in _pools.values) {
-      p.indices.buffer.mcsmRelease();
+      p.indices.buffer.prismarineRelease();
       for (final v in p.streams.values) {
-        v.buffer.mcsmRelease();
+        v.buffer.prismarineRelease();
       }
     }
     _pools.clear();

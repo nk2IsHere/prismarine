@@ -32,7 +32,7 @@ extension _Instancing on _Smoke {
     }
 
     // Two passes on one command buffer need feature 64 on Metal.
-    final shared = fs.mcsmPassesPerCommandBuffer;
+    final shared = fs.prismarinePassesPerCommandBuffer;
     draw(a, 0, 4);
     if (shared) {
       draw(b, 2, 2);
@@ -171,7 +171,7 @@ extension _Instancing on _Smoke {
         _near(_px(idxFirst, 64, 16, 16), [0, 0, 0, 255]);
     log(
       'SMOKE first instance ${ok ? 'ok' : 'WRONG'} '
-      '(${fs.mcsmFirstInstanceDraws ? 'engine draw' : 'bound again at the offset'}; '
+      '(${fs.prismarineFirstInstanceDraws ? 'engine draw' : 'bound again at the offset'}; '
       'draw 2..3: $d1 px differ from an offset binding, '
       'indexed 1..3: $d2 px differ)',
     );

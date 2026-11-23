@@ -111,7 +111,7 @@ bool near(List<int> a, List<int> b, [int tolerance = 2]) {
 
 /// Runs the checks. Returns true when all pass or the engine lacks bit 2048.
 Future<bool> release9Checks(void Function(String) log) async {
-  if (!gpu.mcsmEngineSupportsS2) {
+  if (!gpu.prismarineComputeSupported) {
     log('SMOKE release 9 not on this engine or backend (no feature 2048)');
     return true;
   }

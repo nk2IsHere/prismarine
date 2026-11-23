@@ -1,6 +1,6 @@
 // The checks of engine release 11 for command buffers and passes made again
-// after their submit (flutter_gpu G15 over McsmDetach of the engine) and the
-// collection of the VM at the idle point of the caller (mcsmGcIdle).
+// after their submit (flutter_gpu G15 over PrismarineDetach of the engine) and
+// the collection of the VM at the idle point of the caller (prismarineGcIdle).
 //
 // - After a submit the next command buffer is the same Dart object on a new
 //   native one. A pass made again draws as a new pass. A clear alone leaves
@@ -20,8 +20,8 @@ import 'package:vector_math/vector_math.dart';
 /// Runs the checks of release 11 with [log] for SMOKE lines. Returns true when
 /// all pass.
 Future<bool> release11Checks(void Function(String) log) async {
-  if (!gpu.mcsmGcIdleSupported) {
-    log('SMOKE release 11 not on this engine (no McsmDetach)');
+  if (!gpu.prismarineGcIdleSupported) {
+    log('SMOKE release 11 not on this engine (no PrismarineDetach)');
     return true;
   }
   final ctx = gpu.gpuContext;
@@ -116,7 +116,7 @@ Future<bool> release11Checks(void Function(String) log) async {
   }
   try {
     // With no minimum, new space holds enough whatever it holds.
-    final ran = gpu.mcsmGcIdle(0, 0, 0);
+    final ran = gpu.prismarineGcIdle(0, 0, 0);
     say('idle collection', ran & 1 == 1 ? null : 'ran $ran, want bit 1');
   } on Object catch (e) {
     say('idle collection', '$e');

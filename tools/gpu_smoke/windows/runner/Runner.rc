@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.mcsm" "\0"
+            VALUE "CompanyName", "dev.prismarine" "\0"
             VALUE "FileDescription", "gpu_smoke" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "gpu_smoke" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.mcsm. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 dev.prismarine. All rights reserved." "\0"
             VALUE "OriginalFilename", "gpu_smoke.exe" "\0"
             VALUE "ProductName", "gpu_smoke" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

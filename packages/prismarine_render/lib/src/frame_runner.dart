@@ -103,8 +103,8 @@ class FrameRunner {
   final _packed = Expando<Map<Object, (gpu.VertexLayout, Uint8List)>>(
     'packed inline vertices',
   );
-  final _samplers = <String, gpu.McsmSampler>{};
-  final _samplerObjects = Expando<gpu.McsmSampler>('samplers by state');
+  final _samplers = <String, gpu.PrismarineSampler>{};
+  final _samplerObjects = Expando<gpu.PrismarineSampler>('samplers by state');
   final _constantObjects = Expando<Map<String, gpu.Texture>>(
     'constant textures by texel object',
   );

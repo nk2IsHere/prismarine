@@ -303,7 +303,7 @@ final class _DispatchState {
   final List<Uint8List?> blocks;
   final List<int> sizes;
   final List<TextureRef?> textures;
-  final List<gpu.McsmSampler> samplers;
+  final List<gpu.PrismarineSampler> samplers;
   final List<(String, StorageRef)> storage;
 
   /// The view of each frame-buffer binding and its buffer, by slot and frame

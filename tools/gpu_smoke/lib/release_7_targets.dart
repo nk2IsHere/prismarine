@@ -4,7 +4,7 @@ extension _Targets on _Smoke {
   // 2. Two targets of different formats in one pass, then the R32F target
   // copied into RGBA8 to read it.
   Future<void> mixedTargets() async {
-    final mixed = fs.mcsmMixedColorAttachmentFormats;
+    final mixed = fs.prismarineMixedColorAttachmentFormats;
     final c0 = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
     final c1 = rt(
       mixed ? gpu.PixelFormat.r32Float : gpu.PixelFormat.r32g32b32a32Float,
@@ -87,7 +87,7 @@ extension _Targets on _Smoke {
   // attachment with the depth test. Two overlapping quads, the nearer drawn
   // first, overlap in the middle. Both targets keep the nearer quad there.
   Future<void> gBuffer() async {
-    final mixed = fs.mcsmMixedColorAttachmentFormats;
+    final mixed = fs.prismarineMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
     final gLayout = gpu.VertexLayout(
       buffers: [
@@ -222,7 +222,7 @@ extension _Targets on _Smoke {
   // differ in load actions and depth targets must each get their own load,
   // clear and depth. Vulkan caches a render pass and framebuffer per target.
   Future<void> passReuse() async {
-    final mixed = fs.mcsmMixedColorAttachmentFormats;
+    final mixed = fs.prismarineMixedColorAttachmentFormats;
     final vG = lib['SmokeGbufferVertex']!;
     final gLayout = gpu.VertexLayout(
       buffers: [

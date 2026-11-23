@@ -381,7 +381,7 @@ extension RunnerResources on FrameRunner {
     var v = at.ring[_frame];
     if (v == null || v.lengthInBytes != data.length) {
       // The last buffer of this frame slot, three runs old, goes now (G17).
-      v?.buffer.mcsmRelease();
+      v?.buffer.prismarineRelease();
       gpu.GpuMemory.tag = 'buffer.perInput';
       v = at.ring[_frame] = _whole(
         gpu.gpuContext.createDeviceBuffer(
@@ -427,7 +427,7 @@ extension RunnerResources on FrameRunner {
 
   bool _unbound(Uint8List _, _InlineBuffer b) {
     if (b.run >= _runs - _unnamedRuns) return false;
-    b.view.buffer.mcsmRelease();
+    b.view.buffer.prismarineRelease();
     return true;
   }
 
@@ -509,7 +509,7 @@ extension RunnerResources on FrameRunner {
 const _unnamedRuns = 8;
 
 /// Lets go of the copy [b] of a plan buffer at once (G17).
-void _release(gpu.DeviceBuffer b) => b.mcsmRelease();
+void _release(gpu.DeviceBuffer b) => b.prismarineRelease();
 
 /// The view of an inline buffer and the run that bound it last.
 final class _InlineBuffer {

@@ -4,7 +4,7 @@
 #endif
 
 // Viewport arrays of release 7. Each instance draws into the viewport of its
-// `tile`. The build hook turns the `mcsm_viewport_index` output into the
+// `tile`. The build hook turns the `viewport_index` output into the
 // [[viewport_array_index]] of Metal. On Vulkan (release 8) the shader writes
 // gl_ViewportIndex itself. Elsewhere nobody reads the output.
 
@@ -20,7 +20,7 @@ in float tile;
 
 out vec4 v_color;
 out vec2 v_pos;
-flat out uint mcsm_viewport_index;
+flat out uint viewport_index;
 
 void main() {
   v_color = color;
@@ -30,5 +30,5 @@ void main() {
 #ifdef IMPELLER_TARGET_VULKAN
   gl_ViewportIndex = int(tile);
 #endif
-  mcsm_viewport_index = uint(tile);
+  viewport_index = uint(tile);
 }

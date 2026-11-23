@@ -110,7 +110,7 @@ final noStencil = gpu.StencilConfig();
 
 /// Returns the Direct3D 11 sampler state [s] as a whole sampler of the
 /// engine.
-gpu.McsmSampler sampler(SamplerState s) => gpu.McsmSampler(
+gpu.PrismarineSampler sampler(SamplerState s) => gpu.PrismarineSampler(
   minFilter: s.minLinear ? .linear : .nearest,
   magFilter: s.magLinear ? .linear : .nearest,
   mipFilter: s.mipLinear ? .linear : .nearest,

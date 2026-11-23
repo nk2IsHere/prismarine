@@ -279,7 +279,7 @@ Future<String?> _separateSamplers(_Kit kit) async {
       p.bindSeparateTexture(f.getSeparateTextureSlot('depth_map'), depth);
       p.bindSeparateSampler(
         f.getSeparateSamplerSlot('compare_sampler'),
-        gpu.McsmSampler(compare: gpu.CompareFunction.less),
+        gpu.PrismarineSampler(compare: gpu.CompareFunction.less),
       );
       p.bindUniform(f.getUniformSlot('Ref'), kit.floats([ref, 0, 0, 0]));
     });

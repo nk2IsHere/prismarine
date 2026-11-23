@@ -1,6 +1,6 @@
 // The calls of the engine fork that the checks use, found by symbol. The
 // app then builds and runs on the engine of Flutter too. RenderPass and
-// McsmDrawList pass as native pointers. They extend
+// PrismarineDrawList pass as native pointers. They extend
 // NativeFieldWrapperClass1 as the exports of flutter_gpu take them. The
 // analyzer does not resolve dart:nativewrappers and does not see that.
 // ignore_for_file: ffi_native_only_classes_extending_nativefieldwrapperclass1_can_be_pointer, must_be_a_subtype, extends_non_class
@@ -17,39 +17,42 @@ import 'package:flutter_gpu/gpu.dart';
 /// of release builds and 8 retained draws. Bits 16 to 512 are described
 /// at their getters. Bit 1024 marks bits of the running backend, which are
 /// read again until Flutter GPU has made its context.
-/// `MCSM_ENGINE_FEATURES=<mask>` keeps only the bits of the mask.
-int get mcsmEngineFeatures {
-  final known = _mcsmFeaturesKnown;
+/// `PRISMARINE_ENGINE_FEATURES=<mask>` keeps only the bits of the mask. The
+/// old form `MCSM_ENGINE_FEATURES` is read too.
+int get prismarineEngineFeatures {
+  final known = _prismarineFeaturesKnown;
   if (known != null) return known;
   final lib = DynamicLibrary.process();
-  if (!lib.providesSymbol('InternalFlutterGpu_McsmFeatures')) {
-    return _mcsmFeaturesKnown = 0;
+  if (!lib.providesSymbol('InternalFlutterGpu_PrismarineFeatures')) {
+    return _prismarineFeaturesKnown = 0;
   }
   final bits = lib.lookupFunction<Int64 Function(), int Function()>(
-    'InternalFlutterGpu_McsmFeatures',
+    'InternalFlutterGpu_PrismarineFeatures',
     isLeaf: true,
   )();
   final mask = int.tryParse(
-    io.Platform.environment['MCSM_ENGINE_FEATURES'] ?? '',
+    io.Platform.environment['PRISMARINE_ENGINE_FEATURES'] ??
+        io.Platform.environment['MCSM_ENGINE_FEATURES'] ??
+        '',
   );
   final features = mask == null ? bits : bits & mask;
   // An engine without bit 1024 has final bits.
   if ((bits & 1024) != 0 ||
-      !lib.providesSymbol('InternalFlutterGpu_McsmBackend')) {
-    _mcsmFeaturesKnown = features;
+      !lib.providesSymbol('InternalFlutterGpu_PrismarineBackend')) {
+    _prismarineFeaturesKnown = features;
   }
   return features;
 }
 
-int? _mcsmFeaturesKnown;
+int? _prismarineFeaturesKnown;
 
 /// The backend of Flutter GPU, `metal`, `gles` or `vulkan`. Null before
 /// Flutter GPU has made its context and on other engines.
-String? get mcsmBackend {
+String? get prismarineBackend {
   final lib = DynamicLibrary.process();
-  if (!lib.providesSymbol('InternalFlutterGpu_McsmBackend')) return null;
+  if (!lib.providesSymbol('InternalFlutterGpu_PrismarineBackend')) return null;
   final b = lib.lookupFunction<Int32 Function(), int Function()>(
-    'InternalFlutterGpu_McsmBackend',
+    'InternalFlutterGpu_PrismarineBackend',
     isLeaf: true,
   )();
   return switch (b) {
@@ -63,46 +66,51 @@ String? get mcsmBackend {
 /// Returns true when the pipelines of a pass take the own format of each
 /// colour attachment. The engine of Flutter builds every attachment with
 /// the format of attachment 0.
-bool get mcsmMixedColorAttachmentFormats => (mcsmEngineFeatures & 1) != 0;
+bool get prismarineMixedColorAttachmentFormats =>
+    (prismarineEngineFeatures & 1) != 0;
 
-/// Returns true when [mcsmSetColorWriteMask] is available.
-bool get mcsmColorWriteMask => (mcsmEngineFeatures & 2) != 0;
+/// Returns true when [prismarineSetColorWriteMask] is available.
+bool get prismarineColorWriteMask => (prismarineEngineFeatures & 2) != 0;
 
 /// Sets the channels that the draws of [pass] write to colour attachment
 /// [colorAttachmentIndex]. Bits 0 to 3 are red, green, blue and alpha. The
-/// mask is part of the pipeline state. Needs [mcsmColorWriteMask].
-void mcsmSetColorWriteMask(
+/// mask is part of the pipeline state. Needs [prismarineColorWriteMask].
+void prismarineSetColorWriteMask(
   RenderPass pass,
   int mask, {
   int colorAttachmentIndex = 0,
 }) {
-  if (!mcsmColorWriteMask) {
-    throw UnsupportedError('mcsmSetColorWriteMask needs the mcsm6 engine');
+  if (!prismarineColorWriteMask) {
+    throw UnsupportedError(
+      'prismarineSetColorWriteMask needs an engine with feature bit 2',
+    );
   }
-  _mcsmSetColorWriteMask(pass, colorAttachmentIndex, mask & 0xF);
+  _prismarineSetColorWriteMask(pass, colorAttachmentIndex, mask & 0xF);
 }
 
 @Native<Void Function(Pointer<Void>, Int, Int)>(
   symbol: 'InternalFlutterGpu_RenderPass_SetColorWriteMask',
 )
-external void _mcsmSetColorWriteMask(
+external void _prismarineSetColorWriteMask(
   RenderPass pass,
   int colorAttachmentIndex,
   int writeMask,
 );
 
-/// Returns true when [McsmDrawList] is available.
-bool get mcsmRetainedDraws => (mcsmEngineFeatures & 8) != 0;
+/// Returns true when [PrismarineDrawList] is available.
+bool get prismarineRetainedDraws => (prismarineEngineFeatures & 8) != 0;
 
-/// Draws recorded from a render pass with [mcsmBeginRecording]. A draw keeps
-/// all that it sent, the pipeline, the bindings, the vertex and index
-/// buffers and the counts. [mcsmReplay] sends it again in a later pass with
-/// targets of the same formats. The buffers and textures stay alive and
-/// their contents may change between replays. Needs [mcsmRetainedDraws].
-base class McsmDrawList extends NativeFieldWrapperClass1 {
-  McsmDrawList() {
-    if (!mcsmRetainedDraws) {
-      throw UnsupportedError('McsmDrawList needs the mcsm6 engine');
+/// Draws recorded from a render pass with [prismarineBeginRecording]. A draw
+/// keeps all that it sent, the pipeline, the bindings, the vertex and index
+/// buffers and the counts. [prismarineReplay] sends it again in a later pass
+/// with targets of the same formats. The buffers and textures stay alive and
+/// their contents may change between replays. Needs [prismarineRetainedDraws].
+base class PrismarineDrawList extends NativeFieldWrapperClass1 {
+  PrismarineDrawList() {
+    if (!prismarineRetainedDraws) {
+      throw UnsupportedError(
+        'PrismarineDrawList needs an engine with feature bit 8',
+      );
     }
     _initialize(this);
   }
@@ -115,7 +123,7 @@ base class McsmDrawList extends NativeFieldWrapperClass1 {
   @Native<Void Function(Handle)>(
     symbol: 'InternalFlutterGpu_DrawList_Initialize',
   )
-  external static void _initialize(McsmDrawList wrapper);
+  external static void _initialize(PrismarineDrawList wrapper);
 
   @Native<Int Function(Pointer<Void>)>(
     symbol: 'InternalFlutterGpu_DrawList_GetLength',
@@ -131,50 +139,53 @@ base class McsmDrawList extends NativeFieldWrapperClass1 {
 }
 
 /// Appends every later draw on [pass] to [list].
-void mcsmBeginRecording(RenderPass pass, McsmDrawList list) =>
-    _mcsmBeginRecording(pass, list);
+void prismarineBeginRecording(RenderPass pass, PrismarineDrawList list) =>
+    _prismarineBeginRecording(pass, list);
 
-void mcsmEndRecording(RenderPass pass) => _mcsmEndRecording(pass);
+void prismarineEndRecording(RenderPass pass) => _prismarineEndRecording(pass);
 
 /// Sends the draws of [list] at the first [count] of [indices] on [pass],
 /// in that order. The pass sends its own bindings again with its next draw.
 /// Returns false when an index is out of range or a draw failed.
-bool mcsmReplay(
+bool prismarineReplay(
   RenderPass pass,
-  McsmDrawList list,
+  PrismarineDrawList list,
   Int32List indices,
   int count,
 ) {
   RangeError.checkValueInInterval(count, 0, indices.length, 'count');
-  return _mcsmReplay(pass, list, indices, count);
+  return _prismarineReplay(pass, list, indices, count);
 }
 
 @Native<Void Function(Pointer<Void>, Pointer<Void>)>(
   symbol: 'InternalFlutterGpu_RenderPass_BeginRecording',
   isLeaf: true,
 )
-external void _mcsmBeginRecording(RenderPass pass, McsmDrawList list);
+external void _prismarineBeginRecording(
+  RenderPass pass,
+  PrismarineDrawList list,
+);
 
 @Native<Void Function(Pointer<Void>)>(
   symbol: 'InternalFlutterGpu_RenderPass_EndRecording',
   isLeaf: true,
 )
-external void _mcsmEndRecording(RenderPass pass);
+external void _prismarineEndRecording(RenderPass pass);
 
 @Native<Bool Function(Pointer<Void>, Pointer<Void>, Handle, Int)>(
   symbol: 'InternalFlutterGpu_RenderPass_Replay',
 )
-external bool _mcsmReplay(
+external bool _prismarineReplay(
   RenderPass pass,
-  McsmDrawList list,
+  PrismarineDrawList list,
   Int32List indices,
   int count,
 );
 
-/// Returns true when [mcsmWriteTextureDirect] can write. Bit 16, on Metal
+/// Returns true when [prismarineWriteTextureDirect] can write. Bit 16, on Metal
 /// only.
-bool get mcsmDirectTextureWrites =>
-    (mcsmEngineFeatures & 16) != 0 &&
+bool get prismarineDirectTextureWrites =>
+    (prismarineEngineFeatures & 16) != 0 &&
     (io.Platform.isMacOS || io.Platform.isIOS);
 
 /// Writes [bytes], the whole base level, into the memory of [texture] with
@@ -183,15 +194,19 @@ bool get mcsmDirectTextureWrites =>
 /// [texture]. Returns false and writes nothing on another backend, for a
 /// texture that is not host-visible or for a size that is not the one of
 /// the base level.
-bool mcsmWriteTextureDirect(Texture texture, ByteData bytes, {int slice = 0}) {
-  if (!mcsmDirectTextureWrites) return false;
-  return _mcsmWriteDirect(texture, gpuContext, bytes, slice);
+bool prismarineWriteTextureDirect(
+  Texture texture,
+  ByteData bytes, {
+  int slice = 0,
+}) {
+  if (!prismarineDirectTextureWrites) return false;
+  return _prismarineWriteDirect(texture, gpuContext, bytes, slice);
 }
 
 @Native<Bool Function(Pointer<Void>, Pointer<Void>, Handle, Int)>(
-  symbol: 'InternalFlutterGpu_Texture_McsmWriteDirect',
+  symbol: 'InternalFlutterGpu_Texture_PrismarineWriteDirect',
 )
-external bool _mcsmWriteDirect(
+external bool _prismarineWriteDirect(
   Texture texture,
   GpuContext context,
   ByteData bytes,
@@ -200,12 +215,13 @@ external bool _mcsmWriteDirect(
 
 /// Returns true when a command buffer may hold several render passes in
 /// turn. Bit 64. Making a pass ends the encoder of the previous one.
-bool get mcsmPassesPerCommandBuffer => (mcsmEngineFeatures & 64) != 0;
+bool get prismarinePassesPerCommandBuffer =>
+    (prismarineEngineFeatures & 64) != 0;
 
-/// Returns true when [mcsmSetViewports] can set several viewports. Bit 256,
-/// on Metal and on Vulkan devices with multiViewport.
-bool get mcsmViewportArrays {
-  final bits = mcsmEngineFeatures;
+/// Returns true when [prismarineSetViewports] can set several viewports. Bit
+/// 256, on Metal and on Vulkan devices with multiViewport.
+bool get prismarineViewportArrays {
+  final bits = prismarineEngineFeatures;
   if ((bits & 256) == 0) return false;
   // Without bit 1024 the bit 256 is the one of Metal.
   return (bits & 1024) != 0 || io.Platform.isMacOS || io.Platform.isIOS;
@@ -213,39 +229,42 @@ bool get mcsmViewportArrays {
 
 /// Returns true when a render pass binds every colour attachment. Metal
 /// always does, Vulkan with bit 1024 and OpenGL ES with bit 128.
-bool get mcsmMultipleColorAttachments {
+bool get prismarineMultipleColorAttachments {
   if (io.Platform.isMacOS || io.Platform.isIOS) return true;
-  final bits = mcsmEngineFeatures;
-  if ((bits & 1024) != 0 && mcsmBackend == 'vulkan') return true;
+  final bits = prismarineEngineFeatures;
+  if ((bits & 1024) != 0 && prismarineBackend == 'vulkan') return true;
   return (bits & 128) != 0;
 }
 
 /// Returns true when a uniform block may hold a large array that the
 /// backend binds as one buffer, on Metal and Vulkan.
-bool get mcsmUniformArraysInBlocks {
-  // MCSM_UNIFORM_ARRAYS=0 answers as OpenGL ES does.
-  if (io.Platform.environment['MCSM_UNIFORM_ARRAYS'] == '0') return false;
+bool get prismarineUniformArraysInBlocks {
+  // PRISMARINE_UNIFORM_ARRAYS=0 answers as OpenGL ES does.
+  final env = io.Platform.environment;
+  if ((env['PRISMARINE_UNIFORM_ARRAYS'] ?? env['MCSM_UNIFORM_ARRAYS']) == '0') {
+    return false;
+  }
   if (io.Platform.isMacOS || io.Platform.isIOS) return true;
-  final bits = mcsmEngineFeatures;
-  return (bits & 1024) != 0 && mcsmBackend == 'vulkan';
+  final bits = prismarineEngineFeatures;
+  return (bits & 1024) != 0 && prismarineBackend == 'vulkan';
 }
 
 /// Returns true when the engine draws from a first instance in one call.
 /// Bit 512. Another engine binds the instance buffers again at the offset.
-bool get mcsmFirstInstanceDraws => (mcsmEngineFeatures & 512) != 0;
+bool get prismarineFirstInstanceDraws => (prismarineEngineFeatures & 512) != 0;
 
 /// Sets up to 16 [viewports] and a scissor rect for each for the later
 /// draws on [pass]. A primitive goes to the viewport that its vertex stage
-/// writes to a `flat out uint mcsm_viewport_index` output. On Vulkan the
+/// writes to a `flat out uint viewport_index` output. On Vulkan the
 /// stage also writes `gl_ViewportIndex`. An empty list goes back to one
 /// viewport. Returns false where the engine or backend has no viewport
 /// arrays. The caller then draws tile by tile.
-bool mcsmSetViewports(
+bool prismarineSetViewports(
   RenderPass pass,
   List<Viewport> viewports, {
   List<Scissor>? scissors,
 }) {
-  if (!mcsmViewportArrays || viewports.length > 16) return false;
+  if (!prismarineViewportArrays || viewports.length > 16) return false;
   final n = viewports.length;
   final v = Float32List(6 * n);
   final s = Int32List(4 * n);
@@ -265,13 +284,13 @@ bool mcsmSetViewports(
       ..[4 * i + 2] = r?.width ?? p.width
       ..[4 * i + 3] = r?.height ?? p.height;
   }
-  return _mcsmSetViewports(pass, v, s, n);
+  return _prismarineSetViewports(pass, v, s, n);
 }
 
 @Native<Bool Function(Pointer<Void>, Handle, Handle, Int)>(
-  symbol: 'InternalFlutterGpu_RenderPass_McsmSetViewports',
+  symbol: 'InternalFlutterGpu_RenderPass_PrismarineSetViewports',
 )
-external bool _mcsmSetViewports(
+external bool _prismarineSetViewports(
   RenderPass pass,
   Float32List viewports,
   Int32List scissors,

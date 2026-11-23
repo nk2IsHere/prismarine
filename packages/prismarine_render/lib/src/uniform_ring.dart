@@ -122,7 +122,7 @@ class BlockStore {
     // The submitted runs keep what they bound. No later run binds a view of
     // an older epoch.
     for (final a in _arenas) {
-      a.mcsmRelease();
+      a.prismarineRelease();
     }
     _arenas.clear();
     _staging.clear();

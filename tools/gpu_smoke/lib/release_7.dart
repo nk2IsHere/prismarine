@@ -63,8 +63,10 @@ Future<bool> _done(gpu.CommandBuffer cb) {
 
 Future<bool> release7Checks(void Function(String) log) async {
   final ctx = gpu.gpuContext;
-  final features = fs.mcsmEngineFeatures;
-  log('SMOKE engine features $features backend ${fs.mcsmBackend ?? 'unknown'}');
+  final features = fs.prismarineEngineFeatures;
+  log(
+    'SMOKE engine features $features backend ${fs.prismarineBackend ?? 'unknown'}',
+  );
   final lib = await gpu.ShaderLibrary.fromAsset(smokeBundle);
   if (lib == null) {
     log('SMOKE release 7 FAILED: no smoke shader bundle');

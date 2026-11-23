@@ -8,7 +8,7 @@
 PRODUCT_NAME = gpu_smoke
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = dev.mcsm.gpuSmoke
+PRODUCT_BUNDLE_IDENTIFIER = dev.prismarine.gpuSmoke
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 dev.mcsm. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 dev.prismarine. All rights reserved.

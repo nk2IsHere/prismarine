@@ -6,8 +6,8 @@ extension _Replays on _Smoke {
   // replayed into a fresh pass must give the bytes of the recorded pass in
   // every target.
   Future<void> replays() async {
-    if (fs.mcsmRetainedDraws) {
-      final mixed = fs.mcsmMixedColorAttachmentFormats;
+    if (fs.prismarineRetainedDraws) {
+      final mixed = fs.prismarineMixedColorAttachmentFormats;
       final vG = lib['SmokeGbufferVertex']!;
       final gLayout = gpu.VertexLayout(
         buffers: [
@@ -75,7 +75,7 @@ extension _Replays on _Smoke {
       final uniforms = ctx.createDeviceBufferWithCopy(
         ByteData.sublistView(blocks),
       );
-      final list = fs.McsmDrawList();
+      final list = fs.PrismarineDrawList();
       Future<(Uint8List, Uint8List)> frame(bool record) async {
         var cb = ctx.createCommandBuffer();
         final p = cb.createRenderPass(
@@ -92,7 +92,7 @@ extension _Replays on _Smoke {
         );
         p.setColorBlendEnable(false, colorAttachmentIndex: 1);
         if (record) {
-          fs.mcsmBeginRecording(p, list);
+          fs.prismarineBeginRecording(p, list);
           p
             ..bindPipeline(pipeline)
             ..setDepthWriteEnable(true)
@@ -116,9 +116,9 @@ extension _Replays on _Smoke {
               gpu.BufferView(uniforms, offsetInBytes: 256, lengthInBytes: 16),
             )
             ..draw(6);
-          fs.mcsmEndRecording(p);
+          fs.prismarineEndRecording(p);
         } else {
-          fs.mcsmReplay(p, list, Int32List.fromList([0, 1]), 2);
+          fs.prismarineReplay(p, list, Int32List.fromList([0, 1]), 2);
         }
         await _done(cb);
         cb = ctx.createCommandBuffer();
@@ -169,7 +169,7 @@ extension _Replays on _Smoke {
 
   // 3. A direct texture write (feature 16), drawn and read back.
   Future<void> directWrite() async {
-    if (fs.mcsmDirectTextureWrites) {
+    if (fs.prismarineDirectTextureWrites) {
       final t = ctx.createTexture(
         gpu.StorageMode.hostVisible,
         4,
@@ -180,7 +180,10 @@ extension _Replays on _Smoke {
       for (var i = 0; i < 64; i += 4) {
         texel.setAll(i, [77, 33, 200, 255]);
       }
-      final wrote = fs.mcsmWriteTextureDirect(t, ByteData.sublistView(texel));
+      final wrote = fs.prismarineWriteTextureDirect(
+        t,
+        ByteData.sublistView(texel),
+      );
       final out = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
       final cb = ctx.createCommandBuffer();
       final fsv = ScreenCopy.loaded!.vertex;
@@ -226,7 +229,7 @@ Future<bool> _viewportArrays(
   gpu.GpuContext ctx,
   gpu.Texture Function(gpu.PixelFormat) rt,
 ) async {
-  final supported = fs.mcsmViewportArrays;
+  final supported = fs.prismarineViewportArrays;
   final lib = await gpu.ShaderLibrary.fromAsset(smokeBundle);
   if (lib == null) return false;
   final v = lib['SmokeTilesVertex']!, f = lib['SmokeTilesFragment']!;
@@ -362,7 +365,7 @@ Future<bool> _viewportArrays(
   final b = rt(gpu.PixelFormat.r8g8b8a8UNormInt);
   cb = ctx.createCommandBuffer();
   final pb = begin(cb, b);
-  final set = fs.mcsmSetViewports(pb, tiles, scissors: scissors);
+  final set = fs.prismarineSetViewports(pb, tiles, scissors: scissors);
   pb
     ..bindVertexBuffer(
       gpu.BufferView(instances, offsetInBytes: 0, lengthInBytes: 28 * 4),
@@ -371,7 +374,7 @@ Future<bool> _viewportArrays(
     ..draw(3, instanceCount: 4);
   // A later draw without them goes back to one viewport over the whole
   // target. It draws nothing here and must not fail.
-  fs.mcsmSetViewports(pb, const []);
+  fs.prismarineSetViewports(pb, const []);
   await _done(cb);
   final ra = await _readRgba8(a), rb = await _readRgba8(b);
   var differ = 0, covered = 0;

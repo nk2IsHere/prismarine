@@ -39,7 +39,7 @@ class Win32Window {
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
-  // Unattended runs (mcsm): the window never activates or takes focus, stays
+  // Unattended runs: the window never activates or takes focus, stays
   // on top and out of the taskbar, and doesn't take mouse clicks. Set before
   // Create.
   void SetBackground(bool background) { background_ = background; }

@@ -136,7 +136,7 @@ extension _RunnerSlots on FrameRunner {
 
   /// Returns [s] as a sampler of the engine, one per distinct state, looked
   /// up once per state object.
-  gpu.McsmSampler _sampler(
+  gpu.PrismarineSampler _sampler(
     SamplerState s,
   ) => _samplerObjects[s] ??= _samplers.putIfAbsent(
     '${s.minLinear}${s.magLinear}${s.mipLinear}${s.address.join()}'
@@ -420,5 +420,5 @@ final class _StageInputs {
   ];
   final List<TextureRef?> textures;
   final List<bool> texel;
-  final List<gpu.McsmSampler> samplers;
+  final List<gpu.PrismarineSampler> samplers;
 }
