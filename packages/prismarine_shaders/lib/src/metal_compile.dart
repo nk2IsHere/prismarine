@@ -45,7 +45,7 @@ class MetalCompiler {
 
   /// Compiles [msl] in [dir] with [flags] from [metalCompileFlags]. Returns
   /// the library or the first error of the compiler. The library takes its
-  /// UUID from the name of its output file. The name is fixed and the same
+  /// UUID from the name of its output file. The name is fixed, so the same
   /// source gives the same bytes.
   Future<(Uint8List?, String?)> compile(
     Uint8List msl,
@@ -81,8 +81,9 @@ String _firstError(ProcessResult r, String file) => '${r.stderr}'
     .replaceFirst(file, '')
     .trim();
 
-/// Returns the compiler flags for a bundle entry with [options], the same
-/// flags as the compile of the engine at run time. `metal_preserve_invariance`
+/// Returns the compiler flags for a bundle entry with [options]. These are the
+/// flags that the engine uses when it compiles at run time.
+/// `metal_preserve_invariance`
 /// and `metal_safe_math` select MSL 2.3 with invariance and with safe maths.
 /// An entry with neither gets no flags. The target is the macOS of the SDK.
 /// An older macOS refuses the library and the engine then compiles the
@@ -131,7 +132,7 @@ Map<String, Uint8List> metalSources(Uint8List bundle) {
 /// `viewport_index` bound to the viewport index of Metal, or null when the
 /// source has none. A draw then goes to that viewport of the viewport array
 /// of the pass. The GLSL declares the output as `flat out uint
-/// viewport_index`, which impellerc writes as a user output.
+/// viewport_index`, and impellerc turns it into a user output.
 Uint8List? metalViewportIndex(Uint8List msl) {
   final text = utf8.decode(msl, allowMalformed: true);
   if (!_userViewportIndex.hasMatch(text)) return null;

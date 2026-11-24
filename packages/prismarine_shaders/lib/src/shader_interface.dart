@@ -1,6 +1,6 @@
-/// Returns the interface of the GLSL [source] of a shader of [stage]
-/// (`vertex`, `pixel` or `compute`) in the JSON form that `ShaderRecord` of
-/// prismarine_frame reads.
+/// Returns the interface of the GLSL [source] of a shader of [stage] in the
+/// JSON form that `ShaderRecord` of prismarine_frame reads. [stage] is
+/// `vertex`, `pixel` or `compute`.
 ///
 /// The interface comes from the declarations, which follow these rules.
 ///

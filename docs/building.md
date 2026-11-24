@@ -1,7 +1,7 @@
 # Building
 
 This page takes you from a fresh computer to the sample app running on the patched engine. The `prismarine` command
-does every step: it checks your tools, fetches the engine, cooks the shaders and assets of an app and builds and
+does every step. It checks your tools, fetches the engine, cooks the shaders and assets of an app, builds the app and
 starts it. The sample app in `apps/prismarine_sample` is the example throughout.
 
 ## Installing the tools
@@ -13,36 +13,44 @@ the Flutter SDK in `~/.prismarine/flutter` first. Clone it there at its tag.
 git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/.prismarine/flutter
 ```
 
-The build hooks of `prismarine_pad` and `prismarine_audio_out` compile Rust crates and `prismarine_pad` builds SDL
-with CMake and a C compiler.
+On macOS, install Xcode 27 from the App Store. Then install CMake and the Metal compiler of Xcode.
 
-- On macOS, install Xcode 27 from the App Store and CMake with `brew install cmake`. Then download the Metal compiler of
-  Xcode with `xcodebuild -downloadComponent MetalToolchain`.
-- On Ubuntu, install the packages of a Flutter desktop app and the ALSA headers for the audio output.
-- On Windows, install Git and Visual Studio 2022 with the workload "Desktop development with C++", which brings the
-  MSVC compiler and CMake.
+```sh
+brew install cmake
+xcodebuild -downloadComponent MetalToolchain
+```
+
+On Ubuntu, install these packages.
 
 ```sh
 sudo apt install git curl xz-utils clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev
 ```
 
-Install Rust with rustup into its default folders, `~/.rustup` and `~/.cargo`, since a build hook does not get
-`RUSTUP_HOME` or `CARGO_HOME`. On Windows, run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and keep its MSVC
-toolchain. A macOS app build compiles each crate for both CPUs of the Mac, which needs two targets.
+On Windows, install Git and Visual Studio 2022 with the workload "Desktop development with C++". The workload includes
+the MSVC compiler and CMake.
+
+Install Rust with rustup into its default folders, `~/.rustup` and `~/.cargo`. Build hooks do not receive
+`RUSTUP_HOME` or `CARGO_HOME`, so other folders do not work. On macOS and Linux, run the installer of rustup.
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+On Windows, run `rustup-init.exe` from [rustup.rs](https://rustup.rs) and keep its MSVC toolchain. On macOS, also add
+the Rust targets of both CPUs of the Mac.
+
+```sh
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
-The engine is a download from the GitHub releases of prismarine. The download needs the GitHub CLI, `gh`, logged in
-with `gh auth login` or a token in `GH_TOKEN`. Set `PRISMARINE_ENGINE_REPO` to the repository of the releases in the
+prismarine downloads the engine from its GitHub releases. The download needs the GitHub CLI, `gh`, logged in with
+`gh auth login` or with a token in `GH_TOKEN`. Set `PRISMARINE_ENGINE_REPO` to the repository of the releases in the
 form `<owner>/<name>`.
 
 ## Putting prismarine on your PATH
 
 The `bin` folder of your checkout holds the command, `bin/prismarine` for macOS and Linux and `bin\prismarine.bat` for
-Windows. Add that folder to your `PATH` once, in `~/.zshrc` or `~/.bashrc`.
+Windows. Add this line to `~/.zshrc` or `~/.bashrc`, with the path of your checkout.
 
 ```sh
 export PATH="$HOME/prismarine/bin:$PATH"
@@ -116,18 +124,18 @@ assets:
 | `shaders.<id>.manifest` | A shader bundle manifest of impellerc, in place of `programs` |
 | `shaders.<id>.package` | The package that holds `programs` or `manifest`. Without it the path is relative to the app |
 | `shaders.<id>.out` | The folder of the bundles and `records.json`, or the bundle file of a manifest |
-| `shaders.<id>.backends` | `metal` and `vulkan` by default |
-| `shaders.<id>.shard` | The shaders in one bundle, 25 by default |
-| `shaders.<id>.impellerc-args` | More arguments of impellerc |
+| `shaders.<id>.backends` | The backends of the bundles, `metal` and `vulkan` by default |
+| `shaders.<id>.shard` | The number of shaders in one bundle file, 25 by default |
+| `shaders.<id>.impellerc-args` | Extra arguments for every impellerc run |
 | `assets.<id>.run` | The command of the step, run in the folder of the app. `{out}` is its output folder |
 | `assets.<id>.out` | The output folder. `{data}` is `~/.prismarine`, or `%LOCALAPPDATA%\prismarine` on Windows |
-| `assets.<id>.out-env` | A variable that sets the output folder |
+| `assets.<id>.out-env` | An environment variable that sets the output folder in place of `out` |
 | `assets.<id>.inputs` | Files and folders of the app and `package:<name>` for the code of a package |
-| `assets.<id>.exists` | Files of a finished output. An output that has them and was not prepared by the command counts as current |
+| `assets.<id>.exists` | Files that a complete output holds. An output folder that holds them counts as current, also when the command did not prepare it |
 
-A step runs again only when one of its inputs changed. The shaders also cook in the build hook of the app and a plain
-`flutter build` then builds the app with current shaders too. Add `prismarine_cook` and `hooks` to the dependencies of your app
-and this file as `hook/build.dart`.
+A step runs again only when one of its inputs changed. A plain `flutter build` also compiles the shaders when your app
+has a build hook. Add `prismarine_cook` and `hooks` to the dependencies of your app and this file as
+`hook/build.dart`.
 
 ```dart
 import 'package:hooks/hooks.dart';
@@ -190,8 +198,9 @@ prismarine engine build
 
 `setup` clones depot_tools and Flutter at the engine revision of your SDK and fetches the sources of the engine.
 `patch` applies the patches that the tree lacks and `build` builds the release out folder of your CPU, or of both CPUs
-with `--cpu=both`. After a new patch, `patch` applies only that patch and `build` takes a few minutes. The builds use
-an engine built from the patches when no fetched engine of the release is in the engine folder.
+with `--cpu=both`. After a new patch, `patch` applies only that patch and `build` takes a few minutes. `prismarine
+build` and `prismarine run` use the engine built from the patches when the engine folder holds no fetched engine of
+the release.
 
 To publish a release, set its name, build and package it on each platform and upload the archives.
 
@@ -201,6 +210,6 @@ prismarine engine package --cpu=both --dest=~/engine-packages
 prismarine engine publish --dest=~/engine-packages
 ```
 
-`release` writes the new name into `RELEASE` and into the engine check of `prismarine_scene`, which you commit.
+`release` writes the new name into `RELEASE` and into the engine check of `prismarine_scene`. Commit both files.
 `publish` creates the GitHub release or adds the archives to it. [The engine
 README](../third_party/flutter_engine/README.md) lists every patch and the requirements of each platform.

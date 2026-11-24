@@ -13,7 +13,8 @@ ArgParser bundleArgParser() => ArgParser()
   ..addMultiOption(
     'backend',
     defaultsTo: ['metal_desktop=metal', 'vulkan=vulkan'],
-    help: 'An impellerc backend and the directory of its bundles.',
+    help:
+        'An impellerc backend and the folder of its bundles, as <backend>=<folder>.',
   )
   ..addMultiOption(
     'impellerc-arg',
@@ -27,11 +28,15 @@ ArgParser bundleArgParser() => ArgParser()
         'An entry option and its value, such as '
         'metal_preserve_invariance=true. Values true and false are booleans.',
   )
-  ..addOption('jobs', defaultsTo: '4', help: 'The impellerc runs at a time.')
+  ..addOption(
+    'jobs',
+    defaultsTo: '4',
+    help: 'The number of impellerc runs at a time.',
+  )
   ..addOption(
     'shard',
     defaultsTo: '$shardEntries',
-    help: 'The entries in a shard.',
+    help: 'The number of entries in a shard.',
   )
   ..addOption(
     'cache',

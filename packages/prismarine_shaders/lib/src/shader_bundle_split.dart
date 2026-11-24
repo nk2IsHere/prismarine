@@ -100,8 +100,8 @@ const shaderBundleBackends = {
   'vulkan': 5,
 };
 
-/// The `BackendShader` field that holds the source of a backend, the MSL of
-/// Metal.
+/// The `BackendShader` field that holds the source of a backend, such as the
+/// MSL of Metal.
 const backendShaderSource = 5;
 
 /// The `BackendShader` field that holds the compiled code of a backend, a
@@ -109,8 +109,8 @@ const backendShaderSource = 5;
 const backendShaderCompiled = 6;
 
 /// Returns [bundle] with only the backends in [keep]. An app on Metal loads
-/// the `metal_desktop` copy and an app on Vulkan the `vulkan` copy and each
-/// backend can be stored in a bundle of its own. [metalCompiled] maps entry
+/// only the `metal_desktop` copy and an app on Vulkan only the `vulkan` copy.
+/// Each backend can then go in a bundle of its own. [metalCompiled] maps entry
 /// names to Metal libraries for the `compiled` field of `metal_desktop`.
 /// [metalSource] maps entry names to the source that replaces the one of
 /// `metal_desktop`.
@@ -145,7 +145,8 @@ class _Reader {
   int get root => d.getUint32(0, Endian.little);
   int u32(int o) => d.getUint32(o, Endian.little);
 
-  /// The absolute offset of [field] in the table at [t], or null.
+  /// The absolute offset of [field] in the table at [t], or null when the
+  /// table lacks it.
   int? field(int t, int field) {
     final vt = t - d.getInt32(t, Endian.little);
     final vtLen = d.getUint16(vt, Endian.little);
@@ -157,8 +158,8 @@ class _Reader {
 
   int deref(int o) => o + u32(o);
 
-  /// The number of fields the table at [t] has a vtable slot for, up to its
-  /// last present one.
+  /// The number of vtable slots of the table at [t], up to its last present
+  /// field.
   int fieldCount(int t) {
     final vt = t - d.getInt32(t, Endian.little);
     var n = (d.getUint16(vt, Endian.little) - 4) ~/ 2;
@@ -181,8 +182,8 @@ int _copy(
   Uint8List? source,
 }) {
   final fields = _schema[table]!;
-  // A field that this schema lacks would be dropped without notice. The
-  // schema of impellerc grew and [_schema] must follow it.
+  // A field that this schema lacks would be dropped without notice. [_schema]
+  // must follow each change to the schema of impellerc.
   if (r.fieldCount(t) > fields.length) {
     throw FormatException(
       '$table has ${r.fieldCount(t)} fields; the copier knows ${fields.length}',

@@ -159,8 +159,8 @@ class EngineCommand extends BaseCommand {
           ])
             await b.build(c, jobs: jobs, mode: argResults!.option('mode')!),
         ];
-        // A cross build reads the host out folder, so the object files are deleted
-        // only after every build.
+        // A cross build reads the host out folder, so the object files are
+        // deleted only after every build.
         if (argResults!.flag('trim')) outs.forEach(b.trim);
       case 'test':
         if (os != 'linux') {

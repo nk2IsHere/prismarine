@@ -22,7 +22,9 @@ JSON form that `ShaderRecord` of prismarine_frame reads.
 
 The command line builds bundles too:
 
-    dart run prismarine_shaders bundle <root> --cache=<cache folder>
+```sh
+dart run prismarine_shaders bundle <root> --cache=<cache folder>
+```
 
 ## Example
 

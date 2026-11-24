@@ -22,8 +22,8 @@ class ShaderBundleSettings {
   final List<String> impellercArgs;
   final Map<String, Object> entryOptions;
 
-  /// One shader-bundle entry for [stage] (`vert`, `frag`, `comp`, or
-  /// `vertex`, `fragment`, `compute`) in [file].
+  /// One shader bundle entry for [stage] in [file]. [stage] is `vert`, `frag`
+  /// or `comp`, or its long form `vertex`, `fragment` or `compute`.
   Map<String, Object> entry(String file, String stage) => {
     'type': switch (stage) {
       'vert' || 'vertex' => 'vertex',
@@ -70,9 +70,9 @@ String? findImpellerc({List<String> engineRoots = const []}) {
   return best?.path;
 }
 
-/// The default number of entries in a shard. A reader of the bundles loads
-/// a whole shard for any one of its shaders and a small shard keeps the
-/// bytes read for one scene low.
+/// The default number of entries in a shard. A reader loads a whole shard for
+/// any one of its shaders. A small shard keeps the bytes that one scene reads
+/// low.
 const shardEntries = 25;
 
 /// The result of [buildShaderBundles].
@@ -115,7 +115,7 @@ Future<ShaderBundleReport> buildShaderBundles(
   for (final f in tree.listSync(recursive: true).whereType<File>()) {
     // Windows lists with backslashes. Entry ids and effects use slashes.
     final rel = f.path.substring(tree.path.length + 1).replaceAll(r'\', '/');
-    // Programs include the files of a bodies folder. They are no entries.
+    // Programs include the files of a bodies folder. They are not entries.
     if (rel.split('/').contains('bodies')) continue;
     if (effects != null && !effects.contains(rel.split('/').first)) continue;
     entries[rel] = (f.path, rel.split('.').last);
