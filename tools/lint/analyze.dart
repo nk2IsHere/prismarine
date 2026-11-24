@@ -35,12 +35,18 @@ Options:
   --apply-format        format our code in place (`dart format` on the files
                         in scope, `cargo fmt` in each crate); the result is
                         layout only, which same_code confirms
+  --allow-skip=<check>:<dir>,...  also accept these skips, such as
+                        flutter:apps/prismarine_sample on a runner that does
+                        not resolve the app
 
 The ratchet: no package's count for a code may grow, and no new code may
 appear in it. A package or check that was skipped (not resolved, no
-toolchain) is reported and left out of the comparison.
+toolchain) is reported and left out of the comparison. A skip fails the run
+unless analyze.allowed_skips in tools/lint/config.yaml or --allow-skip lists
+it as <check>:<dir>.
 
-Exit codes: 0 clean against the baseline, 1 something grew, 2 usage.
+Exit codes: 0 clean against the baseline, 1 something grew or an unexpected
+skip, 2 usage.
 ''';
 
 String get baselinePath => LintConfig.of(repoRoot()).baseline('analyze');
@@ -77,6 +83,7 @@ void main(List<String> args) {
     'list',
     'update-baseline',
     'apply-format',
+    'allow-skip',
   ];
   for (final a in args) {
     if (!a.startsWith('--') ||
@@ -112,8 +119,15 @@ void main(List<String> args) {
       stdout.writeln('${d.where}: ${d.key}: ${d.message}');
     }
   }
+  final allowed = {
+    ...LintConfig.of(repoRoot()).analyzeAllowedSkips,
+    ...?opt('allow-skip')?.split(',').where((s) => s.isNotEmpty),
+  };
+  final unexpected = <Skip>[];
   for (final s in run.skipped) {
-    stdout.writeln('analyze: skipped $s');
+    final ok = allowed.contains(s.key);
+    if (!ok) unexpected.add(s);
+    stdout.writeln('analyze: skipped $s${ok ? ' (allowed)' : ''}');
   }
   final totals = <String, int>{};
   for (final d in run.diags) {
@@ -126,6 +140,30 @@ void main(List<String> args) {
       .join(', ');
   stdout.writeln('analyze: ${run.diags.length} diagnostics ($byCheck)');
   _ratchet(run, update: opt('update-baseline') != null);
+  if (unexpected.isNotEmpty) {
+    stdout.writeln(
+      'analyze: FAILED, ${unexpected.length} skipped. Resolve them, or list '
+      'them in analyze.allowed_skips of the lint config:',
+    );
+    for (final s in unexpected) {
+      stdout.writeln('  ${s.key}');
+    }
+    exitCode = 1;
+  }
+}
+
+/// A package or crate that a check did not analyse, with the cause.
+class Skip {
+  Skip(this.check, this.dir, this.reason);
+  final String check;
+  final String dir;
+  final String reason;
+
+  /// The form `<check>:<dir>` of the allow-lists.
+  String get key => '$check:$dir';
+
+  @override
+  String toString() => '$check $dir ($reason)';
 }
 
 /// One run of the checks with the findings and the packages that were
@@ -142,7 +180,7 @@ class _Run {
 
   /// `<check>|<package>` for every package that a check analysed.
   final ran = <String>{};
-  final skipped = <String>[];
+  final skipped = <Skip>[];
 
   // The directories with Dart code outside any package, analysed from the
   // root.
@@ -161,7 +199,7 @@ class _Run {
     for (final p in pkgDirs.where((p) => _isFlutter(root, p))) {
       final dir = '$flutterRoot/$p';
       if (!File('$dir/.dart_tool/package_config.json').existsSync()) {
-        skipped.add('flutter $p (not resolved under $flutterRoot)');
+        skipped.add(Skip('flutter', p, 'not resolved under $flutterRoot'));
         continue;
       }
       final r = _run('dart', ['analyze', '--format=machine', '.'], dir);
@@ -187,7 +225,9 @@ class _Run {
       ], '$root/$c');
       final found = _clippy(r.stdout, c);
       if (r.exitCode != 0 && found.isEmpty) {
-        skipped.add('clippy $c (cargo failed: ${_firstError(r.stderr)})');
+        skipped.add(
+          Skip('clippy', c, 'cargo failed: ${_firstError(r.stderr)}'),
+        );
         continue;
       }
       diags.addAll(found);
@@ -217,7 +257,9 @@ class _Run {
       final f = _run('cargo', ['fmt', '--check', '--', '-l'], '$root/$c');
       final out = (f.stdout as String).trim();
       if (f.exitCode != 0 && out.isEmpty) {
-        skipped.add('format $c (cargo fmt failed: ${_firstError(f.stderr)})');
+        skipped.add(
+          Skip('format', c, 'cargo fmt failed: ${_firstError(f.stderr)}'),
+        );
         continue;
       }
       for (final l in out.split('\n').where((l) => l.isNotEmpty)) {
@@ -320,14 +362,21 @@ void _ratchet(_Run run, {required bool update}) {
   }
 }
 
-ProcessResult _run(String exe, List<String> args, String dir) =>
-    Process.runSync(
+// A missing tool, such as cargo, gives a failed result with the error in
+// stderr. The check then reports a skip.
+ProcessResult _run(String exe, List<String> args, String dir) {
+  try {
+    return Process.runSync(
       exe,
       args,
       workingDirectory: dir,
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
     );
+  } on ProcessException catch (e) {
+    return ProcessResult(0, -1, '', 'error: $exe did not start: ${e.message}');
+  }
+}
 
 bool _isFlutter(String root, String pkg) {
   final f = File('$root/$pkg/pubspec.yaml');

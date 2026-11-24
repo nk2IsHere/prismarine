@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:prismarine_scene/prismarine_scene.dart';
 
 import 'src/perf.dart';
 import 'src/sample_data.dart';
@@ -154,6 +155,10 @@ class _SampleAppState extends State<SampleApp> {
           () => _takeShot(path),
         );
       }
+    } on EngineMismatch catch (e) {
+      stderr.writeln('sample: $e');
+      if (widget.smoke || widget.perf != null) exit(1);
+      setState(() => _error = e);
     } on SampleDataMissing catch (e) {
       stderr.writeln('sample: $e');
       if (widget.smoke || widget.perf != null) exit(1);

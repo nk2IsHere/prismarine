@@ -121,7 +121,7 @@ Future<bool> release9Checks(void Function(String) log) async {
   } catch (_) {
     log(
       'SMOKE release 9 FAILED: no shader bundle of the features. '
-      'tool/features_bundle.sh builds it.',
+      'Build the app with `prismarine build`.',
     );
     return false;
   }

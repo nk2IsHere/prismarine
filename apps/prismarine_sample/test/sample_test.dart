@@ -29,7 +29,7 @@ void main() {
     } else {
       expect(dir, endsWith('/.prismarine/sample'));
     }
-    expect('${SampleDataMissing('/x')}', contains('dart tool/fetch.dart'));
+    expect('${SampleDataMissing('/x')}', contains('prismarine cook'));
   });
 
   test('a placed camera looks along the negative z axis of its node', () {

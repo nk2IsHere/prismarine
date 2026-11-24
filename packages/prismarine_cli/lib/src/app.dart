@@ -1,0 +1,320 @@
+import 'dart:io';
+import 'dart:isolate';
+
+import 'package:prismarine_cook/prismarine_cook.dart';
+
+import 'doctor.dart';
+import 'engine_fetch.dart';
+import 'toolchain.dart';
+import 'tools.dart';
+import 'ui.dart';
+
+/// The steps of a command on one app, which are toolchain, engine, packages, cook,
+/// build and run.
+class AppSteps {
+  AppSteps(this.ui, this.toolchain, this.tools, {this.project});
+
+  final Ui ui;
+  final Toolchain toolchain;
+  final Tools tools;
+
+  /// The app, or null outside one.
+  final Project? project;
+
+  Map<String, String> get env => toolchain.environment;
+
+  /// Checks the toolchain. Throws a [Failure] that lists every problem.
+  Future<String> checkToolchain(EngineRelease? release) =>
+      ui.step<String>('toolchain', () async {
+        final checks = ToolchainChecks(
+          toolchain,
+          (c) => tools.read(c),
+          os: hostPlatform(),
+          env: env,
+        );
+        final problems = [
+          for (final f in checks.all(release))
+            if (f.problem) f,
+        ];
+        if (problems.isEmpty) return 'Flutter ${toolchain.version}';
+        throw Failure(
+          [for (final p in problems) '${p.what}: ${p.detail}.'].join('\n  '),
+          fix: problems.map((p) => p.fix).whereType<String>().join('\n       '),
+        );
+      }, done: (s) => s);
+
+  /// The release of the app, or of the checkout of this command outside an
+  /// app.
+  EngineRelease release() {
+    final p = project;
+    final file = p == null ? null : releaseFileOfApp(p.dir);
+    if (file != null) return EngineRelease.read(file);
+    if (p != null && !p.needsPubGet) {
+      throw Failure(
+        'The app ${p.name} does not use the flutter_gpu of prismarine.',
+        fix:
+            'add flutter_gpu with a path to third_party/flutter_gpu of prismarine to dependency_overrides of pubspec.yaml',
+      );
+    }
+    return EngineRelease.read(
+      '${checkoutOfCommand()}/third_party/flutter_engine/RELEASE',
+    );
+  }
+
+  /// Finds the engine of [release] and fetches it when it is missing or
+  /// [force] is set. Writes the choice for the build hook of the app.
+  Future<Engine> engine(
+    EngineRelease release, {
+    bool force = false,
+    String? target,
+  }) {
+    var fetched = false;
+    final host = hostTarget();
+    return ui.step(
+      target == null ? 'engine' : 'engine $target',
+      () async {
+        final target_ = target ?? host;
+        if (target_ == null) {
+          throw Failure('prismarine has no engine for this OS and CPU.');
+        }
+        final dir = engineDir(env);
+        var e = force ? null : findEngine(dir, target_, release).engine;
+        if (e != null && e.missingParts.isNotEmpty && e.fetched) e = null;
+        if (e == null) {
+          e = await fetchEngine(release, dir, target_, toolchain, tools, ui);
+          fetched = true;
+        } else {
+          linkDartSdk(e, toolchain);
+        }
+        final missing = e.missingParts;
+        if (missing.isNotEmpty) {
+          throw Failure(
+            'The engine in ${e.outPath} lacks ${missing.join(', ')}.',
+            fix: 'build the engine again',
+          );
+        }
+        final p = project;
+        if (p != null && target_ == host) {
+          EngineChoice(e.impellerc, release.tag).writeIn(p.dir);
+        }
+        return e;
+      },
+      done: (e) => !e.fetched
+          ? 'built from the patches in ${e.src}'
+          : fetched
+          ? '${release.name} fetched into ${e.src.substring(0, e.src.length - 4)}'
+          : '${release.name} ok',
+    );
+  }
+
+  /// Runs `flutter pub get` in the app when its package config is older
+  /// than its pubspec.
+  Future<void> packages() async {
+    final p = project!;
+    if (!p.needsPubGet) return;
+    await ui.step('packages', () async {
+      await tools.must(
+        [toolchain.flutter, 'pub', 'get'],
+        dir: p.dir,
+        log: 'pub-get',
+        cause: '`flutter pub get` failed in ${p.dir}.',
+        fix: 'prismarine flutter pub get --verbose',
+      );
+    }, done: (_) => 'resolved');
+  }
+
+  /// Cooks the shaders of the app with [engine].
+  Future<void> shaders(Engine engine, {bool force = false}) async {
+    final p = project!;
+    for (final entry in p.shaders) {
+      await ui.step(
+        'shaders ${entry.id}',
+        () async {
+          try {
+            return await cookShaders(
+              p,
+              entry,
+              impellerc: engine.impellerc,
+              cacheDir: shaderCacheDir(env),
+              force: force,
+            );
+          } on ShaderCookError catch (e) {
+            throw Failure('$e', fix: 'fix the shader, then prismarine cook');
+          } on ProjectError catch (e) {
+            throw Failure('$e', fix: 'edit ${p.dir}/prismarine.yaml');
+          }
+        },
+        done: (c) => c.current
+            ? '${c.shaders} current'
+            : '${c.shaders - c.cached} rebuilt, ${c.cached} from the cache',
+      );
+    }
+  }
+
+  /// Runs the asset steps of the app that are stale.
+  Future<void> assets({bool force = false}) async {
+    final p = project!;
+    for (final step in p.assets) {
+      await ui.step(
+        'assets ${step.id}',
+        () async {
+          try {
+            return await cookAsset(
+              p,
+              step,
+              environment: env,
+              force: force,
+              run: (command, dir) async {
+                final c = [
+                  command.first == 'dart' ? toolchain.dart : command.first,
+                  ...command.skip(1),
+                ];
+                final r = await tools.run(
+                  c,
+                  dir: dir,
+                  log: 'assets-${step.id}',
+                );
+                if (!r.ok) {
+                  throw Failure(
+                    '`${command.join(' ')}` exited with ${r.exitCode}.\n'
+                    '${_tail(r.output)}',
+                    fix: 'prismarine cook --verbose',
+                    log: '${tools.logDir}/assets-${step.id}.log',
+                  );
+                }
+                return 0;
+              },
+            );
+          } on ProjectError catch (e) {
+            throw Failure('$e', fix: 'edit ${p.dir}/prismarine.yaml');
+          }
+        },
+        done: (c) => c.adopted
+            ? 'taken as current, the output in ${c.out} has no stamp'
+            : c.current
+            ? 'current in ${c.out}'
+            : 'done in ${c.out}',
+      );
+    }
+  }
+
+  /// Builds the app for [platform] in release mode on [engine], or on the
+  /// engine of Flutter without one. [debug] builds in debug mode on the
+  /// engine of Flutter. Returns the path of the built app.
+  Future<String> build(
+    String platform,
+    Engine? engine,
+    List<String> extra, {
+    bool debug = false,
+  }) {
+    final p = project!;
+    return ui.step('build $platform', () async {
+      await tools.must(
+        [
+          toolchain.flutter,
+          'build',
+          platform,
+          if (debug) '--debug' else '--release',
+          if (!debug && engine != null) ...engine.flutterArgs,
+          ...extra,
+        ],
+        dir: p.dir,
+        log: 'build-$platform',
+        cause: '`flutter build $platform` failed.',
+        fix: 'prismarine build $platform --verbose',
+      );
+      final app = builtApp(p.dir, platform, release: !debug);
+      if (!File(app).existsSync()) {
+        throw Failure('The build left no app at $app.');
+      }
+      return app;
+    }, done: (a) => 'ok, ${_relative(a, p.dir)}');
+  }
+
+  String _relative(String path, String dir) =>
+      path.startsWith('$dir/') ? path.substring(dir.length + 1) : path;
+}
+
+String _tail(String output) {
+  final lines = output
+      .trimRight()
+      .split('\n')
+      .where((l) => l.trim().isNotEmpty)
+      .toList();
+  return lines
+      .skip(lines.length > 10 ? lines.length - 10 : 0)
+      .map((l) => '    $l')
+      .join('\n');
+}
+
+/// The prismarine checkout of this command. A `dart run` from another
+/// repository finds it through the package of the command, a launcher
+/// through the path of its kernel file.
+String checkoutOfCommand() {
+  final starts = <String>[];
+  try {
+    final lib = Isolate.resolvePackageUriSync(
+      Uri.parse('package:prismarine_cli/prismarine_cli.dart'),
+    );
+    if (lib != null) starts.add(File.fromUri(lib).parent.path);
+  } on Object {
+    // A kernel file without a package config resolves no package.
+  }
+  starts.add(File(Platform.script.toFilePath()).parent.path);
+  for (final start in starts) {
+    var d = Directory(start);
+    while (true) {
+      if (File('${d.path}/third_party/flutter_engine/RELEASE').existsSync()) {
+        return d.path;
+      }
+      if (d.parent.path == d.path) break;
+      d = d.parent;
+    }
+  }
+  throw Failure(
+    'The command is not in a checkout of prismarine: ${Platform.script}.',
+  );
+}
+
+/// The path of the app of the Flutter app in [dir] built for [platform].
+String builtApp(String dir, String platform, {bool release = true}) {
+  final mode = release ? 'Release' : 'Debug';
+  switch (platform) {
+    case 'macos':
+      final name =
+          _setting(
+            '$dir/macos/Runner/Configs/AppInfo.xcconfig',
+            RegExp(r'^PRODUCT_NAME\s*=\s*(.+)$'),
+          ) ??
+          'Runner';
+      return '$dir/build/macos/Build/Products/$mode/$name.app/Contents/MacOS/$name';
+    case 'linux':
+      final name =
+          _setting(
+            '$dir/linux/CMakeLists.txt',
+            RegExp(r'^set\(BINARY_NAME\s+"([^"]+)"\)'),
+          ) ??
+          'runner';
+      final arch = hostTarget() == 'linux-arm64' ? 'arm64' : 'x64';
+      return '$dir/build/linux/$arch/${mode.toLowerCase()}/bundle/$name';
+    default:
+      final name =
+          _setting(
+            '$dir/windows/CMakeLists.txt',
+            RegExp(r'^set\(BINARY_NAME\s+"([^"]+)"\)'),
+          ) ??
+          'runner';
+      final arch = hostTarget() == 'windows-arm64' ? 'arm64' : 'x64';
+      return '$dir\\build\\windows\\$arch\\runner\\$mode\\$name.exe';
+  }
+}
+
+String? _setting(String file, RegExp pattern) {
+  final f = File(file);
+  if (!f.existsSync()) return null;
+  for (final l in f.readAsLinesSync()) {
+    final m = pattern.firstMatch(l.trim());
+    if (m != null) return m[1]!.trim();
+  }
+  return null;
+}

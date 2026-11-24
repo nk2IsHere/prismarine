@@ -3,7 +3,7 @@ import 'package:prismarine_render/prismarine_render.dart';
 import 'package:prismarine_scene/prismarine_scene.dart';
 
 /// Draws a prepared glTF from one of its cameras into a 1920 by 1080 frame.
-/// [shaders] comes from the bundle that tool/build_shaders.dart wrote.
+/// [shaders] comes from the bundle that the cook of the app wrote.
 Future<void> drawScene(String gltf, PbrShaderBundle shaders) async {
   final scene = GpuScene.load(gltf);
   final runner = FrameRunner(

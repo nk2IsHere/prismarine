@@ -33,6 +33,10 @@ class PbrShaderBundle {
   final Map<String, ShaderRecord> records;
 }
 
+/// The feature bits of the patched engine that the renderer needs, for
+/// `requireEngine` of prismarine_scene.
+const pbrEngineFeatures = EngineFeatures.compute | EngineFeatures.bindings;
+
 /// The shaders that the frame runner uses besides the plan's own.
 const pbrRunnerShaders = RunnerShaders(
   nullPixel: PbrShaderIds.nullPixel,
@@ -64,7 +68,11 @@ class PbrAssets implements RenderAssets {
 
   @override
   gpu.Shader shader(String id) => _shaders[id] ??=
-      shaders.library[id] ?? (throw StateError('no shader $id'));
+      shaders.library[id] ??
+      (throw StateError(
+        'The shader bundle has no shader $id. The bundle is older than '
+        'prismarine_pbr. Cook it again with `prismarine cook`.',
+      ));
 
   (GpuScene, int) _image(String stem) {
     final at = stem.lastIndexOf(':');

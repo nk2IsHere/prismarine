@@ -14,6 +14,11 @@ The sample app on macOS. Sponza 2022 Scene commissioned by Frank Meinl, sponsore
 ## Building and running engine
 
 To learn how to build and run sample application with prismarine engine, refer to [`Building`](docs/building.md).
+With the tools installed and `bin` of your checkout on your `PATH`, one command builds and runs the sample.
+
+```sh
+prismarine run
+```
 
 ## Packages
 
@@ -40,6 +45,8 @@ The README of each linked package gives its use, a short example and its platfor
 | [`prismarine_loop`](packages/prismarine_loop/README.md) | Frame pacing, GC pacing, a frame limiter, window focus, cursor capture and mouse look |
 | [`prismarine_debug`](packages/prismarine_debug/README.md) | Frame history, a profiler per frame, a log of GPU passes, glitch capture and a debug panel |
 | [`prismarine_cargo`](packages/prismarine_cargo/README.md) | A build hook that compiles the Rust crate of a package |
+| [`prismarine_cook`](packages/prismarine_cook/README.md) | The cook of an app from its `prismarine.yaml`, with stamps of the inputs and a build hook for its shaders |
+| [`prismarine_cli`](packages/prismarine_cli/README.md) | The `prismarine` command |
 
 ## Engine
 
@@ -65,9 +72,8 @@ prismarine renders through Metal on macOS and through Vulkan on Linux and Window
 | [Code checks](tools/lint/README.md) | Runs the analyzer, the formatters and file size checks and comments against a baseline |
 | [Heap and allocation profiler](tools/profiler/README.md) | Compares heap snapshots and shows the places that allocate |
 | [GPU smoke tool](tools/gpu_smoke/README.md) | Checks the Flutter GPU features of the engine on a machine |
-| [Machine locks](tools/machine/README.md) | Share one machine between the heavy jobs and the timed runs of every repository on it |
-| [Toolchain](tools/toolchain/README.md) | Sets the Flutter SDK, the pub cache and the engine directory of the machine in a shell |
-| [Engine release scripts](third_party/flutter_engine/README.md) | Build, package and fetch the patched engine for each platform |
+| [prismarine command](packages/prismarine_cli/README.md) | Checks the toolchain, fetches, builds and publishes the engine, cooks, builds and runs an app on every platform |
+| [Engine patches](third_party/flutter_engine/README.md) | The patches of the engine, its releases and the requirements of each platform |
 
 ## Licence
 

@@ -7,7 +7,8 @@ and a tone map. The details are on [the area page](../../docs/areas/pbr.md).
 ## Usage
 
 Load each scene with `GpuScene.load` of prismarine_scene and the shaders with `PbrShaderBundle.load` from the files
-that `dart tool/build_shaders.dart <out>` writes with the impellerc of the patched engine. `PbrAssets` serves both to a
+that the cook of your app writes from its `prismarine.yaml`, as [the build page](../../docs/building.md#your-own-app)
+describes. Call `requireEngine(pbrEngineFeatures)` of prismarine_scene first. `PbrAssets` serves both to a
 `FrameRunner` with `pbrRunnerShaders`. Each frame, set the fields of a `PbrCamera`, of the point lights in
 `PbrBuilder.lights` and of `PbrBuilder.settings`, then run the plan that `frame` returns. The plan stays the same object
 while the size of the view holds, and a frame allocates nothing.
@@ -22,7 +23,7 @@ import 'package:prismarine_render/prismarine_render.dart';
 import 'package:prismarine_scene/prismarine_scene.dart';
 
 /// Draws a prepared glTF from one of its cameras into a 1920 by 1080 frame.
-/// [shaders] comes from the bundle that tool/build_shaders.dart wrote.
+/// [shaders] comes from the bundle that the cook of the app wrote.
 Future<void> drawScene(String gltf, PbrShaderBundle shaders) async {
   final scene = GpuScene.load(gltf);
   final runner = FrameRunner(

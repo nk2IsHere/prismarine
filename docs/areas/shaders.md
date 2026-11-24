@@ -25,6 +25,9 @@ nested lists for checks.
 
 ## Shader interfaces
 
+`programRecords` returns the interface of every program of a program tree by its id, read from its source with its
+includes in place and its `#ifdef` blocks resolved. The [cook](cook.md) writes it as `records.json`.
+
 `shaderInterface` reads the interface of a GLSL source from its declarations, in the JSON form that `ShaderRecord` of
 [prismarine_frame](frame.md) reads. A uniform block has the form `uniform Frame { … } cb0;` and its rows are its
 std140 size. A texture has the form `uniform texture2D baseColor; // t0` with a separate `uniform sampler s0;`, or

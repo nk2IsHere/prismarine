@@ -16,8 +16,7 @@ lints, the profiler, the machine scripts, the workspace pubspec or the workflow 
 
 The workflows use Flutter 3.47.7 with Dart 3.13.5 and Rust 1.88.0, the versions of the gate. The Flutter packages run
 their tests on the stock Flutter SDK with the patched flutter_gpu of `third_party`. The shader bundle test uses the
-impellerc of the SDK. The sample app and gpu_smoke need the patched engine and stay in the local gate. A check that
-`analyze.dart` skips for a missing toolchain fails the workflow.
+impellerc of the SDK. The sample app and gpu_smoke need the patched engine and stay in the local gate.
 
 The pub cache, the cargo registry and the target dirs of clippy, `cargo test` and the build hooks are cached. A cache
 made for a pull request serves only that pull request. A run by hand on `main` makes the caches that every pull request

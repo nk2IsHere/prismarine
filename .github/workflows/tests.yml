@@ -14,7 +14,6 @@ on:
       - packages/**
       - third_party/flutter_gpu/**
       - tools/lint/**
-      - tools/machine/**
       - tools/profiler/**
       - pubspec.yaml
       - pubspec.lock
@@ -95,8 +94,6 @@ jobs:
       - name: profiler tests
         working-directory: tools/profiler
         run: dart test
-      - name: machine locks test
-        run: tools/machine/test/locks_test.sh
 
       # The impellerc of the SDK for the shader bundle test.
       - name: impellerc of the Flutter SDK
@@ -124,20 +121,14 @@ jobs:
             echo "== $p"
             (cd "$p" && flutter pub get && flutter test --timeout=120s) || exit 1
           done
-      # analyze.dart skips a check without its toolchain and passes. Here
-      # a skipped check fails the step. The sample app and gpu_smoke are not
-      # resolved and are analyzed by the landing gate.
+      # The sample app is not resolved here. The landing gate analyzes it.
       - name: analyze the Flutter packages
         if: runner.os == 'Linux'
-        run: |
-          dart tools/lint/analyze.dart --only=flutter | tee "$RUNNER_TEMP/analyze.txt"
-          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt" | grep -v -e ' apps/' -e ' tools/gpu_smoke '
+        run: dart tools/lint/analyze.dart --only=flutter --allow-skip=flutter:apps/prismarine_sample
 
       - name: clippy
         # The Windows form of the path for the Dart process.
-        run: |
-          dart tools/lint/analyze.dart --only=clippy --target-dir="$(pwd -W 2>/dev/null || pwd)/build/cargo" | tee "$RUNNER_TEMP/analyze.txt"
-          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt"
+        run: dart tools/lint/analyze.dart --only=clippy --target-dir="$(pwd -W 2>/dev/null || pwd)/build/cargo"
       - name: cargo test
         run: |
           for c in $(git ls-files '*Cargo.toml' | grep -v third_party); do

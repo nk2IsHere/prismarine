@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# prismarine starts the prismarine command of this checkout with the Dart of
+# the Flutter SDK. The command builds itself again when its sources change.
+set -e
+src=${BASH_SOURCE[0]}
+while [[ -L $src ]]; do
+  dir=$(cd -P "$(dirname "$src")" && pwd)
+  src=$(readlink "$src")
+  [[ $src == /* ]] || src=$dir/$src
+done
+root=$(cd -P "$(dirname "$src")/.." && pwd)
+sdk=
+for d in "${PRISMARINE_FLUTTER:-}" "$HOME/.prismarine/flutter"; do
+  if [[ -n $d && -x $d/bin/flutter ]]; then sdk=$(cd -P "$d" && pwd); break; fi
+done
+if [[ -z $sdk ]] && command -v flutter >/dev/null; then
+  sdk=$(cd -P "$(dirname "$(command -v flutter)")/.." && pwd)
+fi
+if [[ -z $sdk ]]; then
+  echo "prismarine needs the Flutter SDK 3.47.7. Install it with:" >&2
+  echo "  git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/.prismarine/flutter" >&2
+  exit 1
+fi
+cache=${PRISMARINE_PUB_CACHE:-$HOME/.prismarine/pub-cache}
+[[ -d $cache ]] && export PUB_CACHE=$(cd -P "$cache" && pwd)
+dart=$sdk/bin/dart
+kernel=$root/.dart_tool/prismarine/prismarine.dill
+if [[ ! -f $root/.dart_tool/package_config.json ]]; then
+  echo "prismarine: resolving the packages of $root" >&2
+  (cd "$root" && "$dart" pub get >/dev/null) || { (cd "$root" && "$dart" pub get); exit 1; }
+fi
+if [[ ! -f $kernel ]]; then
+  mkdir -p "$(dirname "$kernel")"
+  (cd "$root" && "$dart" compile kernel -o "$kernel" packages/prismarine_cli/bin/prismarine.dart >/dev/null)
+fi
+exec "$dart" "$kernel" "$@"

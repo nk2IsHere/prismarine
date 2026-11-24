@@ -8,33 +8,20 @@ Linux](#vulkan-on-windows-and-linux). Flutter GPU gains formats, texture arrays,
 texture views. The passes of a frame are released at submit and the Dart VM collects at an idle point that the app
 picks.
 
-The patched engine is optional. Every app builds and runs on the stock engine of Flutter too, only slower and the
+An app that needs no feature of the patches builds and runs on the stock engine of Flutter too. It is slower there and the
 frames are byte-identical on both. The patches apply to the engine of Flutter 3.47.7 stable, engine revision
 `deb287481e3ce9468f3434937ced4240a70539ca`. The patches are files in this directory. A downloaded or built engine is
-data in the engine directory, which is not in git.
+data in the engine directory, `PRISMARINE_ENGINE_DIR` or `~/.prismarine/engine`, which is not in git. The `prismarine`
+command of `bin/` fetches, builds, packs and publishes it, as [the build page](../../docs/building.md) describes.
 
 The Dart side of the patches is [third_party/flutter_gpu](../flutter_gpu/PATCHES.md). It finds the exports of the
 patched engine by symbol and falls back to the stock calls on the prebuilt engine. `tools/gpu_smoke` checks an engine on
 a platform.
 
-## Settings
-
-The scripts read these settings from the environment. Each one is also read in its `MCSM_` form, such as
-`MCSM_ENGINE_REPO`.
-
-| Setting | Meaning |
-|---|---|
-| `PRISMARINE_ENGINE_DIR` | The engine directory, with the fetched targets in `<dir>/<target>` and a built engine in `<dir>/flutter`. The default of the fetch scripts is `~/.prismarine/engine`, the engine directory of the toolchain, or `$MCSM_DATA/engine` when `MCSM_DATA` is set. |
-| `PRISMARINE_FLUTTER` | The Flutter SDK. The default is the `flutter` on `PATH`. |
-| `PRISMARINE_ENGINE_REPO` | The GitHub repository of the releases, as owner/name. The default is its value in a `private/config/*.env` above this directory. Releases from prismarine1 on are in the repository of prismarine, the older ones in the one of `MCSM_ENGINE_REPO`. |
-| `PRISMARINE_ENGINE_ARCHIVE` | A downloaded archive with its `.sha256` beside it, which `fetch.sh` unpacks in place of the download. |
-| `PRISMARINE_ENGINE_CPU`, `_MODE`, `_JOBS`, `_TRIM` | The CPU, runtime mode, ninja jobs and object-file clean-up of `build.sh`. |
-| `PRISMARINE_ENGINE_REV` | The engine revision that `linux.sh` checks out and `package.sh` records. |
-
 ## Fetching a release
 
-The GitHub release that `RELEASE` gives, now `engine-deb287481e3c-prismarine1`, holds the engine for six targets of 14 to
-21 MB each. Each archive holds only what a release `flutter build … --local-engine` reads.
+`RELEASE` gives the current release, now `engine-deb287481e3c-prismarine1`. Its GitHub release holds the engine for six
+targets of 14 to 21 MB each. Each archive holds only what a release `flutter build … --local-engine` reads.
 
 | Target | Archive | Out dir for `--local-engine` |
 |---|---|---|
@@ -45,77 +32,62 @@ The GitHub release that `RELEASE` gives, now `engine-deb287481e3c-prismarine1`, 
 | Windows x64 | `prismarine-engine-windows-x64.tar.xz` | `host_release` |
 | Windows arm64 | `prismarine-engine-windows-arm64.tar.xz` | `host_release_arm64` |
 
-You need the GitHub CLI, `gh`, logged in to an account that can read the private repository of the releases.
-
-    third_party/flutter_engine/fetch.sh            # the target of this machine, on macOS or Linux
-    third_party/flutter_engine/fetch.sh macos-x64  # another target
-    powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\fetch.ps1   # Windows
-
-The scripts download the archive and its `.sha256` and check it. They unpack it to `<engine dir>/<target>/` and link
-the `dart-sdk` of the engine to the one of the Flutter SDK, which has the same Dart. Then they print the flags for
-`flutter build`. Offline, download the archive and its `.sha256` from the release page and set
-`PRISMARINE_ENGINE_ARCHIVE=<file>`, or pass `fetch.ps1 -Archive <file>`.
+`prismarine engine` downloads the archive of your computer with the GitHub CLI, checks its SHA-256 and unpacks it into
+`<engine dir>/<target>`. It links the `dart-sdk` of the engine to the one of the Flutter SDK, which has the same Dart.
+`gh` must be logged in to an account that can read the repository of the releases, which `PRISMARINE_ENGINE_REPO`
+gives as `<owner>/<name>`, or a `private/config/*.env` above the checkout. Offline, download the archive and its
+`.sha256` from the release page and set `PRISMARINE_ENGINE_ARCHIVE=<file>`.
 
 ## Building the engine
 
-Each build checks out Flutter at the engine revision and applies `patches/*.patch`. It fetches the dependencies of the
-engine with `gclient` of Chromium's depot_tools, which the scripts install and builds only the release targets that the
-Flutter tool reads. Plan on several GB of disk and about an hour per machine. The Flutter SDK that builds the app must
-be 3.47.7.
+`prismarine engine setup` installs depot_tools of Chromium, clones Flutter at the engine revision of the Flutter SDK
+into `<engine dir>/flutter` and fetches the dependencies of the engine for your OS with `gclient`. `prismarine engine
+patch` applies `patches/*.patch` with `git am` and `patches/dart/*.patch` uncommitted to the Dart SDK at its `DEPS`
+revision. The engine stamps its Dart version from the HEAD of that checkout, which must stay the one that the kernel
+files of the Flutter tool carry. `prismarine engine build` builds only the release targets that the Flutter tool reads.
+Plan on several GB of disk and about an hour for the first build. The Flutter SDK that builds the app must be 3.47.7.
 
-A machine that holds the tree of the previous release builds the next one incrementally. Apply only the new patches,
-with `git am <patch>` in `<engine dir>/flutter` and `git apply <patch>` for a new Dart patch in
-`engine/src/flutter/third_party/dart`, then run the build step alone. For prismarine1 on the tree of mcsm11 these are
-0029, 0030, `dart/0003` and `dart/0004`. The builds then took 3 minutes for each macOS target at 6 jobs, 5 minutes for
-each Linux target at 10 jobs and 16 minutes for Windows x64 and 22 for arm64 at 12 jobs.
+A tree of the previous release builds the next one incrementally. `patch` applies only the patch files whose commits
+the tree lacks and the Dart patches that its Dart SDK lacks. For prismarine1 on the tree of mcsm11 these were 0029,
+0030, `dart/0003` and `dart/0004`. The builds then took 3 minutes for each macOS target at 6 jobs, 5 minutes for each
+Linux target at 10 jobs and 16 minutes for Windows x64 and 22 for arm64 at 12 jobs.
+
+| Option of `engine build` | Effect |
+|---|---|
+| `--cpu=x64\|arm64\|both` | The CPUs. The CPU of the computer by default. Linux and Windows cross-build arm64 |
+| `--mode=profile` | `out/host_profile_arm64` and its kin, for `flutter build --profile` with Dart flags such as `--no-inline-alloc` and `--profile_vm` of patch 0007 |
+| `--jobs=<n>` | The jobs of ninja, 6 on macOS, 10 on Linux and the cores on Windows by default |
+| `--trim` | Deletes the object files of the out dir afterwards, 2 to 4 GB. The next build is a full one |
 
 ### macOS, arm64 and x86_64
 
 You need Xcode 27 with its command-line tools and the Metal Toolchain, `xcodebuild -downloadComponent
 MetalToolchain`, about 0.8 GB. Xcode 27 ships without `metal` and the shaders of the engine need it. The sources take
-13 GB in `<engine dir>/flutter`, a shared clone of the Flutter SDK and each out dir takes 2.6 to 4.6 GB.
+13 GB in `<engine dir>/flutter`, a shared clone of the Flutter SDK, and each out dir takes 2.6 to 4.6 GB. The first arm64
+build took about an hour on an M2 Pro with 6 jobs. The x64 build took 13 minutes more with the sources already built.
 
-    third_party/flutter_engine/build.sh all                            # arm64, out/host_release_arm64
-    PRISMARINE_ENGINE_CPU=x64 third_party/flutter_engine/build.sh build  # Intel, out/host_release
-
-- `all` runs `setup` with depot_tools, the clone and `gclient sync`, which takes 20 to 40 minutes of downloads, then
-  `patch` and `build`.
-- The first arm64 build took about an hour on an M2 Pro with 6 jobs. The x64 build took 13 minutes more with the
-  sources already built.
-- After a patch edit, `build.sh patch` and then `build.sh build` take minutes.
-- `PRISMARINE_ENGINE_TRIM=1` deletes the object files of the out dir afterwards, about 2 GB. The next build is then a
-  full one.
-- `PRISMARINE_ENGINE_MODE=profile` builds `out/host_profile_arm64` for `flutter build macos --profile`. Profile builds
-  take `--no-inline-alloc` and `--profile_vm` as Dart flags.
-- After an Xcode update the out dir rebuilds in full. Download the Metal Toolchain again first. `gclient sync` made a
-  link `MacOSX<version>.sdk` into Xcode in `engine/src/flutter/prebuilts/SDKs`. When the SDK version of Xcode changes,
-  point a link with the new version at it and delete the old one, or the compiler finds no sysroot.
+After an Xcode update the out dir rebuilds in full. Download the Metal Toolchain again first. `gclient sync` made a link
+`MacOSX<version>.sdk` into Xcode in `engine/src/flutter/prebuilts/SDKs`. When the SDK version of Xcode changes, point a
+link with the new version at it and delete the old one, or the compiler finds no sysroot.
 
 ### Linux, x64 native and arm64 cross-built
 
 You need an x86_64 Linux machine, with Ubuntu 24.04 and 26.04 tested and `git`, `python3`, `curl`, `xz-utils` and
 `pkg-config`. `gclient` brings the compiler and the Debian sysroots for both CPUs. The sources take about 11 GB, each
 release out dir about 1 GB and the optional test build 5.4 GB. The builds take about 10 minutes for x64 and 13 for
-arm64 on 16 cores after the download.
-
-    export PRISMARINE_ENGINE_DIR=$HOME/flutter-engine
-    third_party/flutter_engine/linux.sh setup   # depot_tools, clone, patches, gclient sync
-    third_party/flutter_engine/linux.sh build   # out/host_release for x64, out/linux_release_arm64 for arm64
-    third_party/flutter_engine/linux.sh test    # optional, the gpu_unittests that the patches touch
+arm64 on 16 cores after the download. `prismarine engine test` builds the unit tests of Flutter GPU and Impeller on
+SwiftShader and runs the suites of Flutter GPU that the patches touch.
 
 The impeller tests on SwiftShader need a display. In Docker with `tools/gpu_smoke/Dockerfile.linux` and
-`O=$PRISMARINE_ENGINE_DIR/flutter/engine/src/out/host_debug_unopt_tests`, run
+`O=<engine dir>/flutter/engine/src/out/host_debug_unopt_tests`, run
 `VK_ICD_FILENAMES=$O/vk_swiftshader_icd.json VK_LAYER_PATH=$O/vulkan-data VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation LD_LIBRARY_PATH=$O xvfb-run -a -s "-screen 0 1280x800x24 -extension MIT-SHM" $O/impeller_unittests "--gtest_filter=*/Vulkan:-*Playground*"`.
 They give 711 passes and 21 skips.
-
-A Flutter app for Linux also needs the usual Linux desktop packages of Flutter, `clang cmake ninja-build pkg-config
-libgtk-3-dev liblzma-dev`, which `tools/gpu_smoke/Dockerfile.linux` installs.
 
 ### Windows, x64 native and arm64 cross-built
 
 You need Windows 10 or 11 on x64, an elevated PowerShell and about 30 GB free. The sources take about 10 GB and the out
 dirs 2.5 GB for x64 and 3.6 GB for arm64. A long build must run where closing a terminal or an SSH session does not stop
-it, such as a scheduled task. `windows-toolchain.ps1` installs the tools.
+it, such as a scheduled task. `prismarine engine toolchain` installs the tools.
 
 - Git and Python 3.12 through winget.
 - Visual Studio 2022 Build Tools with `Microsoft.VisualStudio.Workload.VCTools`,
@@ -125,33 +97,22 @@ it, such as a scheduled task. `windows-toolchain.ps1` installs the tools.
   feature `OptionId.WindowsDesktopDebuggers`.
 - Long paths, `LongPathsEnabled=1` and `git config --system core.longpaths true`.
 
-```
-powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\windows-toolchain.ps1
-powershell -ExecutionPolicy Bypass -File third_party\flutter_engine\windows.ps1 -EngineDir C:\flutter-engine
-```
-
-`windows.ps1` builds `out\host_release` for x64 and `out\host_release_arm64` for arm64, cross-built. `-Cpu
-x64|arm64|both` picks the CPUs and the logs go to `<EngineDir>\logs`. A build takes about 25 minutes for x64 and 35 for
-arm64 on 10 to 12 cores after a download of about 30 minutes. The arm64 engine is for arm64 Windows machines, since its
-`gen_snapshot.exe` is an arm64 program. The Flutter tool builds a Windows app only for the CPU of the machine.
+A build takes about 25 minutes for x64 and 35 for arm64 on 10 to 12 cores after a download of about 30 minutes. The
+arm64 engine is for arm64 Windows machines, since its `gen_snapshot.exe` is an arm64 program. The Flutter tool builds a
+Windows app only for the CPU of the machine.
 
 ## Using the engine
 
-Pass the engine to `flutter build` of a release build.
+`prismarine build` and `prismarine run` pass the engine to `flutter build` of a release build. `prismarine engine`
+prints the flags for a build by hand.
 
-    flutter build macos   --release --local-engine-src-path=<…>/engine/src --local-engine=host_release_arm64 --local-engine-host=host_release_arm64
-    flutter build linux   --release --local-engine-src-path=<…>/engine/src --local-engine=host_release --local-engine-host=host_release
-    flutter build windows --release --local-engine-src-path=<…>\engine\src --local-engine=host_release --local-engine-host=host_release
-
-- `<…>/engine/src` is `<engine dir>/<target>/src` for a fetched engine and `<engine dir>/flutter/engine/src` for a built
-  one.
+- The engine source is `<engine dir>/<target>/src` for a fetched engine and `<engine dir>/flutter/engine/src` for a built
+  one. A fetched engine of the release comes before a built one.
 - Arm64 Linux and Windows machines take `linux_release_arm64` and `host_release_arm64` for both flags.
-- A self-built out dir needs the `flutter_patched_sdk_product` link, which the build scripts make.
 - Debug builds always run on the stock engine. Profile builds run on a self-built profile out dir.
-- An app built on the patched engine is for one CPU only. The Flutter tool sets `ARCHS` from the name of the engine, so
-  `_arm64` gives arm64 and any other name x86_64. A universal macOS app needs one build per engine and a merge that
-  runs `lipo` on every Mach-O file, merges `NativeAssetsManifest.json` and signs the result.
-  [`templates/scripts/universal_app.sh`](../../templates/scripts/universal_app.sh) does the merge.
+- An app built on the patched engine is for one CPU only. The Flutter tool sets `ARCHS` from the name of the engine,
+  `_arm64` gives arm64 and any other name x86_64. `prismarine build macos --universal` builds once on each engine and
+  merges the two apps with `lipo` into one universal app.
 - The patched and stock engines can take turns in one build directory. The Flutter tool rebuilds what changed.
 - The runner of an app can set `--new_gen_semi_max_size` before the engine starts, through the Dart flags of patch
   0007. A `FLUTTER_ENGINE_SWITCHES` with `dart-flags=…` reaches release builds too.
@@ -180,14 +141,15 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
 
 ## Publishing a release
 
-1. Set `RELEASE` to the new tag, of the form `engine-<engine revision, 12 characters>-<release name>`.
-2. Package each target on the machine that built it, with `package.sh <engine/src> <out dir> <target> <dest> [<host out
-   dir>]` on macOS and Linux and `package.ps1 -Src … -Out … -Target … -Dest … [-HostOut …]` on Windows. Each makes the
-   archive and its `.sha256` and records `PRISMARINE_ENGINE_REV`.
-3. Check each archive the way users get it. Run `fetch.sh` with `PRISMARINE_ENGINE_ARCHIVE=<file>`, or `fetch.ps1
-   -Archive <file>`, into a scratch engine directory, then build an app or gpu_smoke on it.
-4. Run `gh release create <tag> -R "$PRISMARINE_ENGINE_REPO" --title … --notes-file … prismarine-engine-* SHA256SUMS`. An
-   asset must be under 2 GiB and these are about 20 MB.
+1. Run `prismarine engine release <name>`, such as `prismarine2`. It sets `RELEASE` to `engine-<engine revision, 12
+   characters>-<name>` and the release constant of the engine check of `prismarine_scene` to the same tag.
+2. Build and pack each target on the machine that built it, with `prismarine engine package --cpu=both
+   --dest=<folder>`. Each archive records the release, the engine revision and the patch set.
+3. Check each archive the way users get it. Fetch it with `PRISMARINE_ENGINE_ARCHIVE=<file>` into a scratch engine
+   directory, then run gpu_smoke on it with `prismarine run --app=tools/gpu_smoke`.
+4. Run `prismarine engine publish --dest=<folder>` on each machine. The first run creates the GitHub release and each
+   run adds its archives with a `SHA256SUMS` of every archive of the release. An asset must be under 2 GiB and these
+   are about 20 MB.
 
 ## Patches
 
@@ -413,11 +375,11 @@ their own disk caches.
 
 | Target | Built on | gn | Out dir | Size | First build |
 |---|---|---|---|---|---|
-| macOS arm64 | a Mac, `build.sh build` | `--mac-cpu=arm64` | `host_release_arm64` | 4.6 GB | about 1 h |
-| macOS x86_64 | a Mac, `PRISMARINE_ENGINE_CPU=x64 build.sh build` | `--mac-cpu=x64` | `host_release` | 2.6 GB without `obj/` | 13 min at 6 jobs |
-| Linux x64 | Linux x64, `linux.sh build` | the host | `host_release` | 0.7 GB | 10 min at 10 jobs |
+| macOS arm64 | a Mac, `engine build` | `--mac-cpu=arm64` | `host_release_arm64` | 4.6 GB | about 1 h |
+| macOS x86_64 | a Mac, `engine build --cpu=x64` | `--mac-cpu=x64` | `host_release` | 2.6 GB without `obj/` | 13 min at 6 jobs |
+| Linux x64 | Linux x64, `engine build` | the host | `host_release` | 0.7 GB | 10 min at 10 jobs |
 | Linux arm64 | Linux x64, cross-built with the Debian sysroot | `--target-os=linux --linux-cpu=arm64` | `linux_release_arm64` | 0.9 GB | 12.5 min |
-| Windows x64 | Windows, `windows.ps1` | the host | `host_release` | 2.5 GB | 23 min at 10 jobs |
+| Windows x64 | Windows, `engine build` | the host | `host_release` | 2.5 GB | 23 min at 10 jobs |
 | Windows arm64 | Windows, cross-built | `--windows-cpu arm64` | `host_release_arm64` | 3.6 GB | 35 min |
 
 The tests of the Linux x64 debug test build, `out/host_debug_unopt_tests` on SwiftShader, are these.

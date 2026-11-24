@@ -1,0 +1,16 @@
+name: prismarine_cli
+description: The prismarine command. Checks the toolchain, fetches the patched engine, cooks the shaders and assets of an app and builds and runs it on macOS, Linux and Windows.
+publish_to: none
+environment:
+  sdk: ^3.10.0
+resolution: workspace
+executables:
+  prismarine: prismarine
+dependencies:
+  args: ^2.7.0
+  crypto: ^3.0.6
+  prismarine_cook:
+    path: ../prismarine_cook
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

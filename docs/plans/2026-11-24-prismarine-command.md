@@ -1,0 +1,30 @@
+# Plan: the prismarine command
+
+From [the prismarine command design](../specs/2026-11-24-prismarine-command-design.md). The work is on branch
+`prismcli` of prismarine. mcsm does not change.
+
+1. `prismarine_shaders` gets `programRecords`, the interfaces of a program tree with includes and `#ifdef` blocks
+   resolved, with a test on a small tree.
+2. `prismarine_cook` gets the project file, the engine locator with the search for the export, the shader cook and the
+   asset steps with their stamps and `cookHook`. Its tests cover each part with faked engine folders.
+3. `prismarine_cli` gets the commands, the checks of doctor behind a faked process runner and the paths of the built
+   app. The launchers `bin/prismarine` and `bin/prismarine.bat` start it from a kernel snapshot.
+4. `prismarine_scene` gets `engine_check.dart` and `prismarine_pbr` gets `pbrEngineFeatures` and the message for a
+   missing shader. A test compares `prismarineEngineRelease` with `RELEASE`.
+5. The sample gets `prismarine.yaml` and its hook and calls `requireEngine`. `tool/shaders.sh` and
+   `tool/build_shaders.dart` of `prismarine_pbr` go.
+6. Docs: `docs/building.md`, the sample README, the root README, the toolchain README and area page, the pbr and
+   shaders pages, an area page for the command, state and the CI workflow paths.
+7. Checks: the tests of every touched package, analyze, format, code_shape and the alloc lint. A fresh clone on macOS
+   and on Linux runs `prismarine run` from nothing. A stale bundle and an old engine are shown to stop with their
+   messages.
+
+8. The engine actions `toolchain`, `setup`, `patch`, `build`, `test`, `package`, `release` and `publish`, with an
+   incremental rebuild of prismarine1 on the Mac and on the workstation that packs the published archives again.
+9. The build scripts go: `tools/toolchain`, the scripts of `third_party/flutter_engine`, `templates/` with
+   `universal_app.sh` in favour of `build macos --universal` and the scripts of gpu_smoke. mcsm runs the command of its
+   pinned checkout in `fetch_engine.sh` and `fetch_engine.ps1`, in a branch of mcsm.
+
+The landing gate in the private repository runs `bin/prismarine cook apps/prismarine_sample` in place of
+`tool/shaders.sh`, `eval "$(bin/prismarine env)"` in place of sourcing `env.sh` and `bin/prismarine build macos` for
+the app build. The coordinator changes it at landing.

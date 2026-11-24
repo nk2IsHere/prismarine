@@ -25,6 +25,11 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
   stays usable from pure-Dart isolates and tools. No umbrella package exists.
 - **Environment variables (2026-11-23).** Variables have the form `PRISMARINE_*`. A moved variable also reads its old
   `MCSM_*` form for one release.
+- **One command for building (2026-11-24).** Every build step is a subcommand of the `prismarine` command, written in
+  Dart, on macOS, Linux and Windows alike. The repository holds no shell scripts for building. The machine locks and
+  the gate scripts of the private repository are infrastructure and call the command where they build. An app lists
+  its cook in `prismarine.yaml`, and its build hook cooks its shaders. The design is in
+  [the command design](../specs/2026-11-24-prismarine-command-design.md).
 
 ## Use from mcsm
 
@@ -33,8 +38,8 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
   coordinator merges prismarine first, behind its gate. The pin bump in mcsm follows, behind the gate of mcsm. mcsm
   does not pin a prismarine commit that is not on `main`.
 - **Shared machine infrastructure (2026-11-23).** Each machine has one heavy-job lock, one measure lock and one
-  directory for the engine and the Flutter SDK. Both repositories use them. The scripts are in `tools/machine/` of
-  prismarine. The Wine oracle tools stay in mcsm.
+  directory for the engine and the Flutter SDK. Both repositories use them. The scripts are in prismarine's private
+  repository, since they serve our own machines. The Wine oracle tools stay in mcsm.
 
 ## Units that move
 

@@ -177,9 +177,11 @@ with the effect on and off. The runs vary by about 0.2 ms.
 
 ## Shaders
 
-The sources are in `shaders/programs/Pbr/`. `dart tool/build_shaders.dart <out>` builds them with the impellerc of the
-patched engine into `<out>/bundle/<backend>/Pbr.0.shaderbundle.gz` for Metal and Vulkan and writes the interface of
-each shader into `<out>/records.json`. An app carries both as assets and passes them to `PbrShaderBundle.load`.
+The sources are in `shaders/programs/Pbr/`. An app lists them in its `prismarine.yaml` and the [cook](cook.md) builds
+them with the impellerc of the patched engine into `<out>/bundle/<backend>/Pbr.0.shaderbundle.gz` for Metal and Vulkan
+and writes the interface of each shader into `<out>/records.json`. The app carries both as assets and passes them to
+`PbrShaderBundle.load`. A shader that the bundle lacks fails with its id and `prismarine cook` as the fix.
+`pbrEngineFeatures` holds the feature bits of the engine that the renderer needs, compute and the added bindings.
 
 ## Checks
 

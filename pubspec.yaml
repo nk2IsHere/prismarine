@@ -17,5 +17,7 @@ workspace:
   - packages/prismarine_audio_out
   - packages/prismarine_shaders
   - packages/prismarine_assets
+  - packages/prismarine_cook
+  - packages/prismarine_cli
   - tools/lint
   - tools/profiler
