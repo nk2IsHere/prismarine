@@ -138,7 +138,7 @@ At its start, an app calls `requireEngine` of `prismarine_scene` with the featur
 | Command | Effect |
 |---|---|
 | `prismarine run [<platform>]` | Builds the app in release mode on the patched engine and starts it |
-| `prismarine build [<platform>]` | Builds the app, `--stock` on the engine of Flutter and `--debug` in debug mode |
+| `prismarine build [<platform>]` | Builds the app without its asset steps, `--stock` on the engine of Flutter, `--debug` in debug mode and `--universal` for both CPUs of a Mac |
 | `prismarine cook [<app>]` | Cooks the shaders and runs the asset steps that are not current |
 | `prismarine doctor [<app>]` | Lists every problem with its fix |
 | `prismarine engine` | Fetches the engine of the release of the app |

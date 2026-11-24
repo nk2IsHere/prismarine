@@ -32,7 +32,7 @@ in one sentence, the last lines of the tool, the log and the command that fixes 
 | toolchain | the checks of doctor for the toolchain, every problem listed at once | never, it takes about 0.3 s |
 | engine | finds the engine of the release of the app and fetches it when it is missing | the engine is in place |
 | shaders | the shader entries of `prismarine.yaml` | their stamps are current |
-| assets | the asset steps of `prismarine.yaml` | their stamps are current |
+| assets | the asset steps of `prismarine.yaml`, in `run` only | their stamps are current |
 | build | `flutter build <platform> --release` with the engine flags | never, Flutter skips what is current |
 
 `run` then starts the built binary with the arguments after `--` and returns its exit code. The binary is

@@ -168,7 +168,7 @@ is the `out` of its `prismarine-engine.txt`. The engine library is `FlutterMacOS
 | `prismarine engine [<action>]` | `fetch` by default. `toolchain`, `setup`, `patch`, `build`, `test`, `package`, `release` and `publish` replace the engine scripts, as [the command page](../areas/cli.md) lists |
 | `prismarine cook [<app>] [--shaders] [--assets]` | Runs `flutter pub get` when needed and cooks what is stale |
 | `prismarine build [<platform>] [--app=<dir>] [--debug\|--stock\|--universal] [-- <flutter args>]` | Fetches a missing engine, cooks and runs `flutter build <platform> --release` with the engine flags. `--stock` builds on the engine of Flutter and `--universal` merges an arm64 and an x86_64 build for macOS |
-| `prismarine run [<platform>] [--app=<dir>] [-- <app args>]` | Builds, then starts the built app with its arguments and returns its exit code |
+| `prismarine run [<platform>] [--app=<dir>] [-- <app args>]` | Builds, runs the asset steps, then starts the built app with its arguments and returns its exit code |
 | `prismarine env [--shell=sh\|powershell\|cmd]` | Prints the lines that set the toolchain in a shell |
 | `prismarine flutter <args>`, `prismarine dart <args>` | Runs the tool of the SDK with the toolchain |
 

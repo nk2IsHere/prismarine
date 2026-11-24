@@ -50,7 +50,7 @@ class _Runner extends CommandRunner<int> {
 }
 
 /// The steps up to the build that `build` and `run` share. Returns the
-/// path of the built app.
+/// path of the built app. The asset steps run only with [assets].
 Future<String> _buildApp(
   BaseCommand c,
   String platform,
@@ -58,6 +58,7 @@ Future<String> _buildApp(
   bool debug = false,
   bool stock = false,
   bool universal = false,
+  bool assets = false,
 }) async {
   c.needFlutter();
   final project = c.findApp(given: c.argResults!.option('app'))!;
@@ -68,7 +69,7 @@ Future<String> _buildApp(
   await s.checkToolchain(release);
   final engine = await s.engine(release);
   await s.shaders(engine);
-  await s.assets();
+  if (assets) await s.assets();
   if (debug || stock) {
     c.ui.line(
       'This ${debug ? 'debug' : 'release'} build runs on the engine of '
@@ -169,6 +170,7 @@ class _RunCommand extends BaseCommand {
       platform,
       const [],
       stock: argResults!.flag('stock'),
+      assets: true,
     );
     ui.line('run ${app.split(RegExp(r'[/\\]')).last}');
     final p = await Process.start(
@@ -203,7 +205,7 @@ class _BuildCommand extends BaseCommand {
   String get name => 'build';
   @override
   String get description =>
-      'Checks the toolchain, fetches the engine, cooks and builds the app in release mode on the patched engine.';
+      'Checks the toolchain, fetches the engine, cooks the shaders and builds the app in release mode on the patched engine.';
   @override
   String get invocation =>
       'prismarine build [<platform>] [--app=<folder>] [-- <flutter build arguments>]';
