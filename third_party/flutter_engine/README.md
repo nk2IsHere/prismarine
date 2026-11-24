@@ -142,14 +142,15 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
 ## Publishing a release
 
 1. Run `prismarine engine release <name>`, such as `prismarine2`. It sets `RELEASE` to `engine-<engine revision, 12
-   characters>-<name>` and the release constant of the engine check of `prismarine_scene` to the same tag.
+   characters>-<name>`, and the release constant of the engine check of `prismarine_scene` and the `engine` of each
+   app's `prismarine.yaml` to the same tag.
 2. Build and pack each target on the machine that built it, with `prismarine engine package --cpu=both
    --dest=<folder>`. Each archive records the release, the engine revision and the patch set.
 3. Check each archive the way users get it. Fetch it with `PRISMARINE_ENGINE_ARCHIVE=<file>` into a scratch engine
    directory, then run gpu_smoke on it with `prismarine run --app=tools/gpu_smoke`.
-4. Run `prismarine engine publish --dest=<folder>` on each machine. The first run creates the GitHub release and each
-   run adds its archives with a `SHA256SUMS` of every archive of the release. An asset must be under 2 GiB and these
-   are about 20 MB.
+4. The owner publishes the archives with the release tool of the private repository. It creates the GitHub release
+   or adds the archives to it with a `SHA256SUMS` of every archive of the release. An asset must be under 2 GiB and
+   these are about 20 MB.
 
 ## Patches
 

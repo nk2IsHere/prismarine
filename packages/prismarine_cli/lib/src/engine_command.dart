@@ -21,7 +21,6 @@ const _actions = {
   'package': 'Packs the built out folders into release archives in --dest.',
   'release':
       'Sets RELEASE and the engine check of prismarine_scene to a new release name.',
-  'publish': 'Uploads the archives in --dest to the GitHub release of RELEASE.',
 };
 
 class EngineCommand extends BaseCommand {
@@ -65,7 +64,7 @@ class EngineCommand extends BaseCommand {
       ..addOption(
         'dest',
         help:
-            'package, publish: the folder of the archives, <engine dir>/packages by default.',
+            'package: the folder of the archives, <engine dir>/packages by default.',
         valueHelp: 'folder',
       );
   }
@@ -74,10 +73,10 @@ class EngineCommand extends BaseCommand {
   String get name => 'engine';
   @override
   String get description =>
-      'Fetches the patched engine, or builds, packs and publishes a release of it.';
+      'Fetches the patched engine, or builds and packs a release of it.';
   @override
   String get invocation =>
-      'prismarine engine [fetch|toolchain|setup|patch|build|test|package|release <name>|publish] [options]';
+      'prismarine engine [fetch|toolchain|setup|patch|build|test|package|release <name>] [options]';
 
   @override
   String get usageFooter =>
@@ -90,9 +89,7 @@ class EngineCommand extends BaseCommand {
       '  prismarine engine release prismarine2\n'
       '                                       Sets the name of the next release\n'
       '  prismarine engine package --cpu=both --dest=~/engine-packages\n'
-      '                                       Packs both out folders into archives\n'
-      '  prismarine engine publish --dest=~/engine-packages\n'
-      '                                       Uploads the archives to the release';
+      '                                       Packs both out folders into archives';
 
   @override
   Future<int> run() async {
@@ -195,15 +192,7 @@ class EngineCommand extends BaseCommand {
           done: (t) => 'RELEASE is $t',
         );
         ui.line(
-          'Commit RELEASE, engine_check.dart and the prismarine.yaml files, then build, package and publish $tag.',
-        );
-      case 'publish':
-        await publishEngine(
-          ui: ui,
-          tools: tools,
-          release: release,
-          from: dest,
-          env: env,
+          'Commit RELEASE, engine_check.dart and the prismarine.yaml files, then build and package $tag.',
         );
     }
     return 0;

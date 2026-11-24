@@ -15,7 +15,7 @@ private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`
 in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
 with its own config. It runs the heap and allocation profiler of `tools/profiler`, the package `prismarine_profiler`,
 from the same checkout. The `prismarine` command of `bin/`, the package `prismarine_cli`, does every build step on
-macOS, Linux and Windows: doctor, the fetch, build, package and publish of the engine, the cook of an app from its
+macOS, Linux and Windows: doctor, the fetch, build and package of the engine, the cook of an app from its
 `prismarine.yaml` through `prismarine_cook`, and the build and run of an app. The build scripts, `env.sh` and the
 template `universal_app.sh` are gone. An app checks the engine at its start with `requireEngine` of
 `prismarine_scene`. The allocation lint also walks `prismarine_render` and `prismarine_loop`. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and

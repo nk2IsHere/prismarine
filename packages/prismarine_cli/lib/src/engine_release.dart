@@ -3,9 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:prismarine_cook/prismarine_cook.dart';
 
-import 'doctor.dart';
 import 'engine_build.dart';
-import 'engine_fetch.dart';
 import 'tools.dart';
 import 'ui.dart';
 
@@ -240,119 +238,6 @@ String bumpRelease(String checkout, String revision, String name) {
   }
   return tag;
 }
-
-/// Uploads the archives of [release] in [from] with their `.sha256` and a
-/// `SHA256SUMS` of every archive of the release to its GitHub release,
-/// which it creates when it is missing.
-Future<String> publishEngine({
-  required Ui ui,
-  required Tools tools,
-  required EngineRelease release,
-  required String from,
-  required Map<String, String> env,
-}) => ui.step<String>('publish ${release.name}', () async {
-  final repo = releaseRepository(release, env);
-  if (repo == null) {
-    throw Failure('PRISMARINE_ENGINE_REPO is not set.', fix: repoFix);
-  }
-  final archives = [
-    for (final f in Directory(from).listSync().whereType<File>())
-      if (RegExp(r'prismarine-engine-[a-z0-9-]+\.tar\.xz$').hasMatch(f.path))
-        f.path,
-  ]..sort();
-  if (archives.isEmpty) {
-    throw Failure(
-      'No prismarine-engine-*.tar.xz in $from.',
-      fix: 'prismarine engine package --dest=$from',
-    );
-  }
-  final sums = <String, String>{};
-  final exists =
-      tools.read(['gh', 'release', 'view', release.tag, '-R', repo]) != null;
-  if (exists) {
-    final tmp = Directory.systemTemp.createTempSync('prismarine-sums');
-    if (tools.read([
-          'gh',
-          'release',
-          'download',
-          release.tag,
-          '-R',
-          repo,
-          '-p',
-          'SHA256SUMS',
-          '-D',
-          tmp.path,
-        ]) !=
-        null) {
-      for (final l in File('${tmp.path}/SHA256SUMS').readAsLinesSync()) {
-        final p = l.split(RegExp(r'\s+'));
-        if (p.length == 2) sums[p[1]] = p[0];
-      }
-    }
-    tmp.deleteSync(recursive: true);
-  }
-  final files = <String>[];
-  for (final a in archives) {
-    final sum = File('$a.sha256');
-    if (!sum.existsSync()) {
-      throw Failure(
-        '$a has no .sha256 beside it.',
-        fix: 'prismarine engine package',
-      );
-    }
-    final want = sum.readAsStringSync().trim().split(RegExp(r'\s+')).first;
-    final have = (await sha256.bind(File(a).openRead()).first).toString();
-    if (want != have) {
-      throw Failure(
-        '$a does not match its .sha256.',
-        fix: 'prismarine engine package',
-      );
-    }
-    sums[a.split(Platform.pathSeparator).last.split('/').last] = have;
-    files.addAll([a, sum.path]);
-  }
-  final names = sums.keys.toList()..sort();
-  final list = File('$from/SHA256SUMS')
-    ..writeAsStringSync(
-      '${[for (final n in names) '${sums[n]}  $n'].join('\n')}\n',
-    );
-  files.add(list.path);
-  if (exists) {
-    await tools.must(
-      [
-        'gh',
-        'release',
-        'upload',
-        release.tag,
-        '-R',
-        repo,
-        '--clobber',
-        ...files,
-      ],
-      log: 'engine-publish',
-      cause: 'The upload to ${release.tag} of $repo failed.',
-    );
-  } else {
-    await tools.must(
-      [
-        'gh',
-        'release',
-        'create',
-        release.tag,
-        '-R',
-        repo,
-        '--title',
-        release.tag,
-        '--notes',
-        'The patched engine ${release.name}.',
-        ...files,
-      ],
-      log: 'engine-publish',
-      cause: 'gh could not create the release ${release.tag} in $repo.',
-    );
-  }
-  return '${archives.length} archives to $repo';
-}, done: (s) => s);
 
 /// Returns the target of the engine for [os] and [cpu] and, for a cross build,
 /// the out folder that holds the host tools.

@@ -208,14 +208,14 @@ build` and `prismarine run` use the engine built from the patches when the engin
 the release. A fetched release has no profile engine. `prismarine engine build --mode=profile` builds one for
 `prismarine build --profile`, which profiling tools such as the Dart VM's allocation profiler need.
 
-To publish a release, set its name, build and package it on each platform and upload the archives.
+A new release gets a name and an archive for each platform.
 
 ```sh
 prismarine engine release prismarine2
 prismarine engine package --cpu=both --dest=~/engine-packages
-prismarine engine publish --dest=~/engine-packages
 ```
 
-`release` writes the new name into `RELEASE` and into the engine check of `prismarine_scene`. Commit both files.
-`publish` creates the GitHub release or adds the archives to it. [The engine
-README](../third_party/flutter_engine/README.md) lists every patch and the requirements of each platform.
+`release` writes the new name into `RELEASE`, into the engine check of `prismarine_scene` and into the `engine` of
+each app's `prismarine.yaml`. Commit these files. The owner of prismarine publishes the archives to its GitHub
+releases. [The engine README](../third_party/flutter_engine/README.md) lists every patch and the requirements of each
+platform.

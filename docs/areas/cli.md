@@ -72,7 +72,8 @@ The last two come from the arm64 build. The result has an ad hoc signature.
 
 ## Engine actions
 
-`prismarine engine <action>` fetches the engine or builds, packs and publishes a release of it.
+`prismarine engine <action>` fetches the engine or builds and packs a release of it. The owner publishes the archives
+with a tool of the private repository.
 
 | Action | Work |
 |---|---|
@@ -84,7 +85,6 @@ The last two come from the arm64 build. The result has an ad hoc signature.
 | `test` | Linux: the unit tests of Flutter GPU on SwiftShader |
 | `package` | Packs an out folder without build files, object files, dot files and debug symbols, with `prismarine-engine.txt`, as `tar` and `xz -9` |
 | `release` | Writes the new tag into `RELEASE` and into `prismarineEngineRelease` of `prismarine_scene` |
-| `publish` | `gh release create`, or `gh release upload --clobber` for a release that exists, with a merged `SHA256SUMS` |
 
 ## Platforms
 
