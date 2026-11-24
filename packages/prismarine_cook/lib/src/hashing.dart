@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
-/// Returns the files under each of [paths], a file standing for itself, in
-/// a fixed order. A missing path gives no files.
+/// Returns the files under each of [paths] in a fixed order. A path of a file
+/// gives that file. A missing path gives no files.
 List<File> filesUnder(Iterable<String> paths) {
   final out = <File>[];
   for (final p in paths) {
@@ -49,8 +49,8 @@ String hashInputs(List<String> parts, {List<String> trees = const []}) {
   return sink.value.toString();
 }
 
-/// Returns a SHA-256 in hex of the bytes of [path], kept for the length of
-/// the process per path, size and time of the file.
+/// Returns the SHA-256 in hex of the bytes of [path]. The result is kept until
+/// the process ends, per path, size and time of the file.
 String hashFile(String path) {
   final f = File(path);
   final s = f.statSync();

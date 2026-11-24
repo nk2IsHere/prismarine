@@ -8,8 +8,8 @@ import 'host.dart';
 import 'project.dart';
 import 'shader_cook.dart';
 
-/// Cooks the shaders of the app of a build hook whose stamps are stale and
-/// declares their inputs as dependencies of the hook. An app without a
+/// Cooks the shaders of the app whose inputs changed and declares those
+/// inputs as dependencies of the build hook. An app without a
 /// `prismarine.yaml` cooks nothing.
 ///
 /// ```dart
@@ -47,10 +47,10 @@ Future<void> cookHook(BuildInput input, BuildOutputBuilder output) async {
   }
 }
 
-/// Returns the impellerc that the build hook of the app in [appDir] uses, the
-/// choice of the last command run, else the fetched engine of the release
-/// of the app in the engine folder of the home folder. Throws a
-/// [StateError] with the fix when neither exists.
+/// Returns the impellerc for the build hook of the app in [appDir]. It is the
+/// impellerc that the last prismarine command recorded in the app, else the
+/// one of the fetched engine of its release in the engine folder that [env]
+/// sets. Throws a [StateError] with the fix when neither exists.
 String hookImpellerc(String appDir, Map<String, String> env) {
   final choice = EngineChoice.readIn(appDir);
   if (choice != null && File(choice.impellerc).existsSync()) {
@@ -58,7 +58,10 @@ String hookImpellerc(String appDir, Map<String, String> env) {
   }
   final releaseFile = releaseFileOfApp(appDir);
   final target = hostTarget();
-  if (releaseFile == null || target == null) {
+  if (target == null) {
+    throw StateError('prismarine has no engine for this OS and CPU.');
+  }
+  if (releaseFile == null) {
     throw StateError(
       'The app does not resolve the flutter_gpu of prismarine. Run '
       '`prismarine build` in $appDir.',

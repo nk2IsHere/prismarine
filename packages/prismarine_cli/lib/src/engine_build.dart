@@ -7,9 +7,8 @@ import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
 
-/// The build of the patched engine from the patches in
-/// `third_party/flutter_engine/patches` of a prismarine checkout, in the
-/// tree `<engine dir>/flutter`.
+/// Builds the patched engine in the tree `<engine dir>/flutter` from the
+/// patches in `third_party/flutter_engine/patches` of a prismarine checkout.
 class EngineBuild {
   EngineBuild(this.ui, this.tools, this.toolchain, this.checkout, this.dir);
 
@@ -220,9 +219,9 @@ class EngineBuild {
   );
 
   /// Applies the Dart patches that the working tree of the Dart SDK lacks.
-  /// The patches stay uncommitted at the Dart revision of `DEPS`. The
-  /// engine stamps its Dart version from the HEAD of that checkout, which
-  /// must stay the one that the kernel files of the Flutter tool carry.
+  /// The engine takes its Dart version from HEAD of that checkout. HEAD must
+  /// stay at the version that the kernel files of the Flutter tool carry, so
+  /// the patches stay uncommitted at the Dart revision of `DEPS`.
   Future<List<String>> _patchDart() async {
     final files = _patchFiles('$patches/dart');
     if (files.isEmpty) return const [];
@@ -319,7 +318,7 @@ class EngineBuild {
   }
 
   /// Builds the out folder of [cpu] and [mode], `release` or `profile`,
-  /// with gn and ninja. Builds only the targets that a
+  /// with gn and with [jobs] jobs of ninja. Builds only the targets that a
   /// `flutter build --local-engine` of that mode reads.
   Future<String> build(String cpu, {int? jobs, String mode = 'release'}) {
     final os = hostPlatform();
@@ -371,15 +370,16 @@ class EngineBuild {
     }, done: (o) => 'ok, $src/out/$o');
   }
 
-  /// Deletes the object files of the out folder [out], 2 to 4 GB. The next
-  /// build of it is a full one.
+  /// Deletes the object files of the out folder [out], which frees 2 to 4 GB.
+  /// The next build of it is a full one.
   void trim(String out) {
     final obj = Directory('$src/out/$out/obj');
     if (obj.existsSync()) obj.deleteSync(recursive: true);
   }
 
   /// Builds the unit tests of Flutter GPU and Impeller on SwiftShader on
-  /// Linux and runs the suites of Flutter GPU that the patches touch.
+  /// Linux with [jobs] jobs of ninja. Runs the suites of Flutter GPU that the
+  /// patches touch.
   Future<void> test({int? jobs}) => ui.step('test', () async {
     const out = 'host_debug_unopt_tests';
     await _run(
@@ -409,8 +409,7 @@ class EngineBuild {
       ],
       dir: src,
       log: 'engine-tests',
-      cause: 'gpu_unittests failed.',
-      fix: 'the log above lists the failed tests',
+      cause: 'gpu_unittests failed. The log lists the failed tests.',
     );
   });
 }
@@ -429,8 +428,8 @@ List<String> _patchFiles(String dir) {
     ..sort();
 }
 
-/// The subjects of the commits in the text of a patch file, without the
-/// `[PATCH n/m]` prefix, as `git log --format=%s` gives them.
+/// Reads the subjects of the commits in the text of a patch file, in the form
+/// that `git log --format=%s` prints.
 List<String> patchSubjects(String text) {
   final out = <String>[];
   final lines = const LineSplitter().convert(text);
@@ -449,7 +448,7 @@ List<String> patchSubjects(String text) {
 
 /// Decodes the RFC 2047 words of a mail header, such as
 /// `=?UTF-8?q?a=20b?=`, which `git format-patch` writes for a subject with
-/// characters outside ASCII. The space between two words goes.
+/// characters outside ASCII. A space between two encoded words is dropped.
 String _decodeWords(String header) {
   final word = RegExp(r'=\?([^?]+)\?([qQbB])\?([^?]*)\?=');
   final joined = header.replaceAllMapped(
@@ -554,10 +553,10 @@ List<String> ninjaTargets(String os, String cpu) {
   };
 }
 
-/// Installs the tools that the build of the engine needs on Windows, which are Git,
-/// Python, the Build Tools of Visual Studio 2022 with the C++ tools for x64
-/// and ARM64, ATL and the Windows SDK 10.0.22621 with its Debugging Tools.
-/// Turns on long paths. Needs an elevated shell.
+/// Installs the tools that the build of the engine needs on Windows. They are
+/// Git, Python, the Build Tools of Visual Studio 2022 with the C++ tools for
+/// x64 and ARM64, ATL and the Windows SDK 10.0.22621 with its Debugging
+/// Tools. Turns on long paths. Needs an elevated shell.
 Future<void> installWindowsToolchain(Ui ui, Tools tools) async {
   final winget =
       '${tools.environment['LOCALAPPDATA']}\\Microsoft\\WindowsApps\\winget.exe';

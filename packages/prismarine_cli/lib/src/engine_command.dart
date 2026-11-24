@@ -10,10 +10,12 @@ import 'ui.dart';
 const _actions = {
   'fetch':
       'Fetches the release of the app, or of this checkout outside an app. The default.',
+  'toolchain':
+      'Windows: installs the tools that the build of the engine needs. Needs an elevated shell.',
   'setup':
       'Clones depot_tools and Flutter at the engine revision and syncs the sources of the engine.',
   'patch': 'Applies the patches that the engine tree lacks.',
-  'build': 'Builds the release out folders of the engine for --cpu.',
+  'build': 'Builds the out folders of the engine for --cpu and --mode.',
   'test':
       'Linux: builds and runs the unit tests of Flutter GPU on SwiftShader.',
   'package': 'Packs the built out folders into release archives in --dest.',
@@ -29,8 +31,8 @@ class EngineCommand extends BaseCommand {
       ..addOption(
         'target',
         help:
-            'fetch: the target, such as macos-x64 or linux-arm64. The one of '
-            'this computer by default.',
+            'fetch: the target, such as macos-x64 or linux-arm64. The default '
+            'is this computer.',
       )
       ..addFlag(
         'force',
@@ -40,7 +42,14 @@ class EngineCommand extends BaseCommand {
       ..addOption(
         'cpu',
         allowed: ['x64', 'arm64', 'both'],
-        help: 'build, package: the CPUs. The CPU of this computer by default.',
+        help:
+            'build, package: the CPUs. The default is the CPU of this computer.',
+      )
+      ..addOption(
+        'mode',
+        allowed: ['release', 'profile'],
+        defaultsTo: 'release',
+        help: 'build: the runtime mode of the engine.',
       )
       ..addOption(
         'jobs',
@@ -51,7 +60,7 @@ class EngineCommand extends BaseCommand {
         'trim',
         negatable: false,
         help:
-            'build: deletes the object files afterwards, 2 to 4 GB. The next build is a full one.',
+            'build: deletes the object files after the build, which frees 2 to 4 GB. The next build is a full one.',
       )
       ..addOption(
         'dest',
@@ -68,19 +77,22 @@ class EngineCommand extends BaseCommand {
       'Fetches the patched engine, or builds, packs and publishes a release of it.';
   @override
   String get invocation =>
-      'prismarine engine [fetch|setup|patch|build|package|release <name>|publish] [options]';
+      'prismarine engine [fetch|toolchain|setup|patch|build|test|package|release <name>|publish] [options]';
 
   @override
   String get usageFooter =>
-      '\n\nActions:\n${[for (final MapEntry(:key, :value) in _actions.entries) '  ${key.padRight(10)}$value'].join('\n')}'
+      '\n\nActions:\n${[for (final MapEntry(:key, :value) in _actions.entries) '  ${key.padRight(11)}$value'].join('\n')}'
       '\n\nExamples:\n'
-      '  prismarine engine                    Fetches the release of the app or checkout\n'
+      '  prismarine engine                    Fetches the engine release of the app\n'
       '  prismarine engine setup              Gets the sources of the engine, once per computer\n'
       '  prismarine engine patch              Applies only the patches that are new\n'
       '  prismarine engine build --cpu=both   Builds the x64 and arm64 out folders\n'
       '  prismarine engine release prismarine2\n'
+      '                                       Sets the name of the next release\n'
       '  prismarine engine package --cpu=both --dest=~/engine-packages\n'
-      '  prismarine engine publish --dest=~/engine-packages';
+      '                                       Packs both out folders into archives\n'
+      '  prismarine engine publish --dest=~/engine-packages\n'
+      '                                       Uploads the archives to the release';
 
   @override
   Future<int> run() async {
@@ -127,7 +139,7 @@ class EngineCommand extends BaseCommand {
       case 'toolchain':
         if (os != 'windows') {
           throw Failure(
-            'The toolchain action is for Windows. On $os the tools of doctor are enough.',
+            'The toolchain action is for Windows. On $os, prismarine doctor lists the missing tools.',
             fix: 'prismarine doctor',
           );
         }
@@ -138,16 +150,21 @@ class EngineCommand extends BaseCommand {
         await b.patch();
       case 'build':
         final jobs = int.tryParse(argResults!.option('jobs') ?? '');
-        // The host tools of a cross build come from the out folder of the CPU of this computer.
-        for (final c in [
-          ...cpus.where((c) => c == host),
-          ...cpus.where((c) => c != host),
-        ]) {
-          await b.build(c, jobs: jobs, mode: argResults!.option('mode')!);
-        }
+        // A cross build takes its host tools from the out folder of the CPU of
+        // this computer, which is built first.
+        final outs = [
+          for (final c in [
+            ...cpus.where((c) => c == host),
+            ...cpus.where((c) => c != host),
+          ])
+            await b.build(c, jobs: jobs, mode: argResults!.option('mode')!),
+        ];
+        // A cross build reads the host out folder, so the object files are deleted
+        // only after every build.
+        if (argResults!.flag('trim')) outs.forEach(b.trim);
       case 'test':
         if (os != 'linux') {
-          throw Failure('The tests of the engine run on Linux.');
+          throw Failure('The tests of the engine run on Linux only.');
         }
         await b.test(jobs: int.tryParse(argResults!.option('jobs') ?? ''));
       case 'package':

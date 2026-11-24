@@ -9,8 +9,8 @@ import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
 
-/// The steps of a command on one app, which are toolchain, engine, packages, cook,
-/// build and run.
+/// The steps that a command runs on one app. They check the toolchain, fetch
+/// the engine, resolve the packages, cook the app and build it.
 class AppSteps {
   AppSteps(this.ui, this.toolchain, this.tools, {this.project});
 
@@ -18,12 +18,13 @@ class AppSteps {
   final Toolchain toolchain;
   final Tools tools;
 
-  /// The app, or null outside one.
+  /// The app, or null when the command runs outside an app.
   final Project? project;
 
   Map<String, String> get env => toolchain.environment;
 
-  /// Checks the toolchain. Throws a [Failure] that lists every problem.
+  /// Checks the toolchain for [release]. Throws a [Failure] that lists every
+  /// problem.
   Future<String> checkToolchain(EngineRelease? release) =>
       ui.step<String>('toolchain', () async {
         final checks = ToolchainChecks(
@@ -43,8 +44,8 @@ class AppSteps {
         );
       }, done: (s) => s);
 
-  /// The release of the app, or of the checkout of this command outside an
-  /// app.
+  /// Reads the engine release of the app. Outside an app it reads the release
+  /// of the prismarine checkout of this command.
   EngineRelease release() {
     final p = project;
     final file = p == null ? null : releaseFileOfApp(p.dir);
@@ -53,7 +54,7 @@ class AppSteps {
       throw Failure(
         'The app ${p.name} does not use the flutter_gpu of prismarine.',
         fix:
-            'add flutter_gpu with a path to third_party/flutter_gpu of prismarine to dependency_overrides of pubspec.yaml',
+            'add flutter_gpu with the path <prismarine>/third_party/flutter_gpu under dependency_overrides in pubspec.yaml',
       );
     }
     return EngineRelease.read(
@@ -61,8 +62,10 @@ class AppSteps {
     );
   }
 
-  /// Finds the engine of [release] and fetches it when it is missing or
-  /// [force] is set. Writes the choice for the build hook of the app.
+  /// Finds the engine of [release] for [target], the target of this computer
+  /// by default, and fetches it when it is missing or [force] is set. For this
+  /// computer it records the impellerc of the engine in the app, where the
+  /// build hook reads it.
   Future<Engine> engine(
     EngineRelease release, {
     bool force = false,
@@ -90,7 +93,7 @@ class AppSteps {
         if (missing.isNotEmpty) {
           throw Failure(
             'The engine in ${e.outPath} lacks ${missing.join(', ')}.',
-            fix: 'build the engine again',
+            fix: 'prismarine engine build',
           );
         }
         final p = project;
@@ -123,7 +126,8 @@ class AppSteps {
     }, done: (_) => 'resolved');
   }
 
-  /// Cooks the shaders of the app with [engine].
+  /// Cooks the shaders of the app with the impellerc of [engine]. [force]
+  /// cooks every shader again.
   Future<void> shaders(Engine engine, {bool force = false}) async {
     final p = project!;
     for (final entry in p.shaders) {
@@ -151,7 +155,8 @@ class AppSteps {
     }
   }
 
-  /// Runs the asset steps of the app that are stale.
+  /// Runs the asset steps of the app whose inputs changed. [force] runs every
+  /// step.
   Future<void> assets({bool force = false}) async {
     final p = project!;
     for (final step in p.assets) {
@@ -190,7 +195,7 @@ class AppSteps {
           }
         },
         done: (c) => c.adopted
-            ? 'taken as current, the output in ${c.out} has no stamp'
+            ? 'output found in ${c.out}, not run again'
             : c.current
             ? 'current in ${c.out}'
             : 'done in ${c.out}',
@@ -199,8 +204,9 @@ class AppSteps {
   }
 
   /// Builds the app for [platform] in release mode on [engine], or on the
-  /// engine of Flutter without one. [debug] builds in debug mode on the
-  /// engine of Flutter. Returns the path of the built app.
+  /// engine of Flutter when [engine] is null. [debug] builds in debug mode on
+  /// the engine of Flutter. [extra] goes to `flutter build`. Returns the path
+  /// of the built app.
   Future<String> build(
     String platform,
     Engine? engine,
@@ -225,7 +231,7 @@ class AppSteps {
       );
       final app = builtApp(p.dir, platform, release: !debug);
       if (!File(app).existsSync()) {
-        throw Failure('The build left no app at $app.');
+        throw Failure('flutter build made no app at $app.');
       }
       return app;
     }, done: (a) => 'ok, ${_relative(a, p.dir)}');
@@ -247,9 +253,8 @@ String _tail(String output) {
       .join('\n');
 }
 
-/// The prismarine checkout of this command. A `dart run` from another
-/// repository finds it through the package of the command, a launcher
-/// through the path of its kernel file.
+/// Finds the prismarine checkout of this command. It searches upward from the
+/// package of the command and from its kernel file.
 String checkoutOfCommand() {
   final starts = <String>[];
   try {
@@ -276,7 +281,8 @@ String checkoutOfCommand() {
   );
 }
 
-/// The path of the app of the Flutter app in [dir] built for [platform].
+/// The path of the executable that `flutter build` makes for the app in [dir]
+/// on [platform]. [release] selects the release build.
 String builtApp(String dir, String platform, {bool release = true}) {
   final mode = release ? 'Release' : 'Debug';
   switch (platform) {

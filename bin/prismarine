@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# prismarine starts the prismarine command of this checkout with the Dart of
-# the Flutter SDK. The command builds itself again when its sources change.
+# Starts the prismarine command of this checkout with the Dart SDK of Flutter.
+# The command is compiled again when its sources change.
 set -e
 src=${BASH_SOURCE[0]}
 while [[ -L $src ]]; do

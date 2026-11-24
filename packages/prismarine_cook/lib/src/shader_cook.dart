@@ -47,8 +47,8 @@ class ShaderCookError implements Exception {
   }
 }
 
-/// The key of the inputs of [entry] in [project] with [impellerc]. Equal
-/// keys give equal outputs.
+/// Returns the key of the inputs of [entry] in [project] with [impellerc]. Two
+/// cooks with the same key make the same output.
 String shaderKey(Project project, ShaderEntry entry, String impellerc) {
   final metal = MetalCompiler.find();
   String identity(String? path) {
@@ -82,8 +82,8 @@ bool shadersCurrent(Project project, ShaderEntry entry, String impellerc) =>
     shaderStamp(project, entry).key == shaderKey(project, entry, impellerc) &&
     _outputExists(project, entry);
 
-/// Cooks the program tree of [entry] into its output folder when its stamp
-/// is stale or [force] is set. The bundles go to
+/// Cooks the program tree of [entry] in [project] with [impellerc] into its
+/// output folder when its stamp is stale or [force] is set. The bundles go to
 /// `<out>/bundle/<backend>/<effect>.<n>.shaderbundle.gz` and the interfaces
 /// to `<out>/records.json`. Shards come from the cache in [cacheDir]. Throws
 /// a [ShaderCookError] when a shader does not compile.

@@ -5,11 +5,11 @@ import 'tools.dart';
 import 'ui.dart';
 
 /// Merges the macOS app [arm] built for arm64 and the app [x64] built for
-/// x86_64 into the universal app [out]. Each Mach-O file of one CPU becomes
-/// a file of both CPUs through lipo. The other files must be equal, except
-/// the native assets manifest, whose entries of both CPUs are kept, and the
-/// signatures and the engine revision string, which come from [arm]. The
-/// result has an ad hoc signature. Returns the number of merged files.
+/// x86_64 into the universal app [out]. lipo joins each pair of Mach-O files.
+/// The other files must be equal. The exceptions are the native assets
+/// manifest, which keeps the entries of both CPUs, the signatures and the
+/// engine revision string. The last two come from [arm]. The result has an
+/// ad hoc signature. Returns the number of merged files.
 Future<int> mergeUniversalApp(
   String arm,
   String x64,

@@ -8,9 +8,10 @@ import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
 
-/// The repository of the engine releases as `<owner>/<name>`:
-/// `PRISMARINE_ENGINE_REPO`, else its line in a `private/config/*.env`
-/// at or above the checkout of [release]. Returns null without one.
+/// Returns the repository of the engine releases, which has the form
+/// `<owner>/<name>`. It is `PRISMARINE_ENGINE_REPO` of [env], else the line
+/// that sets it in a `private/config/*.env` at or above the checkout of
+/// [release]. Returns null when neither sets one.
 String? releaseRepository(EngineRelease release, Map<String, String> env) {
   final set = env['PRISMARINE_ENGINE_REPO'];
   if (set != null && set.isNotEmpty) return set;
@@ -40,9 +41,10 @@ String? releaseRepository(EngineRelease release, Map<String, String> env) {
 }
 
 /// Downloads the archive of [release] for [target], checks its SHA-256 and
-/// unpacks it into `<dir>/<target>`, in place of what was there. With
-/// `PRISMARINE_ENGINE_ARCHIVE` set, the archive at that path with its
-/// `.sha256` beside it takes the place of the download.
+/// unpacks it into `<dir>/<target>` in place of the old engine. With
+/// `PRISMARINE_ENGINE_ARCHIVE` set, it unpacks the archive at that path in
+/// place of a download. That archive needs its `.sha256` file beside it.
+/// The steps run with [toolchain], [tools] and [ui].
 Future<Engine> fetchEngine(
   EngineRelease release,
   String dir,
@@ -59,11 +61,16 @@ Future<Engine> fetchEngine(
     final file = File('${tmp.path}/$asset');
     final sum = File('${tmp.path}/$asset.sha256');
     if (archive != null && archive.isNotEmpty) {
-      if (!File(archive).existsSync() ||
-          !File('$archive.sha256').existsSync()) {
+      if (!File(archive).existsSync()) {
         throw Failure(
-          'PRISMARINE_ENGINE_ARCHIVE is $archive, which or whose .sha256 does not exist.',
+          'PRISMARINE_ENGINE_ARCHIVE is $archive, which does not exist.',
           fix: 'unset PRISMARINE_ENGINE_ARCHIVE',
+        );
+      }
+      if (!File('$archive.sha256').existsSync()) {
+        throw Failure(
+          'The archive $archive has no $archive.sha256 beside it.',
+          fix: 'download the .sha256 file of the archive into the same folder',
         );
       }
       File(archive).copySync(file.path);
@@ -96,7 +103,7 @@ Future<Engine> fetchEngine(
     final have = (await sha256.bind(file.openRead()).first).toString();
     if (want != have) {
       throw Failure(
-        'The archive $asset has the SHA-256 $have, its .sha256 file gives $want.',
+        'The SHA-256 of $asset is $have, but its .sha256 file has $want.',
         fix: 'prismarine engine --force',
       );
     }
@@ -106,7 +113,7 @@ Future<Engine> fetchEngine(
     await tools.must(
       ['tar', '-C', dir, '-xJf', file.path],
       log: 'engine-unpack',
-      cause: 'The unpacking of $asset failed.',
+      cause: 'tar could not unpack $asset.',
       fix: Platform.isLinux ? 'sudo apt install xz-utils' : null,
     );
   } finally {
@@ -124,9 +131,8 @@ Future<Engine> fetchEngine(
   return e;
 }
 
-/// Points `dart-sdk` of the out folder of the fetched engine [e] at the
-/// one of the Flutter SDK, which has the same Dart. A link that already
-/// points there stays.
+/// Links `dart-sdk` in the out folder of the fetched engine [e] to the
+/// `dart-sdk` of [toolchain]. Both hold the same Dart.
 void linkDartSdk(Engine e, Toolchain toolchain) {
   if (!e.fetched || toolchain.flutterRoot == null) return;
   final link = Link('${e.outPath}/dart-sdk');

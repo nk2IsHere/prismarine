@@ -1,5 +1,5 @@
-/// The prismarine command: doctor, engine, cook, build, run, env and the
-/// tools of the Flutter SDK.
+/// The prismarine command. It checks the tools, fetches the engine and cooks,
+/// builds and runs an app.
 library;
 
 export 'src/app.dart';

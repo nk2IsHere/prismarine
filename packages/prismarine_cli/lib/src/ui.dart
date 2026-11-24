@@ -17,15 +17,15 @@ class Failure implements Exception {
   String toString() => cause;
 }
 
-/// The output of a command, one line for each step with its result and
-/// time. On a terminal the line of a running step shows its time and the
-/// last line of its tool.
+/// Prints the steps of a command, one line each with its result and time. On
+/// a terminal the line of a running step shows its time and the last line of
+/// its tool.
 class Ui {
   Ui({this.verbose = false, IOSink? out, bool? terminal})
     : out = out ?? stdout,
       terminal = terminal ?? (stdout.hasTerminal && !verbose);
 
-  /// Shows the output of the tools as it comes.
+  /// Prints the output of the tools while they run.
   final bool verbose;
   final IOSink out;
 
@@ -38,8 +38,8 @@ class Ui {
   Timer? _ticker;
 
   /// Runs [body] as the step [label]. Prints the line of the step with the
-  /// text that [done] returns and the time. A [Failure] prints the step
-  /// with its cause and fix and is thrown again.
+  /// text that [done] returns and the time. A [Failure] of [body] is printed
+  /// with its cause and fix and thrown again.
   Future<T> step<T>(
     String label,
     Future<T> Function() body, {
@@ -88,7 +88,7 @@ class Ui {
   void printFailure(Failure f) {
     out.writeln('  ${f.cause}');
     if (f.log != null) out.writeln('  log: ${f.log}');
-    // A fix of several commands lines them up under the first.
+    // A fix of several commands prints one per line, under the first.
     final fix = f.fix?.replaceAll('\n', '\n       ');
     if (fix != null) out.writeln('  fix: $fix');
   }
@@ -109,7 +109,7 @@ class Ui {
   }
 }
 
-/// [d] in seconds with one decimal under a minute, as `2.4 s` or `3 min 5 s`.
+/// Formats [d] as `2.4 s` under a minute and as `3 min 5 s` from a minute on.
 String seconds(Duration d) {
   final ms = d.inMilliseconds;
   if (ms < 60000) return '${(ms / 1000).toStringAsFixed(1)} s';

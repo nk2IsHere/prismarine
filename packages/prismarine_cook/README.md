@@ -1,9 +1,9 @@
 # prismarine_cook
 
-prismarine_cook cooks a prismarine app from its `prismarine.yaml`. It finds the patched engine of the release of the
-app, cooks its shader trees and shader bundle manifests and runs its asset steps, each only when the hash of its inputs
-changed. Its `cookHook` cooks the shaders in the build hook of the app, which makes a plain `flutter build` cook them
-too. The details are on [the area page](../../docs/areas/cook.md).
+prismarine_cook prepares what an app needs before it is built, as its `prismarine.yaml` lists. It compiles the
+shaders with the impellerc of the patched engine and runs the asset steps, such as the download of a scene. A step
+runs again only when its inputs changed. With `cookHook` in the build hook of the app, a plain `flutter build` also
+compiles the shaders. The details are on [the area page](../../docs/areas/cook.md).
 
 ## Usage
 
@@ -31,13 +31,13 @@ import 'dart:io';
 
 import 'package:prismarine_cook/prismarine_cook.dart';
 
-/// Cooks the shaders of the app in the current folder with the fetched
-/// engine of its release, as its build hook does.
+/// Cooks the shaders of the app in the current folder with the impellerc of
+/// its engine release.
 Future<void> main() async {
   final app = Project.find(Directory.current.path);
   final project = app == null ? null : Project.load(app);
   if (project == null) {
-    print('no prismarine.yaml here or above');
+    print('No prismarine.yaml in this folder or above it.');
     return;
   }
   final impellerc = hookImpellerc(project.dir, Platform.environment);

@@ -49,8 +49,10 @@ class _Runner extends CommandRunner<int> {
   String get usageFooter => examples;
 }
 
-/// The steps up to the build that `build` and `run` share. Returns the
-/// path of the built app. The asset steps run only with [assets].
+/// Runs the steps of [c] up to the build of its app for [platform] and returns
+/// the path of the built app. [extra] goes to `flutter build`. [debug] and
+/// [stock] build on the engine of Flutter. [universal] builds one app for
+/// both CPUs of a Mac. [assets] also runs the asset steps.
 Future<String> _buildApp(
   BaseCommand c,
   String platform,
@@ -86,7 +88,7 @@ Future<String> _buildApp(
   }
   if (platform != 'macos' || debug || stock) {
     throw UsageException(
-      '--universal is for a release build for macOS on the patched engine.',
+      '--universal works only for a release build for macOS on the patched engine.',
       '',
     );
   }
@@ -136,9 +138,7 @@ List<String> _afterPlatform(ArgResults r) =>
 void _addStock(ArgParser p) => p.addFlag(
   'stock',
   negatable: false,
-  help:
-      'Builds in release mode on the engine of Flutter, without the patches, '
-      'such as for a comparison.',
+  help: 'Builds in release mode on the engine of Flutter without the patches.',
 );
 
 class _RunCommand extends BaseCommand {
@@ -196,8 +196,8 @@ class _BuildCommand extends BaseCommand {
       'universal',
       negatable: false,
       help:
-          'macOS: builds for arm64 and x86_64 on both engines and merges them '
-          'into one app.',
+          'macOS: builds the app for arm64 and for x86_64 and merges both into '
+          'one app.',
     );
   }
 
@@ -234,7 +234,8 @@ class _CookCommand extends BaseCommand {
       ..addFlag(
         'force',
         negatable: false,
-        help: 'Cooks again what is current.',
+        help:
+            'Cooks the shaders and runs the asset steps also when they are current.',
       );
   }
 
@@ -344,7 +345,9 @@ class _DoctorCommand extends BaseCommand {
   }
 }
 
-/// The checks of the packages and the cook state of [project].
+/// Checks that the packages of [project] are resolved, that its shaders are
+/// cooked for [engine] and that its assets are prepared in the folders that
+/// [env] sets.
 List<Finding> appChecks(
   Project project,
   Engine? engine,
@@ -401,7 +404,7 @@ class _EnvCommand extends BaseCommand {
       'shell',
       allowed: ['sh', 'powershell', 'cmd'],
       defaultsTo: Platform.isWindows ? 'powershell' : 'sh',
-      help: 'The shell of the lines.',
+      help: 'The shell that reads the lines.',
     );
   }
 
@@ -456,7 +459,7 @@ class _PassCommand extends BaseCommand {
   final String name;
   @override
   String get description =>
-      'Runs $name of the Flutter SDK of prismarine with its pub cache.';
+      'Runs $name of the Flutter SDK that prismarine uses, with the pub cache of prismarine.';
   @override
   String get invocation => 'prismarine $name <arguments>';
   @override

@@ -11,7 +11,7 @@ Put the `bin` folder of your checkout on your `PATH`. `bin/prismarine` runs on m
 
 ```sh
 prismarine doctor
-prismarine run
+prismarine run --app=apps/prismarine_sample
 prismarine build linux --app=apps/prismarine_sample
 prismarine engine build --cpu=both
 ```
@@ -20,7 +20,7 @@ prismarine engine build --cpu=both
 
 ## Example
 
-The command is also a library. The example runs the doctor in the current folder. It is
+The command is also a library. The example runs `prismarine doctor` in the current folder. It is
 [`example/example.dart`](example/example.dart):
 
 ```dart
@@ -34,5 +34,5 @@ Future<void> main() async {
 
 ## Platforms
 
-The command runs on macOS, Linux and Windows. `build --universal` is for macOS, `engine toolchain` for Windows and
-`engine test` for Linux.
+The command runs on macOS, Linux and Windows. `build --universal` works only on macOS, `engine toolchain` only on
+Windows and `engine test` only on Linux.

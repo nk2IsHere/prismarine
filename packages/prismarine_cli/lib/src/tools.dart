@@ -15,9 +15,9 @@ class ToolResult {
   bool get ok => exitCode == 0;
 }
 
-/// Runs the tools of the steps. A run shows the output of the tool with
-/// `--verbose` and else keeps it in a log file and shows its last line on
-/// the status line of the step.
+/// Runs the tools of the steps. Each run writes the output of its tool to a
+/// log file. With `--verbose` the output is also printed, else the line of
+/// the running step shows its last line.
 class Tools {
   Tools(this.ui, {required this.environment, required this.logDir});
 
@@ -26,11 +26,11 @@ class Tools {
   /// The environment of every tool, with the Flutter SDK first on `PATH`.
   final Map<String, String> environment;
 
-  /// The folder of the log files.
   final String logDir;
 
-  /// Runs [command] in [dir] for the step [log] and returns its exit code
-  /// and output. The output goes to `<logDir>/<log>.log`.
+  /// Runs [command] in [dir] with [extraEnvironment] added to [environment].
+  /// Writes its output to `<logDir>/<log>.log` and returns its exit code and
+  /// output.
   Future<ToolResult> run(
     List<String> command, {
     String? dir,
@@ -81,7 +81,8 @@ class Tools {
   }
 
   /// Runs [command] and throws a [Failure] with [cause], the last lines of
-  /// its output and [fix] when it exits with an error.
+  /// its output and [fix] when it exits with an error. [dir], [log] and
+  /// [extraEnvironment] are as for [run].
   Future<ToolResult> must(
     List<String> command, {
     String? dir,
@@ -110,8 +111,8 @@ class Tools {
     );
   }
 
-  /// Runs [command] quietly and returns its output, or null when it cannot
-  /// start or fails.
+  /// Runs [command] in [dir] without a log and returns its output, or null
+  /// when it cannot start or fails.
   String? read(List<String> command, {String? dir}) {
     try {
       final r = Process.runSync(

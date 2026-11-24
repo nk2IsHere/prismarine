@@ -1,4 +1,3 @@
-# The cook of the sample, read by the prismarine command and by hook/build.dart.
 shaders:
   pbr:
     package: prismarine_pbr

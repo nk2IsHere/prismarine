@@ -83,9 +83,9 @@ class Project {
     }
   }
 
-  /// The apps below [start]: the folders down to [depth] levels under it with
-  /// a `prismarine.yaml`, sorted. Hidden folders and `build` folders are not
-  /// searched.
+  /// Returns the apps below [start], sorted. An app is a folder with a
+  /// `prismarine.yaml` down to [depth] levels under [start]. Hidden folders
+  /// and `build` folders are not searched.
   static List<String> below(String start, {int depth = 3}) {
     final found = <String>[];
     void walk(Directory d, int level) {
@@ -148,7 +148,7 @@ String? packageRootIn(String dir, String package) {
   return null;
 }
 
-/// A file `prismarine.yaml` that does not follow its form.
+/// A `prismarine.yaml` that does not have the expected form.
 class ProjectError implements Exception {
   ProjectError(this.message);
   final String message;
@@ -219,8 +219,11 @@ class ShaderEntry {
     if (shard is! int || shard < 1) {
       throw ProjectError('$where: shard must be a positive number.');
     }
-    if ((m['programs'] == null) == (m['manifest'] == null)) {
-      throw ProjectError('$where: give either programs or manifest.');
+    if (m['programs'] != null && m['manifest'] != null) {
+      throw ProjectError('$where: set programs or manifest, not both.');
+    }
+    if (m['programs'] == null && m['manifest'] == null) {
+      throw ProjectError('$where: set programs or manifest.');
     }
     return ShaderEntry._(
       id,
@@ -251,7 +254,7 @@ class ShaderEntry {
   /// relative to the app.
   final String out;
 
-  /// `metal` and `vulkan`, the backends of the bundles.
+  /// The backends of the bundles, `metal` and `vulkan` by default.
   final List<String> backends;
   final int shard;
   final List<String> impellercArgs;
@@ -260,7 +263,7 @@ class ShaderEntry {
   /// package is not in the package config of [project].
   String programsDir(Project project) => '${baseDir(project)}/$programs';
 
-  /// The folder of [package], or of the app without one. Throws a
+  /// The folder of [package], or of the app when [package] is null. Throws a
   /// [ProjectError] when the package is not in the package config.
   String baseDir(Project project) {
     final base = package == null ? project.dir : project.packageRoot(package!);
@@ -333,8 +336,9 @@ class AssetStep {
 
   final String id;
 
-  /// Paths in the output folder that a finished output has. An output with
-  /// all of them and without a stamp is taken as current.
+  /// Paths that a complete output folder holds. An output folder without a
+  /// stamp that holds all of them counts as current. The step does not run
+  /// then.
   final List<String> exists;
 
   /// The command and its arguments. `{out}` becomes the output folder.
@@ -343,7 +347,7 @@ class AssetStep {
   /// The output folder. `{data}` becomes [dataHome].
   final String out;
 
-  /// A variable that sets the output folder when it is set.
+  /// The environment variable that sets the output folder in place of [out].
   final String? outEnv;
 
   /// Files and folders of the app and `package:<name>` for the `lib` folder

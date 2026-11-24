@@ -66,6 +66,6 @@ String engineDir(Map<String, String> env, {bool? windows}) {
   return '${prismarineHome(env, windows: w)}${w ? r'\' : '/'}engine';
 }
 
-/// The folder of the shard cache of shader builds.
+/// The folder of the cache of compiled shader shards.
 String shaderCacheDir(Map<String, String> env) =>
     '${prismarineHome(env)}/cache/shaders';

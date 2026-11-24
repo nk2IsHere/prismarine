@@ -1,6 +1,6 @@
 @echo off
-rem prismarine starts the prismarine command of this checkout with the Dart of
-rem the Flutter SDK. The command builds itself again when its sources change.
+rem Starts the prismarine command of this checkout with the Dart SDK of Flutter.
+rem The command is compiled again when its sources change.
 setlocal
 set "ROOT=%~dp0.."
 for %%I in ("%ROOT%") do set "ROOT=%%~fI"

@@ -5,7 +5,7 @@ import 'package:prismarine_cook/prismarine_cook.dart';
 import 'engine_fetch.dart';
 import 'toolchain.dart';
 
-/// One result of a check of doctor.
+/// The result of one check of `prismarine doctor`.
 class Finding {
   Finding.ok(this.what, this.detail) : problem = false, fix = null;
   Finding.problem(this.what, this.detail, this.fix) : problem = true;
@@ -25,8 +25,8 @@ class Finding {
 /// fails.
 typedef Reader = String? Function(List<String> command);
 
-/// The checks of the toolchain of the computer, for [os] `macos`, `linux`
-/// or `windows`.
+/// Checks the tools on this computer that prismarine needs. [os] is `macos`,
+/// `linux` or `windows`.
 class ToolchainChecks {
   ToolchainChecks(
     this.toolchain,
@@ -42,7 +42,7 @@ class ToolchainChecks {
   final Map<String, String> env;
   final bool Function(String path) exists;
 
-  /// Every check of the toolchain. [release] is the engine release of the
+  /// Runs every check of the toolchain. [release] is the engine release of the
   /// app, or null when none is known.
   List<Finding> all(EngineRelease? release) => [
     flutter(release),
@@ -67,7 +67,7 @@ class ToolchainChecks {
     if (v != flutterVersion) {
       return Finding.problem(
         'Flutter',
-        'the SDK in $root is ${v ?? 'of an unknown version'}, prismarine needs $flutterVersion',
+        'the SDK in $root is ${v ?? 'of an unknown version'}, but prismarine needs $flutterVersion',
         'git -C "$root" fetch --tags && git -C "$root" checkout $flutterVersion',
       );
     }
@@ -75,7 +75,7 @@ class ToolchainChecks {
     if (release != null && rev != null && !rev.startsWith(release.revision)) {
       return Finding.problem(
         'Flutter',
-        'the SDK in $root has engine $rev, the release ${release.tag} is for ${release.revision}',
+        'the SDK in $root has engine $rev, but the release ${release.tag} needs engine ${release.revision}',
         'git -C "$root" checkout $flutterVersion',
       );
     }
@@ -136,7 +136,7 @@ class ToolchainChecks {
       return [
         Finding.problem(
           'Rust',
-          'rustup is in RUSTUP_HOME=$rustupHome, which a build hook does not get',
+          'rustup is in RUSTUP_HOME=$rustupHome. Build hooks do not receive that variable',
           os == 'windows'
               ? 'mklink /J "$home\\.rustup" "$rustupHome"'
               : 'ln -s "$rustupHome" ~/.rustup',
@@ -182,7 +182,7 @@ class ToolchainChecks {
       );
     }
     if (os == 'windows' && _visualStudio != null) {
-      return Finding.ok('CMake', 'the one of Visual Studio');
+      return Finding.ok('CMake', 'the CMake of Visual Studio');
     }
     return Finding.problem('CMake', 'no cmake on PATH', switch (os) {
       'macos' => 'brew install cmake',
@@ -195,12 +195,20 @@ class ToolchainChecks {
   List<Finding> xcode() {
     final v = read(['xcodebuild', '-version']);
     if (v == null) {
+      final selected = read(['xcode-select', '-p']) ?? '';
       return [
-        Finding.problem(
-          'Xcode',
-          'no Xcode, or the command-line tools are selected in its place',
-          'install Xcode from the App Store, then sudo xcode-select -s /Applications/Xcode.app',
-        ),
+        if (selected.contains('CommandLineTools'))
+          Finding.problem(
+            'Xcode',
+            'the command-line tools are selected in place of Xcode',
+            'sudo xcode-select -s /Applications/Xcode.app',
+          )
+        else
+          Finding.problem(
+            'Xcode',
+            'no Xcode',
+            'install Xcode from the App Store, then sudo xcode-select -s /Applications/Xcode.app',
+          ),
       ];
     }
     final metal = read(['xcrun', '-sdk', 'macosx', '-f', 'metal']);
@@ -209,7 +217,7 @@ class ToolchainChecks {
       if (metal == null)
         Finding.problem(
           'Metal compiler',
-          'Xcode has no Metal toolchain, the shaders would compile at run time',
+          'Xcode has no Metal toolchain. Without it the shaders compile at run time',
           'xcodebuild -downloadComponent MetalToolchain',
         )
       else
@@ -283,7 +291,8 @@ class ToolchainChecks {
   }
 }
 
-/// The checks of the engine of [release] in the folder of [search].
+/// Checks the engine of [release] that [search] found against [toolchain].
+/// [read] runs the tools and [env] holds the settings of the engine folder.
 List<Finding> engineChecks(
   EngineRelease release,
   EngineSearch search,
@@ -295,7 +304,7 @@ List<Finding> engineChecks(
   if (e == null) {
     final other = search.otherRelease == null
         ? ''
-        : ', it holds ${search.otherRelease}';
+        : ', only ${search.otherRelease}';
     return [
       Finding.problem(
         'Engine',
@@ -311,7 +320,7 @@ List<Finding> engineChecks(
       Finding.problem(
         'Engine',
         'the engine in ${e.outPath} lacks ${missing.join(', ')}',
-        e.fetched ? 'prismarine engine --force' : 'build the engine again',
+        e.fetched ? 'prismarine engine --force' : 'prismarine engine build',
       ),
     ];
   }
@@ -320,7 +329,7 @@ List<Finding> engineChecks(
       'Engine',
       e.fetched
           ? '${release.name} in ${search.dir}/${search.target}'
-          : 'built from the patches in ${e.src}, its patches are not compared with ${release.name}',
+          : 'built from the patches in ${e.src}, not checked against the patches of ${release.name}',
     ),
   ];
   final rev = toolchain.engineRevision;
@@ -328,7 +337,7 @@ List<Finding> engineChecks(
     out.add(
       Finding.problem(
         'Engine and SDK',
-        'the engine is for Flutter engine ${e.revision}, the SDK has $rev',
+        'the engine is for Flutter engine ${e.revision}, but the SDK has $rev',
         'git -C "${toolchain.flutterRoot}" checkout $flutterVersion',
       ),
     );
@@ -336,8 +345,9 @@ List<Finding> engineChecks(
   return out;
 }
 
-/// The checks of the download of [release], which are gh, its login and the
-/// repository of the releases.
+/// Checks that the engine of [release] can be downloaded. gh must be on the
+/// `PATH` of [read] and logged in, and [env] must give the repository of the
+/// releases.
 List<Finding> downloadChecks(
   EngineRelease release,
   Reader read,
@@ -352,7 +362,7 @@ List<Finding> downloadChecks(
     out.add(
       Finding.problem(
         'GitHub CLI',
-        'no gh on PATH, the engine download needs it',
+        'no gh on PATH. The engine download needs it',
         Platform.isMacOS
             ? 'brew install gh'
             : Platform.isWindows

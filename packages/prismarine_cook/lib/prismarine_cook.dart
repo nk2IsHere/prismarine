@@ -1,6 +1,5 @@
-/// The cook of a prismarine app: its `prismarine.yaml`, the engine of its
-/// release, its shaders and asset steps with stamps of their inputs and the
-/// build hook that cooks its shaders.
+/// Reads the `prismarine.yaml` of an app and cooks its shaders and asset steps.
+/// A step runs again only when its inputs changed.
 library;
 
 export 'src/asset_cook.dart';

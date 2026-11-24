@@ -20,7 +20,9 @@ Examples:
                                        Runs gpu_smoke on the engine of Flutter
   prismarine doctor                    Lists every problem of the toolchain and the engine with its fix
   prismarine cook apps/prismarine_sample
-  prismarine env --shell=powershell | Invoke-Expression''';
+                                       Cooks the shaders and assets of the sample
+  prismarine env --shell=powershell | Invoke-Expression
+                                       Sets the Flutter SDK and the engine in PowerShell''';
 
 abstract class BaseCommand extends Command<int> {
   BaseCommand() {
@@ -40,10 +42,11 @@ abstract class BaseCommand extends Command<int> {
   late final Ui ui = Ui(verbose: verbose);
   late final Toolchain toolchain = Toolchain.find(Platform.environment);
 
-  /// The app of the command. It is `--app`, else a folder in the arguments, else
-  /// the nearest folder at or above this one with a `prismarine.yaml`, else
-  /// the one app below this folder. Several apps below it are listed with
-  /// the command for each.
+  /// Finds the app of the command. It is the folder [given], else the nearest
+  /// folder at or above the current one with a `prismarine.yaml`, else the one
+  /// app below the current folder. Several apps below it are listed with the
+  /// command for each. Returns null when [required] is false and no app is
+  /// found.
   Project? findApp({bool required = true, String? given}) {
     final cwd = Directory.current.path;
     final dir = given ?? Project.find(cwd) ?? _onlyAppBelow(cwd, required);
@@ -51,7 +54,7 @@ abstract class BaseCommand extends Command<int> {
       if (!required) return null;
       ui.printFailure(
         Failure(
-          'No prismarine.yaml in ${Directory.current.path} or a folder above it.',
+          'No prismarine.yaml in ${Directory.current.path}, above it or below it.',
           fix: 'cd into the folder of the app, or pass --app=<folder>',
         ),
       );
@@ -104,7 +107,7 @@ abstract class BaseCommand extends Command<int> {
   void addApp() => argParser.addOption(
     'app',
     help:
-        'The folder of the app. By default the nearest folder with a prismarine.yaml.',
+        'The folder of the app. The default is the nearest folder at or above this one with a prismarine.yaml, else the one app below it.',
     valueHelp: 'folder',
   );
 

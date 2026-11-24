@@ -15,8 +15,8 @@ class AssetCook {
   /// True when the output was current and the step did not run.
   final bool current;
 
-  /// True when an output without a stamp had every path of
-  /// [AssetStep.exists] and was taken as current.
+  /// True when the output had no stamp but held every path of
+  /// [AssetStep.exists]. The step did not run then.
   final bool adopted;
 }
 
@@ -30,7 +30,8 @@ class AssetStepError implements Exception {
       'assets ${step.id}: `${step.run.join(' ')}` exited with $exitCode.';
 }
 
-/// The key of the inputs of [step] in [project].
+/// Returns the key of the inputs of [step] in [project] for the output folder
+/// [out].
 String assetKey(Project project, AssetStep step, String out) => hashInputs([
   'assets 1',
   ...step.command(out),
@@ -41,7 +42,9 @@ Stamp assetStamp(AssetStep step, String out) =>
     Stamp('$out/cook-${step.id}.json');
 
 /// Runs [step] of [project] when its stamp is stale or [force] is set.
-/// [run] runs a command in a folder and returns its exit code. Throws an
+/// [environment] gives the variables of the output folder, the process
+/// environment by default. [run] runs a command in a folder and returns its
+/// exit code. Throws an
 /// [AssetStepError] when the command fails.
 Future<AssetCook> cookAsset(
   Project project,

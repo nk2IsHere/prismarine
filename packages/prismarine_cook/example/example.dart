@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:prismarine_cook/prismarine_cook.dart';
 
-/// Cooks the shaders of the app in the current folder with the fetched
-/// engine of its release, as its build hook does.
+/// Cooks the shaders of the app in the current folder with the impellerc of
+/// its engine release.
 Future<void> main() async {
   final app = Project.find(Directory.current.path);
   final project = app == null ? null : Project.load(app);
   if (project == null) {
-    print('no prismarine.yaml here or above');
+    print('No prismarine.yaml in this folder or above it.');
     return;
   }
   final impellerc = hookImpellerc(project.dir, Platform.environment);

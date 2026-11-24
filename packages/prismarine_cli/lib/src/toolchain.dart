@@ -10,9 +10,9 @@ const flutterVersion = '3.47.7';
 class Toolchain {
   Toolchain._(this.flutterRoot, this.pubCache, this.environment);
 
-  /// Finds the Flutter SDK. It is the one of the Dart that runs this command,
-  /// then `PRISMARINE_FLUTTER`, then `~/.prismarine/flutter`, then the
-  /// `flutter` on `PATH`. [flutterRoot] is null when none exists.
+  /// Finds the Flutter SDK. It looks in the SDK of the running Dart, then in
+  /// `PRISMARINE_FLUTTER`, `~/.prismarine/flutter` and the `flutter` on `PATH`.
+  /// [flutterRoot] is null when none of them has an SDK.
   factory Toolchain.find(Map<String, String> env) {
     final root =
         _sdkOfDart(Platform.resolvedExecutable) ??
@@ -31,21 +31,21 @@ class Toolchain {
       out['FLUTTER_ROOT'] = root;
     }
     if (cache != null && Directory(cache).existsSync()) {
-      // The real path keeps the paths in package configs and build caches
-      // the same whether a folder is reached through a link or not.
+      // Package configs and build caches store this path. The resolved path
+      // keeps them the same with and without a link to the folder.
       cache = Directory(cache).resolveSymbolicLinksSync();
     }
     if (cache != null) out['PUB_CACHE'] = cache;
     return Toolchain._(root, cache, out);
   }
 
-  /// The root of the Flutter SDK, or null without one.
+  /// The root of the Flutter SDK, or null when there is none.
   final String? flutterRoot;
 
-  /// The pub cache, or null for the default of pub.
+  /// The pub cache, or null when pub uses its default cache.
   final String? pubCache;
 
-  /// The environment of every tool.
+  /// The environment that every tool runs with.
   final Map<String, String> environment;
 
   String get flutter =>
@@ -101,7 +101,8 @@ String? _sdkAt(String? dir) {
   return Directory(dir).resolveSymbolicLinksSync();
 }
 
-/// The SDK of the Dart at [exe], `<sdk>/bin/cache/dart-sdk/bin/dart`.
+/// The Flutter SDK of the Dart at [exe], which has the form
+/// `<sdk>/bin/cache/dart-sdk/bin/dart`.
 String? _sdkOfDart(String exe) {
   final parts = File(exe).absolute.path.split(RegExp(r'[/\\]'));
   final i = parts.lastIndexOf('dart-sdk');

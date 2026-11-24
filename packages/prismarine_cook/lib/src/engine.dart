@@ -17,7 +17,9 @@ class EngineRelease {
     if (!f.existsSync()) throw StateError('No release file at $path.');
     final tag = f.readAsStringSync().trim();
     if (!RegExp(r'^engine-[0-9a-f]{12}-\w+$').hasMatch(tag)) {
-      throw StateError('$path holds "$tag", not engine-<revision>-<name>.');
+      throw StateError(
+        '$path holds "$tag", which does not have the form engine-<12 hex digits>-<name>.',
+      );
     }
     return EngineRelease(tag, path);
   }
@@ -37,9 +39,10 @@ class EngineRelease {
   String get checkout => File(file).parent.parent.parent.path;
 }
 
-/// The release file of the prismarine that the app in [appDir] resolves,
-/// beside its vendored `flutter_gpu`. Returns null when the app has no
-/// package config or does not use the vendored `flutter_gpu`.
+/// Returns the `RELEASE` file of the prismarine checkout that the app in
+/// [appDir] resolves, found through the vendored `flutter_gpu` of that
+/// checkout. Returns null when the app has no package config or does not use
+/// the vendored `flutter_gpu`.
 String? releaseFileOfApp(String appDir) {
   final gpu = packageRootIn(appDir, 'flutter_gpu');
   if (gpu == null) return null;
@@ -111,8 +114,8 @@ class EngineSearch {
   /// The target of the computer.
   final String target;
 
-  /// The release of a fetched engine in the folder that is not the one
-  /// searched for, or null.
+  /// The release of a fetched engine in the folder when it is another release
+  /// than the one searched for, else null.
   final String? otherRelease;
 }
 
@@ -216,8 +219,9 @@ int _indexOf(Uint8List hay, int end, List<int> needle) {
   return -1;
 }
 
-/// The engine choice of the last command run in an app, which its build
-/// hook reads. Flutter gives a hook no `PRISMARINE_ENGINE_DIR`.
+/// The engine that the last prismarine command in an app used. The build hook
+/// of the app reads it. Flutter does not pass `PRISMARINE_ENGINE_DIR` to a
+/// hook.
 class EngineChoice {
   EngineChoice(this.impellerc, this.release);
 
@@ -234,7 +238,7 @@ class EngineChoice {
     f.writeAsStringSync(text);
   }
 
-  /// Reads the choice of the app in [appDir], or null without one.
+  /// Reads the choice of the app in [appDir], or null when the app has none.
   static EngineChoice? readIn(String appDir) {
     try {
       final j = jsonDecode(File(pathIn(appDir)).readAsStringSync()) as Map;
