@@ -14,6 +14,8 @@ const _actions = {
       'Clones depot_tools and Flutter at the engine revision and syncs the sources of the engine.',
   'patch': 'Applies the patches that the engine tree lacks.',
   'build': 'Builds the release out folders of the engine for --cpu.',
+  'test':
+      'Linux: builds and runs the unit tests of Flutter GPU on SwiftShader.',
   'package': 'Packs the built out folders into release archives in --dest.',
   'release':
       'Sets RELEASE and the engine check of prismarine_scene to a new release name.',
@@ -38,6 +40,12 @@ class EngineCommand extends BaseCommand {
         'jobs',
         help:
             'build: the jobs of ninja. 6 on macOS, 10 on Linux and the cores on Windows by default.',
+      )
+      ..addFlag(
+        'trim',
+        negatable: false,
+        help:
+            'build: deletes the object files afterwards, 2 to 4 GB. The next build is a full one.',
       )
       ..addOption(
         'dest',
@@ -127,6 +135,11 @@ class EngineCommand extends BaseCommand {
         ]) {
           await b.build(c, jobs: jobs, mode: argResults!.option('mode')!);
         }
+      case 'test':
+        if (os != 'linux') {
+          throw Failure('The tests of the engine run on Linux.');
+        }
+        await b.test(jobs: int.tryParse(argResults!.option('jobs') ?? ''));
       case 'package':
         for (final c in cpus) {
           final (target, hostOut) = targetOf(os, c);

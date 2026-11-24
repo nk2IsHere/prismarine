@@ -370,6 +370,49 @@ class EngineBuild {
       return out;
     }, done: (o) => 'ok, $src/out/$o');
   }
+
+  /// Deletes the object files of the out folder [out], 2 to 4 GB. The next
+  /// build of it is a full one.
+  void trim(String out) {
+    final obj = Directory('$src/out/$out/obj');
+    if (obj.existsSync()) obj.deleteSync(recursive: true);
+  }
+
+  /// Builds the unit tests of Flutter GPU and Impeller on SwiftShader on
+  /// Linux and runs the suites of Flutter GPU that the patches touch.
+  Future<void> test({int? jobs}) => ui.step('test', () async {
+    const out = 'host_debug_unopt_tests';
+    await _run(
+      [
+        'flutter/tools/gn', '--runtime-mode=debug', '--unoptimized', //
+        '--prebuilt-dart-sdk', '--use-glfw-swiftshader', '--target-dir=$out',
+      ],
+      dir: src,
+      log: 'engine-gn-tests',
+      cause: 'gn failed for the tests.',
+    );
+    await _run(
+      [
+        _tool('ninja'), '-C', 'out/$out', '-j${jobs ?? 10}', //
+        'flutter/lib/gpu:gpu_unittests', 'flutter/impeller:impeller_unittests',
+      ],
+      dir: src,
+      log: 'engine-ninja-tests',
+      cause: 'ninja failed for the tests.',
+    );
+    // The suite of CommandBuffer aborts in debug builds on a test of Flutter
+    // that keeps a ref-counted object on the stack.
+    await _run(
+      [
+        'out/$out/gpu_unittests',
+        '--gtest_filter=FlutterGpuRenderPassTest.*:FlutterGpuShaderLibraryTest.*',
+      ],
+      dir: src,
+      log: 'engine-tests',
+      cause: 'gpu_unittests failed.',
+      fix: 'the log above lists the failed tests',
+    );
+  });
 }
 
 String _name(String path) => path.split(RegExp(r'[/\\]')).last;
