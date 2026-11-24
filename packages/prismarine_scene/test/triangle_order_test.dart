@@ -52,7 +52,7 @@ void main() {
     final glb = readGlb(b.toGlb());
     final doc = GltfDocument(glb.json, [glb.bin]);
     expect(sortTrianglesForRuns(doc, minTriangles: 4), 1);
-    final first = [for (final i in doc.uints(idx)) i ~/ 3].toSet().toList();
+    final first = {for (final i in doc.uints(idx)) i ~/ 3}.toList();
     expect(first, [0, 2, 4, 6, 1, 3, 5, 7]);
     expect(sortTrianglesForRuns(doc, minTriangles: 8), 0);
   });

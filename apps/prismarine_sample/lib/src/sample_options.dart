@@ -52,8 +52,9 @@ void applyRenderOptions(PbrSettings s, String? Function(String name) opt) {
     final parts = v.split(',');
     s.pointShadows.budget = int.parse(parts[0]).clamp(0, maxPointShadows);
     if (parts.length > 1) s.pointShadows.quality = _quality(parts[1]);
-    if (parts.length > 2)
+    if (parts.length > 2) {
       s.pointShadows.turns = int.parse(parts[2]).clamp(1, 3);
+    }
   }
   if (opt('fog') case final v?) {
     s.volume.enabled = v != 'off';
