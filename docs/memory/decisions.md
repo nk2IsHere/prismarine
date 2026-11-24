@@ -23,13 +23,17 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
 
 - **One package per function (2026-11-23).** Packages have the form `prismarine_<function>`. Code without Flutter
   stays usable from pure-Dart isolates and tools. No umbrella package exists.
-- **Environment variables (2026-11-23).** Variables have the form `PRISMARINE_*`. A moved variable also reads its old
-  `MCSM_*` form for one release.
+- **Environment variables (2026-11-23).** Variables have the form `PRISMARINE_*`. No code reads an old `MCSM_*` form
+  (owner, 2026-11-24).
 - **One command for building (2026-11-24).** Every build step is a subcommand of the `prismarine` command, written in
   Dart, on macOS, Linux and Windows alike. The repository holds no shell scripts for building. The machine locks and
   the gate scripts of the private repository are infrastructure and call the command where they build. An app lists
   its cook in `prismarine.yaml`, and its build hook cooks its shaders. The design is in
   [the command design](../specs/2026-11-24-prismarine-command-design.md).
+- **prismarine.yaml is the source of truth of a project (2026-11-24).** An app's `prismarine.yaml` holds everything
+  about the project that the command needs: the engine release, the Flutter version, the shaders and the asset steps.
+  The command checks the release against the prismarine that the app resolves and stops with the fix when they
+  differ. What is not the project's stays out: the repository of the releases and the machine's folders.
 
 ## Use from mcsm
 
