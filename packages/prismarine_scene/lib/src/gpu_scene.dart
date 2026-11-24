@@ -18,7 +18,7 @@ class GpuScene {
   /// [clusterTriangles] sets the runs of the primitives as for
   /// [GltfModel.read]. Above 0 the triangles of each primitive are sorted
   /// first with [sortTrianglesForRuns].
-  factory GpuScene.load(String path, {int clusterTriangles = 1024}) {
+  factory GpuScene.load(String path, {int clusterTriangles = 4096}) {
     final doc = GltfDocument.open(path);
     if (clusterTriangles > 0) {
       sortTrianglesForRuns(doc, minTriangles: clusterTriangles);

@@ -154,9 +154,9 @@ class GltfModel {
   );
 
   /// Reads [doc]. Each primitive is split into [clusters] of at most
-  /// [clusterTriangles] consecutive triangles, 1,024 by default. 0 keeps each
+  /// [clusterTriangles] consecutive triangles, 4,096 by default. 0 keeps each
   /// primitive in one run.
-  factory GltfModel.read(GltfDocument doc, {int clusterTriangles = 1024}) {
+  factory GltfModel.read(GltfDocument doc, {int clusterTriangles = 4096}) {
     final views = doc.list('bufferViews');
     final skipped = <String>[];
     final meshes = <List<ModelPrimitive?>>[];

@@ -11,7 +11,7 @@ import 'package:prismarine_assets/prismarine_assets.dart';
 /// A primitive with [minTriangles] triangles or fewer keeps its order, as
 /// does each primitive whose material blends, since its order changes its
 /// picture. Only triangle lists with 16-bit indices are sorted.
-int sortTrianglesForRuns(GltfDocument doc, {int minTriangles = 1024}) {
+int sortTrianglesForRuns(GltfDocument doc, {int minTriangles = 4096}) {
   final materials = doc.list('materials');
   final blended = <int>{}, candidates = <int, int>{};
   for (final mesh in doc.list('meshes')) {
