@@ -1,0 +1,2 @@
+# cmd reads batch files with Windows line ends.
+*.bat text eol=crlf
