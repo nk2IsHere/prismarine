@@ -47,5 +47,5 @@ void main() {
 ## Platforms
 
 The package is pure Dart. It runs on macOS, Linux and Windows, in any isolate and in command-line tools. The shadow and
-the corpus runner start processes and need `dart:io`. `tool/corpus_remote.sh` runs on macOS and Linux and needs ssh and
+the corpus runner start processes and need `dart:io`. `tool/corpus_remote.dart` runs on macOS and Linux and needs ssh and
 rsync.

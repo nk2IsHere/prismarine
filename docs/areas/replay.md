@@ -48,7 +48,7 @@ The corpus runner replays a list of runs and compares the fingerprint of each fr
 `Corpus` with the data of a run, its arguments and its recording. Your corpus program replays one run as a worker.
 The runner compiles the program once, runs the workers in parallel and cuts long runs at their baseline snapshots into
 chunks. A check reports the first divergence of each run per channel and fails on one that the note of expected
-divergences does not list. `tool/corpus_remote.sh` runs the same commands on another machine.
+divergences does not list. `tool/corpus_remote.dart` runs the same commands on another machine.
 
 ## Checks
 
