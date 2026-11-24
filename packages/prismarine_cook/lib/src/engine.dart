@@ -8,7 +8,13 @@ import 'project.dart';
 /// A release of the patched engine, such as
 /// `engine-deb287481e3c-prismarine1`.
 class EngineRelease {
-  EngineRelease(this.tag, this.file);
+  EngineRelease(this.tag, this.file) : _checkout = null;
+
+  /// The release [tag] that the `prismarine.yaml` of the app in [appDir]
+  /// names, for an app whose packages are not resolved yet.
+  EngineRelease.ofApp(this.tag, String appDir)
+    : file = '$appDir/prismarine.yaml',
+      _checkout = appDir;
 
   /// Reads the release in the file [path]. Throws a [StateError] for a file
   /// that is missing or does not have the form `engine-<revision>-<name>`.
@@ -26,7 +32,8 @@ class EngineRelease {
 
   final String tag;
 
-  /// The file `RELEASE` that holds [tag].
+  /// The file `RELEASE` that holds [tag], or the `prismarine.yaml` that names
+  /// it.
   final String file;
 
   /// The first 12 hex digits of the engine revision of Flutter.
@@ -35,8 +42,10 @@ class EngineRelease {
   /// The short name, such as `prismarine1`.
   String get name => tag.substring(tag.indexOf('-', 7) + 1);
 
-  /// The prismarine checkout that holds [file].
-  String get checkout => File(file).parent.parent.parent.path;
+  /// The prismarine checkout that holds [file], or the app's folder for a
+  /// release that an app names.
+  String get checkout => _checkout ?? File(file).parent.parent.parent.path;
+  final String? _checkout;
 }
 
 /// Returns the `RELEASE` file of the prismarine checkout that the app in

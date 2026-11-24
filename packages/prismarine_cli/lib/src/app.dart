@@ -47,8 +47,9 @@ class AppSteps {
 
   /// Reads the engine release of the app, the `engine` of its
   /// `prismarine.yaml`. Throws a [Failure] when the file sets none or when the
-  /// prismarine that the app resolves has another release. Outside an app it
-  /// reads the release of the prismarine checkout of this command.
+  /// prismarine that the app resolves has another release. An app whose
+  /// packages are not resolved gets the release of its file unchecked. Outside
+  /// an app it reads the release of the prismarine checkout of this command.
   EngineRelease release() {
     final p = project;
     if (p == null) {
@@ -57,10 +58,12 @@ class AppSteps {
       );
     }
     final file = releaseFileOfApp(p.dir);
+    final named = p.engine;
     if (file == null && p.needsPubGet) {
+      if (named != null) return EngineRelease.ofApp(named, p.dir);
       throw Failure(
-        'The packages of the app ${p.name} are not resolved.',
-        fix: 'prismarine flutter pub get, in ${p.dir}',
+        '${p.dir}/prismarine.yaml sets no engine.',
+        fix: 'add the line engine: <release> to ${p.dir}/prismarine.yaml',
       );
     }
     if (file == null) {
@@ -71,7 +74,7 @@ class AppSteps {
       );
     }
     final have = EngineRelease.read(file);
-    final want = p.engine;
+    final want = named;
     if (want == null) {
       throw Failure(
         '${p.dir}/prismarine.yaml sets no engine.',
