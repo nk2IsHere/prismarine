@@ -42,7 +42,7 @@ class ShaderCookError implements Exception {
   String toString() {
     final first = failed.entries.first;
     final more = failed.length > 1 ? ' and ${failed.length - 1} more' : '';
-    return 'shaders $entry: ${first.key} does not compile$more. '
+    return '${first.key} does not compile$more. '
         '${first.value.trim().split('\n').take(6).join('\n')}';
   }
 }
