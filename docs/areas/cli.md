@@ -85,17 +85,6 @@ with the tools of the private repository.
 | `test` | Linux: the unit tests of Flutter GPU on SwiftShader |
 | `package` | Packs an out folder without build files, object files, dot files and debug symbols, with `prismarine-engine.txt`, as `tar` and `xz -9` |
 
-## The pin
-
-`prismarine pin` works on a git repository whose pubspecs and Cargo.toml files depend on prismarine by git, pinned to
-one commit. It reads the URL of the dependencies from the tracked pubspecs. Each computer maps that URL to a real
-repository with git's `url.<source>.insteadOf`, which `pin map <source>` sets. `pin <commit>` rewrites the commit in
-every file, runs `cargo fetch` for each crate and resolves each folder that resolves on its own: the root and each
-pinned pubspec that is not a member of a workspace. `pin check` fails unless the pin is in the main branch of the
-source and the root's package config resolves it. `pin link <checkout>` writes override files that resolve prismarine
-from a local checkout, and `pin unlink` removes them. `pin ship <host> <dir>` makes a bare repository over ssh hold
-the pin, for a container that has no access to the source.
-
 ## Platforms
 
 The command runs on macOS, Linux and Windows. `build --universal` works only on macOS, `engine toolchain` only on

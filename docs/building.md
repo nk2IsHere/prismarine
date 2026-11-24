@@ -164,7 +164,6 @@ At its start, an app calls `requireEngine` of `prismarine_scene` with the featur
 | `prismarine doctor [<app>]` | Lists every problem with its fix |
 | `prismarine engine` | Fetches the engine of the release of the app |
 | `prismarine env` | Prints the lines that set the Flutter SDK, the pub cache and the engine of the app in a shell, `--shell=powershell` for PowerShell |
-| `prismarine pin [<commit>]` | For a repository that depends on prismarine by git: pins a commit in every pubspec and Cargo.toml and resolves them. `check`, `link <checkout>`, `unlink`, `map <source>` and `ship` handle the pin |
 | `prismarine flutter …`, `prismarine dart …` | Runs `flutter` or `dart` of the SDK with the pub cache of prismarine |
 
 The platform is the one of your computer by default. The app is the nearest folder at or above the current one with a

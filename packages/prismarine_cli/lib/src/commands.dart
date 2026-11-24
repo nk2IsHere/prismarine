@@ -8,7 +8,6 @@ import 'app.dart';
 import 'base_command.dart';
 import 'doctor.dart';
 import 'engine_command.dart';
-import 'pin_command.dart';
 import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
@@ -26,7 +25,6 @@ Future<int> runPrismarine(List<String> args) async {
     ..addCommand(EngineCommand())
     ..addCommand(_DoctorCommand())
     ..addCommand(_EnvCommand())
-    ..addCommand(PinCommand())
     ..addCommand(_PassCommand('flutter'))
     ..addCommand(_PassCommand('dart'));
   try {
