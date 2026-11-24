@@ -34,6 +34,9 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
   about the project that the command needs: the engine release, the Flutter version, the shaders and the asset steps.
   The command checks the release against the prismarine that the app resolves and stops with the fix when they
   differ. What is not the project's stays out: the repository of the releases and the machine's folders.
+- **Only the owner publishes engine releases (2026-11-24).** The public command builds and packs a release. The
+  publish is a tool of the private repository that asks the owner for the tag on a terminal. The repository of the
+  releases has no other collaborator.
 
 ## Use from mcsm
 
