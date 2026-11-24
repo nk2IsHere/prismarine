@@ -23,9 +23,12 @@ such as the commands that replay it.
 
 `GlitchCatcher` reads back every frame of the ring and compares it with the frames before and after it. A bright,
 nearly grey patch that neither neighbour has, while the neighbours agree, is a one-frame artefact. The catcher writes
-the three frames and a mask of the flagged pixels into its folder, with one line each in `caught.jsonl`. On macOS,
-`WindowSurfaceReader` reads the surface that the window shows after Flutter's compositing. The catcher checks those
-frames too. `writeShownFrames` writes the newest frames of the ring into a dump.
+the three frames and a mask of the flagged pixels into its folder, with one line each in `caught.jsonl`.
+`WindowSurfaceReader` reads what the window shows after Flutter's compositing, and the catcher checks those frames
+too. Call its `take` once per UI frame. A worker isolate reads a copy 640 pixels wide. On macOS it reads the IOSurface
+of the window. On Linux it reads the view of the GTK window with `XGetImage`, which needs GDK on X11 and is not
+available for a window on a Wayland display. On Windows it copies the client area with `PrintWindow`, which also
+holds the frames of a swap chain. `writeShownFrames` writes the newest frames of the ring into a dump.
 
 ## Profiler
 
@@ -33,7 +36,8 @@ frames too. `writeShownFrames` writes the newest frames of the ring into a dump.
 `stalls.jsonl` with first-use pipeline compiles and, on close, `summary.txt` with p50, p95 and the maximum of each
 section over each of its windows. Call `beginFrame` at the start of each frame and `add` with each timed section. Pass
 `stall` to the hook of your renderer for pipeline compiles. `LoopMonitor` measures the time the event loop was held
-outside the work that `UiWork` counts. `physFootprint` gives the footprint of the process on macOS.
+outside the work that `UiWork` counts. The profiler writes the footprint of the process from `processFootprint` of
+[prismarine_jobs](jobs.md) every 30 frames.
 
 ## Debug panel
 
