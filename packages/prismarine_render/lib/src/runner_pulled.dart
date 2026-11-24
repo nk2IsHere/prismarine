@@ -338,14 +338,21 @@ extension _RunnerPulled on FrameRunner {
     for (final MapEntry(:key, :value) in d.pixelResources.textures.entries) {
       final n = layout.materialTextureSlot(key);
       if (n < 0) continue;
+      while (layers.length <= n) {
+        layers.add(0);
+      }
+      // A constant input, such as a material's default black, is a constant
+      // array of one layer: its texel samples as its 2D form does.
+      if (value is ConstantTexture) {
+        arrays[key] = _texture(value, 'texture2DArray');
+        arrayKey += '$key=${value.format}:${value.texel.join(',')};';
+        continue;
+      }
       if (value is! FileTexture) continue;
       final at = scene.scene.textureAt(value.stem);
       if (at == null) continue;
       final a = scene.scene.arrays[at.$1];
       arrays[key] = scene.textures.texture(a.file, srgb: value.srgb);
-      while (layers.length <= n) {
-        layers.add(0);
-      }
       layers[n] = at.$2;
       arrayKey += '$key=${a.file}:${value.srgb};';
     }
