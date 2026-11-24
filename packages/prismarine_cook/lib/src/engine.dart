@@ -167,6 +167,22 @@ Map<String, String>? readEngineInfo(String path) {
 }
 
 /// The engine library in the out folder [out], or null when it has none.
+/// Finds the profile out folder that matches [engine], such as
+/// `host_profile_arm64` for `host_release_arm64`. It looks beside [engine],
+/// then in the tree built from the patches in `<dir>/flutter`. Returns null
+/// when neither has one with its engine library. A fetched release has no
+/// profile out folder, and `prismarine engine build --mode=profile` builds one.
+Engine? findProfileEngine(Engine engine, String dir) {
+  final out = engine.out.replaceFirst('release', 'profile');
+  if (out == engine.out) return null;
+  for (final src in [engine.src, '$dir/flutter/engine/src']) {
+    if (engineLibrary('$src/out/$out') != null) {
+      return Engine(src: src, out: out, fetched: false);
+    }
+  }
+  return null;
+}
+
 String? engineLibrary(String out) {
   for (final p in [
     'libflutter_linux_gtk.so',

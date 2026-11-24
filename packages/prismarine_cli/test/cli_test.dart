@@ -100,6 +100,14 @@ void main() {
       '$tmp/build/macos/Build/Products/Release/demo_app.app/Contents/MacOS/demo_app',
     );
     expect(builtApp(tmp, 'linux'), endsWith('/release/bundle/demo'));
+    expect(
+      builtApp(tmp, 'macos', mode: 'profile'),
+      contains('/Build/Products/Profile/demo_app.app/'),
+    );
+    expect(
+      builtApp(tmp, 'linux', mode: 'profile'),
+      endsWith('/profile/bundle/demo'),
+    );
   });
 
   test('times have one decimal under a minute', () {

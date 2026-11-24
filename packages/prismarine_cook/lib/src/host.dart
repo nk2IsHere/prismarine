@@ -61,9 +61,15 @@ String dataHome(Map<String, String> env, {bool? windows}) {
 /// The engine folder, `PRISMARINE_ENGINE_DIR` or `~/.prismarine/engine`.
 String engineDir(Map<String, String> env, {bool? windows}) {
   final set = env['PRISMARINE_ENGINE_DIR'];
-  if (set != null && set.isNotEmpty) return set;
   final w = windows ?? Platform.isWindows;
-  return '${prismarineHome(env, windows: w)}${w ? r'\' : '/'}engine';
+  final dir = set != null && set.isNotEmpty
+      ? set
+      : '${prismarineHome(env, windows: w)}${w ? r'\' : '/'}engine';
+  // Build caches store the engine path. The resolved path keeps them the same
+  // with and without a link to the folder.
+  return Directory(dir).existsSync()
+      ? Directory(dir).resolveSymbolicLinksSync()
+      : dir;
 }
 
 /// The folder of the cache of compiled shader shards.

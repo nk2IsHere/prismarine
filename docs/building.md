@@ -154,11 +154,11 @@ At its start, an app calls `requireEngine` of `prismarine_scene` with the featur
 | Command | Effect |
 |---|---|
 | `prismarine run [<platform>]` | Builds the app in release mode on the patched engine and starts it |
-| `prismarine build [<platform>]` | Builds the app without its asset steps, `--stock` on the engine of Flutter, `--debug` in debug mode and `--universal` for both CPUs of a Mac |
+| `prismarine build [<platform>]` | Builds the app without its asset steps, `--stock` on the engine of Flutter, `--debug` in debug mode, `--profile` in profile mode on a profile engine and `--universal` for both CPUs of a Mac |
 | `prismarine cook [<app>]` | Cooks the shaders and runs the asset steps that are not current |
 | `prismarine doctor [<app>]` | Lists every problem with its fix |
 | `prismarine engine` | Fetches the engine of the release of the app |
-| `prismarine env` | Prints the lines that set the Flutter SDK, the pub cache and the engine in a shell, `--shell=powershell` for PowerShell |
+| `prismarine env` | Prints the lines that set the Flutter SDK, the pub cache and the engine of the app in a shell, `--shell=powershell` for PowerShell |
 | `prismarine flutter …`, `prismarine dart …` | Runs `flutter` or `dart` of the SDK with the pub cache of prismarine |
 
 The platform is the one of your computer by default. The app is the nearest folder at or above the current one with a
@@ -200,7 +200,8 @@ prismarine engine build
 `patch` applies the patches that the tree lacks and `build` builds the release out folder of your CPU, or of both CPUs
 with `--cpu=both`. After a new patch, `patch` applies only that patch and `build` takes a few minutes. `prismarine
 build` and `prismarine run` use the engine built from the patches when the engine folder holds no fetched engine of
-the release.
+the release. A fetched release has no profile engine. `prismarine engine build --mode=profile` builds one for
+`prismarine build --profile`, which profiling tools such as the Dart VM's allocation profiler need.
 
 To publish a release, set its name, build and package it on each platform and upload the archives.
 

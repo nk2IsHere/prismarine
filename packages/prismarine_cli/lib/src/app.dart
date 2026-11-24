@@ -203,15 +203,15 @@ class AppSteps {
     }
   }
 
-  /// Builds the app for [platform] in release mode on [engine], or on the
-  /// engine of Flutter when [engine] is null. [debug] builds in debug mode on
-  /// the engine of Flutter. [extra] goes to `flutter build`. Returns the path
-  /// of the built app.
+  /// Builds the app for [platform] in [mode], `release`, `profile` or `debug`,
+  /// on [engine], or on the engine of Flutter when [engine] is null. A debug
+  /// build runs on the engine of Flutter. [extra] goes to `flutter build`.
+  /// Returns the path of the built app.
   Future<String> build(
     String platform,
     Engine? engine,
     List<String> extra, {
-    bool debug = false,
+    String mode = 'release',
   }) {
     final p = project!;
     return ui.step('build $platform', () async {
@@ -220,8 +220,8 @@ class AppSteps {
           toolchain.flutter,
           'build',
           platform,
-          if (debug) '--debug' else '--release',
-          if (!debug && engine != null) ...engine.flutterArgs,
+          '--$mode',
+          if (mode != 'debug' && engine != null) ...engine.flutterArgs,
           ...extra,
         ],
         dir: p.dir,
@@ -229,7 +229,7 @@ class AppSteps {
         cause: '`flutter build $platform` failed.',
         fix: 'prismarine build $platform --verbose',
       );
-      final app = builtApp(p.dir, platform, release: !debug);
+      final app = builtApp(p.dir, platform, mode: mode);
       if (!File(app).existsSync()) {
         throw Failure('flutter build made no app at $app.');
       }
@@ -282,9 +282,9 @@ String checkoutOfCommand() {
 }
 
 /// The path of the executable that `flutter build` makes for the app in [dir]
-/// on [platform]. [release] selects the release build.
-String builtApp(String dir, String platform, {bool release = true}) {
-  final mode = release ? 'Release' : 'Debug';
+/// on [platform] in [mode], `release`, `profile` or `debug`.
+String builtApp(String dir, String platform, {String mode = 'release'}) {
+  mode = '${mode[0].toUpperCase()}${mode.substring(1)}';
   switch (platform) {
     case 'macos':
       final name =

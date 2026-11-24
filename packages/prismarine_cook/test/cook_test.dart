@@ -240,6 +240,30 @@ assets:
       expect(findEngine('$tmp/engine', 'linux-x64', release()).engine, isNull);
     });
 
+    test(
+      'the profile out folder is found beside the engine or in the tree',
+      () {
+        final fetched = Engine(
+          src: '$tmp/engine/linux-x64/src',
+          out: 'host_release',
+          fetched: true,
+        );
+        expect(findProfileEngine(fetched, '$tmp/engine'), isNull);
+        write(
+          'engine/flutter/engine/src/out/host_profile/libflutter_linux_gtk.so',
+          'x',
+        );
+        final inTree = findProfileEngine(fetched, '$tmp/engine')!;
+        expect(inTree.src, '$tmp/engine/flutter/engine/src');
+        expect(inTree.out, 'host_profile');
+        write(
+          'engine/linux-x64/src/out/host_profile/libflutter_linux_gtk.so',
+          'x',
+        );
+        expect(findProfileEngine(fetched, '$tmp/engine')!.src, fetched.src);
+      },
+    );
+
     test('the search finds text across the edge of a read', () {
       final f = File('$tmp/big')
         ..writeAsBytesSync([

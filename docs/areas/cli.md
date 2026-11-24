@@ -17,7 +17,10 @@ kernel. The new kernel runs with `PRISMARINE_REBUILT=1` and does not compile its
 
 The command takes the Flutter SDK of the Dart that runs it. It puts the `bin` folder of the SDK first on the `PATH` of
 every tool it runs and sets `FLUTTER_ROOT` and `PUB_CACHE`. `prismarine env` prints the same settings for a shell, and
-`prismarine flutter` and `prismarine dart` run the tools of the SDK with them.
+`prismarine flutter` and `prismarine dart` run the tools of the SDK with them. The engine lines of `prismarine env` are
+for the release of the app: `--app`, else the app of the current folder, else the checkout of the command. They give
+`PRISMARINE_IMPELLERC`, `PRISMARINE_ENGINE_ARGS` and, when a profile engine exists, `PRISMARINE_ENGINE_PROFILE_ARGS`.
+The engine folder is given by its resolved path, as build caches store it.
 
 ## The app
 

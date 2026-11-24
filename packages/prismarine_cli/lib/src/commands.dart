@@ -51,13 +51,15 @@ class _Runner extends CommandRunner<int> {
 
 /// Runs the steps of [c] up to the build of its app for [platform] and returns
 /// the path of the built app. [extra] goes to `flutter build`. [debug] and
-/// [stock] build on the engine of Flutter. [universal] builds one app for
-/// both CPUs of a Mac. [assets] also runs the asset steps.
+/// [stock] build on the engine of Flutter. [profile] builds in profile mode on
+/// the profile out folder of the patched engine. [universal] builds one app
+/// for both CPUs of a Mac. [assets] also runs the asset steps.
 Future<String> _buildApp(
   BaseCommand c,
   String platform,
   List<String> extra, {
   bool debug = false,
+  bool profile = false,
   bool stock = false,
   bool universal = false,
   bool assets = false,
@@ -78,12 +80,23 @@ Future<String> _buildApp(
       'Flutter, without the patches.',
     );
   }
+  if (profile) {
+    final p = findProfileEngine(engine, engineDir(c.toolchain.environment));
+    if (p == null) {
+      throw Failure(
+        'The engine has no profile out folder beside ${engine.outPath}.',
+        fix: 'prismarine engine build --mode=profile',
+      );
+    }
+    c.ui.line('This profile build runs on ${p.outPath}.');
+    return s.build(platform, p, extra, mode: 'profile');
+  }
   if (!universal) {
     return s.build(
       platform,
       debug || stock ? null : engine,
       extra,
-      debug: debug,
+      mode: debug ? 'debug' : 'release',
     );
   }
   if (platform != 'macos' || debug || stock) {
@@ -135,11 +148,19 @@ List<String> _afterPlatform(ArgResults r) =>
     ? r.rest.sublist(1)
     : r.rest;
 
-void _addStock(ArgParser p) => p.addFlag(
-  'stock',
-  negatable: false,
-  help: 'Builds in release mode on the engine of Flutter without the patches.',
-);
+void _addStock(ArgParser p) => p
+  ..addFlag(
+    'stock',
+    negatable: false,
+    help:
+        'Builds in release mode on the engine of Flutter without the patches.',
+  )
+  ..addFlag(
+    'profile',
+    negatable: false,
+    help:
+        'Builds in profile mode on the profile out folder of the patched engine.',
+  );
 
 class _RunCommand extends BaseCommand {
   _RunCommand() {
@@ -170,6 +191,7 @@ class _RunCommand extends BaseCommand {
       platform,
       const [],
       stock: argResults!.flag('stock'),
+      profile: argResults!.flag('profile'),
       assets: true,
     );
     ui.line('run ${app.split(RegExp(r'[/\\]')).last}');
@@ -218,6 +240,7 @@ class _BuildCommand extends BaseCommand {
       _afterPlatform(argResults!),
       debug: argResults!.flag('debug'),
       stock: argResults!.flag('stock'),
+      profile: argResults!.flag('profile'),
       universal: argResults!.flag('universal'),
     );
     ui.line(app);
@@ -400,6 +423,7 @@ List<Finding> appChecks(
 
 class _EnvCommand extends BaseCommand {
   _EnvCommand() {
+    addApp();
     argParser.addOption(
       'shell',
       allowed: ['sh', 'powershell', 'cmd'],
@@ -414,7 +438,8 @@ class _EnvCommand extends BaseCommand {
   String get description =>
       'Prints the lines that set the Flutter SDK, the pub cache and the engine in a shell.';
   @override
-  String get invocation => 'prismarine env [--shell=sh|powershell|cmd]';
+  String get invocation =>
+      'prismarine env [--app=<folder>] [--shell=sh|powershell|cmd]';
 
   @override
   Future<int> run() async {
@@ -427,13 +452,22 @@ class _EnvCommand extends BaseCommand {
     };
     final target = hostTarget();
     try {
-      final release = steps(null).release();
+      // The release of the app gives the engine. Outside an app the release
+      // of this checkout gives it.
+      final app = findApp(required: false, given: argResults!.option('app'));
+      final release = steps(app).release();
       final e = target == null
           ? null
           : findEngine(engineDir(env), target, release).engine;
       if (e != null) {
         vars['PRISMARINE_IMPELLERC'] = e.impellerc;
         vars['PRISMARINE_ENGINE_ARGS'] = e.flutterArgs.join(' ');
+        final profile = findProfileEngine(e, engineDir(env));
+        if (profile != null) {
+          vars['PRISMARINE_ENGINE_PROFILE_ARGS'] = profile.flutterArgs.join(
+            ' ',
+          );
+        }
       }
     } on Failure {
       // Outside a checkout the engine lines are left out.
