@@ -4,15 +4,27 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 /// Returns the files under each of [paths] in a fixed order. A path of a file
-/// gives that file. A missing path gives no files.
+/// gives that file. A missing path gives no files. Hidden files and folders,
+/// such as `.dart_tool`, and `build` folders under a path are left out.
 List<File> filesUnder(Iterable<String> paths) {
   final out = <File>[];
+  void walk(Directory d, List<File> files) {
+    for (final e in d.listSync(followLinks: false)) {
+      final name = e.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+      if (name.startsWith('.')) continue;
+      if (e is Directory) {
+        if (name != 'build') walk(e, files);
+      } else if (e is File) {
+        files.add(e);
+      }
+    }
+  }
+
   for (final p in paths) {
     if (FileSystemEntity.isDirectorySync(p)) {
-      final files =
-          Directory(p).listSync(recursive: true).whereType<File>().toList()
-            ..sort((a, b) => a.path.compareTo(b.path));
-      out.addAll(files);
+      final files = <File>[];
+      walk(Directory(p), files);
+      out.addAll(files..sort((a, b) => a.path.compareTo(b.path)));
     } else if (File(p).existsSync()) {
       out.add(File(p));
     }

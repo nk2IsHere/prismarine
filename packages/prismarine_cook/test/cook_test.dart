@@ -15,6 +15,19 @@ void main() {
   setUp(() => tmp = Directory.systemTemp.createTempSync('cook').path);
   tearDown(() => Directory(tmp).deleteSync(recursive: true));
 
+  test('input folders leave out hidden and build folders', () {
+    write('in/lib/a.dart', 'a');
+    write('in/.dart_tool/state', 'x');
+    write('in/build/out.bin', 'x');
+    write('in/lib/.DS_Store', 'x');
+    expect(
+      [
+        for (final f in filesUnder(['$tmp/in'])) f.path.substring(tmp.length),
+      ],
+      ['/in/lib/a.dart'],
+    );
+  });
+
   group('project', () {
     test('a relative output folder of an asset step is the app\'s', () {
       write('app/pubspec.yaml', 'name: demo\n');
