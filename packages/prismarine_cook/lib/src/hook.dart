@@ -35,10 +35,13 @@ Future<void> cookHook(BuildInput input, BuildOutputBuilder output) async {
       impellerc: impellerc,
       cacheDir: shaderCacheDir(Platform.environment),
     );
-    final programs = entry.programsDir(project);
-    output.dependencies.add(Directory(programs).uri);
-    for (final f in filesUnder([programs])) {
-      output.dependencies.add(f.uri);
+    for (final source in entry.sources(project)) {
+      if (FileSystemEntity.isDirectorySync(source)) {
+        output.dependencies.add(Directory(source).uri);
+      }
+      for (final f in filesUnder([source])) {
+        output.dependencies.add(f.uri);
+      }
     }
     output.dependencies.add(File(shaderStamp(project, entry).path).uri);
   }

@@ -44,6 +44,17 @@ void main() {
     expect(f.last.fix, 'rustup target add x86_64-apple-darwin');
   });
 
+  test('rustup outside the home folder is a problem for build hooks', () {
+    final f = ToolchainChecks(
+      toolchain,
+      fake({'cargo --version': 'cargo 1.88.0'}),
+      os: 'linux',
+      env: {'HOME': tmp, 'RUSTUP_HOME': '/opt/rustup'},
+      exists: (_) => false,
+    ).rust();
+    expect(f.single.fix, 'ln -s "/opt/rustup" ~/.rustup');
+  });
+
   test('missing Linux packages are one apt line', () {
     final f = checks('linux', {
       'ninja --version': '1.12',
@@ -108,6 +119,7 @@ void main() {
     );
     expect(out.text, contains('engine failed after'));
     expect(out.text, contains('  No engine.\n  fix: prismarine engine'));
+    await out.close();
   });
 }
 
@@ -118,6 +130,8 @@ class _Lines implements IOSink {
   void write(Object? o) => b.write(o);
   @override
   void writeln([Object? o = '']) => b.writeln(o);
+  @override
+  Future<void> close() async {}
   @override
   dynamic noSuchMethod(Invocation i) => null;
 }

@@ -101,6 +101,9 @@ Future<ShaderCook> cookShaders(
     );
   }
   stamp.delete();
+  if (entry.manifest != null) {
+    return _cookManifest(project, entry, impellerc, stamp, key);
+  }
   final programs = entry.programsDir(project);
   if (!Directory(programs).existsSync()) {
     throw ProjectError('shaders.${entry.id}: no folder $programs.');
@@ -144,4 +147,30 @@ Future<ShaderCook> cookShaders(
     shaders: report.bundled,
     cached: report.cached,
   );
+}
+
+Future<ShaderCook> _cookManifest(
+  Project project,
+  ShaderEntry entry,
+  String impellerc,
+  Stamp stamp,
+  String key,
+) async {
+  final base = entry.baseDir(project);
+  final manifest = File('$base/${entry.manifest}').readAsStringSync();
+  final out = File(entry.outDir(project))..parent.createSync(recursive: true);
+  final r = await Process.run(impellerc, [
+    '--sl=${out.path}',
+    ...entry.impellercArgs,
+    '--shader-bundle=${jsonEncode(jsonDecode(manifest))}',
+  ], workingDirectory: base);
+  if (r.exitCode != 0) {
+    if (out.existsSync()) out.deleteSync();
+    throw ShaderCookError(entry.id, {
+      entry.manifest!: '${r.stderr}${r.stdout}',
+    });
+  }
+  final count = (jsonDecode(manifest) as Map).length;
+  stamp.write(key, {'shaders': count});
+  return ShaderCook(entry, current: false, shaders: count);
 }

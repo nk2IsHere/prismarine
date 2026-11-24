@@ -163,6 +163,7 @@ class ShaderEntry {
     this.id,
     this.package,
     this.programs,
+    this.manifest,
     this.out,
     this.backends,
     this.shard,
@@ -174,6 +175,7 @@ class ShaderEntry {
     _onlyKeys(m, const {
       'package',
       'programs',
+      'manifest',
       'out',
       'backends',
       'shard',
@@ -191,10 +193,14 @@ class ShaderEntry {
     if (shard is! int || shard < 1) {
       throw ProjectError('$where: shard must be a positive number.');
     }
+    if ((m['programs'] == null) == (m['manifest'] == null)) {
+      throw ProjectError('$where: give either programs or manifest.');
+    }
     return ShaderEntry._(
       id,
       m['package'] == null ? null : _string(m, 'package', where),
-      _string(m, 'programs', where),
+      m['programs'] == null ? null : _string(m, 'programs', where),
+      m['manifest'] == null ? null : _string(m, 'manifest', where),
       _string(m, 'out', where),
       backends,
       shard,
@@ -204,11 +210,19 @@ class ShaderEntry {
 
   final String id;
 
-  /// The package whose folder holds [programs], or null for the app.
+  /// The package whose folder holds [programs] or [manifest], or null for
+  /// the app.
   final String? package;
-  final String programs;
 
-  /// The output folder, relative to the app.
+  /// A program tree of prismarine_shaders, or null for a [manifest].
+  final String? programs;
+
+  /// A shader bundle manifest of impellerc, or null for [programs]. Its
+  /// files are relative to the folder of the package.
+  final String? manifest;
+
+  /// The output folder of a program tree, or the bundle file of a manifest,
+  /// relative to the app.
   final String out;
 
   /// `metal` and `vulkan`, the backends of the bundles.
@@ -218,7 +232,11 @@ class ShaderEntry {
 
   /// The folder of the program tree. Throws a [ProjectError] when the
   /// package is not in the package config of [project].
-  String programsDir(Project project) {
+  String programsDir(Project project) => '${baseDir(project)}/$programs';
+
+  /// The folder of [package], or of the app without one. Throws a
+  /// [ProjectError] when the package is not in the package config.
+  String baseDir(Project project) {
     final base = package == null ? project.dir : project.packageRoot(package!);
     if (base == null) {
       throw ProjectError(
@@ -226,13 +244,34 @@ class ShaderEntry {
         'pubspec.yaml.',
       );
     }
-    return '$base/$programs';
+    return base;
+  }
+
+  /// The source files and folders of the entry, the inputs of its key.
+  List<String> sources(Project project) {
+    if (programs != null) return [programsDir(project)];
+    final base = baseDir(project);
+    final m = File('$base/$manifest');
+    if (!m.existsSync()) {
+      throw ProjectError('shaders.$id: no manifest ${m.path}.');
+    }
+    final dirs = <String>{};
+    final j = jsonDecode(m.readAsStringSync());
+    if (j is Map) {
+      for (final e in j.values) {
+        if (e is Map && e['file'] is String) {
+          dirs.add(File('$base/${e['file']}').parent.path);
+        }
+      }
+    }
+    return [m.path, ...(dirs.toList()..sort())];
   }
 
   String outDir(Project project) => '${project.dir}/$out';
 
   /// The settings of the entry as JSON, for the key of its stamp.
   String get settings => jsonEncode({
+    'manifest': ?manifest,
     'backends': backends,
     'shard': shard,
     'impellerc-args': impellercArgs,

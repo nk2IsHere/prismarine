@@ -93,6 +93,14 @@ class ToolchainChecks {
           read(['git', '--version'])!.replaceFirst('git version ', ''),
         );
 
+  String? get _home {
+    try {
+      return homeDir(env);
+    } on StateError {
+      return null;
+    }
+  }
+
   /// The cargo on `PATH` or in `~/.cargo/bin`, or null.
   String? get cargo {
     if (read(['cargo', '--version']) != null) return 'cargo';
@@ -119,6 +127,22 @@ class ToolchainChecks {
       ];
     }
     final version = read([c, '--version']) ?? 'cargo';
+    final home = _home;
+    final rustupHome = env['RUSTUP_HOME'];
+    if (home != null &&
+        rustupHome != null &&
+        rustupHome.isNotEmpty &&
+        !exists('$home/.rustup/settings.toml')) {
+      return [
+        Finding.problem(
+          'Rust',
+          'rustup is in RUSTUP_HOME=$rustupHome, which a build hook does not get',
+          os == 'windows'
+              ? 'mklink /J "$home\\.rustup" "$rustupHome"'
+              : 'ln -s "$rustupHome" ~/.rustup',
+        ),
+      ];
+    }
     final rustup = c == 'cargo'
         ? 'rustup'
         : c.replaceFirst(RegExp(r'cargo(\.exe)?$'), 'rustup');
