@@ -133,7 +133,7 @@ assets:
 | `shaders.<id>.shard` | The number of shaders in one bundle file, 25 by default |
 | `shaders.<id>.impellerc-args` | Extra arguments for every impellerc run |
 | `assets.<id>.run` | The command of the step, run in the folder of the app. `{out}` is its output folder |
-| `assets.<id>.out` | The output folder. `{data}` is `~/.prismarine`, or `%LOCALAPPDATA%\prismarine` on Windows |
+| `assets.<id>.out` | The output folder. `{data}` is `~/.prismarine`, or `%LOCALAPPDATA%\prismarine` on Windows, and a relative folder is in the folder of the app |
 | `assets.<id>.out-env` | An environment variable that sets the output folder in place of `out` |
 | `assets.<id>.inputs` | Files and folders of the app and `package:<name>` for the code of a package |
 | `assets.<id>.exists` | Files that a complete output holds. An output folder that holds them counts as current, also when the command did not prepare it |
@@ -158,7 +158,7 @@ At its start, an app calls `requireEngine` of `prismarine_scene` with the featur
 
 | Command | Effect |
 |---|---|
-| `prismarine run [<platform>]` | Builds the app in release mode on the patched engine and starts it |
+| `prismarine run [<platform>]` | Builds the app in release mode on the patched engine and starts it. `--no-build` starts the app as it was last built, and `--timeout=<s>` stops it after that many seconds with exit code 124 |
 | `prismarine build [<platform>]` | Builds the app without its asset steps, `--stock` on the engine of Flutter, `--debug` in debug mode, `--profile` in profile mode on a profile engine and `--universal` for both CPUs of a Mac |
 | `prismarine cook [<app>]` | Cooks the shaders and runs the asset steps that are not current |
 | `prismarine doctor [<app>]` | Lists every problem with its fix |

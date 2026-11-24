@@ -166,6 +166,19 @@ class _RunCommand extends BaseCommand {
   _RunCommand() {
     addApp();
     _addStock(argParser);
+    argParser
+      ..addFlag(
+        'build',
+        defaultsTo: true,
+        help:
+            'Builds the app before it starts. --no-build starts the app as it was last built.',
+      )
+      ..addOption(
+        'timeout',
+        help:
+            'Stops the app after this many seconds and exits with 124, for unattended runs.',
+        valueHelp: 'seconds',
+      );
   }
 
   @override
@@ -186,21 +199,64 @@ class _RunCommand extends BaseCommand {
         usage,
       );
     }
-    final app = await _buildApp(
-      this,
-      platform,
-      const [],
-      stock: argResults!.flag('stock'),
-      profile: argResults!.flag('profile'),
-      assets: true,
-    );
+    final r = argResults!;
+    final timeout = r.option('timeout');
+    final seconds = timeout == null ? null : int.tryParse(timeout);
+    if (timeout != null && (seconds == null || seconds <= 0)) {
+      throw UsageException('--timeout takes whole seconds.', usage);
+    }
+    final String app;
+    if (r.flag('build')) {
+      app = await _buildApp(
+        this,
+        platform,
+        const [],
+        stock: r.flag('stock'),
+        profile: r.flag('profile'),
+        assets: true,
+      );
+    } else {
+      final project = findApp(given: r.option('app'))!;
+      app = builtApp(
+        project.dir,
+        platform,
+        mode: r.flag('profile') ? 'profile' : 'release',
+      );
+      if (!File(app).existsSync()) {
+        final f = Failure(
+          'No built app at $app.',
+          fix: 'prismarine build --app=${project.dir}',
+        );
+        ui.printFailure(f);
+        throw f;
+      }
+    }
     ui.line('run ${app.split(RegExp(r'[/\\]')).last}');
     final p = await Process.start(
       app,
-      _afterPlatform(argResults!),
+      _afterPlatform(r),
       mode: ProcessStartMode.inheritStdio,
     );
-    return p.exitCode;
+    if (seconds == null) return p.exitCode;
+    var timedOut = false;
+    final code = await p.exitCode.timeout(
+      Duration(seconds: seconds),
+      onTimeout: () {
+        timedOut = true;
+        return 0;
+      },
+    );
+    if (!timedOut) return code;
+    ui.line('stopped after $seconds s');
+    p.kill();
+    await p.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        p.kill(ProcessSignal.sigkill);
+        return 137;
+      },
+    );
+    return 124;
   }
 }
 
@@ -411,7 +467,7 @@ List<Finding> appChecks(
   }
   for (final a in project.assets) {
     try {
-      final o = a.outDir(env);
+      final o = a.outDir(env, appDir: project.dir);
       out.add(
         assetStamp(a, o).key == assetKey(project, a, o)
             ? Finding.ok('Assets ${a.id}', 'current in $o')

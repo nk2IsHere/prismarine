@@ -376,7 +376,8 @@ class AssetStep {
   /// The command and its arguments. `{out}` becomes the output folder.
   final List<String> run;
 
-  /// The output folder. `{data}` becomes [dataHome].
+  /// The output folder. `{data}` becomes [dataHome], and a relative folder is
+  /// in the folder of the app.
   final String out;
 
   /// The environment variable that sets the output folder in place of [out].
@@ -386,11 +387,16 @@ class AssetStep {
   /// of a package.
   final List<String> inputs;
 
-  /// The output folder for the environment [env].
-  String outDir(Map<String, String> env) {
+  /// The output folder for the environment [env]. [appDir] is the folder of
+  /// the app, which a relative [out] is in.
+  String outDir(Map<String, String> env, {String? appDir}) {
     final set = outEnv == null ? null : env[outEnv];
     if (set != null && set.isNotEmpty) return set;
-    return out.replaceAll('{data}', dataHome(env));
+    final dir = out.contains('{data}')
+        ? out.replaceAll('{data}', dataHome(env))
+        : out;
+    // A relative folder is in the app's own folder.
+    return appDir == null || File(dir).isAbsolute ? dir : '$appDir/$dir';
   }
 
   /// The command with `{out}` replaced by [outDir].

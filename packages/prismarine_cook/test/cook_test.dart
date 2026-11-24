@@ -16,6 +16,21 @@ void main() {
   tearDown(() => Directory(tmp).deleteSync(recursive: true));
 
   group('project', () {
+    test('a relative output folder of an asset step is the app\'s', () {
+      write('app/pubspec.yaml', 'name: demo\n');
+      write('app/prismarine.yaml', '''
+assets:
+  tool:
+    run: [dart, tool/build.dart, '--out={out}']
+    out: build/tool
+''');
+      final p = Project.load('$tmp/app')!;
+      expect(
+        p.assets.single.outDir(const {}, appDir: p.dir),
+        '${p.dir}/build/tool',
+      );
+    });
+
     test('the engine and the Flutter version come from the file', () {
       write('app/pubspec.yaml', 'name: demo\n');
       write(
@@ -62,6 +77,7 @@ assets:
       expect(p.shaders.single.shard, 25);
       final a = p.assets.single;
       expect(a.outDir({'DEMO_DATA': '/x'}), '/x');
+
       expect(a.command('/x'), ['dart', 'tool/fetch.dart', '--out=/x']);
       if (!Platform.isWindows) {
         expect(a.outDir({'HOME': '/h'}), '/h/.prismarine/demo');

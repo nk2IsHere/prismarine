@@ -53,7 +53,10 @@ Future<AssetCook> cookAsset(
   Map<String, String>? environment,
   bool force = false,
 }) async {
-  final out = step.outDir(environment ?? Platform.environment);
+  final out = step.outDir(
+    environment ?? Platform.environment,
+    appDir: project.dir,
+  );
   final stamp = assetStamp(step, out);
   final key = assetKey(project, step, out);
   if (!force && stamp.key == key) return AssetCook(step, out, current: true);
