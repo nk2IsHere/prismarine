@@ -2,9 +2,9 @@ part of 'gi_passes.dart';
 
 /// The render passes of the indirect light after the opaque pass.
 extension GiScreenPasses on GiPasses {
+  // alloc-cold: a new plan.
   /// The passes after the opaque pass into [hdr] with depth [depth]. [frame]
   /// is the block of the frame role and [view] the viewport of the plan.
-  // alloc-cold: a new plan.
   List<RenderPassPlan> after(
     Uint8List frame,
     String hdr,

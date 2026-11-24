@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'memory_readings.dart';
+import 'process_memory.dart' show processFootprint;
 
 export 'memory_readings.dart' show MemoryReadings, readMemory;
 
@@ -17,9 +18,9 @@ class MemoryRoom {
           minFreeMb ?? int.tryParse(_env('AHEAD_FREE_MB') ?? '') ?? 2048,
       _read = read ?? readMemory;
 
-  /// The memory of the process past which nothing is read far ahead. It is
-  /// the footprint on macOS, the resident set on Linux and the private bytes
-  /// on Windows. Null sets it to 40 % of the memory of the machine.
+  /// The memory of the process past which nothing is read far ahead, compared
+  /// with [processFootprint]. Null sets it to 40 % of the memory of the
+  /// machine.
   final int? budgetMb;
 
   /// The memory that the system must have available for reads far ahead.

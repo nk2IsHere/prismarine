@@ -31,6 +31,7 @@ final class _FirstUses {
     }
   }
 
+  // alloc-cold: PRISMARINE_FRAME_LOG runs only.
   /// Notes the first record of [d]. Returns the time of the clock when its
   /// state is new to its pipeline and pass, else -1. [stateUs] counts from
   /// that time.
@@ -57,6 +58,7 @@ final class _FirstUses {
     return clock.elapsedMicroseconds;
   }
 
+  // alloc-cold: PRISMARINE_FRAME_LOG runs only.
   void pass(String name, int us) => _passes.add((name, us));
 
   /// The time in µs past which a first-recorded draw in the engine counts
@@ -69,6 +71,7 @@ final class _FirstUses {
   final _missed = <String, (int, int)>{};
   final _missedSome = <String>[];
 
+  // alloc-cold: PRISMARINE_FRAME_LOG runs only.
   void missed(String why, DrawPlan d, int us) {
     final (n, total) = _missed[why] ?? (0, 0);
     _missed[why] = (n + 1, total + us);
@@ -80,6 +83,7 @@ final class _FirstUses {
     }
   }
 
+  // alloc-cold: PRISMARINE_FRAME_LOG runs only.
   /// Logs the first uses of the run to [warn] and its slowest passes when
   /// its record of [recordUs] took over [_slowUs].
   void ran(void Function(String)? warn, int recordUs) {

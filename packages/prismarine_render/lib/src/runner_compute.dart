@@ -46,6 +46,7 @@ extension _RunnerCompute on FrameRunner {
     if (state is! _DispatchState ||
         !identical(state.runner, this) ||
         !identical(state.setup, setup)) {
+      // alloc: a dispatch's first run on this runner
       c.runnerState = state = _DispatchState(
         this,
         setup,
@@ -157,6 +158,7 @@ extension _RunnerCompute on FrameRunner {
     } on Exception catch (e) {
       // Reported once per shader. The frame goes on without its output.
       if (_failed.add(c.shader)) {
+        // alloc: once per shader whose dispatch failed
         warn?.call('renderer: dispatch ${c.shader}: $e');
       }
     }
@@ -171,6 +173,7 @@ extension _RunnerCompute on FrameRunner {
       ? _frameInline(dispatch, name, _frameBlocks[b]!)
       : _inline(b);
 
+  // alloc-cold: the first dispatch of a shader.
   /// Returns the lookups of the shader [id] for its dispatches, made on its
   /// first dispatch.
   _ComputeSetup _computeSetupOf(String id) {
@@ -189,6 +192,7 @@ extension _RunnerCompute on FrameRunner {
     );
   }
 
+  // alloc-cold: a dispatch's first run on this runner.
   /// Returns the reads and writes of [c] on the GPU, with targets and frame
   /// buffers by name and inline storage by its bytes. A storage binding
   /// counts as written unless the shader [info] declares it read-only. No
@@ -280,6 +284,7 @@ final class _Access {
 /// objects in the order of the shader, the storage inputs found once by name
 /// and the reads and writes. The resources of a plan do not change once made.
 final class _DispatchState {
+  // alloc-cold: a dispatch's first run on this runner.
   _DispatchState(this.runner, this.setup, DispatchPlan c, this.access)
     : blocks = [for (final b in setup.info.blocks) c.resources.blocks[b.name]],
       sizes = [for (final b in setup.info.blocks) b.rows * 16],

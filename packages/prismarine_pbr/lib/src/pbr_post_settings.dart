@@ -76,6 +76,12 @@ class PbrPointShadowSettings {
   /// The share of the range of a light within which objects cast shadows,
   /// 0.5 by default. Objects further from the light cast none.
   double reach = 0.5;
+
+  /// The frames over which the faces of a moving light are drawn again, from
+  /// 1 to 3, 3 by default. With 3 each frame draws one pair of opposite
+  /// faces of each moving light, and its shadows follow it with a delay of
+  /// up to two frames. 1 draws all six faces each frame.
+  int turns = 3;
 }
 
 /// The most point lights that cast shadows.

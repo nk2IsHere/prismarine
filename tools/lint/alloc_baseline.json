@@ -1,11 +1,6 @@
 {
   "about": "alloc ratchet: per-package counts of allocation places in per-frame code may not grow. Lower it with `dart tools/lint/alloc.dart --update-baseline`.",
   "packages": {
-    "packages/prismarine_assets": {
-      "new": 3,
-      "literal": 1,
-      "closure": 3
-    },
     "packages/prismarine_audio": {
       "new": 132,
       "literal": 89,
@@ -23,11 +18,11 @@
       "sdk": 20
     },
     "packages/prismarine_frame": {
-      "new": 67,
-      "literal": 40,
-      "closure": 6,
-      "iterate": 26,
-      "sdk": 3
+      "new": 55,
+      "literal": 30,
+      "closure": 5,
+      "iterate": 16,
+      "sdk": 1
     },
     "packages/prismarine_jobs": {
       "new": 8,
@@ -37,8 +32,7 @@
       "sdk": 7
     },
     "packages/prismarine_kept": {
-      "new": 3,
-      "iterate": 1
+      "new": 1
     },
     "packages/prismarine_loop": {
       "new": 9,
@@ -64,30 +58,14 @@
     "packages/prismarine_math": {
       "box": 5
     },
-    "packages/prismarine_pbr": {
-      "new": 6,
-      "literal": 14,
-      "string": 4,
-      "iterate": 8,
-      "async": 2,
-      "sdk": 1
-    },
     "packages/prismarine_render": {
-      "new": 184,
-      "literal": 97,
-      "string": 101,
-      "closure": 17,
-      "iterate": 60,
-      "async": 7,
-      "sdk": 14
-    },
-    "packages/prismarine_scene": {
-      "new": 3,
-      "literal": 1,
+      "new": 36,
+      "literal": 5,
+      "string": 3,
       "closure": 1,
-      "iterate": 1,
-      "async": 1,
-      "sdk": 4
+      "iterate": 11,
+      "async": 4,
+      "sdk": 6
     },
     "packages/prismarine_snap": {
       "new": 19,

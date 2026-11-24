@@ -105,8 +105,12 @@ from it. `settings.gi.debugView` shows the diffuse light, the occlusion, the ref
 Each frame the builder gives the shadow slots of the budget to the lights with the most light at the camera among those
 whose range touches the view. A light keeps its slot while it stays among the best. The six faces of a slot draw the
 opaque and masked draws whose bounding sphere touches the face within the reach of the light, with both faces. A light
-inside a closed part sees the backs of its faces, which keep its light inside. The pass is retained while the lights
-hold still. Any stage can read a shadow with `pointShadow(light, worldPos, normal)` of
+inside a closed part sees the backs of its faces, which keep its light inside. A face draws only the runs of triangles of
+such a draw that touch it, from a tree over the runs of the model: a part of the draw that lies inside the face is one
+draw. The faces come in three pairs of opposite faces. A light that gets a slot draws all of them. A moving light draws
+one pair again each frame by default, the oldest first, and its shadows follow it with a delay of up to two frames.
+Each pair keeps the position of its draw in `pointPairs` of the `Frame` block. The pass draws and clears only the faces
+that change. It is retained while the lights hold still. Any stage can read a shadow with `pointShadow(light, worldPos, normal)` of
 `shaders/programs/Pbr/bodies/point_shadow.glsl`, which needs the `Frame` block, the texture `pointShadowAtlas` and the
 comparison sampler s4.
 
@@ -144,6 +148,7 @@ of its label.
 | `post.toneMap` | `agx` by default, or `acesFit`, `aces` or `neutral`. |
 | `pointShadows.budget`, `pointShadows.quality` | The lights that cast shadows, 2 by default and at most 8 and the face size, 256, 512 or 1024 texels, medium by default. |
 | `pointShadows.reach`, `pointShadows.bias` | The share of a light's range within which objects cast shadows, 0.5 and the depth bias in texels, 1.5. |
+| `pointShadows.turns` | The frames over which a moving light draws its faces again, 3 by default. 1 draws all six faces each frame. |
 | `volume.enabled`, `volume.quality` | The fog, on at medium by default, with 96 by 54 by 64, 160 by 90 by 64 or 240 by 135 by 128 froxels. |
 | `volume.density`, `volume.heightFalloff`, `volume.base` | The extinction per metre, 0.006, its falloff per metre of height, 0.08 and the height of the full density, 0. |
 | `volume.anisotropy`, `volume.range` | The forward scattering, 0.5 and the far end of the grid, 60 m. |
@@ -171,9 +176,17 @@ with the effect on and off. The runs vary by about 0.2 ms.
 |---|---|---|
 | TAA, auto exposure, bloom and tone map at default | about 0.35 ms | about 0.15 ms |
 | Fog at medium | about 0.15 ms | about 0.25 ms |
-| Point shadows, each shadowed light at medium with two-sided casters | about 1.7 ms | about 0.2 ms with one-sided casters |
 | Indirect light at medium | about 1.5 to 2 ms | about 1 ms |
 | Indirect light at low and at high | about 1 ms and about 3.5 ms | |
+
+The lights of the performance run move. Drawing their faces in turns and by runs of 4,096 triangles changes the GPU time
+of a whole frame as follows. Without turns and runs, the default of 2 shadowed lights at medium cost about 2.9 ms of it
+on the Mac.
+
+| Shadowed lights | Mac, M2 Pro, Metal | Linux, RTX 4060 Ti, Vulkan |
+|---|---|---|
+| 2 at medium, the default | from 11.3 ms to 8.4 ms | from 7.0 ms to 6.6 ms |
+| 8 at high | from 34.0 ms to 13.5 ms | from 14.8 ms to 7.2 ms |
 
 ## Shaders
 

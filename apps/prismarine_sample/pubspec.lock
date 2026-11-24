@@ -269,6 +269,13 @@ packages:
       relative: true
     source: path
     version: "0.0.0"
+  prismarine_jobs:
+    dependency: transitive
+    description:
+      path: "../../packages/prismarine_jobs"
+      relative: true
+    source: path
+    version: "0.0.0"
   prismarine_kept:
     dependency: transitive
     description:

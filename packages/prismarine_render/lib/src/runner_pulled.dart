@@ -4,6 +4,9 @@ part of 'frame_runner.dart';
 /// pass. The passes of a frame are prepared before the GPU runs the first one.
 /// No pass may share the scratch of another.
 class _PulledFrame {
+  // alloc-cold: once per pulled pass.
+  _PulledFrame();
+
   final instances = _Bytes(), objects = _Bytes(), materials = _Bytes();
   final clusters = _Bytes(), bases = _Bytes(), args = _Bytes();
 
@@ -58,6 +61,7 @@ final _zero16 = Uint8List(16);
 /// programs, pool, state, arrays and samplers, drawn as one instanced draw
 /// of their clusters.
 class _PulledBucket {
+  // alloc-cold: a bucket that the last frame did not have.
   _PulledBucket(this.first, this.scene, this.pool, this.arrays, this.index);
   final DrawPlan first;
   final _CookedSceneGpu scene;
@@ -97,6 +101,7 @@ class _PulledBucket {
         return had;
       }
     }
+    // alloc: a buffer, offset or length that the last views did not have
     return kept[_viewTurn++ & 3] = gpu.BufferView(
       buffer,
       offsetInBytes: offset,
@@ -265,6 +270,7 @@ final _storageNames = Expando<List<String>>('pulled storage names');
 gpu.BufferView _poolStream(_PoolGpu pool, String n, String id, String name) =>
     pool.byStorage[n] ?? (pool.byStorage[n] = _findStream(pool, n, id, name));
 
+// alloc-cold: the first lookup of a stream of a pool.
 gpu.BufferView _findStream(_PoolGpu pool, String n, String id, String name) {
   for (final key in pool.streams.keys) {
     final k = _poolKeys[key] ??= 'pool${key.replaceAll('_', '').toLowerCase()}';
@@ -283,6 +289,7 @@ extension _RunnerPulled on FrameRunner {
 
   // The miss path is a method of its own. An inline closure that captures
   // [d] would allocate a context on every call.
+  // alloc-cold: a draw's first pulled form.
   _PulledDraw _makePulled(DrawPlan d) {
     _pulledStats.made++;
     final p = pulled!;
@@ -457,11 +464,11 @@ extension _RunnerPulled on FrameRunner {
     UniformRing host,
     RowSet? rows,
   ) {
-    final clock = Stopwatch()..start();
+    final at = _clock.elapsedMicroseconds;
     try {
       return _pulledPrepareTimed(cb, pass, draws, host, rows);
     } finally {
-      _pulledStats.add(clock.elapsedMicroseconds, warn);
+      _pulledStats.add(_clock.elapsedMicroseconds - at, warn);
     }
   }
 
@@ -477,6 +484,7 @@ extension _RunnerPulled on FrameRunner {
     final bounds = rows?.bounds;
     final rowCount = rows?.plans.length ?? 0;
 
+    // alloc: a pulled pass's first run
     final f = _pulledFrames[pass] ??= _PulledFrame();
     f.boxes.reset();
     final rest = f.rest..clear();
@@ -538,10 +546,7 @@ extension _RunnerPulled on FrameRunner {
     final camera = f.camera;
     if (buckets.isEmpty || (camera == null && bounds == null)) return null;
     if (FrameRunner.trace) {
-      warn?.call(
-        'renderer: pulled: $instanceCount draws in ${buckets.length} buckets, '
-        '${rest.length} left to their records $why',
-      );
+      _tracePulled(instanceCount, buckets.length, rest, why);
     }
     // The cluster range of each bucket, on a 256-byte boundary for the
     // offset alignment of Metal, as many clusters as its instances have. The
@@ -566,7 +571,9 @@ extension _RunnerPulled on FrameRunner {
     // The bases, a uint each. The pairs above hold one in their first. The
     // words go through the own data view of the bases.
     if (f.words.length < buckets.length) {
+      // alloc: more buckets than any frame before
       f.words = Uint32List(buckets.length * 2);
+      // alloc: more buckets than any frame before
       f.wordBytes = f.words.buffer.asUint8List();
     }
     final words = f.words, data = bases._data;
@@ -614,6 +621,7 @@ extension _RunnerPulled on FrameRunner {
     // One view per cluster buffer.
     var clusterView = slot.clusterView;
     if (clusterView == null || !identical(clusterView.buffer, clusters)) {
+      // alloc: a new cluster buffer
       clusterView = slot.clusterView = gpu.BufferView(
         clusters,
         offsetInBytes: 0,
@@ -673,6 +681,13 @@ extension _RunnerPulled on FrameRunner {
     );
   }
 
+  // alloc-cold: PRISMARINE_RENDER_TRACE runs only.
+  void _tracePulled(int draws, int buckets, List<DrawPlan> rest, Object why) =>
+      warn?.call(
+        'renderer: pulled: $draws draws in $buckets buckets, '
+        '${rest.length} left to their records $why',
+      );
+
   /// Records the buckets of [p] into [pass], one indirect draw each of the
   /// clusters that the culling kept.
   void _pulledRecord(gpu.RenderPass pass, _PulledPrepared p, UniformRing host) {
@@ -720,6 +735,7 @@ extension _RunnerPulled on FrameRunner {
       _warm.learn(d.vertex, pulled: true);
     }
     final setup = cache.pulled ??= _pulledSetup(p, d);
+    // alloc: the first draw of a bucket
     final fixed = cache.pulledFixed ??= _DrawFixed(d, setup);
     final vs = setup.vs, fs = setup.fs!, pipeline = setup.pipeline;
     final pool = b.scene.pool(b.pool);
@@ -754,6 +770,7 @@ extension _RunnerPulled on FrameRunner {
     pass.drawIndirect(args);
   }
 
+  // alloc-cold: the first draw of a bucket, or a warm-up.
   /// Returns the shaders and pipeline of the draw of a pulled bucket.
   _DrawSetup _pulledSetup(Pulled p, DrawPlan d) {
     final vs = p.shaders.shader(d.vertex);
@@ -805,12 +822,14 @@ extension _RunnerPulled on FrameRunner {
         _uniform(host, res.blocks[block.name], block.rows * 16),
       );
     }
+    // alloc: the first bind of a stage of a pulled program
     final names = _storageNames[info] ??= info.storage.keys.toList(
       growable: false,
     );
     for (var k = 0; k < names.length; k++) {
       final name = names[k];
       // `Raw<Name>` as the cooked programs declare them.
+      // alloc: the first bind of a storage name
       final n = _storageKeys[name] ??= name.toLowerCase().replaceFirst(
         'raw',
         '',

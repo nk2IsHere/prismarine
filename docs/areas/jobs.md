@@ -29,6 +29,11 @@ early holds its parsed data that long. A machine short of memory pays for it in 
 memory readings of the OS at most once a second: the memory pressure level and swap growth on macOS, available memory
 and the cgroup limit on Linux and the commit limit on Windows. A budget for the process applies as well.
 
+`processFootprint` returns the memory that the process holds and is the figure that the budget compares. It is the
+physical footprint on macOS, which Activity Monitor shows. On Linux it is the resident anonymous memory plus the
+swapped memory of `/proc/self/status`, without the pages of mapped files. On Windows it is the private bytes. It
+allocates nothing after its first call, which makes it cheap enough for a per-frame profiler.
+
 | Variable | Effect |
 |---|---|
 | `PRISMARINE_AHEAD_BUDGET_MB` | The footprint of the process past which nothing is read far ahead. The default is 40 % of the memory of the machine. |

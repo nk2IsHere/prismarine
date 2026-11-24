@@ -4,3 +4,4 @@ library;
 
 export 'src/gltf_model.dart';
 export 'src/scene_node.dart';
+export 'src/triangle_order.dart';

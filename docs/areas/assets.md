@@ -39,8 +39,9 @@ data format descriptor. `Ktx2Format` lists the formats it writes, from `rgba8` t
 their sRGB forms. `values` adds your own key-value data, such as the source of a texture.
 
 `readKtx2` reads a KTX2 file of one of these formats without supercompression. `encodePng` writes RGBA8 pixels as a
-PNG. `decodeBc1` and `decodeBc3` turn BC blocks into RGBA8, for a preview or for
-a target without BC support.
+PNG with unfiltered rows. By default the PNG keeps the alpha channel and has zlib level 9. Pass `alpha: false` for an
+RGB file and `level: 1` for a fast encode, such as a screenshot that a debug tool writes while the game runs.
+`decodeBc1` and `decodeBc3` turn BC blocks into RGBA8, for a preview or for a target without BC support.
 
 ## Geometry pools and texture arrays
 

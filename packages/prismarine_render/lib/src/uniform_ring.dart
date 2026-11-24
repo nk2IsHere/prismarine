@@ -12,6 +12,9 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 /// An emplacement copies into a CPU copy of its block. [flush] writes the
 /// used bytes of each block to the GPU once, before the frame is submitted.
 class UniformRing {
+  // alloc-cold: once per runner.
+  UniformRing();
+
   static const _blockBytes = 4 << 20;
   static const _frames = 4;
 
@@ -64,6 +67,7 @@ class UniformRing {
       gpu.GpuMemory.tag = null;
     }
     while (_staging.length <= _block) {
+      // alloc: a frame with more constant data than any before
       _staging.add(Uint8List(_blockBytes));
       _used.add(0);
     }
@@ -147,6 +151,7 @@ class BlockStore {
         ),
       );
       gpu.GpuMemory.tag = null;
+      // alloc: a new arena of placed blocks
       _staging.add(Uint8List(_arenaBytes));
       _from.add(0);
       _to.add(0);

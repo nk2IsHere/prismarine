@@ -1,5 +1,6 @@
 part of 'frame_runner.dart';
 
+// alloc-cold: a draw's first run.
 /// Returns the target textures of a draw, those of its vertex stage and then
 /// those of its pixel stage in binding order.
 List<TargetTexture> _targetTexturesOf(DrawPlan d) => [
@@ -69,12 +70,7 @@ extension _RunnerStores on FrameRunner {
         case final DispatchPlan c:
           // Read once per dispatch, since a kept dispatch is the same object
           // from frame to frame.
-          final reads = _dispatchReads[c] ??= [
-            for (final t in c.resources.textures.values)
-              if (t is TargetTexture) t.target,
-            for (final s in c.resources.storage.values)
-              if (s is ImageRef) s.target,
-          ];
+          final reads = _dispatchReads[c] ?? _readsOf(c);
           for (var k = 0; k < reads.length; k++) {
             if (used.add(reads[k])) order.add(reads[k]);
           }
@@ -92,10 +88,19 @@ extension _RunnerStores on FrameRunner {
     return dropped;
   }
 
+  // alloc-cold: a dispatch's first run.
+  List<String> _readsOf(DispatchPlan c) => _dispatchReads[c] = [
+    for (final t in c.resources.textures.values)
+      if (t is TargetTexture) t.target,
+    for (final s in c.resources.storage.values)
+      if (s is ImageRef) s.target,
+  ];
+
   /// Returns the targets that the draw [d] samples, kept with the draw. The
   /// draws of a plan do not change once made.
   List<String> _targetsRead(DrawPlan d) {
     final cache = _cacheOf(d);
+    // alloc: a draw's first run
     return cache.reads ??= [for (final t in _targetTexturesOf(d)) t.target];
   }
 }

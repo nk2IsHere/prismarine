@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:prismarine_assets/prismarine_assets.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -74,12 +76,29 @@ class ModelPrimitive {
     this.indexCount,
     this.material,
     this.min,
-    this.max,
-  );
+    this.max, {
+    Uint32List? clusters,
+    Float32List? clusterBounds,
+  }) : clusters = clusters ?? Uint32List.fromList([firstIndex, indexCount]),
+       clusterBounds =
+           clusterBounds ??
+           Float32List.fromList([min.x, min.y, min.z, max.x, max.y, max.z]);
   final Map<String, ModelStream> streams;
   final int indexView, firstIndex, indexCount;
   final int? material;
   final Vector3 min, max;
+
+  /// The runs of consecutive triangles of the primitive, as pairs of the
+  /// first index and the index count. A renderer can draw and cull a run on
+  /// its own, such as for the faces of a point light shadow.
+  final Uint32List clusters;
+
+  /// The box of the positions of each run of [clusters] in the space of the
+  /// mesh, as the minimum x, y and z and then the maximum x, y and z.
+  final Float32List clusterBounds;
+
+  /// The number of runs in [clusters].
+  int get clusterCount => clusters.length >> 1;
 }
 
 /// One primitive of a node in the scene: the mesh and primitive, the world
@@ -134,7 +153,10 @@ class GltfModel {
     this.max,
   );
 
-  factory GltfModel.read(GltfDocument doc) {
+  /// Reads [doc]. Each primitive is split into [clusters] of at most
+  /// [clusterTriangles] consecutive triangles, 4,096 by default. 0 keeps each
+  /// primitive in one run.
+  factory GltfModel.read(GltfDocument doc, {int clusterTriangles = 4096}) {
     final views = doc.list('bufferViews');
     final skipped = <String>[];
     final meshes = <List<ModelPrimitive?>>[];
@@ -145,6 +167,7 @@ class GltfModel {
             doc,
             views,
             prim as Map<String, Object?>,
+            clusterTriangles,
             () => skipped.add('mesh $m primitive $p'),
           ),
       ]);
@@ -267,6 +290,7 @@ class GltfModel {
     GltfDocument doc,
     List<Map<String, Object?>> views,
     Map<String, Object?> prim,
+    int clusterTriangles,
     void Function() skip,
   ) {
     final idx = prim['indices'] as int?;
@@ -318,15 +342,65 @@ class GltfModel {
       return v;
     }
 
+    final first = at ~/ 2, count = doc.count(idx);
+    final runs = clusterTriangles <= 0 || count <= clusterTriangles * 3
+        ? null
+        : _clusters(
+            doc.uints(idx),
+            doc.floats((prim['attributes'] as Map)['POSITION'] as int),
+            first,
+            clusterTriangles * 3,
+          );
     return ModelPrimitive(
       streams,
       ia['bufferView'] as int,
-      at ~/ 2,
-      doc.count(idx),
+      first,
+      count,
       prim['material'] as int?,
       corner('min'),
       corner('max'),
+      clusters: runs?.$1,
+      clusterBounds: runs?.$2,
     );
+  }
+
+  /// Splits [indices] into runs of [per] indices from [first] in the index
+  /// view. Returns the first index and the count of each run and the box of
+  /// the [positions] that it reads.
+  static (Uint32List, Float32List) _clusters(
+    Uint32List indices,
+    Float32List positions,
+    int first,
+    int per,
+  ) {
+    final n = (indices.length + per - 1) ~/ per;
+    final runs = Uint32List(n * 2), boxes = Float32List(n * 6);
+    for (var c = 0; c < n; c++) {
+      final start = c * per;
+      final end = math.min(start + per, indices.length);
+      runs[c * 2] = first + start;
+      runs[c * 2 + 1] = end - start;
+      var x0 = double.infinity, y0 = double.infinity, z0 = double.infinity;
+      var x1 = -double.infinity, y1 = -double.infinity, z1 = -double.infinity;
+      for (var i = start; i < end; i++) {
+        final v = indices[i] * 3;
+        final x = positions[v], y = positions[v + 1], z = positions[v + 2];
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+        if (z < z0) z0 = z;
+        if (z > z1) z1 = z;
+      }
+      boxes
+        ..[c * 6] = x0
+        ..[c * 6 + 1] = y0
+        ..[c * 6 + 2] = z0
+        ..[c * 6 + 3] = x1
+        ..[c * 6 + 4] = y1
+        ..[c * 6 + 5] = z1;
+    }
+    return (runs, boxes);
   }
 
   static ModelMaterial _material(

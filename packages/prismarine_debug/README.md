@@ -85,5 +85,6 @@ Widget debugPanel(int objects) => DebugPanelShell(
 
 ## Platforms
 
-The package runs in Flutter apps on macOS, Linux and Windows. `WindowSurfaceReader` reads the surface of the window
-after compositing. It and `physFootprint` are for macOS only. Heap snapshots work in profile and debug builds.
+The package runs in Flutter apps on macOS, Linux and Windows. `WindowSurfaceReader` reads the window after
+compositing on all three. On Linux it needs GDK on X11, which you get with `GDK_BACKEND=x11`, also on a Wayland
+desktop through Xwayland. Heap snapshots work in profile and debug builds.

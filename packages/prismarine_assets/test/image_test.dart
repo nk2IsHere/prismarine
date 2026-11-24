@@ -93,4 +93,28 @@ void main() {
     expect(chunks['IHDR']![9], 6); // RGBA
     expect(ZLibDecoder().convert(chunks['IDAT']!), [0, ...rgba]);
   });
+  test('PNG without alpha: RGB rows, the CRCs of IHDR and IEND', () {
+    final rgba = Uint8List.fromList([
+      for (var i = 0; i < 6; i++) ...[i * 10, i * 10 + 1, i * 10 + 2, i],
+    ]);
+    final png = encodePng(3, 2, rgba, alpha: false, level: 1);
+    final b = ByteData.sublistView(png);
+    expect((b.getUint32(16), b.getUint32(20)), (3, 2));
+    expect((png[24], png[25]), (8, 2));
+    expect(b.getUint32(29), 0x1216f14d);
+    expect(png.sublist(png.length - 4), [0xae, 0x42, 0x60, 0x82]);
+    final idat = png.sublist(41, 41 + b.getUint32(33));
+    expect(idat[0], 0x78);
+    expect(ZLibDecoder().convert(idat), [
+      for (var y = 0; y < 2; y++) ...[
+        0,
+        for (var x = 0; x < 3; x++)
+          for (var c = 0; c < 3; c++) (y * 3 + x) * 10 + c,
+      ],
+    ]);
+  });
+
+  test('PNG rejects pixels of the wrong length', () {
+    expect(() => encodePng(2, 2, Uint8List(12)), throwsArgumentError);
+  });
 }

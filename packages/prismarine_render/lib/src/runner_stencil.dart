@@ -14,6 +14,7 @@ extension _RunnerStencil on FrameRunner {
   /// hold, which take the stencil writes of a render pass. A stencil clear
   /// starts them over.
   StencilValues _stencilWrites(Attachment d) {
+    // alloc: the first stencil write of a target
     final v = _stencilValues[d.target] ??= StencilValues();
     if (d.clearStencil case final clear?) v.reset(clear);
     return v;
@@ -33,6 +34,7 @@ extension _RunnerStencil on FrameRunner {
       final info = assets.shaderRecord(shader);
       if (info != null) {
         for (final t in info.textures) {
+          // alloc: the first pass of one draw with this pixel shader
           if (t.type.startsWith('utexture2D')) reads = [...reads!, t.name];
         }
       }
@@ -88,6 +90,7 @@ extension _RunnerStencil on FrameRunner {
     // A copy recorded between dispatches makes the next dispatch open its own
     // compute pass.
     _copies++;
+    // alloc: PRISMARINE_RENDER_PASS_LOG runs only
     _passLog?.add('render stencilCopy $target');
     final pass = cb.createRenderPass(
       gpu.RenderTarget(
@@ -123,7 +126,12 @@ extension _RunnerStencil on FrameRunner {
     if (had != null && had.viewport[2] == w && had.viewport[3] == h) {
       return had;
     }
-    return _stencilDraws[v] = DrawPlan(
+    return _stencilDraws[v] = _newStencilCopyDraw(v, w, h);
+  }
+
+  // alloc-cold: the first copy of a stencil value at a target size.
+  DrawPlan _newStencilCopyDraw(int v, int w, int h) {
+    return DrawPlan(
       label: 'stencilCopy $v',
       vertex: shaders.stencilCopyVertex,
       pixel: shaders.stencilCopyPixel,

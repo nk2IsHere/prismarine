@@ -48,10 +48,10 @@ class PbrVolume {
       settings.volume.enabled != _on ||
       (_on && settings.volume.quality != _quality);
 
+  // alloc-cold: a new plan on a new size or new settings.
   /// Adds the froxel targets and returns the passes of the fog over
   /// [scene], which has the depth [depth], for a view of [width] by
   /// [height] pixels. The passes read the lights of [frame].
-  // alloc-cold: a new plan on a new size or new settings.
   List<PassPlan> make({
     required int width,
     required int height,

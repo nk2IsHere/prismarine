@@ -19,7 +19,8 @@ abstract final class PbrShaderIds {
       markerVertex = 'Pbr/marker.vert',
       markerPixel = 'Pbr/marker.frag',
       depthViewPixel = 'Pbr/depth_view.frag',
-      pointDepthViewPixel = 'Pbr/point_depth_view.frag';
+      pointDepthViewPixel = 'Pbr/point_depth_view.frag',
+      depthClearVertex = 'Pbr/depth_clear.vert';
 
   static const all = [
     litVertex,
@@ -35,6 +36,7 @@ abstract final class PbrShaderIds {
     markerPixel,
     depthViewPixel,
     pointDepthViewPixel,
+    depthClearVertex,
   ];
 }
 

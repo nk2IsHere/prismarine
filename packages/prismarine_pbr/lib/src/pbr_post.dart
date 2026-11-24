@@ -77,11 +77,11 @@ class PbrPost {
     yield ('tone map', 'tonemap');
   }
 
+  // alloc-cold: a new plan on a new size or new settings.
   /// Adds the targets, buffers, blocks and passes after the scene for a
   /// view of [width] by [height] pixels. The passes read [scene] and the
   /// TAA reads [depth]. The tone map draws into [output], then the draws of
   /// [overlay].
-  // alloc-cold: a new plan on a new size or new settings.
   void make({
     required int width,
     required int height,

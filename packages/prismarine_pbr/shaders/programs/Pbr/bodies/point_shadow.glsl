@@ -1,6 +1,8 @@
 // The shadow of a point light from the depth atlas. Each light with a slot
 // has a row of six faces of a cube, in the order +x, -x, +y, -y, +z and -z.
-// pointShadow reads only the Frame block and the atlas, in any stage.
+// Each pair of opposite faces was drawn from the light position in
+// pointPairs, which trails the light while it moves. pointShadow reads only
+// the Frame block and the atlas, in any stage.
 uniform texture2D pointShadowAtlas; // t5
 #define pointShadowAtlas_S s4
 
@@ -12,6 +14,9 @@ float pointShadow(int light, vec3 worldPos, vec3 normal) {
   float slot = cb0.lightColor[light].w;
   if (slot < 0.5) return 1.0;
   vec4 lp = cb0.lightPosition[light];
+  vec3 a0 = abs(worldPos - lp.xyz);
+  int pair = a0.x >= a0.y && a0.x >= a0.z ? 0 : (a0.y >= a0.z ? 1 : 2);
+  lp = cb0.pointPairs[int(slot - 0.5) * 3 + pair];
   ivec2 size = textureSize(sampler2DShadow(pointShadowAtlas, s4), 0);
   float tile = float(size.x) / 6.0;
   vec3 d = worldPos - lp.xyz;
