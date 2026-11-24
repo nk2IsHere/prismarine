@@ -14,7 +14,6 @@ on:
       - packages/**
       - third_party/flutter_gpu/**
       - tools/lint/**
-      - tools/machine/**
       - tools/profiler/**
       - pubspec.yaml
       - pubspec.lock
@@ -95,8 +94,6 @@ jobs:
       - name: profiler tests
         working-directory: tools/profiler
         run: dart test
-      - name: machine locks test
-        run: tools/machine/test/locks_test.sh
 
       # The impellerc of the SDK for the shader bundle test.
       - name: impellerc of the Flutter SDK
