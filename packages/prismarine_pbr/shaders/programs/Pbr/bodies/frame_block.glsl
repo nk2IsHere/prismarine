@@ -22,4 +22,7 @@ uniform Frame {
   // x and y the scale of the projection, z the radius of a light's marker,
   // w 1 with markers
   vec4 markers;
+  // xyz the position and w the range of the light that each pair of faces
+  // of the point shadow atlas was drawn for, three pairs per slot
+  vec4 pointPairs[24];
 } cb0;

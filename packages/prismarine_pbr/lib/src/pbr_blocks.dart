@@ -7,8 +7,9 @@ import 'package:vector_math/vector_math_64.dart';
 /// The bytes of the `Frame` block of the shaders in the std140 layout,
 /// written in place. Offsets count floats.
 class FrameBlock {
-  /// Two matrices, six vectors, two arrays of 16 vectors and one vector.
-  static const floatCount = 32 + 24 + 128 + 4;
+  /// Two matrices, six vectors, two arrays of 16 vectors, one vector and an
+  /// array of 24 vectors.
+  static const floatCount = 32 + 24 + 128 + 4 + 96;
 
   final bytes = Uint8List(floatCount * 4);
   late final _f = bytes.buffer.asFloat32List();

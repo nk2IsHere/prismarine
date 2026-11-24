@@ -262,7 +262,7 @@ class PbrBuilder {
           label: m.name,
         );
         shadow.add(caster);
-        casters.add(PbrCaster(caster, d.center, d.radius));
+        casters.add(_casterOf(caster, d, p));
       }
     }
     opaque.sort((a, b) => a.$1.compareTo(b.$1));
@@ -535,6 +535,10 @@ class PbrBuilder {
       settings.markerSize,
       settings.lightMarkers ? 1 : 0,
     );
+    final pairs = _points.pairs;
+    for (var i = 0; i < pairs.length; i += 4) {
+      f.floats(188 + i, pairs[i], pairs[i + 1], pairs[i + 2], pairs[i + 3]);
+    }
     _shadowFrame.matrix(0, _sunViewProjection);
     final v = camera.view.storage;
     _cameraForward.setValues(-v[2], -v[6], -v[10]);
@@ -727,3 +731,70 @@ const _overlayState = DrawState(
   depthTest: false,
   depthWrite: false,
 );
+
+// alloc-cold: once per draw of a new plan.
+/// Returns the caster of the draw [d] of primitive [p] with a tree over the
+/// runs of triangles of [p], each node as a sphere in the world.
+PbrCaster _casterOf(DrawPlan sun, ModelDraw d, ModelPrimitive p) {
+  final runs = p.clusterCount;
+  if (runs <= 1) return PbrCaster(sun, d.center, d.radius);
+  final w = d.world;
+  final s = w.storage;
+  // The largest scale of the matrix bounds the radius.
+  final scale = math.sqrt(
+    math.max(
+      s[0] * s[0] + s[1] * s[1] + s[2] * s[2],
+      math.max(
+        s[4] * s[4] + s[5] * s[5] + s[6] * s[6],
+        s[8] * s[8] + s[9] * s[9] + s[10] * s[10],
+      ),
+    ),
+  );
+  final count = runs * 2 - 1;
+  final nodes = Uint32List(count * 3);
+  final spheres = Float64List(count * 4);
+  final ranges = p.clusters, boxes = p.clusterBounds;
+  final box = Float64List(6), c = Vector3.zero();
+  var next = 0;
+  // Makes the node of runs [a] to [b] and its halves in preorder. Returns its
+  // index.
+  int node(int a, int b) {
+    final i = next++;
+    var second = 0;
+    if (b - a > 1) {
+      final mid = (a + b) >> 1;
+      node(a, mid);
+      second = node(mid, b);
+    }
+    nodes
+      ..[i * 3] = ranges[a * 2]
+      ..[i * 3 + 1] =
+          ranges[(b - 1) * 2] + ranges[(b - 1) * 2 + 1] - ranges[a * 2]
+      ..[i * 3 + 2] = second;
+    box
+      ..fillRange(0, 3, double.infinity)
+      ..fillRange(3, 6, -double.infinity);
+    for (var r = a; r < b; r++) {
+      for (var k = 0; k < 3; k++) {
+        box[k] = math.min(box[k], boxes[r * 6 + k]);
+        box[k + 3] = math.max(box[k + 3], boxes[r * 6 + k + 3]);
+      }
+    }
+    c.setValues(
+      (box[0] + box[3]) / 2,
+      (box[1] + box[4]) / 2,
+      (box[2] + box[5]) / 2,
+    );
+    w.transform3(c);
+    final dx = box[3] - box[0], dy = box[4] - box[1], dz = box[5] - box[2];
+    spheres
+      ..[i * 4] = c.x
+      ..[i * 4 + 1] = c.y
+      ..[i * 4 + 2] = c.z
+      ..[i * 4 + 3] = math.sqrt(dx * dx + dy * dy + dz * dz) / 2 * scale;
+    return i;
+  }
+
+  node(0, runs);
+  return PbrCaster(sun, d.center, d.radius, nodes: nodes, nodeSpheres: spheres);
+}

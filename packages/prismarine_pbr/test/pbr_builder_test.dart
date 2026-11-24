@@ -7,16 +7,27 @@ import 'package:prismarine_pbr/builder.dart';
 import 'package:prismarine_scene/model.dart';
 import 'package:vector_math/vector_math_64.dart';
 
-/// One triangle mesh drawn by three nodes along x from [offset] with an
-/// opaque, a masked and a blended material.
-GltfModel _model([double offset = 0]) {
+/// One mesh of [triangles] triangles along z, 10 m apart, drawn by three
+/// nodes along x from [offset] with an opaque, a masked and a blended
+/// material. [clusterTriangles] splits the primitives into runs.
+GltfModel _model([
+  double offset = 0,
+  int triangles = 1,
+  int clusterTriangles = 1024,
+]) {
   final b = GltfBuilder();
   final pos = b.addFloatAccessor(
-    Float32List.fromList([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    Float32List.fromList([
+      for (var t = 0; t < triangles; t++) ...[
+        0, 0, -10.0 * t, 1, 0, -10.0 * t, 0, 1, -10.0 * t, //
+      ],
+    ]),
     'VEC3',
     minMax: true,
   );
-  final idx = b.addIndexAccessor(Uint16List.fromList([0, 1, 2]));
+  final idx = b.addIndexAccessor(
+    Uint16List.fromList([for (var i = 0; i < triangles * 3; i++) i]),
+  );
   final meshes = [
     for (final mode in ['OPAQUE', 'MASK', 'BLEND'])
       b.addMesh(mode, [
@@ -36,8 +47,15 @@ GltfModel _model([double offset = 0]) {
   ];
   b.setScene(nodes);
   final glb = readGlb(b.toGlb());
-  return GltfModel.read(GltfDocument(glb.json, [glb.bin]));
+  return GltfModel.read(
+    GltfDocument(glb.json, [glb.bin]),
+    clusterTriangles: clusterTriangles,
+  );
 }
+
+/// The draws that clear a face in [pass].
+int _clears(RenderPassPlan pass) =>
+    pass.draws.where((d) => d.label == 'clear point shadow face').length;
 
 const _scenePasses = ['shadow', 'pointShadows', 'opaque', 'blend', 'markers'];
 
@@ -236,9 +254,15 @@ void main() {
         plan.passes.firstWhere((p) => p.name == 'pointShadows')
             as RenderPassPlan;
     // The opaque and the masked triangle are within the range. Each is seen
-    // by the faces whose frustum its sphere touches.
+    // by the faces whose frustum its sphere touches. Each of the six faces
+    // of the new slot is cleared first.
     expect(pass.draws, isNotEmpty);
-    expect(pass.draws.map((d) => d.label).toSet(), {'OPAQUE', 'MASK'});
+    expect(pass.draws.map((d) => d.label).toSet(), {
+      'clear point shadow face',
+      'OPAQUE',
+      'MASK',
+    });
+    expect(_clears(pass), 6);
     final stamp = plan.retained['pointShadows'];
     b.frame(cam, 64, 32);
     expect(plan.retained['pointShadows'], stamp);
@@ -251,6 +275,89 @@ void main() {
     b.frame(cam, 64, 32);
     expect(f[123], 1);
     expect(f[127], 0);
+  });
+
+  test('a moving light draws one pair of faces a frame', () {
+    final b = PbrBuilder([scene])..settings.pointShadows.budget = 1;
+    final cam = PbrCamera();
+    final l = PointLight()
+      ..position.setValues(1, 0, -3)
+      ..range = 20;
+    b.lights.add(l);
+    final plan = b.frame(cam, 64, 32);
+    final pass =
+        plan.passes.firstWhere((p) => p.name == 'pointShadows')
+            as RenderPassPlan;
+    final f = plan.frameBlocks[FrameRole('pbr.frame').block]!.buffer
+        .asFloat32List();
+    // The pairs of slot 0 hold the position and the range of their draw.
+    double pairX(int p) => f[188 + p * 4];
+    expect([pairX(0), pairX(1), pairX(2)], [1, 1, 1]);
+    expect(f[191], 20);
+    l.position.x = 2;
+    final xs = <List<double>>[];
+    final clears = <int>[];
+    for (var i = 0; i < 4; i++) {
+      b.frame(cam, 64, 32);
+      xs.add([pairX(0), pairX(1), pairX(2)]);
+      clears.add(_clears(pass));
+    }
+    expect(xs, [
+      [2, 1, 1],
+      [2, 2, 1],
+      [2, 2, 2],
+      [2, 2, 2],
+    ]);
+    expect(clears, [2, 2, 2, 0]);
+    b.settings.pointShadows.turns = 1;
+    l.position.x = 3;
+    b.frame(cam, 64, 32);
+    expect([pairX(0), pairX(1), pairX(2)], [3, 3, 3]);
+    expect(_clears(pass), 6);
+  });
+
+  test('a face draws the runs of triangles that it sees', () {
+    final b = PbrBuilder([PbrScene('r', _model(0, 4, 1))])
+      ..settings.pointShadows.budget = 1;
+    final l = PointLight()
+      ..position.setValues(1, 0.5, -3)
+      ..range = 40;
+    b.lights.add(l);
+    final plan = b.frame(PbrCamera(), 64, 32);
+    final pass =
+        plan.passes.firstWhere((p) => p.name == 'pointShadows')
+            as RenderPassPlan;
+    final ranges = {
+      for (final d in pass.draws)
+        if (d.label == 'OPAQUE')
+          (
+            (d.geometry as DrawMeshGeometry).firstIndex,
+            (d.geometry as DrawMeshGeometry).indexCount,
+          ),
+    };
+    // Four runs of one triangle each, 10 m apart along z. The +z face draws
+    // the first run. The -z face draws the second run and the node of the
+    // last two runs, which lies inside it, as one range. A run beyond the
+    // reach of 20 m still casts.
+    expect(ranges, {(0, 3), (3, 3), (6, 6)});
+    // From far along +z the whole mesh is inside the -z face and within
+    // reach, which draws it as one range. All faces are drawn again at once.
+    b.settings.pointShadows.turns = 1;
+    l
+      ..position.setValues(0.5, 0.5, 10)
+      ..range = 100;
+    b.frame(PbrCamera(), 64, 32);
+    expect(
+      {
+        for (final d in pass.draws)
+          if (d.label == 'OPAQUE')
+            (
+              (d.geometry as DrawMeshGeometry).firstIndex,
+              (d.geometry as DrawMeshGeometry).indexCount,
+            ),
+      },
+      {(0, 12)},
+    );
   });
 
   test('lookAlong matches the view matrix of vector_math', () {

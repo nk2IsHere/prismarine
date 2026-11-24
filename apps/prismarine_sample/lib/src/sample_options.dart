@@ -8,7 +8,7 @@ const renderOptions = {
   'exposure': 'auto, or a fixed factor such as 1.5. Auto by default.',
   'tonemap': 'acesFit, aces, agx or neutral. agx by default.',
   'point-shadows':
-      'The lights that cast shadows and the quality, such as 4,high. 2,medium by default.',
+      'The lights that cast shadows, the quality and the frames over which a moving light draws its faces again, such as 4,high,1. 2,medium,3 by default.',
   'fog': 'off, low, medium or high. Medium by default.',
   'fog-density': 'The extinction of the fog per metre.',
   'fog-anisotropy': 'The forward scattering of the fog, from -1 to 1.',
@@ -52,6 +52,8 @@ void applyRenderOptions(PbrSettings s, String? Function(String name) opt) {
     final parts = v.split(',');
     s.pointShadows.budget = int.parse(parts[0]).clamp(0, maxPointShadows);
     if (parts.length > 1) s.pointShadows.quality = _quality(parts[1]);
+    if (parts.length > 2)
+      s.pointShadows.turns = int.parse(parts[2]).clamp(1, 3);
   }
   if (opt('fog') case final v?) {
     s.volume.enabled = v != 'off';
