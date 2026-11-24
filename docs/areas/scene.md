@@ -17,9 +17,15 @@ of the nodes of the default scene with their world matrices and
 bounding spheres, its `materials` the metallic-roughness materials with their textures as image indices, its
 `cameras` the perspective cameras and its `lights` the lights of `KHR_lights_punctual` with their places in the world.
 `min` and `max` bound every draw. A primitive that is not a triangle list with 16-bit indices is left out and listed in
-`skipped`.
+`skipped`. Each primitive is also split into runs of at most `clusterTriangles` consecutive triangles, 4,096 by default,
+with the box of each run in `clusters` and `clusterBounds`. A renderer can draw and cull a run on its own, as the point
+light shadows of [prismarine_pbr](pbr.md) do. `sortTrianglesForRuns` sorts the triangles of each primitive along a
+Morton curve through their centers in the buffers of a document. A run then covers a small part of its mesh. It leaves
+primitives with a blending material in their order.
 
-`GpuScene.load` reads a glTF file and uploads each buffer view that a primitive reads as one device buffer. Its images
+`GpuScene.load` reads a glTF file, sorts its triangles with `sortTrianglesForRuns` and uploads each buffer view that a
+primitive reads as one device buffer. `clusterTriangles` sets the runs, and 0 keeps the order and one run per
+primitive. Its images
 must be KTX2 files in RGBA8, as `prepareGltf` writes them. A texture is uploaded with every mip level on first use, in
 an sRGB format when it is asked for so. `loadTextures` reads the files of some images off the UI thread ahead of their
 first use.
