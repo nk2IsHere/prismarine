@@ -17,7 +17,7 @@ class Failure implements Exception {
   String toString() => cause;
 }
 
-/// The output of a command: one line for each step with its result and
+/// The output of a command, one line for each step with its result and
 /// time. On a terminal the line of a running step shows its time and the
 /// last line of its tool.
 class Ui {

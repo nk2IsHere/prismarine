@@ -336,7 +336,7 @@ List<Finding> engineChecks(
   return out;
 }
 
-/// The checks of the download of [release]: gh, its login and the
+/// The checks of the download of [release], which are gh, its login and the
 /// repository of the releases.
 List<Finding> downloadChecks(
   EngineRelease release,

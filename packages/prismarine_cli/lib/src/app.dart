@@ -8,7 +8,7 @@ import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
 
-/// The steps of a command on one app: toolchain, engine, packages, cook,
+/// The steps of a command on one app, which are toolchain, engine, packages, cook,
 /// build and run.
 class AppSteps {
   AppSteps(this.ui, this.toolchain, this.tools, {this.project});

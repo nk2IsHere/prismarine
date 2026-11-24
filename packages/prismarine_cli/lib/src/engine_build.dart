@@ -554,7 +554,7 @@ List<String> ninjaTargets(String os, String cpu) {
   };
 }
 
-/// Installs the tools that the build of the engine needs on Windows: Git,
+/// Installs the tools that the build of the engine needs on Windows, which are Git,
 /// Python, the Build Tools of Visual Studio 2022 with the C++ tools for x64
 /// and ARM64, ATL and the Windows SDK 10.0.22621 with its Debugging Tools.
 /// Turns on long paths. Needs an elevated shell.

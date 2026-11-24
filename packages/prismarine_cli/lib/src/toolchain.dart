@@ -10,7 +10,7 @@ const flutterVersion = '3.47.7';
 class Toolchain {
   Toolchain._(this.flutterRoot, this.pubCache, this.environment);
 
-  /// Finds the Flutter SDK: the one of the Dart that runs this command,
+  /// Finds the Flutter SDK. It is the one of the Dart that runs this command,
   /// then `PRISMARINE_FLUTTER`, then `~/.prismarine/flutter`, then the
   /// `flutter` on `PATH`. [flutterRoot] is null when none exists.
   factory Toolchain.find(Map<String, String> env) {

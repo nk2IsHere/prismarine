@@ -9,7 +9,7 @@ import 'tools.dart';
 import 'ui.dart';
 
 /// The files of an out folder that a release `flutter build --local-engine`
-/// does not read: build files, object files, unstripped binaries, debug
+/// does not read. These are build files, object files, unstripped binaries, debug
 /// symbols and the tools of the build alone.
 bool _skipFile(String name) =>
     RegExp(
@@ -338,7 +338,7 @@ Future<String> publishEngine({
   return '${archives.length} archives to $repo';
 }, done: (s) => s);
 
-/// The targets of an engine out folder: its target name and the out folder
+/// The target of an engine out folder with the out folder
 /// of the host tools for a cross build.
 (String target, String? hostOut) targetOf(String os, String cpu) =>
     ('$os-$cpu', (os != 'macos' && cpu == 'arm64') ? outName(os, 'x64') : null);

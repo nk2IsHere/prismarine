@@ -38,7 +38,7 @@ abstract class BaseCommand extends Command<int> {
   late final Ui ui = Ui(verbose: verbose);
   late final Toolchain toolchain = Toolchain.find(Platform.environment);
 
-  /// The app of the command: `--app`, else a folder in the arguments, else
+  /// The app of the command. It is `--app`, else a folder in the arguments, else
   /// the nearest folder with a `prismarine.yaml`, else the sample at the
   /// root of a prismarine checkout.
   Project? findApp({bool required = true, String? given}) {
