@@ -12,15 +12,21 @@ wrong order gives a broken app with a crash far from its cause.
 5. `flutter build <platform> --release` runs with `prismarine_engine_args`.
 
 Two failures of this kind happened. An app built against an engine older than its flutter_gpu died on a null texture.
-The vendored flutter_gpu probes the exports of the engine by name, and the engine of prismarine1 renamed them, so every
+The vendored flutter_gpu probes the exports of the engine by name. The engine of prismarine1 renamed them and every
 patched call took the stock path without a word. An app built before `tool/shaders.sh` ran stopped with "no shader
-Pbr/gi_trace.comp". `flutter build` does not build the shaders of `shaders_generated/`, and the bundle there was older
-than the code.
+Pbr/gi_trace.comp". `flutter build` does not build the shaders of `shaders_generated/`. The bundle there was older than
+the code.
+
+The owner then decided that every build step becomes a subcommand and that the build scripts go, in three phases: the
+app path first, then the build, packing and publishing of the engine, then the removal of the scripts with the docs.
 
 ## Goals
 
-- One command for every step on macOS, Linux and Windows: `doctor`, `engine`, `cook`, `build`, `run`, `env` and a
-  pass-through for `flutter` and `dart`.
+- One command for every step on macOS, Linux and Windows: `doctor`, `engine` with its actions, `cook`, `build`, `run`,
+  `env` and a pass-through for `flutter` and `dart`.
+- No shell script for building is left: `env.sh`, the fetch, build and package scripts of the engine, `shaders.sh`,
+  `build_shaders.dart` of `prismarine_pbr`, `features_bundle.sh` and `windows_smoke.ps1` of gpu_smoke and
+  `universal_app.sh` go.
 - A plain `flutter build` of a ported app cooks its shaders through a build hook. A stale shader bundle cannot reach an
   app.
 - The cooking of an app is listed in its own file, `prismarine.yaml`. A cook step runs again only when the hash of its
@@ -33,10 +39,12 @@ than the code.
 
 - The installation of the Flutter SDK, Rust, Xcode, Visual Studio or packages of the OS. `doctor` gives the command
   for each one and the user runs it.
-- The build of the engine from its patches. The engine scripts stay as they are.
+- The machine locks and the gate scripts of the private repository. The gate calls the command where it builds.
+- The profiler's `observe.sh` and the corpus script of `prismarine_replay`, which do not build.
 - Data assets of the hooks of Dart. They need `flutter config --enable-dart-data-assets` on Flutter 3.47.7, which is
   experimental. The hook writes into the folder of the app like the hook of `prismarine_scene` does.
-- mcsm. Its player, slicer and scripts stay as they are. The end of this spec lists what mcsm could take.
+- mcsm beyond its engine fetch. Its player, slicer and scripts stay as they are. The end of this spec lists what mcsm
+  could take.
 
 ## Packages and launchers
 
@@ -54,8 +62,8 @@ the Flutter SDK from `PRISMARINE_FLUTTER`, then `~/.prismarine/flutter`, then th
 prints the `git clone` of Flutter 3.47.7 into `~/.prismarine/flutter` and stops. It sets `PUB_CACHE` to
 `PRISMARINE_PUB_CACHE` or to `~/.prismarine/pub-cache` when that folder exists. It runs `dart pub get` in the checkout
 when `.dart_tool/package_config.json` is missing or older than `pubspec.lock`. It starts
-`packages/prismarine_cli/bin/prismarine.dart` from a JIT snapshot in `.dart_tool/prismarine/`, made again when a source
-of the command is newer. The bash launcher runs on macOS and Linux and the batch file in `cmd` and PowerShell.
+`packages/prismarine_cli/bin/prismarine.dart` from a kernel file in `.dart_tool/prismarine/`. The command compiles itself
+again when a source of it is newer. The bash launcher runs on macOS and Linux and the batch file in `cmd` and PowerShell.
 
 `bin/prismarine.bat` replaces `env.sh` on Windows. `prismarine env --shell=powershell` prints the lines that set
 `PATH`, `PUB_CACHE`, `PRISMARINE_ENGINE_DIR` and `PRISMARINE_IMPELLERC` in a PowerShell session.
@@ -86,6 +94,7 @@ assets:
 |---|---|
 | `shaders.<id>.package` | The package whose folder holds `programs`. Without it the path is relative to the app |
 | `shaders.<id>.programs` | A program tree of `prismarine_shaders`, a folder for each effect with a `bodies` folder for includes |
+| `shaders.<id>.manifest` | A shader bundle manifest of impellerc, in place of `programs`. `out` is then the bundle file |
 | `shaders.<id>.out` | The output folder in the app: `bundle/<backend>/<effect>.<n>.shaderbundle.gz`, `records.json` and the stamp |
 | `shaders.<id>.backends` | The backends, `metal` and `vulkan` by default |
 | `shaders.<id>.shard` | The entries per shard, 25 by default |
@@ -93,7 +102,8 @@ assets:
 | `assets.<id>.run` | The command of the step, run in the folder of the app. `{out}` becomes the output folder |
 | `assets.<id>.out` | The output folder. `{data}` is `~/.prismarine` or `%LOCALAPPDATA%\prismarine` on Windows |
 | `assets.<id>.out-env` | A variable that sets the output folder when it is set |
-| `assets.<id>.inputs` | Files and folders of the app, and `package:<name>` for the `lib` folder of a package |
+| `assets.<id>.inputs` | Files and folders of the app and `package:<name>` for the `lib` folder of a package |
+| `assets.<id>.exists` | Files of a finished output. An output with them and without a stamp counts as current, which spares the download of a scene prepared before the stamps |
 
 `records.json` holds the interface of every shader, as `shaderInterface` of `prismarine_shaders` reads it from the
 source with its includes and its `#ifdef` blocks resolved. This code moves from `tool/build_shaders.dart` of
@@ -155,9 +165,9 @@ is the `out` of its `prismarine-engine.txt`. The engine library is `FlutterMacOS
 | Command | Effect |
 |---|---|
 | `prismarine doctor [<app>]` | Checks the toolchain, the engine and, with an app, its packages and cook state. Prints each finding with its fix. Exits with 1 when one is a problem |
-| `prismarine engine [--target=<t>] [--force]` | Fetches the release of the app or of the checkout through `fetch.sh` or `fetch.ps1`, or says why it cannot |
+| `prismarine engine [<action>]` | `fetch` by default. `toolchain`, `setup`, `patch`, `build`, `test`, `package`, `release` and `publish` replace the engine scripts, as [the command page](../areas/cli.md) lists |
 | `prismarine cook [<app>] [--shaders] [--assets]` | Runs `flutter pub get` when needed and cooks what is stale |
-| `prismarine build [<platform>] [--app=<dir>] [--debug] [-- <flutter args>]` | Fetches a missing engine, cooks and runs `flutter build <platform> --release` with the engine flags |
+| `prismarine build [<platform>] [--app=<dir>] [--debug\|--stock\|--universal] [-- <flutter args>]` | Fetches a missing engine, cooks and runs `flutter build <platform> --release` with the engine flags. `--stock` builds on the engine of Flutter and `--universal` merges an arm64 and an x86_64 build for macOS |
 | `prismarine run [<platform>] [--app=<dir>] [-- <app args>]` | Builds, then starts the built app with its arguments and returns its exit code |
 | `prismarine env [--shell=sh\|powershell\|cmd]` | Prints the lines that set the toolchain in a shell |
 | `prismarine flutter <args>`, `prismarine dart <args>` | Runs the tool of the SDK with the toolchain |
@@ -165,7 +175,7 @@ is the `out` of its `prismarine-engine.txt`. The engine library is `FlutterMacOS
 The platform is the OS of the computer by default. The app is the current folder by default and else the nearest
 folder above it with a `prismarine.yaml`. `build` prints one line for each step, such as `engine: engine-…-prismarine1
 in ~/.prismarine/engine/macos-arm64`, `cook pbr: 41 shaders, 39 from the cache` and the path of the app at the end. A
-debug build runs on the engine of Flutter. `build --debug` says so in a line and passes no engine flags.
+debug build runs on the engine of Flutter. `build --debug` prints a line about it and passes no engine flags.
 
 `run` starts the binary of the build: `build/macos/Build/Products/Release/<product>.app/Contents/MacOS/<product>`,
 `build/linux/<arch>/release/bundle/<binary>` or `build\windows\<arch>\runner\Release\<binary>.exe`. The product name is
@@ -174,7 +184,12 @@ the platform.
 
 `engine` checks before the download that `gh` is installed, that it is logged in or `GH_TOKEN` is set and that the
 release repository is known from `PRISMARINE_ENGINE_REPO` or `private/config/*.env`. Each missing part stops it with
-its own message and fix.
+its own message and fix. The download, the SHA-256 check and the unpacking are in Dart with `gh` and `tar`.
+
+The engine actions find the patches that a tree lacks by the subjects of their commits in `<revision>..HEAD`. The Dart
+patches are uncommitted and the action compares the tree of the Dart SDK with HEAD plus each prefix of the Dart
+patches. An incremental rebuild then applies only the new patches. A run of `patch`, `build` and `package` on the
+trees of prismarine1 must give archives with the same files, bytes and modes as the published ones.
 
 ## The checks of doctor
 
@@ -183,7 +198,7 @@ its own message and fix.
 | Flutter SDK | missing, not 3.47.7, or its engine revision differs from the release | the clone at the tag into `~/.prismarine/flutter` |
 | Rust | no `cargo` on `PATH` or in `~/.cargo/bin` | the rustup install |
 | Rust targets | macOS lacks `aarch64-apple-darwin` or `x86_64-apple-darwin`; Windows lacks its MSVC target | `rustup target add …` |
-| CMake | no `cmake`, on Windows also none in Visual Studio | `brew install cmake`, the apt line, or the C++ workload |
+| CMake | no `cmake`, on Windows also none in Visual Studio | `brew install cmake`, the apt line or the C++ workload |
 | Xcode | macOS without Xcode or without its Metal compiler | the Xcode install, `xcodebuild -downloadComponent MetalToolchain` |
 | Linux packages | `clang`, `ninja`, `pkg-config`, or `gtk+-3.0`, `alsa` and `liblzma` through `pkg-config`, missing | the `apt install` line of the packages that are missing |
 | Visual Studio | Windows without Visual Studio 2022 and its C++ tools, found with `vswhere` | the workload "Desktop development with C++" |
@@ -208,7 +223,7 @@ running engine has every feature bit of `needs` and else one message for the one
 
 `requireEngine(needs)` throws `EngineMismatch` with that message. `prismarine_pbr` exports `pbrEngineFeatures`, the
 bits of compute and of the added bindings. The sample calls `requireEngine(pbrEngineFeatures)` first in its load. It
-shows the message in its window and prints it, and exits with 1 in a smoke or performance run. The runner of
+shows the message in its window and prints it and exits with 1 in a smoke or performance run. The runner of
 `prismarine_render` does not check. mcsm runs it in tests on the engine of the Flutter tester.
 
 `PbrAssets` fails a missing shader with the id and the fix, `prismarine cook`, in place of "no shader <id>".
@@ -218,7 +233,9 @@ shows the message in its window and prints it, and exits with 1 in a smoke or pe
 - `prismarine.yaml` lists the shaders of `prismarine_pbr` and the Sponza step.
 - `hook/build.dart` calls `cookHook`. `pubspec.yaml` depends on `prismarine_cook` and `hooks`.
 - `tool/shaders.sh` and `tool/build_shaders.dart` of `prismarine_pbr` go. The landing gate runs `bin/prismarine cook
-  apps/prismarine_sample` in place of `tool/shaders.sh`.
+  apps/prismarine_sample` in place of `tool/shaders.sh` and `bin/prismarine build macos` for its app build.
+- gpu_smoke lists the bundle of its release 9 checks as a manifest entry of its `prismarine.yaml` and its hook cooks
+  it.
 - The message of `SampleDataMissing` gives `prismarine cook` as the fix.
 - The README says `prismarine run macos`, with Linux and Windows in their own sentences.
 
@@ -236,12 +253,16 @@ that the command covers `env.sh` on every OS.
 - A shader edited after a build is cooked by a plain `flutter build`. An app built against an engine of an older
   release stops with the message of the table above.
 - Windows builds on VM 2 when the owner allows it.
+- An incremental run of the engine actions on the trees of prismarine1 on the Mac and on the workstation packs archives
+  equal to the published ones.
 
 ## Use in mcsm
 
-mcsm could take three parts later, each its own change in mcsm.
+mcsm takes the first part with this change and could take the others later, each its own change in mcsm.
 
-- `prismarine doctor` and `prismarine engine` in place of `tools/toolchain/fetch_engine.sh` and the engine checks of
-  its `env.sh`.
+- `prismarine engine` in place of the `fetch.sh` and `fetch.ps1` that its `tools/toolchain/fetch_engine.sh` and
+  `fetch_engine.ps1` run from the pinned checkout. This change goes with the removal of the scripts, in a branch of
+  mcsm with the pin on it.
+- `prismarine doctor` in place of the engine checks of its `env.sh`.
 - `requireEngine` at the start of the player, with the bits of its renderer.
 - `prismarine build` for the player, after its build moves out of the mirror of `sync.sh`.

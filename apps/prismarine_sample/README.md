@@ -5,6 +5,20 @@ and eight coloured lights move through the hall in a light fog. Their light boun
 and the floors reflect the hall. You fly through it with the mouse and keyboard or with a gamepad. It runs on Metal on
 macOS and on Vulkan on Linux and Windows.
 
+## Running
+
+Install the tools and put the `prismarine` command on your `PATH`, as [the build page](../../docs/building.md)
+describes. Then run the sample from the root of your checkout.
+
+```sh
+prismarine run macos
+```
+
+On Linux and Windows the platform is `linux` or `windows`. Without one it is the one of your computer. The first run
+fetches the engine, downloads about 2.4 GB of Sponza and prepares it in `~/.prismarine/sample`, or in
+`%LOCALAPPDATA%\prismarine\sample` on Windows, which takes a few minutes. The options below follow `--`, as in
+`prismarine run -- --gi=high`.
+
 ## Controls
 
 - W, A, S and D move, Q and E move down and up, and Shift moves faster.

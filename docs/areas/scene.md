@@ -51,7 +51,14 @@ A vertex output whose name ends in `viewport_index` picks the viewport of a view
 entry carries a library from the Metal compiler of Xcode, which the engine fork loads without a compile at run time.
 
 `gpuBackend` reads the backend of Flutter GPU from the engine fork, `metal` or `vulkan`. `gpuFeatures` reads its
-feature bits. Both are for a log line. `gpuBackend` is null and `gpuFeatures` is 0 on another engine.
+feature bits. `gpuBackend` is null and `gpuFeatures` is 0 on another engine.
+
+`requireEngine(needs)` stops an app at its start when the running engine lacks a feature bit of `needs`, such as
+`EngineFeatures.compute`. It throws an `EngineMismatch` with one message for the case that happened: the engine of
+Flutter, a patched engine older than the release of this prismarine, or the missing features by name. Each message
+gives the fix, `prismarine engine` and `prismarine build`. `engineProblem` returns the message without throwing.
+`prismarineEngineRelease` is the release of `RELEASE`, which a test compares. The runner of `prismarine_render` does
+not check the engine, since tests run it on the engine of the Flutter tester.
 
 ## Checks
 

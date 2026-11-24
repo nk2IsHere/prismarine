@@ -7,13 +7,13 @@ starts it. The sample app in `apps/prismarine_sample` is the example throughout.
 ## Installing the tools
 
 You need the Flutter SDK 3.47.7, Rust, CMake, git and the compiler of your platform. The `prismarine` command looks for
-the Flutter SDK in `~/.prismarine/flutter` first, so clone it there at its tag.
+the Flutter SDK in `~/.prismarine/flutter` first. Clone it there at its tag.
 
 ```sh
 git clone --branch 3.47.7 https://github.com/flutter/flutter.git ~/.prismarine/flutter
 ```
 
-The build hooks of `prismarine_pad` and `prismarine_audio_out` compile Rust crates, and `prismarine_pad` builds SDL
+The build hooks of `prismarine_pad` and `prismarine_audio_out` compile Rust crates and `prismarine_pad` builds SDL
 with CMake and a C compiler.
 
 - On macOS, install Xcode 27 from the App Store and CMake with `brew install cmake`. Then download the Metal compiler of
@@ -114,10 +114,10 @@ assets:
 | `assets.<id>.run` | The command of the step, run in the folder of the app. `{out}` is its output folder |
 | `assets.<id>.out` | The output folder. `{data}` is `~/.prismarine`, or `%LOCALAPPDATA%\prismarine` on Windows |
 | `assets.<id>.out-env` | A variable that sets the output folder |
-| `assets.<id>.inputs` | Files and folders of the app, and `package:<name>` for the code of a package |
+| `assets.<id>.inputs` | Files and folders of the app and `package:<name>` for the code of a package |
 | `assets.<id>.exists` | Files of a finished output. An output that has them and was not prepared by the command counts as current |
 
-A step runs again only when one of its inputs changed. The shaders also cook in the build hook of the app, and a plain
+A step runs again only when one of its inputs changed. The shaders also cook in the build hook of the app and a plain
 `flutter build` then builds the app with current shaders too. Add `prismarine_cook` and `hooks` to the dependencies of your app
 and this file as `hook/build.dart`.
 
@@ -159,7 +159,7 @@ options with examples.
 
 ## The engine
 
-Each version of prismarine works with one release of the patched engine, and `third_party/flutter_engine/RELEASE` holds
+Each version of prismarine works with one release of the patched engine and `third_party/flutter_engine/RELEASE` holds
 its name, such as `engine-deb287481e3c-prismarine1`. `prismarine engine` downloads the archive of that release for
 your computer, checks its SHA-256 and unpacks it into `~/.prismarine/engine/<target>`, such as
 `~/.prismarine/engine/macos-arm64`. `prismarine build` and `run` do this themselves when the engine is missing.
@@ -170,7 +170,7 @@ A release holds an archive for each of `macos-arm64`, `macos-x64`, `linux-x64`, 
 ## Building the engine from the patches
 
 You can build the engine yourself from the patches in `third_party/flutter_engine/patches`. The sources take about
-13 GB in `~/.prismarine/engine/flutter`, and the first build takes about an hour. On Windows, first install the build
+13 GB in `~/.prismarine/engine/flutter` and the first build takes about an hour. On Windows, first install the build
 tools of the engine in an elevated PowerShell with `prismarine engine toolchain`.
 
 ```sh
@@ -180,7 +180,7 @@ prismarine engine build
 ```
 
 `setup` clones depot_tools and Flutter at the engine revision of your SDK and fetches the sources of the engine.
-`patch` applies the patches that the tree lacks, and `build` builds the release out folder of your CPU, or of both CPUs
+`patch` applies the patches that the tree lacks and `build` builds the release out folder of your CPU, or of both CPUs
 with `--cpu=both`. After a new patch, `patch` applies only that patch and `build` takes a few minutes. The builds use
 an engine built from the patches when no fetched engine of the release is in the engine folder.
 

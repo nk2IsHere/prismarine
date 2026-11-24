@@ -19,18 +19,18 @@ buffers and images, indirect dispatches and draws and per-frame array uploads.
 
 ## Building and running
 
-Build the shaders of the release 9 checks once, then build the app for the platform with the flags of the engine. The
-build hook of the app builds the smoke bundle and the hook of prismarine_scene builds the copy.
+Run the checks on the patched engine of your computer and with `--stock` on the engine of Flutter, from the root of
+your checkout.
 
-    tool/features_bundle.sh [<engine out dir>/impellerc]
-    flutter build <macos|linux|windows> --release \
-      [--local-engine-src-path=<engine/src> --local-engine=<out> --local-engine-host=<out>]
+```sh
+prismarine run --app=tools/gpu_smoke
+prismarine run --stock --app=tools/gpu_smoke
+```
 
-`tool/features_bundle.sh` builds the shaders of the release 9 checks with the impellerc of the engine, by default
-`$PRISMARINE_IMPELLERC`. The impellerc of the Flutter SDK refuses them.
-
-On Windows, `windows_smoke.ps1 -EngineSrc <engine\src>` builds and runs the app on the stock engine and then on the
-patched one. `Dockerfile.linux` is an image for a Linux build and a headless run under Xvfb and Mesa.
+The build hook of the app builds the smoke bundle and the bundle of the release 9 checks, which `prismarine.yaml`
+lists. The shaders of the release 9 checks need the impellerc of the patched engine and the one of the Flutter SDK
+refuses them. With `GPU_SMOKE_OUT=<file>` the app also writes its `SMOKE` lines into that file. `Dockerfile.linux` is an
+image for a Linux build and a headless run under Xvfb and Mesa.
 
 ## Platforms
 

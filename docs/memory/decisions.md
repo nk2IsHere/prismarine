@@ -25,6 +25,11 @@ mcsm is in [the split design](../specs/2026-11-23-prismarine-split-design.md).
   stays usable from pure-Dart isolates and tools. No umbrella package exists.
 - **Environment variables (2026-11-23).** Variables have the form `PRISMARINE_*`. A moved variable also reads its old
   `MCSM_*` form for one release.
+- **One command for building (2026-11-24).** Every build step is a subcommand of the `prismarine` command, written in
+  Dart, on macOS, Linux and Windows alike. The repository holds no shell scripts for building. The machine locks and
+  the gate scripts of the private repository are infrastructure and call the command where they build. An app lists
+  its cook in `prismarine.yaml`, and its build hook cooks its shaders. The design is in
+  [the command design](../specs/2026-11-24-prismarine-command-design.md).
 
 ## Use from mcsm
 

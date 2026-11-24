@@ -14,9 +14,11 @@ private repo are in place. The packages are `prismarine_kept`, `prismarine_snap`
 `prismarine_jobs`, `prismarine_cargo`, `prismarine_pad`, `prismarine_frame` and `prismarine_render`, each with a page
 in `docs/areas/`. mcsm pins prismarine by commit and uses these packages. mcsm runs the lints from its pinned checkout
 with its own config. It runs the heap and allocation profiler of `tools/profiler`, the package `prismarine_profiler`,
-from the same checkout. `templates/scripts/` holds the first app script copied as a template, `universal_app.sh`.
-`tools/toolchain/env.sh` sets the Flutter SDK, pub cache and engine directory of the machine from `~/.prismarine`. The
-gate sources it. The allocation lint also walks `prismarine_render` and `prismarine_loop`. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
+from the same checkout. The `prismarine` command of `bin/`, the package `prismarine_cli`, does every build step on
+macOS, Linux and Windows: doctor, the fetch, build, package and publish of the engine, the cook of an app from its
+`prismarine.yaml` through `prismarine_cook`, and the build and run of an app. The build scripts, `env.sh` and the
+template `universal_app.sh` are gone. An app checks the engine at its start with `requireEngine` of
+`prismarine_scene`. The allocation lint also walks `prismarine_render` and `prismarine_loop`. Steps 9 and 10 are done. `prismarine_loop`, `prismarine_debug`, `prismarine_scene` and
 `prismarine_render` are Flutter packages outside the pub workspace. Step 9 adds `prismarine_debug`, the debug tools of
 the player of mcsm with the shell of its debug panel. mcsm adds its own sections to the shell. Step 8 adds
 `prismarine_audio` and `prismarine_audio_out`, and mcsm's mixer crate is built in place of the crate of

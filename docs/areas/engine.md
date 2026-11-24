@@ -10,7 +10,7 @@ The engine has three parts.
 
 | Part | Contents |
 |---|---|
-| `third_party/flutter_engine` | The engine patches, the Dart VM patches and the scripts that build, package and fetch a release. `RELEASE` gives the current release. |
+| `third_party/flutter_engine` | The engine patches and the Dart VM patches. `RELEASE` gives the current release, which `prismarine engine` fetches, builds, packs and publishes. |
 | `third_party/flutter_gpu` | The Dart package of Flutter GPU with the patches that use the new exports. It falls back to the stock calls on the prebuilt engine. |
 | `tools/gpu_smoke` | An app that checks the features of an engine on a platform and times its draws. |
 
@@ -21,10 +21,10 @@ the `--local-engine` flags of a release build.
 
 ## The engine directory
 
-A machine has one engine directory, `PRISMARINE_ENGINE_DIR`, for every repository that builds on the engine. `fetch.sh`
-unpacks each target into `<dir>/<target>` and `build.sh` keeps its sources and out dirs in `<dir>/flutter`. The
-engine is data and is not in git. A repository that pins prismarine reads `RELEASE` and runs the scripts from its
-pinned checkout.
+A machine has one engine directory, `PRISMARINE_ENGINE_DIR` or `~/.prismarine/engine`, for every repository that builds
+on the engine. `prismarine engine` unpacks each target into `<dir>/<target>` and `prismarine engine build` keeps its
+sources and out dirs in `<dir>/flutter`, as [the command](cli.md) describes. The engine is data and is not in git. A
+repository that pins prismarine reads `RELEASE` and runs `bin/prismarine` from its pinned checkout.
 
 ## Names
 
@@ -37,8 +37,8 @@ gpu_smoke numbers its check files by release, such as `lib/release_9.dart` and `
 ## gpu_smoke
 
 gpu_smoke draws through the `ScreenCopy` of `prismarine_scene` and reads the feature bits of the engine through its
-own calls in `lib/engine_calls.dart`. It builds the shaders of the release 9 checks with the impellerc of the engine,
-as [its README](../../tools/gpu_smoke/README.md) describes.
+own calls in `lib/engine_calls.dart`. Its build hook cooks the shaders of the release 9 checks from its
+`prismarine.yaml` with the impellerc of the engine, as [its README](../../tools/gpu_smoke/README.md) describes.
 
 ## Checks
 
