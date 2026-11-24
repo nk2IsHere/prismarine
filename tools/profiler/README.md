@@ -16,7 +16,7 @@ Run a tool from the root of the repository after `dart pub get`. `--help` prints
 | `bin/alloc_sites.dart <ws> <seconds> [out.json]` | Reports allocation by call site, weighted by bytes, on a VM with the heap sample patch |
 | `bin/alloc_flame.dart <sites.json>` | Draws the stacks of an `alloc_sites` report as a flame graph in HTML or as a text tree |
 | `bin/profile.dart <ws> <frames.jsonl> <outDir> <name>:<t0>:<t1>…` | Records CPU samples, GC pauses and the heap by class for windows of game time |
-| `observe.sh <outDir> "<name>:<t0>:<t1>…" <script> [args…]` | Runs a headless Dart program under the VM service and profiles it with `profile.dart` |
+| `bin/observe.dart <outDir> "<name>:<t0>:<t1>…" <script> [args…]` | Runs a headless Dart program under the VM service and profiles it with `profile.dart` |
 
 `<ws>` is the WebSocket URI of the VM service of a profile build. `frames.jsonl` is the clock file, one line per frame
 with its game time, such as `{"t": 12.5}`. `FrameProfiler` of `prismarine_debug` writes it.
@@ -27,10 +27,10 @@ with its game time, such as `{"t": 12.5}`. `FrameProfiler` of `prismarine_debug`
 | `PRISMARINE_PROFILE_TRACE` | Classes, separated by commas, whose allocations `profile.dart` records with their stacks |
 | `PRISMARINE_PROFILE_OURS` | Texts, separated by commas, of the file paths of own code for those stacks. By default every file outside the SDK and the pub cache is own code |
 | `PRISMARINE_PROFILE_RAW` | A folder that gets the stack of every CPU sample of `profile.dart` |
-| `PRISMARINE_OBSERVE_CLOCK` | The clock file of the program of `observe.sh`, `<outDir>/frames.jsonl` by default |
-| `PRISMARINE_OBSERVE_DART_FLAGS` | Flags of the VM for the program of `observe.sh`, such as `--no-inline-alloc` |
-| `PRISMARINE_OBSERVE_TIMEOUT` | The seconds after which `observe.sh` stops the program, 1800 by default |
-| `PRISMARINE_PROFILER_PACKAGES` | The package config of `profile.dart` for `observe.sh` in a checkout without one, such as a checkout in the pub cache |
+| `PRISMARINE_OBSERVE_CLOCK` | The clock file of the program of `observe.dart`, `<outDir>/frames.jsonl` by default |
+| `PRISMARINE_OBSERVE_DART_FLAGS` | Flags of the VM for the program of `observe.dart`, such as `--no-inline-alloc` |
+| `PRISMARINE_OBSERVE_TIMEOUT` | The seconds after which `observe.dart` stops the program, 1800 by default |
+| `PRISMARINE_PROFILER_PACKAGES` | The package config of `profile.dart` for `observe.dart` in a checkout without one, such as a checkout in the pub cache |
 
 The `PROFILE_` and `OBSERVE_` forms of the variables are read when the `PRISMARINE_` forms are not set.
 `PRISMARINE_OBSERVE_CLOCK` reads `BENCH_FRAMES` and the program gets the path in both variables.
@@ -50,7 +50,7 @@ Allocation by call site between 30 s and 40 s of game time, per frame, then as a
 
 ## Platforms
 
-The Dart tools run on macOS, Linux and Windows. `observe.sh` needs zsh and perl and runs on macOS and Linux.
+The tools run on macOS, Linux and Windows.
 
 ## Checks
 

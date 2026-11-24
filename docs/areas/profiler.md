@@ -43,8 +43,8 @@ effect of a change on a release build with `--verbose_gc`.
 
 `profile.dart` records CPU samples, GC pauses and the heap by class for windows of game time and writes one JSON per
 window. The allocation profile of the VM gives the contents of the heap and not an allocation rate. Its accumulated
-figures equal the current ones and its reset does not clear them. `observe.sh` runs a headless Dart program under the
-VM service and profiles it the same way. The program writes the clock file itself.
+figures equal the current ones and its reset does not clear them. `observe.dart` runs a headless Dart program under
+the VM service and profiles it the same way. The program writes the clock file itself.
 
 ## Checks
 

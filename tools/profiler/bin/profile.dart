@@ -152,7 +152,7 @@ Future<void> main(List<String> args) async {
     ).writeAsStringSync(const JsonEncoder.withIndent(' ').convert(result));
   }
   // An observed VM pauses its isolates at exit by default. The paused
-  // isolates are resumed, else the target does not end. observe.sh also
+  // isolates are resumed, else the target does not end. observe.dart also
   // starts its target with --no-pause-isolates-on-exit.
   try {
     for (final iso in (await vm.getVM()).isolates ?? const <IsolateRef>[]) {
