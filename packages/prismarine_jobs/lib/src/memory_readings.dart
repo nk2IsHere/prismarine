@@ -1,9 +1,11 @@
-// The memory readings of the OS for MemoryRoom. macOS reads sysctl and
-// proc_pid_rusage. Linux reads /proc and the cgroup v2 files. Windows calls
-// GlobalMemoryStatusEx and K32GetProcessMemoryInfo of kernel32 and uses a
-// low-memory resource notification.
+// The memory readings of the OS for MemoryRoom. macOS reads sysctl. Linux
+// reads /proc and the cgroup v2 files. Windows calls GlobalMemoryStatusEx of
+// kernel32 and uses a low-memory resource notification. The memory of the
+// process is processFootprint on each OS.
 import 'dart:ffi';
 import 'dart:io';
+
+import 'process_memory.dart';
 
 /// One reading of the memory of the machine, in MB.
 class MemoryReadings {
@@ -20,8 +22,7 @@ class MemoryReadings {
   /// The physical memory of the machine.
   final int physicalMb;
 
-  /// The memory of the process. It is the footprint on macOS, the resident
-  /// set on Linux and the private bytes on Windows.
+  /// The memory of the process as [processFootprint] reads it.
   final int processMb;
 
   /// The memory available to the system without paging, `MemAvailable` on
@@ -71,7 +72,7 @@ MemoryReadings _linux() {
   final m = _meminfo();
   return MemoryReadings(
     physicalMb: (m['MemTotal'] ?? 0) >> 10,
-    processMb: ProcessInfo.currentRss >> 20,
+    processMb: (processFootprint() ?? 0) >> 20,
     availableMb: (m['MemAvailable'] ?? 0) >> 10,
     cgroupRoomMb: _cgroupRoomMb(),
     // pswpout counts pages of 4 KB.
@@ -141,7 +142,7 @@ MemoryReadings _mac() {
   final level = _sysctl('kern.memorystatus_vm_pressure_level') ?? 4;
   return MemoryReadings(
     physicalMb: (_sysctl('hw.memsize') ?? 0) >> 20,
-    processMb: (_footprint() ?? 0) >> 20,
+    processMb: (processFootprint() ?? 0) >> 20,
     // vm.swapusage is an xsw_usage of the u64 fields total, avail and used.
     pagedOutMb: (_sysctl('vm.swapusage', at: 16, size: 32) ?? 0) >> 20,
     pressure: level != 1,
@@ -166,11 +167,6 @@ final _sysctlbyname = _libc
         int,
       )
     >('sysctlbyname');
-final _rusage = _libc
-    ?.lookupFunction<
-      Int32 Function(Int32, Int32, Pointer<Void>),
-      int Function(int, int, Pointer<Void>)
-    >('proc_pid_rusage');
 
 /// 1 KB of scratch for the calls, kept for the life of the isolate.
 Pointer<Uint8> get _scratch => _buf ??= _alloc(1024);
@@ -216,19 +212,6 @@ int? _sysctl(String name, {int at = 0, int size = 8}) {
   return Pointer<Uint64>.fromAddress(b.address + at).value;
 }
 
-/// Returns the `ri_phys_footprint` of `proc_pid_rusage`, the figure that
-/// Activity Monitor shows.
-int? _footprint() {
-  final f = _rusage;
-  if (f == null) return null;
-  final b = _scratch;
-  if (f(pid, 2, b.cast()) != 0) return null;
-  // rusage_info_v2 has uuid[16] and then the u64 fields user_time,
-  // system_time, pkg_idle_wkups, interrupt_wkups, pageins, wired_size,
-  // resident_size and phys_footprint.
-  return Pointer<Uint64>.fromAddress(b.address + 16 + 7 * 8).value;
-}
-
 // --- Windows ---------------------------------------------------------------
 
 final _kernel32 = Platform.isWindows
@@ -256,14 +239,6 @@ MemoryReadings _windows() {
         Int32 Function(IntPtr, Pointer<Int32>),
         int Function(int, Pointer<Int32>)
       >('QueryMemoryResourceNotification');
-  final process = k.lookupFunction<IntPtr Function(), int Function()>(
-    'GetCurrentProcess',
-  );
-  final counters = k
-      .lookupFunction<
-        Int32 Function(IntPtr, Pointer<Void>, Uint32),
-        int Function(int, Pointer<Void>, int)
-      >('K32GetProcessMemoryInfo');
   final b = _scratch;
   // MEMORYSTATUSEX has 64 bytes. It holds the u32 fields dwLength and
   // dwMemoryLoad and then the u64 fields ullTotalPhys, ullAvailPhys,
@@ -274,19 +249,12 @@ MemoryReadings _windows() {
   int u64(int at) => Pointer<Uint64>.fromAddress(b.address + at).value;
   final load = Pointer<Uint32>.fromAddress(b.address + 4).value;
   final total = u64(8), avail = u64(16), commitAvail = u64(32);
-  // PROCESS_MEMORY_COUNTERS_EX has 80 bytes on 64-bit. It holds cb and
-  // PageFaultCount and then SIZE_T fields, with PrivateUsage at 72.
-  final pc = b.address + 128;
-  Pointer<Uint32>.fromAddress(pc).value = 80;
-  final private = counters(process(), Pointer<Void>.fromAddress(pc), 80) != 0
-      ? Pointer<Uint64>.fromAddress(pc + 72).value
-      : 0;
   final low = Pointer<Int32>.fromAddress(b.address + 256)..value = 0;
   final lowMemory =
       _lowMemory != 0 && query(_lowMemory, low) != 0 && low.value != 0;
   return MemoryReadings(
     physicalMb: total >> 20,
-    processMb: private >> 20,
+    processMb: (processFootprint() ?? 0) >> 20,
     availableMb: avail >> 20,
     commitRoomMb: commitAvail >> 20,
     pressure: lowMemory || load >= 90,

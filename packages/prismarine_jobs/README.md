@@ -17,7 +17,8 @@ calls needs privileges.
 
 `MemoryRoom.deep` is true when the memory readings of the OS show room for reads far ahead, such as the decode of the
 next level. It reads the OS at most once a second. The variables `PRISMARINE_AHEAD_BUDGET_MB`,
-`PRISMARINE_AHEAD_FREE_MB` and `PRISMARINE_AHEAD` change its limits.
+`PRISMARINE_AHEAD_FREE_MB` and `PRISMARINE_AHEAD` change its limits. `processFootprint` returns the memory that the
+process holds, in bytes.
 
 ## Example
 
@@ -61,5 +62,5 @@ Future<void> main() async {
 
 ## Platforms
 
-The package is pure Dart with calls into the OS through `dart:ffi`. The thread roles and the memory readings have their
-own implementation for macOS, Linux and Windows.
+The package is pure Dart with calls into the OS through `dart:ffi`. The thread roles, the memory readings and
+`processFootprint` have their own implementation for macOS, Linux and Windows.
