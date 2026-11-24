@@ -28,11 +28,21 @@ if not exist "%ROOT%\.dart_tool\package_config.json" (
   "%DART%" pub get >nul || ("%DART%" pub get & popd & exit /b 1)
   popd
 )
-if not exist "%KERNEL%" (
-  if not exist "%ROOT%\.dart_tool\prismarine" mkdir "%ROOT%\.dart_tool\prismarine"
-  pushd "%ROOT%"
+if exist "%KERNEL%" goto run
+if not exist "%ROOT%\.dart_tool\prismarine" mkdir "%ROOT%\.dart_tool\prismarine"
+pushd "%ROOT%"
+"%DART%" compile kernel -o "%KERNEL%" packages\prismarine_cli\bin\prismarine.dart >nul 2>&1
+if errorlevel 1 (
+  rem A package config of an older checkout can lack a package of the command.
+  echo prismarine: resolving the packages of %ROOT% 1>&2
+  "%DART%" pub get >nul
   "%DART%" compile kernel -o "%KERNEL%" packages\prismarine_cli\bin\prismarine.dart >nul
-  popd
+  if errorlevel 1 (
+    popd
+    exit /b 1
+  )
 )
+popd
+:run
 "%DART%" "%KERNEL%" %*
 exit /b %ERRORLEVEL%

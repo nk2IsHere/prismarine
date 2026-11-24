@@ -25,12 +25,23 @@ cache=${PRISMARINE_PUB_CACHE:-$HOME/.prismarine/pub-cache}
 [[ -d $cache ]] && export PUB_CACHE=$(cd -P "$cache" && pwd)
 dart=$sdk/bin/dart
 kernel=$root/.dart_tool/prismarine/prismarine.dill
-if [[ ! -f $root/.dart_tool/package_config.json ]]; then
+config=$root/.dart_tool/package_config.json
+resolve() {
   echo "prismarine: resolving the packages of $root" >&2
   (cd "$root" && "$dart" pub get >/dev/null) || { (cd "$root" && "$dart" pub get); exit 1; }
-fi
-if [[ ! -f $kernel ]]; then
+  # pub get does not touch an unchanged config. Without this, every start
+  # resolves again.
+  touch "$config"
+}
+compile() {
   mkdir -p "$(dirname "$kernel")"
   (cd "$root" && "$dart" compile kernel -o "$kernel" packages/prismarine_cli/bin/prismarine.dart >/dev/null)
+}
+if [[ ! -f $config || $root/pubspec.yaml -nt $config || $root/pubspec.lock -nt $config ]]; then
+  resolve
+fi
+if [[ ! -f $kernel ]]; then
+  # A package config of an older checkout can lack a package of the command.
+  compile 2>/dev/null || { resolve; compile || exit 1; }
 fi
 exec "$dart" "$kernel" "$@"

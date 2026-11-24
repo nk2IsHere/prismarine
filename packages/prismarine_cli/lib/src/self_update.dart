@@ -22,11 +22,13 @@ Future<int?> updateSelf(List<String> args) async {
   final built = kernel.lastModifiedSync();
   final config = File('$root/.dart_tool/package_config.json');
   final lock = File('$root/pubspec.lock');
+  final pubspec = File('$root/pubspec.yaml');
   final dart = Platform.resolvedExecutable;
   var stale = false;
   if (lock.existsSync() &&
       (!config.existsSync() ||
-          lock.lastModifiedSync().isAfter(config.lastModifiedSync()))) {
+          lock.lastModifiedSync().isAfter(config.lastModifiedSync()) ||
+          pubspec.lastModifiedSync().isAfter(config.lastModifiedSync()))) {
     final r = await Process.run(dart, ['pub', 'get'], workingDirectory: root);
     if (r.exitCode != 0) {
       stderr.write(
