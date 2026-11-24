@@ -62,35 +62,42 @@ class AppSteps {
 
   /// Finds the engine of [release] and fetches it when it is missing or
   /// [force] is set. Writes the choice for the build hook of the app.
-  Future<Engine> engine(EngineRelease release, {bool force = false}) => ui.step(
-    'engine',
-    () async {
-      final target = hostTarget();
-      if (target == null) {
-        throw Failure('prismarine has no engine for this OS and CPU.');
-      }
-      final dir = engineDir(env);
-      var e = force ? null : findEngine(dir, target, release).engine;
-      if (e != null && e.missingParts.isNotEmpty && e.fetched) e = null;
-      if (e == null) {
-        e = await fetchEngine(release, dir, target, toolchain, tools, ui);
-      } else {
-        linkDartSdk(e, toolchain);
-      }
-      final missing = e.missingParts;
-      if (missing.isNotEmpty) {
-        throw Failure(
-          'The engine in ${e.outPath} lacks ${missing.join(', ')}.',
-          fix: 'build the engine again',
-        );
-      }
-      final p = project;
-      if (p != null) EngineChoice(e.impellerc, release.tag).writeIn(p.dir);
-      return e;
-    },
-    done: (e) =>
-        e.fetched ? '${release.name} ok' : 'built from the patches in ${e.src}',
-  );
+  Future<Engine> engine(EngineRelease release, {bool force = false}) {
+    var fetched = false;
+    return ui.step(
+      'engine',
+      () async {
+        final target = hostTarget();
+        if (target == null) {
+          throw Failure('prismarine has no engine for this OS and CPU.');
+        }
+        final dir = engineDir(env);
+        var e = force ? null : findEngine(dir, target, release).engine;
+        if (e != null && e.missingParts.isNotEmpty && e.fetched) e = null;
+        if (e == null) {
+          e = await fetchEngine(release, dir, target, toolchain, tools, ui);
+          fetched = true;
+        } else {
+          linkDartSdk(e, toolchain);
+        }
+        final missing = e.missingParts;
+        if (missing.isNotEmpty) {
+          throw Failure(
+            'The engine in ${e.outPath} lacks ${missing.join(', ')}.',
+            fix: 'build the engine again',
+          );
+        }
+        final p = project;
+        if (p != null) EngineChoice(e.impellerc, release.tag).writeIn(p.dir);
+        return e;
+      },
+      done: (e) => !e.fetched
+          ? 'built from the patches in ${e.src}'
+          : fetched
+          ? '${release.name} fetched into ${e.src.substring(0, e.src.length - 4)}'
+          : '${release.name} ok',
+    );
+  }
 
   /// Runs `flutter pub get` in the app when its package config is older
   /// than its pubspec.
