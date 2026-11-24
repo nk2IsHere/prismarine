@@ -68,8 +68,8 @@ prismarine doctor
 asset steps of the app, builds it in release mode and starts it. A step that is current is skipped. Each step prints
 one line with its result and time.
 
-The sample is an app like any other: its `prismarine.yaml` lists its shaders and its one asset step, which downloads
-and prepares Sponza. Run it from the root of your checkout:
+The sample's `prismarine.yaml` lists its shaders and its one asset step, which downloads and prepares Sponza. Run it
+from the root of your checkout:
 
 ```sh
 prismarine run --app=apps/prismarine_sample
