@@ -184,6 +184,13 @@ packages:
       relative: true
     source: path
     version: "0.0.0"
+  prismarine_jobs:
+    dependency: "direct main"
+    description:
+      path: "../prismarine_jobs"
+      relative: true
+    source: path
+    version: "0.0.0"
   prismarine_kept:
     dependency: "direct main"
     description:

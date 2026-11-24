@@ -12,6 +12,8 @@ dependencies:
     path: ../prismarine_assets
   prismarine_frame:
     path: ../prismarine_frame
+  prismarine_jobs:
+    path: ../prismarine_jobs
   prismarine_kept:
     path: ../prismarine_kept
   prismarine_loop:

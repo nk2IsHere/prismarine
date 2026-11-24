@@ -5,13 +5,13 @@
 // over its windows.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show FrameTiming;
 
 import 'package:flutter_gpu/gpu.dart' show GpuMemory;
 
+import 'package:prismarine_jobs/prismarine_jobs.dart' show processFootprint;
 import 'package:prismarine_loop/prismarine_loop.dart';
 
 class FrameProfiler {
@@ -124,10 +124,8 @@ class FrameProfiler {
     _put(_cWall, DateTime.now().microsecondsSinceEpoch.toDouble());
     if (_n++ % 30 == 0) {
       _put(_cRss, ProcessInfo.currentRss.toDouble());
-      // The footprint that Activity Monitor shows, with compressed and
-      // swapped pages and the allocations of the GPU. The GPU memory made
-      // through Flutter GPU follows by kind, in MB.
-      if (physFootprint() case final f?) _put(_cFootprint, f / 1048576);
+      // The GPU memory made through Flutter GPU follows by kind, in MB.
+      if (processFootprint() case final f?) _put(_cFootprint, f / 1048576);
       GpuMemory.bytes.forEach(_gpu_);
     }
   }
@@ -332,32 +330,3 @@ String summarize(
   }
   return out.toString();
 }
-
-/// Returns the physical footprint of the process in bytes, or null on a
-/// system other than macOS. It is the `ri_phys_footprint` of
-/// `proc_pid_rusage`, which the Memory column of Activity Monitor shows.
-int? physFootprint() {
-  final f = _rusage;
-  if (f == null) return null;
-  final buf = _rusageBuf ??= _malloc(512);
-  if (f(_getpid!(), 2, buf) != 0) return null;
-  // rusage_info_v2 has uuid[16] and then the u64 fields user_time,
-  // system_time, pkg_idle_wkups, interrupt_wkups, pageins, wired_size,
-  // resident_size and phys_footprint.
-  return Pointer<Uint64>.fromAddress(buf.address + 16 + 7 * 8).value;
-}
-
-Pointer<Void>? _rusageBuf;
-final _libc = Platform.isMacOS ? DynamicLibrary.process() : null;
-final int Function(int, int, Pointer<Void>)? _rusage = _libc
-    ?.lookupFunction<
-      Int32 Function(Int32, Int32, Pointer<Void>),
-      int Function(int, int, Pointer<Void>)
-    >('proc_pid_rusage');
-final int Function()? _getpid = _libc
-    ?.lookupFunction<Int32 Function(), int Function()>('getpid');
-final Pointer<Void> Function(int) _malloc = _libc!
-    .lookupFunction<
-      Pointer<Void> Function(IntPtr),
-      Pointer<Void> Function(int)
-    >('malloc');
