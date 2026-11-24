@@ -318,11 +318,12 @@ class EngineBuild {
     }
   }
 
-  /// Builds the release out folder of [cpu] with gn and ninja. Builds only
-  /// the targets that a release `flutter build --local-engine` reads.
-  Future<String> build(String cpu, {int? jobs}) {
+  /// Builds the out folder of [cpu] and [mode], `release` or `profile`,
+  /// with gn and ninja. Builds only the targets that a
+  /// `flutter build --local-engine` of that mode reads.
+  Future<String> build(String cpu, {int? jobs, String mode = 'release'}) {
     final os = hostPlatform();
-    final out = outName(os, cpu);
+    final out = outName(os, cpu, mode: mode);
     return ui.step('build $out', () async {
       if (!Directory(src).existsSync()) {
         throw Failure(
@@ -334,7 +335,7 @@ class EngineBuild {
         [
           if (Platform.isWindows) 'python3',
           'flutter${Platform.pathSeparator}tools${Platform.pathSeparator}gn',
-          ...gnArgs(os, cpu),
+          ...gnArgs(os, cpu, mode: mode),
         ],
         dir: src,
         log: 'engine-gn-$out',
@@ -354,9 +355,12 @@ class EngineBuild {
         cause: 'ninja failed for $out.',
         fix: 'prismarine engine build --verbose',
       );
+      // The Flutter tool reads the patched SDK of a release out folder under
+      // the name of its cache.
       final product = '$src/out/$out/flutter_patched_sdk_product';
-      if (FileSystemEntity.typeSync(product, followLinks: false) ==
-          FileSystemEntityType.notFound) {
+      if (mode == 'release' &&
+          FileSystemEntity.typeSync(product, followLinks: false) ==
+              FileSystemEntityType.notFound) {
         Link(product).createSync(
           Platform.isWindows
               ? '$src\\out\\$out\\flutter_patched_sdk'
@@ -448,16 +452,17 @@ solutions = [{
 }]
 ${os == 'macos' ? '' : 'target_os = ["${os == 'windows' ? 'win' : 'linux'}"]\n'}''';
 
-/// The out folder of a release engine for [os] and [cpu].
-String outName(String os, String cpu) => switch ((os, cpu)) {
-  ('linux', 'arm64') => 'linux_release_arm64',
-  (_, 'arm64') => 'host_release_arm64',
-  _ => 'host_release',
-};
+/// The out folder of an engine of [mode] for [os] and [cpu].
+String outName(String os, String cpu, {String mode = 'release'}) =>
+    switch ((os, cpu)) {
+      ('linux', 'arm64') => 'linux_${mode}_arm64',
+      (_, 'arm64') => 'host_${mode}_arm64',
+      _ => 'host_$mode',
+    };
 
-/// The arguments of gn for a release engine of [os] and [cpu].
-List<String> gnArgs(String os, String cpu) => [
-  '--runtime-mode=release',
+/// The arguments of gn for an engine of [mode] for [os] and [cpu].
+List<String> gnArgs(String os, String cpu, {String mode = 'release'}) => [
+  '--runtime-mode=$mode',
   if (os == 'macos') '--mac-cpu=$cpu',
   if (os == 'linux' && cpu == 'arm64') ...[
     '--target-os=linux',

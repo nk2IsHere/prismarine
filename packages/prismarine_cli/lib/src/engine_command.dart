@@ -125,7 +125,7 @@ class EngineCommand extends BaseCommand {
           ...cpus.where((c) => c == host),
           ...cpus.where((c) => c != host),
         ]) {
-          await b.build(c, jobs: jobs);
+          await b.build(c, jobs: jobs, mode: argResults!.option('mode')!);
         }
       case 'package':
         for (final c in cpus) {
