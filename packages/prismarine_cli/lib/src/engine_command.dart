@@ -5,6 +5,7 @@ import 'base_command.dart';
 import 'engine_build.dart';
 import 'engine_release.dart';
 import 'tools.dart';
+import 'ui.dart';
 
 const _actions = {
   'fetch':
@@ -57,7 +58,7 @@ class EngineCommand extends BaseCommand {
 
   @override
   String get usageFooter =>
-      '\n\nActions:\n${[for (final MapEntry(:key, :value) in _actions.entries) '  ${key.padRight(9)}$value'].join('\n')}'
+      '\n\nActions:\n${[for (final MapEntry(:key, :value) in _actions.entries) '  ${key.padRight(10)}$value'].join('\n')}'
       '\n\nExamples:\n'
       '  prismarine engine                    Fetches the release of the app or checkout\n'
       '  prismarine engine setup              Gets the sources of the engine, once per computer\n'
@@ -101,6 +102,14 @@ class EngineCommand extends BaseCommand {
     };
     final dest = argResults!.option('dest') ?? '$dir/packages';
     switch (action) {
+      case 'toolchain':
+        if (os != 'windows') {
+          throw Failure(
+            'The toolchain action is for Windows. On $os the tools of doctor are enough.',
+            fix: 'prismarine doctor',
+          );
+        }
+        await installWindowsToolchain(ui, tools);
       case 'setup':
         await b.setup();
       case 'patch':

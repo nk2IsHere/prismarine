@@ -475,3 +475,106 @@ List<String> ninjaTargets(String os, String cpu) {
     ],
   };
 }
+
+/// Installs the tools that the build of the engine needs on Windows: Git,
+/// Python, the Build Tools of Visual Studio 2022 with the C++ tools for x64
+/// and ARM64, ATL and the Windows SDK 10.0.22621 with its Debugging Tools.
+/// Turns on long paths. Needs an elevated shell.
+Future<void> installWindowsToolchain(Ui ui, Tools tools) async {
+  final winget =
+      '${tools.environment['LOCALAPPDATA']}\\Microsoft\\WindowsApps\\winget.exe';
+  const accept = [
+    '-e',
+    '--silent',
+    '--accept-package-agreements',
+    '--accept-source-agreements',
+  ];
+  for (final id in ['Git.Git', 'Python.Python.3.12']) {
+    await ui.step('install $id', () async {
+      await tools.run([
+        winget,
+        'install',
+        '--id',
+        id,
+        ...accept,
+        '--scope',
+        'machine',
+      ], log: 'toolchain-$id');
+    });
+  }
+  await ui.step('install Visual Studio Build Tools', () async {
+    final exe = '${Directory.systemTemp.path}\\vs_BuildTools.exe';
+    final client = HttpClient();
+    try {
+      final rq = await client.getUrl(
+        Uri.parse('https://aka.ms/vs/17/release/vs_BuildTools.exe'),
+      );
+      final rs = await rq.close();
+      await rs.pipe(File(exe).openWrite());
+    } finally {
+      client.close();
+    }
+    final r = await tools.run([
+      exe, '--quiet', '--wait', '--norestart', '--nocache', //
+      for (final c in const [
+        'Microsoft.VisualStudio.Workload.VCTools',
+        'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+        'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+        'Microsoft.VisualStudio.Component.VC.ATL',
+        'Microsoft.VisualStudio.Component.VC.ATL.ARM64',
+        'Microsoft.VisualStudio.Component.Windows11SDK.22621',
+      ]) ...['--add', c],
+      '--includeRecommended',
+    ], log: 'toolchain-vs');
+    // 3010 asks for a restart and counts as done.
+    if (r.exitCode != 0 && r.exitCode != 3010) {
+      throw Failure(
+        'The installer of the Visual Studio Build Tools exited with ${r.exitCode}.',
+        fix: 'run prismarine engine toolchain in an elevated PowerShell',
+      );
+    }
+  });
+  await ui.step('install the Debugging Tools', () async {
+    await tools.run([
+      winget,
+      'install',
+      '--id',
+      'Microsoft.WindowsSDK.10.0.22621',
+      ...accept, //
+      '--override',
+      '/features OptionId.WindowsDesktopDebuggers /quiet /norestart',
+    ], log: 'toolchain-debuggers');
+    if (!File(
+      r'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\dbghelp.dll',
+    ).existsSync()) {
+      throw Failure(
+        'The Debugging Tools of the Windows SDK are missing after their install.',
+        fix:
+            'install them from the Windows SDK 10.0.22621 in the settings of the apps',
+      );
+    }
+  });
+  await ui.step('long paths', () async {
+    await tools.must(
+      [
+        r'C:\Program Files\Git\cmd\git.exe',
+        'config',
+        '--system',
+        'core.longpaths',
+        'true',
+      ],
+      log: 'toolchain-longpaths',
+      cause: 'git config --system failed.',
+      fix: 'run it in an elevated PowerShell',
+    );
+    await tools.must(
+      [
+        'reg', 'add', r'HKLM\SYSTEM\CurrentControlSet\Control\FileSystem', //
+        '/v', 'LongPathsEnabled', '/t', 'REG_DWORD', '/d', '1', '/f',
+      ],
+      log: 'toolchain-longpaths',
+      cause: 'The registry value LongPathsEnabled could not be set.',
+      fix: 'run it in an elevated PowerShell',
+    );
+  });
+}
