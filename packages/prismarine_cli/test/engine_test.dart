@@ -22,6 +22,15 @@ Subject: [PATCH 2/2] gpu: a second commit
     ]);
   });
 
+  test('a subject outside ASCII is decoded', () {
+    const text = '''
+Subject: [PATCH] =?UTF-8?q?flutter=5Fgpu=20(x):=20arrays=20?=
+ =?UTF-8?q?=E2=80=94=20bit=20256?=
+
+''';
+    expect(patchSubjects(text), ['flutter_gpu (x): arrays — bit 256']);
+  });
+
   test('the out folders and gn arguments of each OS and CPU', () {
     expect(outName('macos', 'arm64'), 'host_release_arm64');
     expect(outName('linux', 'arm64'), 'linux_release_arm64');

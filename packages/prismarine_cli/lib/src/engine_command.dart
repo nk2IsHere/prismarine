@@ -91,7 +91,11 @@ class EngineCommand extends BaseCommand {
     final s = steps(null);
     final release = s.release();
     final dir = engineDir(env);
-    final tools = Tools(ui, environment: env, logDir: '$dir/logs');
+    final tools = Tools(
+      ui,
+      environment: env,
+      logDir: '${release.checkout}/.dart_tool/prismarine/logs',
+    );
     final b = EngineBuild(ui, tools, toolchain, release.checkout, dir);
     final os = hostPlatform();
     final host = hostTarget()!.split('-').last;

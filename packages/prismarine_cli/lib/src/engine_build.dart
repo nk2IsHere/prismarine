@@ -393,9 +393,39 @@ List<String> patchSubjects(String text) {
     while (i + 1 < lines.length && lines[i + 1].startsWith(' ')) {
       s += lines[++i];
     }
-    out.add(s.replaceFirst(RegExp(r'^\[PATCH[^\]]*\]\s*'), '').trim());
+    out.add(
+      _decodeWords(s).replaceFirst(RegExp(r'^\[PATCH[^\]]*\]\s*'), '').trim(),
+    );
   }
   return out;
+}
+
+/// Decodes the RFC 2047 words of a mail header, such as
+/// `=?UTF-8?q?a=20b?=`, which `git format-patch` writes for a subject with
+/// characters outside ASCII. The space between two words goes.
+String _decodeWords(String header) {
+  final word = RegExp(r'=\?([^?]+)\?([qQbB])\?([^?]*)\?=');
+  final joined = header.replaceAllMapped(
+    RegExp(r'(\?=)\s+(=\?)'),
+    (m) => '${m[1]}${m[2]}',
+  );
+  return joined.replaceAllMapped(word, (m) {
+    final text = m[3]!;
+    if (m[2]!.toLowerCase() == 'b') return utf8.decode(base64.decode(text));
+    final bytes = <int>[];
+    for (var i = 0; i < text.length; i++) {
+      final c = text[i];
+      if (c == '_') {
+        bytes.add(0x20);
+      } else if (c == '=' && i + 2 < text.length) {
+        bytes.add(int.parse(text.substring(i + 1, i + 3), radix: 16));
+        i += 2;
+      } else {
+        bytes.add(c.codeUnitAt(0));
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
+  });
 }
 
 /// The `.gclient` of the engine tree for [os], without Android, the JDK,
