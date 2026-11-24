@@ -88,7 +88,9 @@ class Ui {
   void printFailure(Failure f) {
     out.writeln('  ${f.cause}');
     if (f.log != null) out.writeln('  log: ${f.log}');
-    if (f.fix != null) out.writeln('  fix: ${f.fix}');
+    // A fix of several commands lines them up under the first.
+    final fix = f.fix?.replaceAll('\n', '\n       ');
+    if (fix != null) out.writeln('  fix: $fix');
   }
 
   void _draw() {

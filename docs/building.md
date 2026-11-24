@@ -64,18 +64,26 @@ prismarine doctor
 
 ## Running the sample
 
-`prismarine run` at the root of your checkout runs the sample app. It checks the tools, fetches the engine, cooks the
-shaders, downloads and prepares Sponza, builds the app in release mode and starts it. A step that is current is
-skipped. Each step prints one line with its result and time.
+`prismarine run` builds an app and starts it. It checks the tools, fetches the engine, cooks the shaders, runs the
+asset steps of the app, builds it in release mode and starts it. A step that is current is skipped. Each step prints
+one line with its result and time.
+
+The sample is an app like any other: its `prismarine.yaml` lists its shaders and its one asset step, which downloads
+and prepares Sponza. Run it from the root of your checkout:
 
 ```sh
-prismarine run
+prismarine run --app=apps/prismarine_sample
 ```
 
 The first run downloads about 2.4 GB of Sponza and prepares it in `~/.prismarine/sample`, or in
 `%LOCALAPPDATA%\prismarine\sample` on Windows, which takes a few minutes. Set `PRISMARINE_SAMPLE_DATA` to keep the
-scene elsewhere. The arguments after `--` go to the app, as in `prismarine run -- --gi=high`. The options of the sample
-are in [its README](../apps/prismarine_sample/README.md).
+scene elsewhere. The arguments after `--` go to the app:
+
+```sh
+prismarine run --app=apps/prismarine_sample -- --gi=high
+```
+
+The options of the sample are in [its README](../apps/prismarine_sample/README.md).
 
 A failed step prints its cause, the command that fixes it and the log of its tool. `--verbose` shows the output of
 every tool as it runs.
@@ -145,8 +153,9 @@ At its start, an app calls `requireEngine` of `prismarine_scene` with the featur
 | `prismarine env` | Prints the lines that set the Flutter SDK, the pub cache and the engine in a shell, `--shell=powershell` for PowerShell |
 | `prismarine flutter …`, `prismarine dart …` | Runs `flutter` or `dart` of the SDK with the pub cache of prismarine |
 
-The platform is the one of your computer by default. The app is the nearest folder with a `prismarine.yaml`, or the
-sample at the root of the checkout. `--app=<folder>` gives another one. `prismarine <command> --help` lists the
+The platform is the one of your computer by default. The app is the nearest folder at or above the current one with a
+`prismarine.yaml`, else the one app below it. Where several apps are below it, as at the root of the checkout, the
+command lists them with the command for each. `--app=<folder>` gives the app. `prismarine <command> --help` lists the
 options with examples.
 
 | Variable | Effect |

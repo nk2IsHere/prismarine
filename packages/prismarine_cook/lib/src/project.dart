@@ -83,6 +83,32 @@ class Project {
     }
   }
 
+  /// The apps below [start]: the folders down to [depth] levels under it with
+  /// a `prismarine.yaml`, sorted. Hidden folders and `build` folders are not
+  /// searched.
+  static List<String> below(String start, {int depth = 3}) {
+    final found = <String>[];
+    void walk(Directory d, int level) {
+      if (level > depth) return;
+      final List<FileSystemEntity> entries;
+      try {
+        entries = d.listSync(followLinks: false);
+      } on FileSystemException {
+        return;
+      }
+      for (final e in entries) {
+        if (e is! Directory) continue;
+        final name = e.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+        if (name.startsWith('.') || name == 'build') continue;
+        if (File('${e.path}/prismarine.yaml').existsSync()) found.add(e.path);
+        walk(e, level + 1);
+      }
+    }
+
+    walk(Directory(start).absolute, 1);
+    return found..sort();
+  }
+
   /// The root folder of package [package] from the package config of the
   /// app. Returns null when the config is missing or lacks the package.
   String? packageRoot(String package) => packageRootIn(dir, package);

@@ -11,7 +11,9 @@ import 'ui.dart';
 const examples = '''
 
 Examples:
-  prismarine run                       Builds and starts the app of this folder, or the sample at the root of prismarine
+  prismarine run                       Builds and starts the app of this folder
+  prismarine run --app=apps/prismarine_sample
+                                       Builds and starts the sample from the root of prismarine
   prismarine run -- --perf=10          Passes --perf=10 to the app
   prismarine build linux               Builds the app for Linux in release mode
   prismarine run --stock --app=tools/gpu_smoke
@@ -39,10 +41,12 @@ abstract class BaseCommand extends Command<int> {
   late final Toolchain toolchain = Toolchain.find(Platform.environment);
 
   /// The app of the command. It is `--app`, else a folder in the arguments, else
-  /// the nearest folder with a `prismarine.yaml`, else the sample at the
-  /// root of a prismarine checkout.
+  /// the nearest folder at or above this one with a `prismarine.yaml`, else
+  /// the one app below this folder. Several apps below it are listed with
+  /// the command for each.
   Project? findApp({bool required = true, String? given}) {
-    final dir = given ?? Project.find(Directory.current.path) ?? _sample();
+    final cwd = Directory.current.path;
+    final dir = given ?? Project.find(cwd) ?? _onlyAppBelow(cwd, required);
     if (dir == null) {
       if (!required) return null;
       ui.printFailure(
@@ -71,14 +75,18 @@ abstract class BaseCommand extends Command<int> {
     }
   }
 
-  String? _sample() {
-    final d = '${Directory.current.path}/apps/prismarine_sample';
-    return File('$d/prismarine.yaml').existsSync() &&
-            File(
-              '${Directory.current.path}/third_party/flutter_engine/RELEASE',
-            ).existsSync()
-        ? d
-        : null;
+  String? _onlyAppBelow(String cwd, bool required) {
+    final apps = Project.below(cwd);
+    if (apps.length < 2) return apps.firstOrNull;
+    if (!required) return null;
+    final rel = [for (final a in apps) a.substring(cwd.length + 1)];
+    ui.printFailure(
+      Failure(
+        'Several apps below $cwd: ${rel.join(', ')}.',
+        fix: [for (final r in rel) 'prismarine $name --app=$r'].join('\n'),
+      ),
+    );
+    throw Failure('several apps');
   }
 
   AppSteps steps(Project? project) {

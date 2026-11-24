@@ -16,6 +16,17 @@ void main() {
   tearDown(() => Directory(tmp).deleteSync(recursive: true));
 
   group('project', () {
+    test('the apps below a folder skip hidden and build folders', () {
+      write('apps/a/prismarine.yaml', '');
+      write('tools/b/prismarine.yaml', '');
+      write('apps/a/build/c/prismarine.yaml', '');
+      write('.hidden/d/prismarine.yaml', '');
+      write('one/two/three/four/prismarine.yaml', '');
+      final root = Directory(tmp).resolveSymbolicLinksSync();
+      expect(Project.below(root), ['$root/apps/a', '$root/tools/b']);
+      expect(Project.below('$root/tools'), ['$root/tools/b']);
+    });
+
     test('reads shaders and asset steps with defaults', () {
       write('app/pubspec.yaml', 'name: demo\n');
       write('app/prismarine.yaml', '''
