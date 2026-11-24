@@ -141,9 +141,9 @@ Impeller Vulkan path, used by default where the machine has a working Vulkan dev
 
 ## Publishing a release
 
-1. Run `prismarine engine release <name>`, such as `prismarine2`. It sets `RELEASE` to `engine-<engine revision, 12
-   characters>-<name>`, and the release constant of the engine check of `prismarine_scene` and the `engine` of each
-   app's `prismarine.yaml` to the same tag.
+1. The owner names the release with the release tool of the private repository, such as `prismarine2`. It sets
+   `RELEASE` to `engine-<engine revision, 12 characters>-<name>`, and the release constant of the engine check of
+   `prismarine_scene` and the `engine` of each app's `prismarine.yaml` to the same tag.
 2. Build and pack each target on the machine that built it, with `prismarine engine package --cpu=both
    --dest=<folder>`. Each archive records the release, the engine revision and the patch set.
 3. Check each archive the way users get it. Fetch it with `PRISMARINE_ENGINE_ARCHIVE=<file>` into a scratch engine

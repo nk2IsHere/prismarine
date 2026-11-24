@@ -19,8 +19,6 @@ const _actions = {
   'test':
       'Linux: builds and runs the unit tests of Flutter GPU on SwiftShader.',
   'package': 'Packs the built out folders into release archives in --dest.',
-  'release':
-      'Sets RELEASE and the engine check of prismarine_scene to a new release name.',
 };
 
 class EngineCommand extends BaseCommand {
@@ -76,7 +74,7 @@ class EngineCommand extends BaseCommand {
       'Fetches the patched engine, or builds and packs a release of it.';
   @override
   String get invocation =>
-      'prismarine engine [fetch|toolchain|setup|patch|build|test|package|release <name>] [options]';
+      'prismarine engine [fetch|toolchain|setup|patch|build|test|package] [options]';
 
   @override
   String get usageFooter =>
@@ -86,8 +84,6 @@ class EngineCommand extends BaseCommand {
       '  prismarine engine setup              Gets the sources of the engine, once per computer\n'
       '  prismarine engine patch              Applies only the patches that are new\n'
       '  prismarine engine build --cpu=both   Builds the x64 and arm64 out folders\n'
-      '  prismarine engine release prismarine2\n'
-      '                                       Sets the name of the next release\n'
       '  prismarine engine package --cpu=both --dest=~/engine-packages\n'
       '                                       Packs both out folders into archives';
 
@@ -179,21 +175,6 @@ class EngineCommand extends BaseCommand {
             hostOut: hostOut,
           );
         }
-      case 'release':
-        if (rest.length != 2) {
-          throw UsageException(
-            'release takes the new name, such as prismarine2.',
-            usage,
-          );
-        }
-        final tag = await ui.step(
-          'release',
-          () async => bumpRelease(release.checkout, b.revision, rest[1]),
-          done: (t) => 'RELEASE is $t',
-        );
-        ui.line(
-          'Commit RELEASE, engine_check.dart and the prismarine.yaml files, then build and package $tag.',
-        );
     }
     return 0;
   }

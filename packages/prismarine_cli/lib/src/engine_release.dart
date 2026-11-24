@@ -204,41 +204,6 @@ Future<void> _keepMode(String from, String to) async {
   await Process.run('chmod', [mode.toRadixString(8), to]);
 }
 
-/// Sets `RELEASE` of [checkout] and the constant of the engine check of
-/// prismarine_scene to `engine-<12 digits of revision>-<name>`. Returns the
-/// new tag.
-String bumpRelease(String checkout, String revision, String name) {
-  if (!RegExp(r'^[a-z][a-z0-9]*$').hasMatch(name)) {
-    throw Failure(
-      'The release name "$name" must start with a letter and hold only lower-case letters and digits.',
-      fix: 'prismarine engine release prismarine2',
-    );
-  }
-  final tag = 'engine-${revision.substring(0, 12)}-$name';
-  File(
-    '$checkout/third_party/flutter_engine/RELEASE',
-  ).writeAsStringSync('$tag\n');
-  final check = File(
-    '$checkout/packages/prismarine_scene/lib/src/gpu/engine_check.dart',
-  );
-  check.writeAsStringSync(
-    check.readAsStringSync().replaceFirst(
-      RegExp(r"const prismarineEngineRelease = '[^']*';"),
-      "const prismarineEngineRelease = '$tag';",
-    ),
-  );
-  for (final app in Project.below(checkout)) {
-    final f = File('$app/prismarine.yaml');
-    f.writeAsStringSync(
-      f.readAsStringSync().replaceFirst(
-        RegExp(r'^engine: .*$', multiLine: true),
-        'engine: $tag',
-      ),
-    );
-  }
-  return tag;
-}
-
 /// Returns the target of the engine for [os] and [cpu] and, for a cross build,
 /// the out folder that holds the host tools.
 (String target, String? hostOut) targetOf(String os, String cpu) =>

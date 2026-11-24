@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:prismarine_cli/src/engine_build.dart';
 import 'package:prismarine_cli/src/engine_release.dart';
 import 'package:test/test.dart';
@@ -57,36 +55,5 @@ Subject: [PATCH] =?UTF-8?q?flutter=5Fgpu=20(x):=20arrays=20?=
     expect(gclientFile('windows'), contains('target_os = ["win"]'));
     expect(gclientFile('macos'), isNot(contains('target_os')));
     expect(gclientFile('macos'), contains('"download_android_deps": False'));
-  });
-
-  test('a release bump writes RELEASE and the engine check', () {
-    final tmp = Directory.systemTemp.createTempSync('bump').path;
-    File('$tmp/third_party/flutter_engine/RELEASE')
-      ..createSync(recursive: true)
-      ..writeAsStringSync('engine-deb287481e3c-prismarine1\n');
-    final check =
-        File('$tmp/packages/prismarine_scene/lib/src/gpu/engine_check.dart')
-          ..createSync(recursive: true)
-          ..writeAsStringSync(
-            "const prismarineEngineRelease = 'engine-deb287481e3c-prismarine1';\n",
-          );
-    final app = File('$tmp/apps/demo/prismarine.yaml')
-      ..createSync(recursive: true)
-      ..writeAsStringSync(
-        'engine: engine-deb287481e3c-prismarine1\nflutter: 3.47.7\n',
-      );
-    final tag = bumpRelease(
-      tmp,
-      'deb287481e3ce9468f3434937ced4240a70539ca',
-      'prismarine2',
-    );
-    expect(tag, 'engine-deb287481e3c-prismarine2');
-    expect(
-      File('$tmp/third_party/flutter_engine/RELEASE').readAsStringSync(),
-      '$tag\n',
-    );
-    expect(check.readAsStringSync(), contains("'$tag'"));
-    expect(app.readAsStringSync(), 'engine: $tag\nflutter: 3.47.7\n');
-    Directory(tmp).deleteSync(recursive: true);
   });
 }

@@ -72,8 +72,8 @@ The last two come from the arm64 build. The result has an ad hoc signature.
 
 ## Engine actions
 
-`prismarine engine <action>` fetches the engine or builds and packs a release of it. The owner publishes the archives
-with a tool of the private repository.
+`prismarine engine <action>` fetches the engine or builds and packs it. The owner names and publishes the releases
+with the tools of the private repository.
 
 | Action | Work |
 |---|---|
@@ -84,7 +84,6 @@ with a tool of the private repository.
 | `build` | gn and ninja of the targets that the Flutter tool reads for `--mode`, `release` by default, and the link `flutter_patched_sdk_product` |
 | `test` | Linux: the unit tests of Flutter GPU on SwiftShader |
 | `package` | Packs an out folder without build files, object files, dot files and debug symbols, with `prismarine-engine.txt`, as `tar` and `xz -9` |
-| `release` | Writes the new tag into `RELEASE` and into `prismarineEngineRelease` of `prismarine_scene` |
 
 ## Platforms
 
@@ -94,7 +93,7 @@ Windows and `engine test` only on Linux.
 ## Checks
 
 Run `dart test` in `packages/prismarine_cli`. The tests cover the findings of doctor from faked tool outputs, the
-release repository, the paths of the built app, the patch subjects, the gn arguments and the release bump.
+release repository, the paths of the built app, the patch subjects and the gn arguments.
 
 An incremental run of `patch`, `build` and `package` on the engine trees of a published release gives archives with
 the same paths, bytes and modes as the published ones. This checks a change to the engine actions.

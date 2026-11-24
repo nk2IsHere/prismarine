@@ -41,8 +41,8 @@ The release of an app is the `engine` of its `prismarine.yaml`. It must equal th
 `third_party/flutter_engine` of the prismarine commit whose `flutter_gpu` the package config of the app resolves, also
 in a git dependency: the vendored `flutter_gpu` works only on its own engine. The build hook and the command stop with
 the fix when the two differ. Before the packages of an app are resolved, `prismarine env` and `prismarine engine`
-take the release of its `prismarine.yaml` as it stands, and the next build checks it. `prismarine engine release`
-rewrites the `engine` of every app in the checkout. The
+take the release of its `prismarine.yaml` as it stands, and the next build checks it. Naming a new release rewrites
+the `engine` of every app in the checkout. The
 engine folder is
 `PRISMARINE_ENGINE_DIR` or `~/.prismarine/engine`. The locator takes the fetched engine `<dir>/<target>` when its
 `prismarine-engine.txt` gives the release. Else it takes a tree built from the patches in `<dir>/flutter` whose engine
