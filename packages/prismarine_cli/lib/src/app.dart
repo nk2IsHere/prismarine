@@ -190,9 +190,15 @@ class AppSteps {
     }
   }
 
-  /// Builds the app for [platform] on [engine], or on the engine of Flutter
-  /// without one. Returns the path of the built app.
-  Future<String> build(String platform, Engine? engine, List<String> extra) {
+  /// Builds the app for [platform] in release mode on [engine], or on the
+  /// engine of Flutter without one. [debug] builds in debug mode on the
+  /// engine of Flutter. Returns the path of the built app.
+  Future<String> build(
+    String platform,
+    Engine? engine,
+    List<String> extra, {
+    bool debug = false,
+  }) {
     final p = project!;
     return ui.step('build $platform', () async {
       await tools.must(
@@ -200,12 +206,8 @@ class AppSteps {
           toolchain.flutter,
           'build',
           platform,
-          if (engine == null)
-            '--debug'
-          else ...[
-            '--release',
-            ...engine.flutterArgs,
-          ],
+          if (debug) '--debug' else '--release',
+          if (!debug && engine != null) ...engine.flutterArgs,
           ...extra,
         ],
         dir: p.dir,
@@ -213,7 +215,7 @@ class AppSteps {
         cause: '`flutter build $platform` failed.',
         fix: 'prismarine build $platform --verbose',
       );
-      final app = builtApp(p.dir, platform, release: engine != null);
+      final app = builtApp(p.dir, platform, release: !debug);
       if (!File(app).existsSync()) {
         throw Failure('The build left no app at $app.');
       }

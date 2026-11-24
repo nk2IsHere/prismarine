@@ -1,0 +1,8 @@
+# The cook of gpu_smoke, read by the prismarine command and by hook/build.dart.
+shaders:
+  features:
+    manifest: features.shaderbundle.json
+    out: features_generated/features.shaderbundle
+    # A vertex stage that writes gl_Layer for layered passes needs MSL 2.2 or
+    # later.
+    impellerc-args: [--metal-version=2.3]

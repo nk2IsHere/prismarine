@@ -9,6 +9,8 @@ dependencies:
     sdk: flutter
   flutter_gpu:
     sdk: flutter
+  prismarine_cook:
+    path: ../../packages/prismarine_cook
   prismarine_scene:
     path: ../../packages/prismarine_scene
   vector_math: ^2.1.4
@@ -23,5 +25,5 @@ flutter:
   # The smoke test's shader bundle (hook/build.dart).
   assets:
     - build/shaderbundles/
-    # The shaders of the release 9 checks (tool/features_bundle.sh).
+    # The shaders of the release 9 checks, cooked from prismarine.yaml.
     - features_generated/

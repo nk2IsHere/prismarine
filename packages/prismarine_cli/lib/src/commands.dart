@@ -52,6 +52,8 @@ Examples:
   prismarine run                       Builds and starts the app of this folder, or the sample at the root of prismarine
   prismarine run -- --perf=10          Passes --perf=10 to the app
   prismarine build linux               Builds the app for Linux in release mode
+  prismarine run --stock --app=tools/gpu_smoke
+                                       Runs gpu_smoke on the engine of Flutter
   prismarine doctor                    Lists every problem of the toolchain and the engine with its fix
   prismarine cook apps/prismarine_sample
   prismarine env --shell=powershell | Invoke-Expression''';
@@ -156,6 +158,7 @@ Future<String> _buildApp(
   String platform,
   List<String> extra, {
   bool debug = false,
+  bool stock = false,
 }) async {
   c.needFlutter();
   final project = c.findApp(given: c.argResults!.option('app'))!;
@@ -167,12 +170,13 @@ Future<String> _buildApp(
   final engine = await s.engine(release);
   await s.shaders(engine);
   await s.assets();
-  if (debug) {
+  if (debug || stock) {
     c.ui.line(
-      'A debug build runs on the engine of Flutter, without the patches.',
+      'This ${debug ? 'debug' : 'release'} build runs on the engine of '
+      'Flutter, without the patches.',
     );
   }
-  return s.build(platform, debug ? null : engine, extra);
+  return s.build(platform, debug || stock ? null : engine, extra, debug: debug);
 }
 
 String _platform(ArgResults r) {
@@ -194,9 +198,18 @@ List<String> _afterPlatform(ArgResults r) =>
     ? r.rest.sublist(1)
     : r.rest;
 
+void _addStock(ArgParser p) => p.addFlag(
+  'stock',
+  negatable: false,
+  help:
+      'Builds in release mode on the engine of Flutter, without the patches, '
+      'such as for a comparison.',
+);
+
 class _RunCommand extends _Command {
   _RunCommand() {
     addApp();
+    _addStock(argParser);
   }
 
   @override
@@ -217,7 +230,12 @@ class _RunCommand extends _Command {
         usage,
       );
     }
-    final app = await _buildApp(this, platform, const []);
+    final app = await _buildApp(
+      this,
+      platform,
+      const [],
+      stock: argResults!.flag('stock'),
+    );
     ui.line('run ${app.split(RegExp(r'[/\\]')).last}');
     final p = await Process.start(
       app,
@@ -237,6 +255,7 @@ class _BuildCommand extends _Command {
       help:
           'Builds in debug mode on the engine of Flutter, without the patches.',
     );
+    _addStock(argParser);
   }
 
   @override
@@ -255,6 +274,7 @@ class _BuildCommand extends _Command {
       _platform(argResults!),
       _afterPlatform(argResults!),
       debug: argResults!.flag('debug'),
+      stock: argResults!.flag('stock'),
     );
     ui.line(app);
     return 0;
