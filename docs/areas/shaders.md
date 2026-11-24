@@ -47,7 +47,7 @@ shared by several builds on one machine saves the most time.
 
 | Option | Effect |
 |---|---|
-| `--impellerc` | The impellerc to run. The default is `PRISMARINE_IMPELLERC`, else `MCSM_IMPELLERC`. |
+| `--impellerc` | The impellerc to run. The default is `PRISMARINE_IMPELLERC`. |
 | `--backend` | A backend and its output folder, such as `vulkan=vulkan`. The default is Metal and Vulkan. |
 | `--impellerc-arg` | An extra argument for every impellerc run. |
 | `--option` | An entry option and its value, such as `spirv_optimize=true`. |

@@ -47,12 +47,10 @@ String unboundBlocksAsStructs(String glsl, Set<String> bound) =>
     });
 
 /// Finds the impellerc of the patched engine. Returns `$PRISMARINE_IMPELLERC`,
-/// else `$MCSM_IMPELLERC`, else the newest `<root>/out/<build>/impellerc`
-/// of the [engineRoots]. Returns null when none exists.
+/// else the newest `<root>/out/<build>/impellerc` of the [engineRoots].
+/// Returns null when none exists.
 String? findImpellerc({List<String> engineRoots = const []}) {
-  final env =
-      Platform.environment['PRISMARINE_IMPELLERC'] ??
-      Platform.environment['MCSM_IMPELLERC'];
+  final env = Platform.environment['PRISMARINE_IMPELLERC'];
   if (env != null && File(env).existsSync()) return env;
   File? best;
   for (final root in engineRoots) {

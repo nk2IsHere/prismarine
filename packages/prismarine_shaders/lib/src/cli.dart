@@ -6,9 +6,7 @@ import 'shader_bundle.dart';
 ArgParser bundleArgParser() => ArgParser()
   ..addOption(
     'impellerc',
-    help:
-        'The impellerc to run. The default is PRISMARINE_IMPELLERC, else '
-        'MCSM_IMPELLERC.',
+    help: 'The impellerc to run. The default is PRISMARINE_IMPELLERC.',
   )
   ..addMultiOption(
     'backend',
