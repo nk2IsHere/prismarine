@@ -85,6 +85,10 @@ class LintConfig {
     _ => 'tools/lint/${lint}_baseline.json',
   });
 
+  /// The skips that analyze accepts, each of the form `<check>:<dir>`, such
+  /// as `flutter:tools/gpu_smoke`.
+  List<String> get analyzeAllowedSkips => _strs('analyze.allowed_skips', []);
+
   String get allocRoots => _str('alloc.roots', 'tools/lint/alloc_roots.txt');
   String get allocSdk => _str('alloc.sdk', 'tools/lint/alloc_sdk.txt');
 

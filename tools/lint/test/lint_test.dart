@@ -269,6 +269,15 @@ code_shape:
       expect(HistoryRules().rule('instanced draws (perf3)'), isNull);
       expect(HistoryRules().rule('see docs/plans/x.md'), 'pointer');
     });
+
+    test('the skips that analyze accepts', () {
+      final c = LintConfig.parse(
+        '.',
+        'analyze:\n  allowed_skips: [flutter:tools/gpu_smoke]',
+      );
+      expect(c.analyzeAllowedSkips, ['flutter:tools/gpu_smoke']);
+      expect(LintConfig.parse('.', 'code_roots: []').analyzeAllowedSkips, []);
+    });
   });
 
   group('long comments and functions', () {

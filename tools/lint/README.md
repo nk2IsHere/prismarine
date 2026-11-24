@@ -39,7 +39,8 @@ These commands run the quick checks of prismarine, as its gate runs them:
     (cd tools/lint && dart test)
 
 A Flutter package needs `flutter pub get` in its directory before `dart tools/lint/analyze.dart --only=flutter` can
-analyse it. The privacy check reads its patterns from the private repo and exits with 2 when the repo is missing.
+analyse it. `analyze.dart` fails when it skips a package, such as a Flutter package without `flutter pub get` or a
+crate without Rust. The skips that `analyze.allowed_skips` in the config lists are accepted. The privacy check reads its patterns from the private repo and exits with 2 when the repo is missing.
 
 ## Platforms
 

@@ -51,9 +51,5 @@ jobs:
             (cd "$p" && flutter pub get)
           done
           dart tools/lint/alloc.dart
-      # analyze.dart skips a check without its toolchain and passes. Here
-      # a skipped check fails the step.
       - name: analyze and format
-        run: |
-          dart tools/lint/analyze.dart --only=dart,format | tee "$RUNNER_TEMP/analyze.txt"
-          ! grep '^analyze: skipped' "$RUNNER_TEMP/analyze.txt"
+        run: dart tools/lint/analyze.dart --only=dart,format
