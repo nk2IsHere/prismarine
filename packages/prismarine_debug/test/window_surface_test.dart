@@ -36,10 +36,10 @@ void main() {
   test('the checksum changes with the picture and only with it', () {
     final a = Uint8List(16), b = Uint8List(16);
     final p = picture();
-    final s1 = scaleBgra8(p, 4, 2, 20, a, 2, 2);
-    expect(scaleBgra8(p, 4, 2, 20, b, 2, 2), s1);
+    final sum = scaleBgra8(p, 4, 2, 20, a, 2, 2);
+    expect(scaleBgra8(p, 4, 2, 20, b, 2, 2), sum);
     p[0] = 99;
-    expect(scaleBgra8(p, 4, 2, 20, b, 2, 2), isNot(s1));
+    expect(scaleBgra8(p, 4, 2, 20, b, 2, 2), isNot(sum));
   });
 
   test('extended-range 10-bit channels map 384 to 0 and 894 to 255', () {
