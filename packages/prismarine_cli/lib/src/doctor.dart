@@ -199,7 +199,6 @@ class ToolchainChecks {
       'ninja': 'ninja-build',
       'pkg-config': 'pkg-config',
       'xz': 'xz-utils',
-      'unzip': 'unzip',
     };
     const libs = {
       'gtk+-3.0': 'libgtk-3-dev',
