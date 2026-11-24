@@ -3,11 +3,17 @@ import 'dart:io';
 /// The packages whose sources make up the command.
 const _sources = ['prismarine_cli', 'prismarine_cook', 'prismarine_shaders'];
 
+/// Set for the command that a rebuild starts. That command never rebuilds
+/// again, so a test that stays true after the rebuild cannot start a chain of
+/// commands that each hold a compiler's memory.
+const _rebuilt = 'PRISMARINE_REBUILT';
+
 /// Builds the kernel of the command again when it runs from a kernel file
 /// that is older than its sources, then runs the new kernel with [args].
 /// Returns its exit code, or null when the kernel is current or the command
 /// does not run from a kernel file.
 Future<int?> updateSelf(List<String> args) async {
+  if (Platform.environment[_rebuilt] == '1') return null;
   final script = Platform.script.toFilePath();
   if (!script.endsWith('.dill')) return null;
   final kernel = File(script);
@@ -27,6 +33,9 @@ Future<int?> updateSelf(List<String> args) async {
       );
       return 1;
     }
+    // pub get leaves an unchanged package config as it is, so the lock would
+    // stay newer than it and every start would resolve again.
+    if (config.existsSync()) config.setLastModifiedSync(DateTime.now());
     stale = true;
   }
   stale = stale || lock.existsSync() && lock.lastModifiedSync().isAfter(built);
@@ -60,9 +69,11 @@ Future<int?> updateSelf(List<String> args) async {
     return 1;
   }
   File(tmp).renameSync(kernel.path);
-  final p = await Process.start(dart, [
-    kernel.path,
-    ...args,
-  ], mode: ProcessStartMode.inheritStdio);
+  final p = await Process.start(
+    dart,
+    [kernel.path, ...args],
+    environment: {_rebuilt: '1'},
+    mode: ProcessStartMode.inheritStdio,
+  );
   return p.exitCode;
 }
