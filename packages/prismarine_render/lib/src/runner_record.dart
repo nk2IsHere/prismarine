@@ -4,6 +4,7 @@ part of 'frame_runner.dart';
 /// pass. It holds the state as values of the engine and the own vertex and
 /// index views of its mesh geometry, made once.
 final class _DrawFixed {
+  // alloc-cold: a draw's first record.
   _DrawFixed(DrawPlan d, _DrawSetup setup)
     : cull = cullMode(d.state.cull),
       // The front faces of D3D wind clockwise unless FrontCounterClockwise.
@@ -64,10 +65,14 @@ final class _DrawFixed {
       _streamViews.fillRange(0, 3, null);
       _streamGen = r._bufferGen;
     }
-    return _streamViews[r._frame] ??= [
-      for (final (ref, _, _) in g.streams.values) r._bufferView(ref),
-    ];
+    return _streamViews[r._frame] ??= _makeStreamViews(r, g);
   }
+
+  // alloc-cold: once per frame slot while the plan buffers stand.
+  static List<gpu.BufferView> _makeStreamViews(
+    FrameRunner r,
+    DrawMeshGeometry g,
+  ) => [for (final (ref, _, _) in g.streams.values) r._bufferView(ref)];
 
   static gpu.BufferView? _indexView(DrawGeometry g, RenderMesh? mesh) {
     if (g is! DrawMeshGeometry || mesh == null) return null;
@@ -176,6 +181,7 @@ extension _RunnerRecord on FrameRunner {
     final newState = cache.fixed == null
         ? _uses?.draw(d, pipeline, mesh, _clock) ?? -1
         : -1;
+    // alloc: a draw's first record
     final fixed = cache.fixed ??= _DrawFixed(d, setup);
     final g = d.geometry;
     // The engine keeps the bindings of a pass until they are cleared. A draw

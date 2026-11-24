@@ -37,6 +37,7 @@ part 'runner_slots.dart';
 part 'runner_srgb.dart';
 part 'runner_stencil.dart';
 part 'runner_stores.dart';
+part 'runner_targets.dart';
 part 'runner_timing.dart';
 part 'runner_warm.dart';
 
@@ -183,6 +184,7 @@ class FrameRunner {
             shaders
               ..add(d.vertex)
               ..add(d.pixel ?? _depthOnly(d));
+            // alloc: a draw's first run
             for (final t in d.pixelResources.textures.values) {
               if (t is FileTexture) pngs.add(t.stem);
             }
@@ -201,9 +203,11 @@ class FrameRunner {
       }
       return null;
     }
+    // alloc: a run with shaders or textures to load
     return _load({...shaders}, {...pngs}, [...passes], [...loaded]);
   }
 
+  // alloc-cold: a run with shaders or textures to load.
   Future<void> _load(
     Set<String> shaders,
     Set<String> pngs,
@@ -240,74 +244,12 @@ class FrameRunner {
   final _shadersLoaded = <String>{};
   bool _stencilShadersLoaded = false;
 
-  void _ensureTargets(FramePlan plan) {
-    // The same map as in the last run has nothing to make. The codec gives it
-    // again while the targets hold.
-    if (identical(plan.targets, _ensured)) return;
-    _ensured = plan.targets;
-    for (final name in plan.targets.keys) {
-      final s = plan.targets[name]!;
-      if (_namedAt[name] != _targetEpoch) _namedAt[name] = _targetEpoch;
-      final had = _specs[name];
-      if (had != null &&
-          had.width == s.width &&
-          had.height == s.height &&
-          had.format == s.format &&
-          had.layers == s.layers &&
-          had.mips == s.mips &&
-          had.samples == s.samples &&
-          had.storage == s.storage &&
-          had.volume == s.volume) {
-        continue;
-      }
-      final f = pixelFormat(s.format);
-      try {
-        targets[name] = _create(s, f);
-      } catch (e) {
-        throw StateError(
-          'target $name (${s.width}x${s.height} ${s.format}, ${s.layers} '
-          'layers, ${s.mips} mips, ${s.samples} samples'
-          '${s.storage ? ', storage' : ''}${s.volume ? ', 3D' : ''}): $e',
-        );
-      }
-      _specs[name] = s;
-      if (firstUses) {
-        warn?.call(
-          'target made ${Timeline.now} $name ${s.width}x${s.height} '
-          '${s.format} ${s.layers} layers ${s.mips} mips ${s.samples} samples',
-        );
-      }
-      _views.removeWhere((k, _) => k.startsWith('$name|'));
-      _texGen++;
-    }
-  }
-
   Map<String, TargetSpec>? _ensured;
 
   /// The scene-close epoch (RunnerRelease.closed) in which a plan last used
   /// each target.
   final _namedAt = <String, int>{};
   int _targetEpoch = 0;
-
-  gpu.Texture _create(TargetSpec s, gpu.PixelFormat f) =>
-      gpu.gpuContext.createTexture(
-        gpu.StorageMode.devicePrivate,
-        s.width,
-        s.height,
-        format: f,
-        sampleCount: s.samples,
-        textureType: s.samples > 1
-            ? gpu.TextureType.texture2DMultisample
-            : s.volume
-            ? gpu.TextureType.texture3D
-            : (s.layers > 1 ? gpu.TextureType.texture2DArray : null),
-        layers: s.volume ? 1 : s.layers,
-        depth: s.volume ? s.layers : 1,
-        mipLevelCount: s.mips,
-        enableShaderWriteUsage: s.storage,
-        // Only compute writes a 3D texture.
-        enableRenderTargetUsage: !s.volume,
-      );
 
   final _buffers = <String, List<gpu.DeviceBuffer>>{};
 
@@ -352,6 +294,7 @@ class FrameRunner {
         // generation.
         _buffers[name]?.forEach(_release);
         gpu.GpuMemory.tag = 'buffer.plan';
+        // alloc: a plan buffer of a new size
         _buffers[name] = [
           for (var i = 0; i < 3; i++)
             gpu.gpuContext.createDeviceBuffer(
@@ -473,11 +416,13 @@ class FrameRunner {
     _ensureTargets(plan);
     final targetsUs = record.elapsedMicroseconds;
     _ensureBuffers(plan);
+    // alloc: the first run of the runner
     final host = _host ??= UniformRing();
     host.reset();
     // Blocks that the last runs bound and this run has not are forgotten
     // now and then. The map keeps the views of each block from run to run.
     if (_runs % 64 == 0) {
+      // alloc: every 64 runs
       _uniformViews.removeWhere((_, v) => v.run < _runs - 2);
       _dropUnnamed();
     }
@@ -486,6 +431,7 @@ class FrameRunner {
     _store?.begin();
     var cb = gpu.gpuContext.createCommandBuffer();
     _uploadTargets(cb, plan, host);
+    // alloc: PRISMARINE_RENDER_PASS_LOG runs only
     _passLog = _passLogPath == null ? null : [];
     final setup = record.elapsedMicroseconds;
     var computeUs = 0;
@@ -511,12 +457,14 @@ class FrameRunner {
           _uses?.pass(r.name, record.elapsedMicroseconds - at);
         case final DispatchPlan c:
           final at = record.elapsedMicroseconds;
+          // alloc: PRISMARINE_RENDER_TRACE runs only
           if (trace) warn?.call('renderer: dispatch ${c.name} ${c.shader}');
           final copies = _copies;
           _stencilCompute(cb, c, host);
           if (_copies != copies) compute = null;
           compute = _dispatch(cb, c, host, compute);
           dispatches++;
+          // alloc: PRISMARINE_RENDER_PASS_LOG runs only
           _passLog?.add('compute ${c.name}');
           computeUs += record.elapsedMicroseconds - at;
           _uses?.pass('compute', record.elapsedMicroseconds - at);
@@ -543,6 +491,7 @@ class FrameRunner {
     }
     if (_passLog case final log?) {
       if (t != null) log.add('blit present');
+      // alloc: PRISMARINE_RENDER_PASS_LOG runs only
       File(_passLogPath!).writeAsStringSync('${log.join('\n')}\n');
     }
     final done = Completer<bool>();
@@ -595,6 +544,7 @@ class FrameRunner {
     UniformRing host, {
     bool store = true,
   }) {
+    // alloc: PRISMARINE_RENDER_PASS_LOG runs only
     _passLog?.add('render ${r.name} ${r.allDraws.length}');
     _uses?.passName = r.name;
     final p = _passOf(r);
@@ -631,6 +581,7 @@ class FrameRunner {
       final draw = draws[i];
       if (!pulledPass) stencil?.write(draw);
       if (trace) {
+        // alloc: PRISMARINE_RENDER_TRACE runs only
         warn?.call('renderer: draw ${draw.label} ${draw.vertex} ${draw.pixel}');
       }
       try {
@@ -639,7 +590,9 @@ class FrameRunner {
         // A draw that the assets cannot feed, for a missing shader input or
         // resource, drops out and is reported once. The rest of the frame
         // still draws.
+        // alloc: a draw that the assets cannot feed
         if (_failedDraws.add('${draw.label}: ${e.message}')) {
+          // alloc: once per draw that the assets cannot feed
           warn?.call('renderer: draw skipped: ${draw.label}: ${e.message}');
         }
       }
@@ -691,6 +644,7 @@ class FrameRunner {
     _drawWith(pass, d, host, vs, fs, g, state);
   }
 
+  // alloc-cold: a draw's first record, which makes its setup.
   /// Records [d] into [pass] and returns its setup. Without a pass it only
   /// makes the pipeline and vertex buffers of [d] for [prepare].
   _DrawSetup _drawWith(
@@ -803,6 +757,7 @@ class FrameRunner {
     if (c is! _StageInputs ||
         !identical(c.runner, this) ||
         !(identical(c.id, id) || c.id == id)) {
+      // alloc: the first bind of the resources of a stage on this runner
       c = _StageInputs(this, id, assets.shaderRecord(id)!, res);
       res.runnerState = c;
     }
@@ -923,6 +878,7 @@ class FrameRunner {
   _DrawCache _cacheOf(DrawPlan d) {
     final c = d.runnerState;
     if (c is _DrawCache && identical(c.runner, this)) return c;
+    // alloc: a draw's first run on this runner
     final made = _DrawCache(this);
     d.runnerState = made;
     return made;

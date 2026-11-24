@@ -86,9 +86,9 @@ class GiPasses {
   int get _tiles => math.max(1, math.sqrt(volume!.probeCount).ceil());
   int get _rows => (volume!.probeCount + _tiles - 1) ~/ _tiles;
 
+  // alloc-cold: a new plan.
   /// Adds the targets of the indirect light for a view of [width] by
   /// [height] to [targets].
-  // alloc-cold: a new plan.
   void addTargets(Map<String, TargetSpec> targets, int width, int height) {
     _width = width;
     _height = height;
@@ -176,9 +176,9 @@ class GiPasses {
     }
   }
 
+  // alloc-cold: a new plan.
   /// The compute passes that run before the opaque pass. [frame] is the
   /// block of the frame role and [shadowMap] the sun's shadow map.
-  // alloc-cold: a new plan.
   List<PassPlan> before(Uint8List frame, String shadowMap) {
     final indirect = role.block;
     final passes = <PassPlan>[
@@ -298,9 +298,9 @@ class GiPasses {
     return passes;
   }
 
+  // alloc-cold: a new plan.
   /// The names of the passes that only the sun and the sky settings
   /// change.
-  // alloc-cold: a new plan.
   List<String> get skyPasses => [
     'gi.sky',
     for (var m = 1; m < _skyMips; m++) 'gi.skyMip$m',
@@ -308,9 +308,9 @@ class GiPasses {
     'gi.skyIrradiance',
   ];
 
+  // alloc-cold: a new plan.
   /// The textures of the indirect light that a pixel shader reads, with
   /// stand-ins for the targets that the plan lacks.
-  // alloc-cold: a new plan.
   Map<String, TextureRef> get textures => {
     'giIrradiance': volume == null
         ? _black

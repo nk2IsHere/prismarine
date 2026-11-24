@@ -81,13 +81,7 @@ extension RunnerResources on FrameRunner {
   /// [cb] before the passes of the frame. A target whose bytes are the object
   /// that it took last into the same texture is left as it is.
   void _uploadTargets(gpu.CommandBuffer cb, FramePlan plan, UniformRing host) {
-    if (!identical(_uploadsOf, plan.targets)) {
-      _uploadsOf = plan.targets;
-      _uploadNames.clear();
-      for (final MapEntry(:key, :value) in plan.targets.entries) {
-        if (value.initial != null) _uploadNames.add(key);
-      }
-    }
+    if (!identical(_uploadsOf, plan.targets)) _listUploads(plan.targets);
     for (var i = 0; i < _uploadNames.length; i++) {
       final name = _uploadNames[i];
       final spec = plan.targets[name]!;
@@ -96,12 +90,7 @@ extension RunnerResources on FrameRunner {
       final layer =
           spec.width * spec.height * texelBytes(pixelFormat(spec.format));
       if (bytes.length != layer * spec.layers) {
-        if (_failedDraws.add('upload $name')) {
-          warn?.call(
-            'renderer: $name takes ${bytes.length} bytes, not '
-            '${layer * spec.layers}; left as it was',
-          );
-        }
+        _wrongUpload(name, bytes.length, layer * spec.layers);
         continue;
       }
       final had = _uploaded[name];
@@ -110,20 +99,49 @@ extension RunnerResources on FrameRunner {
           identical(had.$2, texture)) {
         continue;
       }
-      // alloc: a record per changed map
-      _uploaded[name] = (bytes, texture);
-      final at = host.emplace(bytes);
-      for (var l = 0; l < spec.layers; l++) {
-        // alloc: a view and a region per layer of a changed map
-        cb.copyBufferToTexture(
-          gpu.BufferView(
-            at.buffer,
-            offsetInBytes: at.offsetInBytes + l * layer,
-            lengthInBytes: layer,
-          ),
-          gpu.TextureRegion(texture, slice: l),
-        );
-      }
+      _upload(cb, host, name, bytes, texture, spec.layers, layer);
+    }
+  }
+
+  // alloc-cold: a plan with another map of targets.
+  void _listUploads(Map<String, TargetSpec> targets) {
+    _uploadsOf = targets;
+    _uploadNames.clear();
+    for (final MapEntry(:key, :value) in targets.entries) {
+      if (value.initial != null) _uploadNames.add(key);
+    }
+  }
+
+  // alloc-cold: a target with bytes of the wrong size.
+  void _wrongUpload(String name, int bytes, int want) {
+    if (_failedDraws.add('upload $name')) {
+      warn?.call(
+        'renderer: $name takes $bytes bytes, not $want; left as it was',
+      );
+    }
+  }
+
+  // alloc-cold: a target whose bytes changed.
+  void _upload(
+    gpu.CommandBuffer cb,
+    UniformRing host,
+    String name,
+    Uint8List bytes,
+    gpu.Texture texture,
+    int layers,
+    int layer,
+  ) {
+    _uploaded[name] = (bytes, texture);
+    final at = host.emplace(bytes);
+    for (var l = 0; l < layers; l++) {
+      cb.copyBufferToTexture(
+        gpu.BufferView(
+          at.buffer,
+          offsetInBytes: at.offsetInBytes + l * layer,
+          lengthInBytes: layer,
+        ),
+        gpu.TextureRegion(texture, slice: l),
+      );
     }
   }
 
@@ -176,6 +194,7 @@ extension RunnerResources on FrameRunner {
     }
   }
 
+  // alloc-cold: the first bind of a file texture object.
   /// Returns the texture file [f] for the shader type [type]. A file that the
   /// assets lack reads zeros, as an unbound Direct3D 11 view does. It is
   /// reported once. The frame still draws.
@@ -204,8 +223,10 @@ extension RunnerResources on FrameRunner {
         when type.startsWith('u') &&
             isDepth(pixelFormat(_specs[t.target]!.format)) =>
       _stencilCopies[t.target] ??
+          // alloc: assets without the shaders of the stencil copy
           (_standIns['stencil $type'] ??= _constant(
             'R32_UINT',
+            // alloc: the first bind of the stand-in
             Uint8List.fromList([3, 0, 0, 0]),
             type,
           )),
@@ -215,6 +236,7 @@ extension RunnerResources on FrameRunner {
     final TargetTexture t => _view(t, array: type.contains('Array')),
     // Per texel object and type, since the plans reuse their constant
     // textures.
+    // alloc: the first bind of a constant texture object
     final ConstantTexture c => (_constantObjects[c] ??= {})[type] ??= switch ((
       c.width,
       c.height,
@@ -256,6 +278,7 @@ extension RunnerResources on FrameRunner {
         );
   }
 
+  // alloc-cold: the first bind of a constant texture.
   gpu.Texture _constant(String format, Uint8List texel, String type) {
     final key = '$format|$type|${texel.join(',')}';
     return _constants[key] ??= () {
@@ -282,6 +305,7 @@ extension RunnerResources on FrameRunner {
     }();
   }
 
+  // alloc-cold: the first bind of a constant image.
   /// Returns a [w] × [h] 2D texture of [texels] in [format], one per texel
   /// object, such as a property map made from data.
   gpu.Texture _image(String format, Uint8List texels, int w, int h) {
@@ -371,6 +395,7 @@ extension RunnerResources on FrameRunner {
   gpu.BufferView _frameInline(String dispatch, String input, Uint8List bytes) {
     if (_inlineBuffers[bytes] != null) return _inline(bytes);
     // By dispatch and then input name, the same strings each frame.
+    // alloc: the first run of an input of a dispatch
     final at = (_inlineSlots[dispatch] ??= {})[input] ??= _InlineSlot();
     if (at.usedIn == _runs) return _inline(bytes);
     at.usedIn = _runs;
@@ -519,6 +544,9 @@ final class _InlineBuffer {
 }
 
 final class _InlineSlot {
+  // alloc-cold: the first run of an input of a dispatch.
+  _InlineSlot();
+
   Uint8List? last;
   int usedIn = -1;
   final ring = List<gpu.BufferView?>.filled(3, null);

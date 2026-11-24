@@ -8,6 +8,7 @@ part of 'frame_runner.dart';
 extension _RunnerSlots on FrameRunner {
   // One map per kind and shader, looked up by the name itself without a key
   // string or a closure per lookup.
+  // alloc: a shader's first bind
   _SlotMaps _slotMapsOf(gpu.Shader s) => _slots[s] ??= _SlotMaps();
 
   gpu.UniformSlot _uniformSlot(gpu.Shader s, String name) {
@@ -22,6 +23,7 @@ extension _RunnerSlots on FrameRunner {
 
   gpu.StorageSlot _samplerSlot(gpu.Shader s, int slot) {
     final m = _slotMapsOf(s).samplers;
+    // alloc: the first bind of a sampler slot of a shader
     return m[slot] ??= s.getSeparateSamplerSlot('s$slot');
   }
 
@@ -129,6 +131,7 @@ extension _RunnerSlots on FrameRunner {
         ..run = _runs
         ..epoch = -1;
     }
+    // alloc: a block of bytes bound for the first time at this size
     final made = _UniformView(want, view, had)..run = _runs;
     _uniformViews[key] = made;
     return made;
@@ -136,19 +139,24 @@ extension _RunnerSlots on FrameRunner {
 
   /// Returns [s] as a sampler of the engine, one per distinct state, looked
   /// up once per state object.
-  gpu.PrismarineSampler _sampler(
-    SamplerState s,
-  ) => _samplerObjects[s] ??= _samplers.putIfAbsent(
-    '${s.minLinear}${s.magLinear}${s.mipLinear}${s.address.join()}'
-    '${s.anisotropy}${s.compare}${s.minLod}${s.maxLod}${s.lodBias}${s.border}',
-    () => sampler(s),
-  );
+  gpu.PrismarineSampler _sampler(SamplerState s) =>
+      _samplerObjects[s] ?? _newSampler(s);
+
+  // alloc-cold: the first bind of a sampler state object.
+  gpu.PrismarineSampler _newSampler(SamplerState s) =>
+      _samplerObjects[s] = _samplers.putIfAbsent(
+        '${s.minLinear}${s.magLinear}${s.mipLinear}${s.address.join()}'
+        '${s.anisotropy}${s.compare}${s.minLod}${s.maxLod}${s.lodBias}'
+        '${s.border}',
+        () => sampler(s),
+      );
 
   /// Returns the slots of [shader] by the blocks, textures and samplers of
   /// its interface [info], resolved on first use.
   _ShaderSlots _slotsOf(gpu.Shader shader, ShaderRecord info) {
     final had = _shaderSlots[info];
     if (had != null && identical(had.shader, shader)) return had;
+    // alloc: a shader's first bind
     return _shaderSlots[info] = _ShaderSlots(shader, info);
   }
 }
@@ -157,6 +165,9 @@ extension _RunnerSlots on FrameRunner {
 /// bindings until they are cleared. It keeps the depth, viewport and blend
 /// state until they are set again. A draw sends only what differs.
 class _PassState {
+  // alloc-cold: once per runner and per stencil copy.
+  _PassState();
+
   gpu.Shader? _vs, _fs;
   int _vertexSlots = -1;
   final vertex = _Bound(), pixel = _Bound();
@@ -299,6 +310,7 @@ class _Bound {
       if (n > 0) _last.fillRange(0, n, null);
       return _last;
     }
+    // alloc: a shader with more bindings than any before in this pass state
     return _last = List.filled(n, null);
   }
 }
@@ -326,6 +338,7 @@ final class _UniformView {
 
 /// The slots of one shader in the order of its interface.
 class _ShaderSlots {
+  // alloc-cold: a shader's first bind.
   _ShaderSlots(this.shader, ShaderRecord info)
     : uniforms = List.filled(info.blocks.length, null),
       textures = List.filled(info.textures.length, null),
@@ -352,6 +365,9 @@ final _noBlock = Uint8List(0);
 
 /// The binding slots of a shader by kind and name ([_RunnerSlots]).
 final class _SlotMaps {
+  // alloc-cold: a shader's first bind.
+  _SlotMaps();
+
   final uniforms = <String, gpu.UniformSlot>{};
   final textures = <String, gpu.StorageSlot>{};
   final samplers = <int, gpu.StorageSlot>{};
@@ -375,6 +391,7 @@ final class _TexelBound {
 /// state is always the same object. A kept draw then binds from these without a
 /// name lookup.
 final class _StageInputs {
+  // alloc-cold: the first bind of the resources of a stage.
   _StageInputs(this.runner, this.id, this.info, StageResources res)
     : blocks = [for (final b in info.blocks) res.blocks[b.name]],
       bytes = _bytesOf[info] ??= List.unmodifiable([

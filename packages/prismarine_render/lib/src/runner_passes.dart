@@ -12,9 +12,27 @@ extension _RunnerPasses on FrameRunner {
       _viewsGen = _bufferGen;
     }
     final length = r.size ?? b.sizeInBytes - r.offset;
-    return (_bufferViews[b] ??= {})[r.offset * 0x100000000 + length] ??=
-        gpu.BufferView(b, offsetInBytes: r.offset, lengthInBytes: length);
+    final views = _bufferViews[b] ?? _viewsOf(b);
+    final key = r.offset * 0x100000000 + length;
+    return views[key] ?? _newBufferView(views, key, b, r.offset, length);
   }
+
+  // alloc-cold: the first view of a frame buffer since the buffers were made.
+  Map<int, gpu.BufferView> _viewsOf(gpu.DeviceBuffer b) => _bufferViews[b] = {};
+
+  // alloc-cold: a range of a frame buffer not viewed since the buffers were
+  // made.
+  gpu.BufferView _newBufferView(
+    Map<int, gpu.BufferView> views,
+    int key,
+    gpu.DeviceBuffer b,
+    int offset,
+    int length,
+  ) => views[key] = gpu.BufferView(
+    b,
+    offsetInBytes: offset,
+    lengthInBytes: length,
+  );
 
   /// Returns the state that this runner keeps with the pass [r]
   /// (RenderPassPlan.runnerState).
@@ -36,6 +54,7 @@ extension _RunnerPasses on FrameRunner {
       }
       return c;
     }
+    // alloc: a pass's first run on this runner
     final made = _PassCache(this, _depthOf(r))..version = r.version;
     r.runnerState = made;
     return made;
@@ -63,6 +82,15 @@ extension _RunnerPasses on FrameRunner {
   gpu.RenderTarget _renderTarget(_PassCache p, RenderPassPlan r, bool store) {
     final had = p.target;
     if (had != null && p.gen == _texGen && p.store == store) return had;
+    return _makeRenderTarget(p, r, store);
+  }
+
+  // alloc-cold: a new target or a change of the depth store of a pass.
+  gpu.RenderTarget _makeRenderTarget(
+    _PassCache p,
+    RenderPassPlan r,
+    bool store,
+  ) {
     final d = p.depth;
     p
       ..gen = _texGen

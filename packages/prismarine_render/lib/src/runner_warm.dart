@@ -91,6 +91,7 @@ final class _Warm {
   // alloc: once per shader id.
   String effectOf(String id) => _effects[id] ??= _effectOf(id);
 
+  // alloc-cold: once per shader id.
   static String _effectOf(String id) {
     final i = id.indexOf('/');
     return i < 0 ? id : id.substring(0, i);

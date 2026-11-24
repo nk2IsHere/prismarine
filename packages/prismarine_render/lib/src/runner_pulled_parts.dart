@@ -10,6 +10,11 @@ class _Bytes {
 
   void _room(int n) {
     if (length + n <= bytes.length) return;
+    _grow(n);
+  }
+
+  // alloc-cold: the bytes grow past the most of any frame before.
+  void _grow(int n) {
     var size = bytes.length * 2;
     while (size < length + n) {
       size *= 2;
@@ -91,6 +96,11 @@ class _PulledStats {
     if (!on) return;
     _us.add(us);
     if (_us.length < 120) return;
+    _report(warn);
+  }
+
+  // alloc-cold: PRISMARINE_PULLED_STATS runs, every 120 prepares.
+  void _report(void Function(String)? warn) {
     _us.sort();
     warn?.call(
       'renderer: pulled stats: prepare p50 ${_us[60] / 1000} ms p90 '
@@ -143,7 +153,9 @@ extension _RunnerPulledAdd on FrameRunner {
       // A cascade row has no record form without a caster cull of its own.
       // The failure is loud, for the cook to take the row.
       if (bounds != null && i < rowCount) {
+        // alloc: a cascade row without a pulled form
         if (_failedDraws.add('${d.label}: cascade row not pulled: $r')) {
+          // alloc: once per cascade row without a pulled form
           warn?.call('renderer: cascade row not pulled: ${d.label}: $r');
         }
         return;
@@ -171,6 +183,7 @@ extension _RunnerPulledAdd on FrameRunner {
           ..start = 0;
       } else {
         if (f.bucketPool.length > 4096) f.bucketPool.clear();
+        // alloc: a bucket that the last frame did not have
         bucket = f.bucketPool[key] = _PulledBucket(
           d,
           c.scene!,

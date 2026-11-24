@@ -21,6 +21,7 @@ extension _RunnerSrgb on FrameRunner {
       mipLevelCount: base.mipLevelCount,
       format: gpu.PixelFormat.r8g8b8a8UNormIntSRGB,
     );
+    // alloc: a new target viewed as sRGB
     _srgbViews[target] = (base, view);
     return view;
   }

@@ -7,6 +7,9 @@ part of 'frame_runner.dart';
 /// block. It is taken again into the same storage when the rows of the
 /// reader change.
 final class _KeptRows {
+  // alloc-cold: once per pulled pass, with its pulled frame.
+  _KeptRows();
+
   List<DrawPlan> plans = const [];
   final _instances = _Bytes(), _boxes = _Bytes(), _materials = _Bytes();
   final _materialAt = KeptMap<Uint8List, int>.identity();
@@ -24,6 +27,7 @@ final class _KeptRows {
   int instanceCount = 0;
   Uint8List? camera;
 
+  // alloc-cold: the rows of a pulled pass changed.
   /// Takes the state of [f] after the rows of [plans] were added.
   _KeptRows take(
     _PulledFrame f,

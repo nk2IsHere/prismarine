@@ -251,6 +251,7 @@ class PulledLayout {
 /// One cooked scene on the GPU with the index and stream buffers of its
 /// pools and its texture arrays, made on first use.
 class _CookedSceneGpu {
+  // alloc-cold: a cooked scene's first use.
   _CookedSceneGpu(this.dir, Map<String, Object?> json, RenderAssets shaders)
     : scene = CookedScene.fromJson(json),
       textures = shaders.atDirectory(dir);
@@ -296,6 +297,7 @@ class _CookedSceneGpu {
 
   // The miss path is a method of its own. An inline closure that captures
   // the key would allocate a context on every call.
+  // alloc-cold: a pool's first use.
   _PoolGpu _makePool(int i, [Uint8List? read]) {
     final parts = cookedPoolParts(
       read ?? File('$dir/${scene.pools[i].file}').readAsBytesSync(),
