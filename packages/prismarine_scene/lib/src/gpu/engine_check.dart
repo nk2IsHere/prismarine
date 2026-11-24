@@ -45,9 +45,13 @@ abstract final class EngineFeatures {
 /// Returns null when the running engine has every feature bit of [needs],
 /// else the one message for the case that happened, with its fix.
 String? engineProblem(int needs) {
+  gpu.GpuContext? context;
   try {
-    gpu.gpuContext;
+    context = gpu.gpuContext;
   } on Object {
+    context = null;
+  }
+  if (context == null) {
     return 'The app runs on the engine of Flutter. It needs the patched '
         'engine $prismarineEngineRelease. Build it with `prismarine build`.';
   }

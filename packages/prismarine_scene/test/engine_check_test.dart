@@ -15,7 +15,9 @@ void main() {
     expect(EngineFeatures.describe(EngineFeatures.compute), 'compute');
     expect(
       EngineFeatures.describe(
-        EngineFeatures.compute | EngineFeatures.bindings | EngineFeatures.oldSpace,
+        EngineFeatures.compute |
+            EngineFeatures.bindings |
+            EngineFeatures.oldSpace,
       ),
       'compute, the added bindings and the heap figures',
     );
