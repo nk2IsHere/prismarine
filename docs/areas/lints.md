@@ -54,7 +54,10 @@ applies only to the files that the code lints check, outside the `comment_check_
 
 `alloc_roots.txt` lists the functions that a frame calls from outside the code that the lint can follow. The lint walks
 every call from these roots and counts each place that allocates. A place that must allocate carries
-`// alloc: <reason>`. A function that a steady frame does not run carries `// alloc-cold: <reason>`.
+`// alloc: <reason>` on its line or alone on the line above. A function that a steady frame does not run carries
+`// alloc-cold: <reason>` above its doc comment, or above the function when it has none. The lint reads a declaration
+from its doc comment and does not see a mark between the doc comment and the function. A constructor of its own takes
+the mark for the field initializers of a class.
 
 The lint resolves the pure-Dart packages of the workspace. The Flutter packages in `alloc.flutter_packages` of the
 config resolve through their own package config, such as `prismarine_render` with its runner and the sample app. Run
