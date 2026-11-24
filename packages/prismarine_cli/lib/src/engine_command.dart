@@ -26,6 +26,12 @@ class EngineCommand extends BaseCommand {
   EngineCommand() {
     addApp();
     argParser
+      ..addOption(
+        'target',
+        help:
+            'fetch: the target, such as macos-x64 or linux-arm64. The one of '
+            'this computer by default.',
+      )
       ..addFlag(
         'force',
         negatable: false,
@@ -92,7 +98,11 @@ class EngineCommand extends BaseCommand {
       );
       final s = steps(project);
       if (project != null) await s.packages();
-      final e = await s.engine(s.release(), force: argResults!.flag('force'));
+      final e = await s.engine(
+        s.release(),
+        force: argResults!.flag('force'),
+        target: argResults!.option('target'),
+      );
       ui.line('flutter build flags: ${e.flutterArgs.join(' ')}');
       return 0;
     }
