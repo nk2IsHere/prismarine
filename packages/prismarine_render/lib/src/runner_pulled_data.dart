@@ -201,6 +201,7 @@ class PulledLayout {
     required this.materialMainBlock,
     required this.materialTexturePrefix,
     this.materialTextures = const [],
+    this.keepOrder = false,
     required this.uvTransforms,
     required this.cascadesBuffer,
     required this.frustumPlanes,
@@ -228,6 +229,12 @@ class PulledLayout {
   /// function: each one's layer slot is its place in the list. When it is
   /// empty, [materialTexturePrefix] and a number name them.
   final List<String> materialTextures;
+
+  /// Whether the pulled draws keep the plan's order: a bucket then holds one
+  /// run of draws with the same key, not every draw of the key. A game
+  /// whose opaque draws test depth less-or-equal without a depth prepass
+  /// needs it, as the last draw wins a tie of depth.
+  final bool keepOrder;
 
   /// Whether [name] is a material texture. It allocates nothing, as the
   /// binds of every frame ask it.

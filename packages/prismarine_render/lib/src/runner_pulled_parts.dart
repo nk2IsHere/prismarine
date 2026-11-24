@@ -166,7 +166,18 @@ extension _RunnerPulledAdd on FrameRunner {
     final layout = pulled!.layout;
     final objectRow = layout.objectRow, instanceRow = layout.instanceRow;
     final buckets = f.buckets;
-    final key = c.key!;
+    // With keepOrder a bucket holds one run of draws with the same key, so
+    // the buckets draw in the plan's order; a run's bucket is keyed by the
+    // pulled form of its first draw, kept from frame to frame.
+    final Object key;
+    if (layout.keepOrder) {
+      final same = f.lastRun != null && f.lastKey == c.key;
+      f.lastKey = c.key;
+      key = same ? f.lastRun! : c;
+      f.lastRun = key;
+    } else {
+      key = c.key!;
+    }
     var bucket = buckets[key];
     if (bucket == null) {
       // The bucket of the key from the last frame while it holds the same

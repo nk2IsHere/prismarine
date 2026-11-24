@@ -33,6 +33,10 @@ class _PulledFrame {
 
   /// The last bucket made per key, taken again while it holds.
   final bucketPool = KeptMap<Object, _PulledBucket>();
+
+  /// With [PulledLayout.keepOrder], the key of the last draw added and the
+  /// key of its run's bucket: the pulled form of the run's first draw.
+  Object? lastKey, lastRun;
   bool keepable = true;
   int instanceCount = 0;
   Uint8List? camera, cameraSource;
@@ -493,6 +497,9 @@ extension _RunnerPulled on FrameRunner {
     final rest = f.rest..clear();
     final why = f.why..clear();
     final buckets = f.buckets..clear();
+    f
+      ..lastKey = null
+      ..lastRun = null;
     f.instances.reset();
     f.objects.reset();
     f.materials.reset();

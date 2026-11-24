@@ -31,7 +31,7 @@ rows of a cooked scene, which the GPU culls and draws by bucket. The layout give
 draw by, such as the blocks of the camera, the object, the instance and the material, the material textures and the
 object and instance rows of `prismarine_frame`. Material textures are named by a prefix and a number, or by a list of
 names when the programs name them by their function; a texture's layer slot is its number or its place in the list.
-The layout also gives the function that makes a view's frustum planes, which must be the builder's.
+With `keepOrder` a bucket holds one run of draws with the same key, so the buckets draw in the plan's order, for a game whose opaque draws test depth less-or-equal without a prepass. The layout also gives the function that makes a view's frustum planes, which must be the builder's.
 
 | Variable | Effect |
 |---|---|
