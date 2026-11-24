@@ -5,6 +5,7 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:prismarine_assets/prismarine_assets.dart';
 
 import 'gltf_model.dart';
+import 'triangle_order.dart';
 
 /// A glTF on the GPU: one device buffer for each buffer view that a
 /// primitive reads, its images as textures and its [model]. The images must
@@ -14,9 +15,15 @@ class GpuScene {
 
   /// Reads the glTF at [path] and uploads the buffer views of its
   /// primitives. The textures load on first use or with [loadTextures].
-  factory GpuScene.load(String path) {
+  /// [clusterTriangles] sets the runs of the primitives as for
+  /// [GltfModel.read]. Above 0 the triangles of each primitive are sorted
+  /// first with [sortTrianglesForRuns].
+  factory GpuScene.load(String path, {int clusterTriangles = 1024}) {
     final doc = GltfDocument.open(path);
-    final model = GltfModel.read(doc);
+    if (clusterTriangles > 0) {
+      sortTrianglesForRuns(doc, minTriangles: clusterTriangles);
+    }
+    final model = GltfModel.read(doc, clusterTriangles: clusterTriangles);
     final used = <int>{
       for (final mesh in model.meshes)
         for (final p in mesh)

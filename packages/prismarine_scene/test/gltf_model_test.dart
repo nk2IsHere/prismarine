@@ -89,4 +89,38 @@ void main() {
     expect((l.type, l.intensity, l.range), ('point', 3, 4));
     expect(l.position.y, 2);
   });
+
+  test('primitives are split into runs of triangles with their boxes', () {
+    final b = GltfBuilder();
+    final pos = b.addFloatAccessor(
+      Float32List.fromList([
+        for (var t = 0; t < 5; t++) ...[
+          0, 0, t * 2.0, 1, 0, t * 2.0, 0, 1, t * 2.0 + 1, //
+        ],
+      ]),
+      'VEC3',
+      minMax: true,
+    );
+    final idx = b.addIndexAccessor(
+      Uint16List.fromList([for (var i = 0; i < 15; i++) i]),
+    );
+    final mesh = b.addMesh('m', [
+      {
+        'attributes': {'POSITION': pos},
+        'indices': idx,
+      },
+    ]);
+    b.setScene([
+      b.addNode({'mesh': mesh}),
+    ]);
+    final glb = readGlb(b.toGlb());
+    final doc = GltfDocument(glb.json, [glb.bin]);
+    final p = GltfModel.read(doc, clusterTriangles: 2).meshes[0][0]!;
+    expect(p.clusterCount, 3);
+    expect(p.clusters, [0, 6, 6, 6, 12, 3]);
+    expect(p.clusterBounds.sublist(6, 12), [0, 0, 4, 1, 1, 7]);
+    final whole = GltfModel.read(doc, clusterTriangles: 0).meshes[0][0]!;
+    expect(whole.clusters, [0, 15]);
+    expect(whole.clusterBounds, [0, 0, 0, 1, 1, 9]);
+  });
 }
