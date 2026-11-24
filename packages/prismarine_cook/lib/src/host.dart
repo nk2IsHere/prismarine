@@ -28,7 +28,7 @@ String builtOutDir(String target) => switch (target) {
   _ => 'host_release',
 };
 
-/// The home folder of the user, `USERPROFILE` on Windows and `HOME`
+/// The home folder, `USERPROFILE` on Windows and `HOME`
 /// elsewhere. Throws a [StateError] when it is not set.
 String homeDir(Map<String, String> env, {bool? windows}) {
   final w = windows ?? Platform.isWindows;

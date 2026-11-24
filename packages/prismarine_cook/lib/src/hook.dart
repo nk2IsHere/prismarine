@@ -47,7 +47,7 @@ Future<void> cookHook(BuildInput input, BuildOutputBuilder output) async {
   }
 }
 
-/// The impellerc that the build hook of the app in [appDir] uses: the
+/// Returns the impellerc that the build hook of the app in [appDir] uses, the
 /// choice of the last command run, else the fetched engine of the release
 /// of the app in the engine folder of the home folder. Throws a
 /// [StateError] with the fix when neither exists.

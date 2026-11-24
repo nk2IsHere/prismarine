@@ -56,6 +56,32 @@ assets:
       );
     });
 
+    test('a manifest entry has its sources and a stamp beside its bundle', () {
+      write('app/prismarine.yaml', '''
+shaders:
+  features:
+    manifest: features.json
+    out: gen/features.shaderbundle
+''');
+      write(
+        'app/features.json',
+        '{"A": {"type": "vertex", "file": "shaders/a.vert"}}',
+      );
+      write('app/shaders/a.vert', '');
+      final p = Project.load('$tmp/app')!;
+      final e = p.shaders.single;
+      expect(e.sources(p).map((s) => s.split('/').last), [
+        'features.json',
+        'shaders',
+      ]);
+      expect(
+        shaderStamp(p, e).path,
+        endsWith('gen/features.shaderbundle.cook.json'),
+      );
+      write('app/prismarine.yaml', 'shaders:\n  x:\n    out: y\n');
+      expect(() => Project.load('$tmp/app'), throwsA(isA<ProjectError>()));
+    });
+
     test('find goes up to the folder with the file', () {
       write('app/prismarine.yaml', '');
       Directory('$tmp/app/lib/src').createSync(recursive: true);

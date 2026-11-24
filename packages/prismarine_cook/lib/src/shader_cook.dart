@@ -57,25 +57,30 @@ String shaderKey(Project project, ShaderEntry entry, String impellerc) {
     return '$path ${s.size} ${s.modified.microsecondsSinceEpoch}';
   }
 
-  return hashInputs(
-    [
-      _cookVersion,
-      entry.settings,
-      'impellerc ${hashFile(impellerc)}',
-      'metal ${identity(metal?.metal)}',
-    ],
-    trees: [entry.programsDir(project)],
-  );
+  return hashInputs([
+    _cookVersion,
+    entry.settings,
+    'impellerc ${hashFile(impellerc)}',
+    'metal ${identity(metal?.metal)}',
+  ], trees: entry.sources(project));
 }
 
-/// The stamp of [entry] in [project].
-Stamp shaderStamp(Project project, ShaderEntry entry) =>
-    Stamp('${entry.outDir(project)}/cook.json');
+/// The stamp of [entry] in [project], in its output folder or beside its
+/// bundle file.
+Stamp shaderStamp(Project project, ShaderEntry entry) => Stamp(
+  entry.manifest == null
+      ? '${entry.outDir(project)}/cook.json'
+      : '${entry.outDir(project)}.cook.json',
+);
+
+bool _outputExists(Project project, ShaderEntry entry) => entry.manifest == null
+    ? Directory('${entry.outDir(project)}/bundle').existsSync()
+    : File(entry.outDir(project)).existsSync();
 
 /// True when the output of [entry] is current for [impellerc].
 bool shadersCurrent(Project project, ShaderEntry entry, String impellerc) =>
     shaderStamp(project, entry).key == shaderKey(project, entry, impellerc) &&
-    Directory('${entry.outDir(project)}/bundle').existsSync();
+    _outputExists(project, entry);
 
 /// Cooks the program tree of [entry] into its output folder when its stamp
 /// is stale or [force] is set. The bundles go to
@@ -92,7 +97,7 @@ Future<ShaderCook> cookShaders(
   final stamp = shaderStamp(project, entry);
   final key = shaderKey(project, entry, impellerc);
   final out = entry.outDir(project);
-  if (!force && stamp.key == key && Directory('$out/bundle').existsSync()) {
+  if (!force && stamp.key == key && _outputExists(project, entry)) {
     final f = stamp.fields;
     return ShaderCook(
       entry,
