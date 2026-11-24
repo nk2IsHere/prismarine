@@ -4,12 +4,14 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:prismarine_cook/prismarine_cook.dart';
 
+import 'app.dart';
 import 'base_command.dart';
 import 'doctor.dart';
 import 'engine_command.dart';
 import 'toolchain.dart';
 import 'tools.dart';
 import 'ui.dart';
+import 'universal.dart';
 
 /// Runs the prismarine command with [args] and returns its exit code.
 Future<int> runPrismarine(List<String> args) async {
@@ -55,6 +57,7 @@ Future<String> _buildApp(
   List<String> extra, {
   bool debug = false,
   bool stock = false,
+  bool universal = false,
 }) async {
   c.needFlutter();
   final project = c.findApp(given: c.argResults!.option('app'))!;
@@ -72,7 +75,42 @@ Future<String> _buildApp(
       'Flutter, without the patches.',
     );
   }
-  return s.build(platform, debug || stock ? null : engine, extra, debug: debug);
+  if (!universal) {
+    return s.build(
+      platform,
+      debug || stock ? null : engine,
+      extra,
+      debug: debug,
+    );
+  }
+  if (platform != 'macos' || debug || stock) {
+    throw UsageException(
+      '--universal is for a release build for macOS on the patched engine.',
+      '',
+    );
+  }
+  final x64 = await s.engine(release, target: 'macos-x64');
+  final keep = '${project.dir}/build/prismarine/universal';
+  Directory(keep).createSync(recursive: true);
+  final parts = <String>[];
+  for (final (cpu, e) in [('arm64', engine), ('x86_64', x64)]) {
+    final exe = await s.build(platform, e, extra);
+    final app = exe.substring(0, exe.indexOf('.app/') + 4);
+    final aside = '$keep/$cpu.app';
+    if (Directory(aside).existsSync()) {
+      Directory(aside).deleteSync(recursive: true);
+    }
+    Directory(app).renameSync(aside);
+    parts.add(aside);
+  }
+  final out = builtApp(project.dir, platform);
+  final app = out.substring(0, out.indexOf('.app/') + 4);
+  await c.ui.step(
+    'universal',
+    () => mergeUniversalApp(parts[0], parts[1], app, s.tools),
+    done: (n) => '$n Mach-O files merged',
+  );
+  return out;
 }
 
 String _platform(ArgResults r) {
@@ -152,6 +190,13 @@ class _BuildCommand extends BaseCommand {
           'Builds in debug mode on the engine of Flutter, without the patches.',
     );
     _addStock(argParser);
+    argParser.addFlag(
+      'universal',
+      negatable: false,
+      help:
+          'macOS: builds for arm64 and x86_64 on both engines and merges them '
+          'into one app.',
+    );
   }
 
   @override
@@ -171,6 +216,7 @@ class _BuildCommand extends BaseCommand {
       _afterPlatform(argResults!),
       debug: argResults!.flag('debug'),
       stock: argResults!.flag('stock'),
+      universal: argResults!.flag('universal'),
     );
     ui.line(app);
     return 0;
