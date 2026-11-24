@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:prismarine_cook/prismarine_cook.dart';
 
@@ -246,19 +247,33 @@ String _tail(String output) {
       .join('\n');
 }
 
-/// The prismarine checkout of this command.
+/// The prismarine checkout of this command. A `dart run` from another
+/// repository finds it through the package of the command, a launcher
+/// through the path of its kernel file.
 String checkoutOfCommand() {
-  final script = Platform.script.toFilePath();
-  var d = File(script).parent;
-  while (true) {
-    if (File('${d.path}/third_party/flutter_engine/RELEASE').existsSync()) {
-      return d.path;
-    }
-    if (d.parent.path == d.path) {
-      throw Failure('The command is not in a checkout of prismarine: $script.');
-    }
-    d = d.parent;
+  final starts = <String>[];
+  try {
+    final lib = Isolate.resolvePackageUriSync(
+      Uri.parse('package:prismarine_cli/prismarine_cli.dart'),
+    );
+    if (lib != null) starts.add(File.fromUri(lib).parent.path);
+  } on Object {
+    // A kernel file without a package config resolves no package.
   }
+  starts.add(File(Platform.script.toFilePath()).parent.path);
+  for (final start in starts) {
+    var d = Directory(start);
+    while (true) {
+      if (File('${d.path}/third_party/flutter_engine/RELEASE').existsSync()) {
+        return d.path;
+      }
+      if (d.parent.path == d.path) break;
+      d = d.parent;
+    }
+  }
+  throw Failure(
+    'The command is not in a checkout of prismarine: ${Platform.script}.',
+  );
 }
 
 /// The path of the app of the Flutter app in [dir] built for [platform].
