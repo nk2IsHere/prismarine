@@ -14,10 +14,11 @@ The sample app on macOS. Sponza 2022 Scene commissioned by Frank Meinl, sponsore
 ## Building and running engine
 
 To learn how to build and run sample application with prismarine engine, refer to [`Building`](docs/building.md).
-With the tools installed and `bin` of your checkout on your `PATH`, one command builds and runs the sample.
+With the tools installed and `bin` of your checkout on your `PATH`, one command, run from the root of your checkout,
+builds and runs the sample.
 
 ```sh
-prismarine run
+prismarine run --app=apps/prismarine_sample
 ```
 
 ## Packages
