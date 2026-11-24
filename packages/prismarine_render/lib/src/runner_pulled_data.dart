@@ -200,6 +200,7 @@ class PulledLayout {
     required this.materialBaseBlock,
     required this.materialMainBlock,
     required this.materialTexturePrefix,
+    this.materialTextures = const [],
     required this.uvTransforms,
     required this.cascadesBuffer,
     required this.frustumPlanes,
@@ -222,6 +223,26 @@ class PulledLayout {
   /// The start of the names of the material textures, which the pulled
   /// passes read from texture arrays, followed by the input's number.
   final String materialTexturePrefix;
+
+  /// The material textures by name, for programs that name them by their
+  /// function: each one's layer slot is its place in the list. When it is
+  /// empty, [materialTexturePrefix] and a number name them.
+  final List<String> materialTextures;
+
+  /// Whether [name] is a material texture. It allocates nothing, as the
+  /// binds of every frame ask it.
+  bool isMaterialTexture(String name) => materialTextures.isNotEmpty
+      ? materialTextures.contains(name)
+      : name.startsWith(materialTexturePrefix);
+
+  /// Returns the layer slot of the material texture [name], or -1 when
+  /// [name] is not a material texture.
+  // alloc-cold: a draw's first pulled form.
+  int materialTextureSlot(String name) {
+    if (materialTextures.isNotEmpty) return materialTextures.indexOf(name);
+    if (!name.startsWith(materialTexturePrefix)) return -1;
+    return int.tryParse(name.substring(materialTexturePrefix.length)) ?? -1;
+  }
 
   /// The instance row's texture coordinate transforms, one vec4 each in a
   /// row. They stay at identity, as the cooked texture coordinates carry

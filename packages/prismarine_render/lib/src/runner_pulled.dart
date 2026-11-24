@@ -336,13 +336,13 @@ extension _RunnerPulled on FrameRunner {
     final layers = <int>[];
     var arrayKey = '';
     for (final MapEntry(:key, :value) in d.pixelResources.textures.entries) {
-      if (!key.startsWith(layout.materialTexturePrefix)) continue;
+      final n = layout.materialTextureSlot(key);
+      if (n < 0) continue;
       if (value is! FileTexture) continue;
       final at = scene.scene.textureAt(value.stem);
       if (at == null) continue;
       final a = scene.scene.arrays[at.$1];
       arrays[key] = scene.textures.texture(a.file, srgb: value.srgb);
-      final n = int.parse(key.substring(layout.materialTexturePrefix.length));
       while (layers.length <= n) {
         layers.add(0);
       }
@@ -354,8 +354,7 @@ extension _RunnerPulled on FrameRunner {
     // have none.
     final pixel = d.pixel == null ? null : p.shaders.shaderRecord(d.pixel!);
     for (final t in pixel?.textures ?? const <TextureSlot>[]) {
-      if (t.name.startsWith(layout.materialTexturePrefix) &&
-          !arrays.containsKey(t.name)) {
+      if (layout.isMaterialTexture(t.name) && !arrays.containsKey(t.name)) {
         return _PulledDraw.refused('texture not cooked');
       }
     }
@@ -433,10 +432,7 @@ extension _RunnerPulled on FrameRunner {
           for (final MapEntry(:key, :value) in res.blocks.entries)
             if (!layout.rowBlocks.contains(key)) ...[key, value],
           for (final MapEntry(:key, :value) in res.textures.entries)
-            if (!key.startsWith(layout.materialTexturePrefix)) ...[
-              key,
-              _textureKey(value),
-            ],
+            if (!layout.isMaterialTexture(key)) ...[key, _textureKey(value)],
         ],
       ]),
     );
@@ -853,7 +849,7 @@ extension _RunnerPulled on FrameRunner {
     final textures = info.textures;
     for (var k = 0; k < textures.length; k++) {
       final t = textures[k];
-      if (t.name.startsWith(p.layout.materialTexturePrefix)) {
+      if (p.layout.isMaterialTexture(t.name)) {
         final tex = b.arrays[t.name];
         if (tex == null) {
           throw StateError('$id: no array for ${t.name}');

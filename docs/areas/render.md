@@ -28,9 +28,10 @@ stencil into a texture.
 
 With a `Pulled` set, the runner draws the passes that its `PulledLayout` lists in pulled form. Their draws go into
 rows of a cooked scene, which the GPU culls and draws by bucket. The layout gives the names that the runner reads a
-draw by, such as the blocks of the camera, the object, the instance and the material, the start of the names of the
-material textures and the object and instance rows of `prismarine_frame`. It also gives the function that makes a
-view's frustum planes, which must be the builder's.
+draw by, such as the blocks of the camera, the object, the instance and the material, the material textures and the
+object and instance rows of `prismarine_frame`. Material textures are named by a prefix and a number, or by a list of
+names when the programs name them by their function; a texture's layer slot is its number or its place in the list.
+The layout also gives the function that makes a view's frustum planes, which must be the builder's.
 
 | Variable | Effect |
 |---|---|
