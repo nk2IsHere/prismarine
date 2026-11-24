@@ -8,9 +8,10 @@ macOS and on Vulkan on Linux and Windows.
 ## Running
 
 Install the tools and put the `prismarine` command on your `PATH`, as [the build page](../../docs/building.md)
-describes. Then run the sample from the root of your checkout.
+describes. Then run the sample from its folder.
 
 ```sh
+cd apps/prismarine_sample
 prismarine run macos
 ```
 
