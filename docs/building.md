@@ -214,5 +214,4 @@ the release. A fetched release has no profile engine. `prismarine engine build -
 prismarine engine package --cpu=both --dest=~/engine-packages
 ```
 
-The owner of prismarine names each release and publishes its archives to the GitHub releases.
 [The engine README](../third_party/flutter_engine/README.md) lists every patch and the requirements of each platform.
