@@ -30,6 +30,11 @@ class Toolchain {
       out['PATH'] = '$root${_s}bin$sep${env['PATH'] ?? ''}';
       out['FLUTTER_ROOT'] = root;
     }
+    if (cache != null && Directory(cache).existsSync()) {
+      // The real path keeps the paths in package configs and build caches
+      // the same whether a folder is reached through a link or not.
+      cache = Directory(cache).resolveSymbolicLinksSync();
+    }
     if (cache != null) out['PUB_CACHE'] = cache;
     return Toolchain._(root, cache, out);
   }
