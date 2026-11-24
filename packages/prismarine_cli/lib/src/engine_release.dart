@@ -17,7 +17,7 @@ bool _skipFile(String name) =>
         ).hasMatch(name) &&
         name != 'flutter_windows.dll.exp' ||
     name == 'gn_logs.txt' ||
-    name.startsWith('.ninja') ||
+    name.startsWith('.') ||
     RegExp(
       r'^(flatc|analyze_snapshot|bootstrap_compile_platform|gen_snapshot_host_targeting_host|shader_archiver)',
     ).hasMatch(name) ||
