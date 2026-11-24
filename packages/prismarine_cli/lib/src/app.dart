@@ -32,6 +32,7 @@ class AppSteps {
           (c) => tools.read(c),
           os: hostPlatform(),
           env: env,
+          flutterWant: project?.flutter,
         );
         final problems = [
           for (final f in checks.all(release))
@@ -44,22 +45,48 @@ class AppSteps {
         );
       }, done: (s) => s);
 
-  /// Reads the engine release of the app. Outside an app it reads the release
-  /// of the prismarine checkout of this command.
+  /// Reads the engine release of the app, the `engine` of its
+  /// `prismarine.yaml`. Throws a [Failure] when the file sets none or when the
+  /// prismarine that the app resolves has another release. Outside an app it
+  /// reads the release of the prismarine checkout of this command.
   EngineRelease release() {
     final p = project;
-    final file = p == null ? null : releaseFileOfApp(p.dir);
-    if (file != null) return EngineRelease.read(file);
-    if (p != null && !p.needsPubGet) {
+    if (p == null) {
+      return EngineRelease.read(
+        '${checkoutOfCommand()}/third_party/flutter_engine/RELEASE',
+      );
+    }
+    final file = releaseFileOfApp(p.dir);
+    if (file == null && p.needsPubGet) {
+      throw Failure(
+        'The packages of the app ${p.name} are not resolved.',
+        fix: 'prismarine flutter pub get, in ${p.dir}',
+      );
+    }
+    if (file == null) {
       throw Failure(
         'The app ${p.name} does not use the flutter_gpu of prismarine.',
         fix:
             'add flutter_gpu with the path <prismarine>/third_party/flutter_gpu under dependency_overrides in pubspec.yaml',
       );
     }
-    return EngineRelease.read(
-      '${checkoutOfCommand()}/third_party/flutter_engine/RELEASE',
-    );
+    final have = EngineRelease.read(file);
+    final want = p.engine;
+    if (want == null) {
+      throw Failure(
+        '${p.dir}/prismarine.yaml sets no engine.',
+        fix: 'add the line engine: ${have.tag} to ${p.dir}/prismarine.yaml',
+      );
+    }
+    if (want != have.tag) {
+      throw Failure(
+        'prismarine.yaml asks for the engine $want, but the prismarine that '
+        'the app resolves is for ${have.tag}.',
+        fix:
+            'set engine: ${have.tag} in ${p.dir}/prismarine.yaml, or move the app to the prismarine of $want',
+      );
+    }
+    return have;
   }
 
   /// Finds the engine of [release] for [target], the target of this computer

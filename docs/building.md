@@ -98,10 +98,13 @@ every tool as it runs.
 
 ## Your own app
 
-An app lists the shaders and assets that it cooks in `prismarine.yaml`, beside its `pubspec.yaml`. The file of the
-sample cooks the shaders of `prismarine_pbr` and prepares Sponza.
+An app describes itself in `prismarine.yaml`, beside its `pubspec.yaml`: the engine release and the Flutter SDK that
+it needs, the shaders that it cooks and its asset steps. The file of the sample asks for the first release, cooks the
+shaders of `prismarine_pbr` and prepares Sponza.
 
 ```yaml
+engine: engine-deb287481e3c-prismarine1
+flutter: 3.47.7
 shaders:
   pbr:
     package: prismarine_pbr
@@ -120,6 +123,8 @@ assets:
 
 | Key | Meaning |
 |---|---|
+| `engine` | The engine release that the app builds and runs on. It must equal the release of the prismarine that the app depends on, and the command stops with the fix when it does not |
+| `flutter` | The version of the Flutter SDK that the app needs, which `prismarine doctor` checks |
 | `shaders.<id>.programs` | A tree of shader programs, a folder for each effect such as `programs/Pbr/` with a `bodies` folder for the files that programs include |
 | `shaders.<id>.manifest` | A shader bundle manifest of impellerc, in place of `programs` |
 | `shaders.<id>.package` | The package that holds `programs` or `manifest`. Without it the path is relative to the app |

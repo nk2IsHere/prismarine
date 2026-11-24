@@ -229,6 +229,15 @@ String bumpRelease(String checkout, String revision, String name) {
       "const prismarineEngineRelease = '$tag';",
     ),
   );
+  for (final app in Project.below(checkout)) {
+    final f = File('$app/prismarine.yaml');
+    f.writeAsStringSync(
+      f.readAsStringSync().replaceFirst(
+        RegExp(r'^engine: .*$', multiLine: true),
+        'engine: $tag',
+      ),
+    );
+  }
   return tag;
 }
 

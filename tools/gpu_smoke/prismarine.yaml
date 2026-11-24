@@ -1,3 +1,5 @@
+engine: engine-deb287481e3c-prismarine1
+flutter: 3.47.7
 shaders:
   features:
     manifest: features.shaderbundle.json

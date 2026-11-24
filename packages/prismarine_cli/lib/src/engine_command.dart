@@ -195,7 +195,7 @@ class EngineCommand extends BaseCommand {
           done: (t) => 'RELEASE is $t',
         );
         ui.line(
-          'Commit RELEASE and engine_check.dart, then build, package and publish $tag.',
+          'Commit RELEASE, engine_check.dart and the prismarine.yaml files, then build, package and publish $tag.',
         );
       case 'publish':
         await publishEngine(

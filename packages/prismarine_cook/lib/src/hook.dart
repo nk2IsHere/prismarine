@@ -48,12 +48,17 @@ Future<void> cookHook(BuildInput input, BuildOutputBuilder output) async {
 }
 
 /// Returns the impellerc for the build hook of the app in [appDir]. It is the
-/// impellerc that the last prismarine command recorded in the app, else the
-/// one of the fetched engine of its release in the engine folder that [env]
-/// sets. Throws a [StateError] with the fix when neither exists.
+/// impellerc that the last prismarine command recorded in the app for the
+/// `engine` of its `prismarine.yaml`, else the one of the fetched engine of
+/// that release in the engine folder that [env] sets. Throws a [StateError]
+/// with the fix when neither exists or when the yaml and the prismarine that
+/// the app resolves disagree.
 String hookImpellerc(String appDir, Map<String, String> env) {
+  final want = Project.load(appDir)?.engine;
   final choice = EngineChoice.readIn(appDir);
-  if (choice != null && File(choice.impellerc).existsSync()) {
+  if (choice != null &&
+      (want == null || choice.release == want) &&
+      File(choice.impellerc).existsSync()) {
     return choice.impellerc;
   }
   final releaseFile = releaseFileOfApp(appDir);
@@ -68,6 +73,12 @@ String hookImpellerc(String appDir, Map<String, String> env) {
     );
   }
   final release = EngineRelease.read(releaseFile);
+  if (want != null && want != release.tag) {
+    throw StateError(
+      'prismarine.yaml asks for the engine $want, but the prismarine that the '
+      'app resolves is for ${release.tag}. Run `prismarine build` in $appDir.',
+    );
+  }
   final search = findEngine(engineDir(env), target, release);
   final engine = search.engine;
   if (engine == null || !File(engine.impellerc).existsSync()) {

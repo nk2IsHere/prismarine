@@ -26,15 +26,20 @@ class Finding {
 typedef Reader = String? Function(List<String> command);
 
 /// Checks the tools on this computer that prismarine needs. [os] is `macos`,
-/// `linux` or `windows`.
+/// `linux` or `windows`. [flutterWant] is the Flutter version of the app, the
+/// one of this command by default.
 class ToolchainChecks {
   ToolchainChecks(
     this.toolchain,
     this.read, {
     required this.os,
     required this.env,
+    String? flutterWant,
     bool Function(String path)? exists,
-  }) : exists = exists ?? ((p) => File(p).existsSync());
+  }) : flutterWant = flutterWant ?? flutterVersion,
+       exists = exists ?? ((p) => File(p).existsSync());
+
+  final String flutterWant;
 
   final Toolchain toolchain;
   final Reader read;
@@ -64,11 +69,11 @@ class ToolchainChecks {
       );
     }
     final v = toolchain.version;
-    if (v != flutterVersion) {
+    if (v != flutterWant) {
       return Finding.problem(
         'Flutter',
-        'the SDK in $root is ${v ?? 'of an unknown version'}, but prismarine needs $flutterVersion',
-        'git -C "$root" fetch --tags && git -C "$root" checkout $flutterVersion',
+        'the SDK in $root is ${v ?? 'of an unknown version'}, but the app needs $flutterWant',
+        'git -C "$root" fetch --tags && git -C "$root" checkout $flutterWant',
       );
     }
     final rev = toolchain.engineRevision;
@@ -76,7 +81,7 @@ class ToolchainChecks {
       return Finding.problem(
         'Flutter',
         'the SDK in $root has engine $rev, but the release ${release.tag} needs engine ${release.revision}',
-        'git -C "$root" checkout $flutterVersion',
+        'git -C "$root" checkout $flutterWant',
       );
     }
     return Finding.ok('Flutter', '$v in $root');

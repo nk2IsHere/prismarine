@@ -70,6 +70,11 @@ Subject: [PATCH] =?UTF-8?q?flutter=5Fgpu=20(x):=20arrays=20?=
           ..writeAsStringSync(
             "const prismarineEngineRelease = 'engine-deb287481e3c-prismarine1';\n",
           );
+    final app = File('$tmp/apps/demo/prismarine.yaml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        'engine: engine-deb287481e3c-prismarine1\nflutter: 3.47.7\n',
+      );
     final tag = bumpRelease(
       tmp,
       'deb287481e3ce9468f3434937ced4240a70539ca',
@@ -81,6 +86,7 @@ Subject: [PATCH] =?UTF-8?q?flutter=5Fgpu=20(x):=20arrays=20?=
       '$tag\n',
     );
     expect(check.readAsStringSync(), contains("'$tag'"));
+    expect(app.readAsStringSync(), 'engine: $tag\nflutter: 3.47.7\n');
     Directory(tmp).deleteSync(recursive: true);
   });
 }

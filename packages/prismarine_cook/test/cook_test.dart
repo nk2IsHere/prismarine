@@ -16,6 +16,21 @@ void main() {
   tearDown(() => Directory(tmp).deleteSync(recursive: true));
 
   group('project', () {
+    test('the engine and the Flutter version come from the file', () {
+      write('app/pubspec.yaml', 'name: demo\n');
+      write(
+        'app/prismarine.yaml',
+        'engine: engine-deb287481e3c-prismarine1\nflutter: 3.47.7\n',
+      );
+      final p = Project.load('$tmp/app')!;
+      expect(p.engine, 'engine-deb287481e3c-prismarine1');
+      expect(p.flutter, '3.47.7');
+      write('app/prismarine.yaml', 'engine: prismarine1\n');
+      expect(() => Project.load('$tmp/app'), throwsA(isA<ProjectError>()));
+      write('app/prismarine.yaml', '');
+      expect(Project.load('$tmp/app')!.engine, isNull);
+    });
+
     test('the apps below a folder skip hidden and build folders', () {
       write('apps/a/prismarine.yaml', '');
       write('tools/b/prismarine.yaml', '');

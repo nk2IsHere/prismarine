@@ -7,13 +7,28 @@ import 'host.dart';
 
 /// A prismarine app with its `prismarine.yaml`.
 class Project {
-  Project._(this.dir, this.name, this.shaders, this.assets);
+  Project._(
+    this.dir,
+    this.name,
+    this.engine,
+    this.flutter,
+    this.shaders,
+    this.assets,
+  );
 
   /// The folder of the app, which holds `pubspec.yaml` and `prismarine.yaml`.
   final String dir;
 
   /// The name of the package of the app.
   final String name;
+
+  /// The engine release that the app builds and runs on, such as
+  /// `engine-deb287481e3c-prismarine1`, or null when the file sets none.
+  final String? engine;
+
+  /// The version of the Flutter SDK that the app needs, such as `3.47.7`, or
+  /// null when the file sets none.
+  final String? flutter;
   final List<ShaderEntry> shaders;
   final List<AssetStep> assets;
 
@@ -38,12 +53,23 @@ class Project {
     }
     final map = (doc as Map?) ?? const {};
     for (final k in map.keys) {
-      if (k != 'shaders' && k != 'assets') {
+      if (!const ['engine', 'flutter', 'shaders', 'assets'].contains(k)) {
         throw ProjectError(
-          '${file.path}: unknown key "$k". The keys are shaders and assets.',
+          '${file.path}: unknown key "$k". The keys are engine, flutter, shaders and assets.',
         );
       }
     }
+    String? value(String key, RegExp form, String example) {
+      final v = map[key];
+      if (v == null) return null;
+      if (v is! String || !form.hasMatch(v)) {
+        throw ProjectError(
+          '${file.path}: $key must have the form of $example, not "$v".',
+        );
+      }
+      return v;
+    }
+
     Map<String, Map> section(String key) {
       final s = map[key];
       if (s == null) return const {};
@@ -60,6 +86,12 @@ class Project {
     return Project._(
       dir,
       name,
+      value(
+        'engine',
+        RegExp(r'^engine-[0-9a-f]{12}-[a-z][a-z0-9]*$'),
+        'engine-deb287481e3c-prismarine1',
+      ),
+      value('flutter', RegExp(r'^\d+\.\d+\.\d+$'), '3.47.7'),
       [
         for (final MapEntry(:key, :value) in section('shaders').entries)
           ShaderEntry._parse(key, value, file.path),

@@ -319,18 +319,25 @@ class _DoctorCommand extends BaseCommand {
     );
     String? read(List<String> c) => tools.read(c);
     EngineRelease? release;
+    Finding? releaseProblem;
     try {
       release = s.release();
+    } on Failure catch (f) {
+      releaseProblem = Finding.problem('Engine release', f.cause, f.fix);
     } on Object {
       release = null;
     }
     final groups = <String, List<Finding>>{
-      'toolchain': ToolchainChecks(
-        toolchain,
-        read,
-        os: hostPlatform(),
-        env: env,
-      ).all(release),
+      'toolchain': [
+        ...ToolchainChecks(
+          toolchain,
+          read,
+          os: hostPlatform(),
+          env: env,
+          flutterWant: project?.flutter,
+        ).all(release),
+        ?releaseProblem,
+      ],
     };
     final target = hostTarget();
     if (release != null && target != null) {
@@ -451,10 +458,10 @@ class _EnvCommand extends BaseCommand {
       'PRISMARINE_ENGINE_DIR': engineDir(env),
     };
     final target = hostTarget();
+    // The release of the app gives the engine. Outside an app the release of
+    // this checkout gives it.
+    final app = findApp(required: false, given: argResults!.option('app'));
     try {
-      // The release of the app gives the engine. Outside an app the release
-      // of this checkout gives it.
-      final app = findApp(required: false, given: argResults!.option('app'));
       final release = steps(app).release();
       final e = target == null
           ? null
@@ -469,8 +476,14 @@ class _EnvCommand extends BaseCommand {
           );
         }
       }
-    } on Failure {
-      // Outside a checkout the engine lines are left out.
+    } on Failure catch (f) {
+      // An app whose release fails stops here. A shell evaluates stdout, so
+      // the failure goes to stderr. Outside an app and outside a checkout the
+      // engine lines are left out.
+      if (app != null) {
+        Ui(out: stderr).printFailure(f);
+        return 1;
+      }
     }
     for (final MapEntry(:key, :value) in vars.entries) {
       final path = key == 'PATH';
