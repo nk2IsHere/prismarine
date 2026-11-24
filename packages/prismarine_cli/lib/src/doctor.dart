@@ -378,9 +378,15 @@ List<Finding> downloadChecks(
         ? Finding.problem(
             'Release repository',
             'PRISMARINE_ENGINE_REPO is not set',
-            'export PRISMARINE_ENGINE_REPO=<owner>/<name> of the engine releases',
+            repoFix,
           )
         : Finding.ok('Release repository', repo),
   );
   return out;
 }
+
+/// The command that sets the repository of the engine releases in the shell
+/// of this OS.
+String get repoFix => Platform.isWindows
+    ? r'$env:PRISMARINE_ENGINE_REPO = "<owner>/<name>" of the engine releases'
+    : 'export PRISMARINE_ENGINE_REPO=<owner>/<name> of the engine releases';

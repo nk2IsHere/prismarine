@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:prismarine_cook/prismarine_cook.dart';
 
+import 'doctor.dart';
 import 'engine_build.dart';
 import 'engine_fetch.dart';
 import 'tools.dart';
@@ -233,11 +234,7 @@ Future<String> publishEngine({
 }) => ui.step<String>('publish ${release.name}', () async {
   final repo = releaseRepository(release, env);
   if (repo == null) {
-    throw Failure(
-      'PRISMARINE_ENGINE_REPO is not set.',
-      fix:
-          'export PRISMARINE_ENGINE_REPO=<owner>/<name> of the engine releases',
-    );
+    throw Failure('PRISMARINE_ENGINE_REPO is not set.', fix: repoFix);
   }
   final archives = [
     for (final f in Directory(from).listSync().whereType<File>())
