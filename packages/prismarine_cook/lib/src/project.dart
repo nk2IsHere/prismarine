@@ -349,11 +349,19 @@ class AssetStep {
     this.outEnv,
     this.inputs,
     this.exists,
+    this.current,
   );
 
   factory AssetStep._parse(String id, Map m, String file) {
     final where = '$file: assets.$id';
-    _onlyKeys(m, const {'run', 'out', 'out-env', 'inputs', 'exists'}, where);
+    _onlyKeys(m, const {
+      'run',
+      'out',
+      'out-env',
+      'inputs',
+      'exists',
+      'current',
+    }, where);
     final run = _strings(m, 'run', where);
     if (run.isEmpty) throw ProjectError('$where: run is empty.');
     return AssetStep._(
@@ -363,6 +371,7 @@ class AssetStep {
       m['out-env'] == null ? null : _string(m, 'out-env', where),
       _strings(m, 'inputs', where),
       _strings(m, 'exists', where),
+      _strings(m, 'current', where),
     );
   }
 
@@ -375,6 +384,13 @@ class AssetStep {
 
   /// The command and its arguments. `{out}` becomes the output folder.
   final List<String> run;
+
+  /// A command that exits with 0 when the output is current, run before
+  /// [run]; empty when the step's stamp decides. A step with it keeps no
+  /// stamp: its own tool knows what of its output is stale, as a step whose
+  /// inputs are too large to hash on every run does. `{out}` becomes the
+  /// output folder.
+  final List<String> current;
 
   /// The output folder. `{data}` becomes [dataHome], and a relative folder is
   /// in the folder of the app.
@@ -402,6 +418,11 @@ class AssetStep {
   /// The command with `{out}` replaced by [outDir].
   List<String> command(String outDir) => [
     for (final a in run) a.replaceAll('{out}', outDir),
+  ];
+
+  /// [current] with `{out}` replaced by [outDir].
+  List<String> currentCommand(String outDir) => [
+    for (final a in current) a.replaceAll('{out}', outDir),
   ];
 
   /// The paths of [inputs] for [project]. Throws a [ProjectError] for a

@@ -137,6 +137,7 @@ assets:
 | `assets.<id>.out-env` | An environment variable that sets the output folder in place of `out` |
 | `assets.<id>.inputs` | Files and folders of the app and `package:<name>` for the code of a package |
 | `assets.<id>.exists` | Files that a complete output holds. An output folder that holds them counts as current, also when the command did not prepare it |
+| `assets.<id>.current` | A command that exits with 0 when the output is current, run before `run`. The step then keeps no stamp: its own tool knows what is stale, for inputs too large to hash on every run. `{out}` becomes the output folder |
 
 A step runs again only when one of its inputs changed. A plain `flutter build` also compiles the shaders when your app
 has a build hook. Add `prismarine_cook` and `hooks` to the dependencies of your app and this file as

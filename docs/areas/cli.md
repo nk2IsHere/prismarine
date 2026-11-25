@@ -32,7 +32,8 @@ root of a prismarine checkout these are the sample and gpu_smoke.
 ## Steps
 
 `build` and `run` run these steps in order. Each prints one line with its result and time. On a terminal the line of a
-running step shows its time and the last line of its tool. The output of each tool goes to
+running step shows its time and the last line of its tool, or, once the tool prints a line
+`progress: <done>/<total> <what>`, the last such line. The output of each tool goes to
 `.dart_tool/prismarine/logs/<step>.log` of the app. `--verbose` also prints it while the tool runs. A failed step
 prints its cause, the last lines of the tool, the path of its log and the command that fixes it. The command then
 exits with 1.

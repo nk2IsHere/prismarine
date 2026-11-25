@@ -41,15 +41,18 @@ String assetKey(Project project, AssetStep step, String out) => hashInputs([
 Stamp assetStamp(AssetStep step, String out) =>
     Stamp('$out/cook-${step.id}.json');
 
-/// Runs [step] of [project] when its stamp is stale or [force] is set.
-/// [environment] gives the variables of the output folder, the process
-/// environment by default. [run] runs a command in a folder and returns its
-/// exit code. Throws an
-/// [AssetStepError] when the command fails.
+/// Runs [step] of [project] when its stamp is stale or [force] is set; a
+/// step with [AssetStep.current] runs when that command exits with another
+/// code than 0. [environment] gives the variables of the output folder, the
+/// process environment by default. [run] runs a command in a folder and
+/// returns its exit code; [check] runs the current command the same way
+/// without treating a code other than 0 as a failure ([run] by default).
+/// Throws an [AssetStepError] when the command fails.
 Future<AssetCook> cookAsset(
   Project project,
   AssetStep step, {
   required Future<int> Function(List<String> command, String dir) run,
+  Future<int> Function(List<String> command, String dir)? check,
   Map<String, String>? environment,
   bool force = false,
 }) async {
@@ -57,6 +60,15 @@ Future<AssetCook> cookAsset(
     environment ?? Platform.environment,
     appDir: project.dir,
   );
+  if (step.current.isNotEmpty) {
+    if (!force &&
+        await (check ?? run)(step.currentCommand(out), project.dir) == 0) {
+      return AssetCook(step, out, current: true);
+    }
+    final code = await run(step.command(out), project.dir);
+    if (code != 0) throw AssetStepError(step, code);
+    return AssetCook(step, out, current: false);
+  }
   final stamp = assetStamp(step, out);
   final key = assetKey(project, step, out);
   if (!force && stamp.key == key) return AssetCook(step, out, current: true);

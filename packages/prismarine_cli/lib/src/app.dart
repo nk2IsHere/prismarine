@@ -199,6 +199,16 @@ class AppSteps {
               step,
               environment: env,
               force: force,
+              // The current command's exit code is its answer, not a
+              // failure.
+              check: (command, dir) async => (await tools.run(
+                [
+                  command.first == 'dart' ? toolchain.dart : command.first,
+                  ...command.skip(1),
+                ],
+                dir: dir,
+                log: 'assets-${step.id}-current',
+              )).exitCode,
               run: (command, dir) async {
                 final c = [
                   command.first == 'dart' ? toolchain.dart : command.first,

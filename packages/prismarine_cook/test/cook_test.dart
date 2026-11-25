@@ -211,6 +211,43 @@ assets:
       expect(c.adopted, true);
     });
 
+    test('a step with a current command runs only when it says so', () async {
+      write('app/prismarine.yaml', '''
+assets:
+  game:
+    run: [make, '{out}']
+    current: [make, --check, '{out}']
+    out: $tmp/data
+''');
+      final p = Project.load('$tmp/app')!;
+      var isCurrent = false;
+      final ran = <List<String>>[];
+      Future<int> run(List<String> c, String d) async {
+        ran.add(c);
+        return 0;
+      }
+
+      Future<int> check(List<String> c, String d) async {
+        expect(c, ['make', '--check', '$tmp/data']);
+        return isCurrent ? 0 : 1;
+      }
+
+      final step = p.assets.single;
+      expect(step.current, ['make', '--check', '{out}']);
+      expect((await cookAsset(p, step, run: run, check: check)).current, false);
+      expect(ran, [
+        ['make', '$tmp/data'],
+      ]);
+      isCurrent = true;
+      expect((await cookAsset(p, step, run: run, check: check)).current, true);
+      expect(ran.length, 1);
+      // Forced, it runs whatever the current command says, and keeps no
+      // stamp of its own.
+      await cookAsset(p, step, run: run, check: check, force: true);
+      expect(ran.length, 2);
+      expect(File('$tmp/data/cook-game.json').existsSync(), false);
+    });
+
     test('a failed step leaves no stamp', () async {
       write(
         'app/prismarine.yaml',

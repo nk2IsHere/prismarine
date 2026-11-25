@@ -25,6 +25,11 @@ the build would run the hook again on the next build.
 An asset step with `exists` does not run when its output folder has no stamp but holds every listed file. It writes
 the stamp then. A scene that was prepared before the step had a stamp is not downloaded again.
 
+An asset step with `current` has no stamp. Its current command runs first, and the step runs only when that command
+exits with another code than 0, or with `--force`. This suits a step whose inputs are too large to hash on every run
+and whose own tool tracks what is stale, such as a game's assets made from an install. A step that runs for hours is
+safe to stop: it runs again from the start, and its command skips what it finished.
+
 ## The build hook
 
 Flutter runs the hook of an app before it bundles the assets, in `flutter build`, `flutter run` and `flutter test`. The

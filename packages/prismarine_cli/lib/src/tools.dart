@@ -54,13 +54,22 @@ class Tools {
       return ToolResult(127, e.message);
     }
     final text = StringBuffer();
+    // A tool that prints `progress: <done>/<total> <what>` lines (a step that
+    // runs for hours) keeps its last one as the status; its other lines
+    // then go only to the log.
+    var progress = false;
     void take(String line) {
       sink.writeln(line);
       text.writeln(line);
-      if (ui.verbose) {
+      final t = line.trim();
+      if (t.startsWith('progress: ')) {
+        progress = true;
+        ui.status = t.substring(10);
+        if (ui.verbose) ui.line(line);
+      } else if (ui.verbose) {
         ui.line(line);
-      } else if (line.trim().isNotEmpty) {
-        ui.status = line.trim();
+      } else if (t.isNotEmpty && !progress) {
+        ui.status = t;
       }
     }
 
