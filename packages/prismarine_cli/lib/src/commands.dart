@@ -73,7 +73,7 @@ Future<String> _buildApp(
   await s.checkToolchain(release);
   final engine = await s.engine(release);
   await s.shaders(engine);
-  if (assets) await s.assets();
+  if (assets) await s.assets(engine: engine);
   if (debug || stock) {
     c.ui.line(
       'This ${debug ? 'debug' : 'release'} build runs on the engine of '
@@ -337,11 +337,15 @@ class _CookCommand extends BaseCommand {
     final onlyAssets = r.flag('assets') && !r.flag('shaders');
     final onlyShaders = r.flag('shaders') && !r.flag('assets');
     await s.packages();
-    if (!onlyAssets && project.shaders.isNotEmpty) {
-      final engine = await s.engine(s.release());
-      await s.shaders(engine, force: force);
-    }
-    if (!onlyShaders) await s.assets(force: force);
+    // The asset steps run with the engine as the shaders do: a fresh
+    // computer has none until this fetches it.
+    final wantShaders = !onlyAssets && project.shaders.isNotEmpty;
+    final wantAssets = !onlyShaders && project.assets.isNotEmpty;
+    final engine = wantShaders || wantAssets
+        ? await s.engine(s.release())
+        : null;
+    if (wantShaders) await s.shaders(engine!, force: force);
+    if (wantAssets) await s.assets(force: force, engine: engine);
     return 0;
   }
 }

@@ -30,6 +30,10 @@ exits with another code than 0, or with `--force`. This suits a step whose input
 and whose own tool tracks what is stale, such as a game's assets made from an install. A step that runs for hours is
 safe to stop: it runs again from the start, and its command skips what it finished.
 
+An asset step's commands run with the engine of the app's release: `PRISMARINE_IMPELLERC` and `PRISMARINE_ENGINE_DIR`,
+as `prismarine env` prints them, so a step can compile shaders or cook with the engine's tools. `prismarine cook`
+fetches the engine before the asset steps, as `prismarine run` does, so a fresh computer runs them in either order.
+
 ## The build hook
 
 Flutter runs the hook of an app before it bundles the assets, in `flutter build`, `flutter run` and `flutter test`. The

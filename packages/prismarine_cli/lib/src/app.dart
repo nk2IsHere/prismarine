@@ -186,9 +186,17 @@ class AppSteps {
   }
 
   /// Runs the asset steps of the app whose inputs changed. [force] runs every
-  /// step.
-  Future<void> assets({bool force = false}) async {
+  /// step. A step runs with the variables of [engine] that `prismarine env`
+  /// prints (its impellerc and folder), as a step that compiles shaders or
+  /// cooks with the engine's tools needs them.
+  Future<void> assets({bool force = false, Engine? engine}) async {
     final p = project!;
+    final engineEnv = engine == null
+        ? const <String, String>{}
+        : {
+            'PRISMARINE_ENGINE_DIR': engineDir(env),
+            'PRISMARINE_IMPELLERC': engine.impellerc,
+          };
     for (final step in p.assets) {
       await ui.step(
         'assets ${step.id}',
@@ -208,6 +216,7 @@ class AppSteps {
                 ],
                 dir: dir,
                 log: 'assets-${step.id}-current',
+                extraEnvironment: engineEnv,
               )).exitCode,
               run: (command, dir) async {
                 final c = [
@@ -218,6 +227,7 @@ class AppSteps {
                   c,
                   dir: dir,
                   log: 'assets-${step.id}',
+                  extraEnvironment: engineEnv,
                 );
                 if (!r.ok) {
                   throw Failure(
