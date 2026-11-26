@@ -202,6 +202,7 @@ class PulledLayout {
     required this.materialTexturePrefix,
     this.materialTextures = const [],
     this.keepOrder = false,
+    this.unculled = const {},
     required this.uvTransforms,
     required this.cascadesBuffer,
     required this.frustumPlanes,
@@ -235,6 +236,11 @@ class PulledLayout {
   /// whose opaque draws test depth less-or-equal without a depth prepass
   /// needs it, as the last draw wins a tie of depth.
   final bool keepOrder;
+
+  /// The passes of [passes] whose draws have cameras of their own, such as a
+  /// shadow atlas with a camera per tile: one view's planes would cull them
+  /// wrongly, so their buckets draw every cluster.
+  final Set<String> unculled;
 
   /// Whether [name] is a material texture. It allocates nothing, as the
   /// binds of every frame ask it.

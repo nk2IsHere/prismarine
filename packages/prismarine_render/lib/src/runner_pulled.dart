@@ -56,6 +56,15 @@ class _PulledFrame {
   var wordBytes = Uint8List(0);
 }
 
+/// Six planes that keep every cluster: no normal, a far-off distance.
+final _keepAllPlanes = Float32List(24)
+  ..[3] = 1e30
+  ..[7] = 1e30
+  ..[11] = 1e30
+  ..[15] = 1e30
+  ..[19] = 1e30
+  ..[23] = 1e30;
+
 /// The views of a pulled bucket for its stages ([_RunnerPulled._pulledStage]),
 /// the clusters, instances, objects and materials.
 final _stageViews = List<gpu.BufferView?>.filled(4, null);
@@ -683,9 +692,11 @@ extension _RunnerPulled on FrameRunner {
       // The cull takes the planes of the camera, from the view-projection of
       // the camera block as the builder computes them. It also takes the
       // instance count.
-      final planes = pulled!.layout.frustumPlanes(
-        Float32List.sublistView(camera!, 0, 64),
-      );
+      final planes = pulled!.layout.unculled.contains(pass)
+          ? _keepAllPlanes
+          : pulled!.layout.frustumPlanes(
+              Float32List.sublistView(camera!, 0, 64),
+            );
       final cull = ByteData(112);
       for (var i = 0; i < 24; i++) {
         cull.setFloat32(i * 4, planes[i], Endian.little);
