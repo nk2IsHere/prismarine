@@ -319,16 +319,35 @@ class _CookedSceneGpu {
   /// ([Pulled.readAhead]).
   Future<void> poolAhead(int i) async {
     if (_pools.containsKey(i)) return;
-    final bytes = await File('$dir/${scene.pools[i].file}').readAsBytes();
+    final path = '$dir/${scene.pools[i].file}';
+    // A compressed pool is inflated on a worker, its bytes handed back
+    // without a copy: a large pool takes most of a second.
+    final bytes = path.endsWith('.gz')
+        ? (await Isolate.run(
+            () => TransferableTypedData.fromList([
+              _inflated(File(path).readAsBytesSync()),
+            ]),
+          )).materialize().asUint8List()
+        : await File(path).readAsBytes();
     _pools[i] ??= _makePool(i, bytes);
   }
+
+  /// The GLB of a pool file read whole: a `.glb.gz` inflated.
+  static Uint8List _inflated(Uint8List gz) => switch (gzip.decode(gz)) {
+    final Uint8List b => b,
+    final b => Uint8List.fromList(b),
+  };
 
   // The miss path is a method of its own. An inline closure that captures
   // the key would allocate a context on every call.
   // alloc-cold: a pool's first use.
   _PoolGpu _makePool(int i, [Uint8List? read]) {
+    final path = '$dir/${scene.pools[i].file}';
     final parts = cookedPoolParts(
-      read ?? File('$dir/${scene.pools[i].file}').readAsBytesSync(),
+      read ??
+          (path.endsWith('.gz')
+              ? _inflated(File(path).readAsBytesSync())
+              : File(path).readAsBytesSync()),
     );
     gpu.BufferView view(Uint8List b) {
       gpu.GpuMemory.tag = 'buffer.pulledPool';

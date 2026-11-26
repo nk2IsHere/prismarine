@@ -102,14 +102,18 @@ class GeometryPools {
     return (firstIndex: firstIndex, indexCount: idx.length);
   }
 
-  /// Writes pool i as `pool_<i>.glb` into [outDir]. Returns the pools in
-  /// their order.
+  /// Writes pool i as `pool_<i>.glb.gz` into [outDir], the GLB through
+  /// gzip at its fastest level: a pool's float streams are mostly constant
+  /// (a default colour, an unused second UV set), and a pool takes a fifth to
+  /// a seventh of its size so. Returns the pools in their order.
   List<CookedPool> write(String outDir) {
     final cooked = <CookedPool>[];
     for (var i = 0; i < _pools.length; i++) {
       final p = _pools[i];
-      final file = 'pool_$i.glb';
-      File('$outDir/$file').writeAsBytesSync(_poolGlb(p, generator));
+      final file = 'pool_$i.glb.gz';
+      File(
+        '$outDir/$file',
+      ).writeAsBytesSync(GZipCodec(level: 1).encode(_poolGlb(p, generator)));
       cooked.add(
         CookedPool(
           file: file,

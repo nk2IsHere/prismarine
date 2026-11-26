@@ -56,10 +56,13 @@ void main() {
     expect([ib0.firstIndex, ib1.firstIndex], [3, 6]);
 
     final cooked = pools.write(dir.path).single;
-    expect(cooked.file, 'pool_0.glb');
+    expect(cooked.file, 'pool_0.glb.gz');
     expect(cooked.layout, 'POSITION:5126:VEC3');
     expect([cooked.vertexCount, cooked.indexCount], [7, 9]);
-    final pool = readGlb(File('${dir.path}/pool_0.glb').readAsBytesSync());
+    final pool = readGlb(
+      gzip.decode(File('${dir.path}/pool_0.glb.gz').readAsBytesSync())
+          as Uint8List,
+    );
     expect((pool.json['asset']! as Map)['generator'], 'test');
     // The second vertex of b is vertex 4 of the pool, de-interleaved.
     final xs = Float32List.sublistView(pool.bin, 0, 7 * 12);
@@ -82,7 +85,10 @@ void main() {
       'POSITION:5126:VEC3',
       'NORMAL:5126:VEC3|POSITION:5126:VEC3',
     ]);
-    final glb = readGlb(File('${dir.path}/pool_1.glb').readAsBytesSync());
+    final glb = readGlb(
+      gzip.decode(File('${dir.path}/pool_1.glb.gz').readAsBytesSync())
+          as Uint8List,
+    );
     expect((glb.json['asset']! as Map)['generator'], 'prismarine_assets');
   });
 

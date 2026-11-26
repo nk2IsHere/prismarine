@@ -48,7 +48,7 @@ RGB file and `level: 1` for a fast encode, such as a screenshot that a debug too
 A renderer that draws many meshes with few buffer binds needs the meshes of one vertex layout in one buffer.
 `GeometryPools` collects them. `addVertices` appends the streams of a mesh to the pool of its layout and returns the
 pool and the base vertex. `addIndices` appends an index list as 32-bit indices and returns its first index and its
-count. `write` writes each pool as `pool_<i>.glb`, which a glTF viewer also opens. You decide which glTF mesh goes in
+count. `write` writes each pool as `pool_<i>.glb.gz`: a GLB, which a glTF viewer opens once unzipped, through gzip at its fastest level, since a pool's float streams are mostly constant and shrink five- to sevenfold. The runner inflates a pool on a worker isolate as it reads it ahead, and reads an uncompressed `pool_<i>.glb` too. You decide which glTF mesh goes in
 and how its streams are called, such as `UV0` for the first UV set.
 
 `cookTextureArrays` groups the KTX2 textures of a directory by size, format and number of levels and writes each
