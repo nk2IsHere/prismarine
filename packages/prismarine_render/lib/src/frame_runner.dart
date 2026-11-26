@@ -103,6 +103,10 @@ class FrameRunner {
   final _srgbViews = <String, (gpu.Texture, gpu.Texture)>{};
   final _slots = Expando<_SlotMaps>('shader slots');
   final _fileTextures = Expando<gpu.Texture>('file textures');
+
+  /// The one-layer array views of file textures that no cooked array holds,
+  /// for the pulled draws (runner_pulled.dart).
+  final _fileArrays = Expando<gpu.Texture>('file arrays');
   final _packed = Expando<Map<Object, (gpu.VertexLayout, Uint8List)>>(
     'packed inline vertices',
   );

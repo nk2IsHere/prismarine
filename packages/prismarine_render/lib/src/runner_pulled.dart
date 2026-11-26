@@ -366,7 +366,25 @@ extension _RunnerPulled on FrameRunner {
       }
       if (value is! FileTexture) continue;
       final at = scene.scene.textureAt(value.stem);
-      if (at == null) continue;
+      if (at == null) {
+        // A texture that no array of the scene holds (a swapped texture, or
+        // another scene's) is an array of its own: its plain texture viewed
+        // as one layer, sampled as its 2D form is.
+        if (!assets.hasTexture(value.stem)) continue;
+        arrays[key] = _fileArrays[value] ??= () {
+          final t = _texture(value, 'texture2D');
+          // alloc: the first pulled bind of a texture outside the arrays
+          return t.makeView(
+            baseMipLevel: 0,
+            mipLevelCount: t.mipLevelCount,
+            baseLayer: 0,
+            layers: 1,
+            textureType: gpu.TextureType.texture2DArray,
+          );
+        }();
+        arrayKey += '$key=file:${value.stem}:${value.srgb};';
+        continue;
+      }
       final a = scene.scene.arrays[at.$1];
       arrays[key] = scene.textures.texture(a.file, srgb: value.srgb);
       layers[n] = at.$2;
