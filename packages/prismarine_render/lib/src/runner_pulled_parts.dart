@@ -161,6 +161,12 @@ extension _RunnerPulledAdd on FrameRunner {
         return;
       }
       f.rest.add(d);
+      f.restAfter.add(f.buckets.length);
+      // With keepOrder the draw ends the run before it: the next pulled
+      // draw starts a bucket drawn after it.
+      f
+        ..lastKey = null
+        ..lastRun = null;
       return;
     }
     final layout = pulled!.layout;

@@ -570,6 +570,26 @@ class FrameRunner {
           stencil.write(draws[i]);
         }
       }
+      if (prepared.restAfter case final after?) {
+        // The plan's order kept: each draw left to its record goes between
+        // the buckets made before and after it.
+        final rest = prepared.rest;
+        var r = 0;
+        for (var b = 0; b <= prepared.ranges.length; b++) {
+          if (r < rest.length && after[r] <= b) {
+            // A bucket left the bindings and state of the pass unknown.
+            pass.clearBindings();
+            state.reset();
+            while (r < rest.length && after[r] <= b) {
+              _drawOne(pass, rest[r++], host, state);
+            }
+          }
+          if (b < prepared.ranges.length) {
+            _pulledRecordOne(pass, prepared, b, host);
+          }
+        }
+        return;
+      }
       _pulledRecord(pass, prepared, host);
       draws = prepared.rest;
       // The pulled draws left the bindings and state of the pass unknown.
@@ -580,21 +600,30 @@ class FrameRunner {
     for (var i = 0; i < draws.length; i++) {
       final draw = draws[i];
       if (!pulledPass) stencil?.write(draw);
-      if (trace) {
-        // alloc: PRISMARINE_RENDER_TRACE runs only
-        warn?.call('renderer: draw ${draw.label} ${draw.vertex} ${draw.pixel}');
-      }
-      try {
-        _draw(pass, draw, host, state);
-      } on StateError catch (e) {
-        // A draw that the assets cannot feed, for a missing shader input or
-        // resource, drops out and is reported once. The rest of the frame
-        // still draws.
-        // alloc: a draw that the assets cannot feed
-        if (_failedDraws.add('${draw.label}: ${e.message}')) {
-          // alloc: once per draw that the assets cannot feed
-          warn?.call('renderer: draw skipped: ${draw.label}: ${e.message}');
-        }
+      _drawOne(pass, draw, host, state);
+    }
+  }
+
+  /// Records [draw] into [pass]: a draw that the assets cannot feed, for a
+  /// missing shader input or resource, drops out and is reported once. The
+  /// rest of the frame still draws.
+  void _drawOne(
+    gpu.RenderPass pass,
+    DrawPlan draw,
+    UniformRing host,
+    _PassState state,
+  ) {
+    if (trace) {
+      // alloc: PRISMARINE_RENDER_TRACE runs only
+      warn?.call('renderer: draw ${draw.label} ${draw.vertex} ${draw.pixel}');
+    }
+    try {
+      _draw(pass, draw, host, state);
+    } on StateError catch (e) {
+      // alloc: a draw that the assets cannot feed
+      if (_failedDraws.add('${draw.label}: ${e.message}')) {
+        // alloc: once per draw that the assets cannot feed
+        warn?.call('renderer: draw skipped: ${draw.label}: ${e.message}');
       }
     }
   }

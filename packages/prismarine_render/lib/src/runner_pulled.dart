@@ -28,6 +28,10 @@ class _PulledFrame {
   /// The state of a prepare while its draws are added (_pulledAdd). It is
   /// kept from frame to frame and cleared with its storage kept.
   final rest = KeptList<DrawPlan>();
+
+  /// With [PulledLayout.keepOrder], the buckets made before each draw of
+  /// [rest]: it is drawn after that many buckets, in the plan's order.
+  final restAfter = KeptList<int>();
   final why = KeptMap<String, int>();
   final buckets = KeptMap<Object, _PulledBucket>();
 
@@ -118,6 +122,7 @@ class _PulledBucket {
 class _PulledPrepared {
   _PulledPrepared(
     this.rest,
+    this.restAfter,
     this.ranges,
     this.instances,
     this.objects,
@@ -128,6 +133,10 @@ class _PulledPrepared {
 
   /// The draws left to their own records.
   final List<DrawPlan> rest;
+
+  /// With [PulledLayout.keepOrder], the buckets drawn before each draw of
+  /// [rest]; null otherwise, when [rest] follows every bucket.
+  final List<int>? restAfter;
 
   /// The buckets, each with its first cluster in [_PulledBucket.start].
   final List<_PulledBucket> ranges;
@@ -307,9 +316,12 @@ extension _RunnerPulled on FrameRunner {
               st.values.map((e) => e.$1.buffer).toSet().length != 1 =>
         'skinned',
       DrawMeshGeometry(indirect: final i) when i != null => 'indirect',
-      // The place of a blended draw in the pass changes the picture. It keeps
-      // its record after the pulled buckets. Opaque draws test depth equal.
-      DrawMeshGeometry() when d.state.blends.any((b) => b.enabled) => 'blended',
+      // The place of a blended draw in the pass changes the picture. Without
+      // keepOrder it keeps its record after the pulled buckets (opaque draws
+      // test depth equal); with it, the buckets keep the plan's order.
+      DrawMeshGeometry()
+          when !p.layout.keepOrder && d.state.blends.any((b) => b.enabled) =>
+        'blended',
       DrawMeshGeometry() when !p.shaders.hasShader(d.vertex) =>
         'no pulled vertex',
       DrawMeshGeometry()
@@ -495,6 +507,7 @@ extension _RunnerPulled on FrameRunner {
     final f = _pulledFrames[pass] ??= _PulledFrame();
     f.boxes.reset();
     final rest = f.rest..clear();
+    final restAfter = f.restAfter..clear();
     final why = f.why..clear();
     final buckets = f.buckets..clear();
     f
@@ -524,6 +537,7 @@ extension _RunnerPulled on FrameRunner {
         f,
         buckets,
         rest,
+        restAfter,
         why,
         indexCounts,
         _frameBlocks,
@@ -543,6 +557,7 @@ extension _RunnerPulled on FrameRunner {
               rows.plans,
               buckets,
               rest,
+              restAfter,
               why,
               f.instanceCount,
               f.cameraSource,
@@ -682,6 +697,7 @@ extension _RunnerPulled on FrameRunner {
     }
     return _PulledPrepared(
       rest,
+      pulled!.layout.keepOrder ? restAfter : null,
       ranges,
       instanceView,
       objectView,
@@ -701,10 +717,22 @@ extension _RunnerPulled on FrameRunner {
   /// Records the buckets of [p] into [pass], one indirect draw each of the
   /// clusters that the culling kept.
   void _pulledRecord(gpu.RenderPass pass, _PulledPrepared p, UniformRing host) {
+    for (var i = 0; i < p.ranges.length; i++) {
+      _pulledRecordOne(pass, p, i, host);
+    }
+  }
+
+  /// Records bucket [i] of [p] into [pass].
+  void _pulledRecordOne(
+    gpu.RenderPass pass,
+    _PulledPrepared p,
+    int i,
+    UniformRing host,
+  ) {
     final ranges = p.ranges;
-    for (var i = 0; i < ranges.length; i++) {
+    {
       final b = ranges[i], start = b.start;
-      if (b.clusters == 0) continue;
+      if (b.clusters == 0) return;
       _pulledBucket(
         pass,
         b,

@@ -22,6 +22,7 @@ final class _KeptRows {
   /// their counts reset.
   final _live = KeptList<_PulledBucket>();
   final _rest = KeptList<DrawPlan>();
+  final _restAfter = KeptList<int>();
   final _why = KeptMap<String, int>();
   final _indexCounts = KeptList<int>();
   int instanceCount = 0;
@@ -34,6 +35,7 @@ final class _KeptRows {
     List<DrawPlan> plans,
     Map<Object, _PulledBucket> buckets,
     List<DrawPlan> rest,
+    List<int> restAfter,
     Map<String, int> why,
     int instanceCount,
     Uint8List? camera,
@@ -64,6 +66,9 @@ final class _KeptRows {
     _rest
       ..clear()
       ..addAll(rest);
+    _restAfter
+      ..clear()
+      ..addAll(restAfter);
     _why
       ..clear()
       ..addAll(why);
@@ -90,6 +95,7 @@ final class _KeptRows {
     _PulledFrame f,
     Map<Object, _PulledBucket> into,
     List<DrawPlan> restInto,
+    List<int> restAfterInto,
     Map<String, int> whyInto,
     List<int> indexCountsInto,
     Map<Uint8List, Uint8List> frameBlocks,
@@ -117,6 +123,7 @@ final class _KeptRows {
         ..start = 0;
     }
     restInto.addAll(_rest);
+    restAfterInto.addAll(_restAfter);
     whyInto.addAll(_why);
     indexCountsInto.addAll(_indexCounts);
   }
