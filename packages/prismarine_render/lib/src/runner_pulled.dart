@@ -309,15 +309,12 @@ extension _RunnerPulled on FrameRunner {
     return _pulledForms[d] = _makePulled(d);
   }
 
-  // The miss path is a method of its own. An inline closure that captures
-  // [d] would allocate a context on every call.
-  // alloc-cold: a draw's first pulled form.
-  _PulledDraw _makePulled(DrawPlan d) {
-    _pulledStats.made++;
+  /// Why draw [d] has no pulled form, from the draw alone (a cooked batch
+  /// apart); null when it has one.
+  // alloc-cold: a draw's first pulled form or load.
+  String? _refusal(DrawPlan d) {
     final p = pulled!;
-    final layout = p.layout, instanceRow = layout.instanceRow;
-    final g = d.geometry;
-    final reason = switch (g) {
+    return switch (d.geometry) {
       // A skinned batch reads the skinning output of the frame, one buffer
       // for all its streams.
       DrawMeshGeometry(streams: final st)
@@ -343,6 +340,36 @@ extension _RunnerPulled on FrameRunner {
       DrawMeshGeometry() => null,
       _ => 'not a mesh',
     };
+  }
+
+  /// Whether draw [d] of a pulled pass draws in pulled form: it has one and
+  /// its batch is cooked. Its loads then skip what only its record reads,
+  /// the plain programs and the material textures' files.
+  // alloc-cold: a draw's first load.
+  bool _drawsPulled(DrawPlan d) {
+    final p = pulled;
+    final g = d.geometry;
+    if (p == null || g is! DrawMeshGeometry || _refusal(d) != null) {
+      return false;
+    }
+    return p.batch(
+          g.mesh,
+          g.firstIndex,
+          g.indexCount,
+          shadow: g.ibuffer == 1,
+        ) !=
+        null;
+  }
+
+  // The miss path is a method of its own. An inline closure that captures
+  // [d] would allocate a context on every call.
+  // alloc-cold: a draw's first pulled form.
+  _PulledDraw _makePulled(DrawPlan d) {
+    _pulledStats.made++;
+    final p = pulled!;
+    final layout = p.layout, instanceRow = layout.instanceRow;
+    final g = d.geometry;
+    final reason = _refusal(d);
     if (reason != null) return _PulledDraw.refused(reason);
     g as DrawMeshGeometry;
     // The indices of a shadow batch are those of the shadow index buffer of

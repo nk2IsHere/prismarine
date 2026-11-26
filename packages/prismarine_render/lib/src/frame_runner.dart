@@ -179,6 +179,7 @@ class FrameRunner {
           if (c.loaded) continue;
           passes.add(c);
           final draws = r.allDraws;
+          final pulledPass = pulled?.pulls(r.name) ?? false;
           for (var i = 0; i < draws.length; i++) {
             final d = draws[i];
             final c = _cacheOf(d);
@@ -186,12 +187,20 @@ class FrameRunner {
             // is not recorded and relies on the loaded flag.
             if (c.setup != null || c.loaded) continue;
             loaded.add(c);
-            shaders
-              ..add(d.vertex)
-              ..add(d.pixel ?? _depthOnly(d));
+            // A draw in pulled form reads its pulled programs, loaded with
+            // the pass, and its material textures from the cooked arrays.
+            final inPulled = pulledPass && _drawsPulled(d);
+            if (!inPulled) {
+              shaders
+                ..add(d.vertex)
+                ..add(d.pixel ?? _depthOnly(d));
+            }
             // alloc: a draw's first run
-            for (final t in d.pixelResources.textures.values) {
-              if (t is FileTexture) pngs.add(t.stem);
+            for (final MapEntry(:key, value: t)
+                in d.pixelResources.textures.entries) {
+              if (t is! FileTexture) continue;
+              if (inPulled && pulled!.layout.isMaterialTexture(key)) continue;
+              pngs.add(t.stem);
             }
           }
         case final DispatchPlan c:
