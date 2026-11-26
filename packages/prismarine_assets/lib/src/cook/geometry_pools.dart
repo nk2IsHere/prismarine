@@ -111,9 +111,12 @@ class GeometryPools {
     for (var i = 0; i < _pools.length; i++) {
       final p = _pools[i];
       final file = 'pool_$i.glb.gz';
-      File(
-        '$outDir/$file',
-      ).writeAsBytesSync(GZipCodec(level: 1).encode(_poolGlb(p, generator)));
+      File('$outDir/$file').writeAsBytesSync(
+        // The header's OS byte set to unknown (RFC 1952), as dart:io writes
+        // the host's: a pool cooked on any computer is the same file.
+        Uint8List.fromList(GZipCodec(level: 1).encode(_poolGlb(p, generator)))
+          ..[9] = 255,
+      );
       cooked.add(
         CookedPool(
           file: file,

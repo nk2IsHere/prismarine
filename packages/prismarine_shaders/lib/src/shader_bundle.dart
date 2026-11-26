@@ -244,7 +244,9 @@ Future<ShaderBundleReport> buildShaderBundles(
       final one = keepShaderBundleBackends(bytes, {
         backend,
       }, metalCompiled: backend == 'metal_desktop' ? libs : const {});
-      final z = gz[d] = Uint8List.fromList(gzip.encode(one));
+      // The gzip header's OS byte set to unknown (RFC 1952): dart:io writes
+      // the host's, and a bundle made on Linux or macOS must be one file.
+      final z = gz[d] = Uint8List.fromList(gzip.encode(one))..[9] = 255;
       File('${out.path}/$d/$k.shaderbundle.gz').writeAsBytesSync(z);
     }
     File(full).deleteSync();
@@ -279,7 +281,10 @@ Future<ShaderBundleReport> buildShaderBundles(
       if (key != null) {
         if (cache!.lookup(key) case final hit?) {
           for (final MapEntry(key: d, value: z) in hit.bundles.entries) {
-            File('${out.path}/$d/$k.shaderbundle.gz').writeAsBytesSync(z);
+            // A shard cached before the OS byte was fixed gets it here.
+            File(
+              '${out.path}/$d/$k.shaderbundle.gz',
+            ).writeAsBytesSync(z.length > 9 ? (z..[9] = 255) : z);
           }
           for (final e in ids) {
             File(entries[e]!.$1).writeAsStringSync(hit.sources[e]!);
