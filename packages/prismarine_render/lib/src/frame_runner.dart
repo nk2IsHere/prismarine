@@ -408,11 +408,11 @@ class FrameRunner {
         _pulledCull,
         _pulledCascadeCull,
         for (final r in plan.passes.whereType<RenderPassPlan>())
-          if (p.passes.contains(r.name))
+          if (p.pulls(r.name))
             for (final d in r.allDraws)
               if (p.shaders.hasShader(d.vertex)) d.vertex,
         for (final r in plan.passes.whereType<RenderPassPlan>())
-          if (p.passes.contains(r.name))
+          if (p.pulls(r.name))
             for (final d in r.allDraws)
               if (d.pixel case final px? when p.shaders.hasShader(px)) px,
       });
@@ -558,7 +558,7 @@ class FrameRunner {
     // nothing. The engine cannot begin it.
     if (r.colors.isEmpty && d == null) return;
     // The rows and culling of a pulled pass go before the pass begins.
-    final prepared = pulled?.passes.contains(r.name) ?? false
+    final prepared = pulled?.pulls(r.name) ?? false
         ? _pulledPrepare(cb, r.name, r.allDraws, host, r.rows)
         : null;
     if (r.allDraws.length == 1) _stencilDraw(cb, r.allDraws[0], host);

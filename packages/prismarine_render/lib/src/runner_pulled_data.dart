@@ -21,6 +21,10 @@ class Pulled {
     if (envVar('PULLED_MAIN') == '1') layout.mainPass,
   };
 
+  /// Whether render pass [name] is drawn in pulled form: one of [passes] or
+  /// a pass the layout names by its start ([PulledLayout.pulls]).
+  bool pulls(String name) => passes.contains(name) || layout.pulls(name);
+
   /// The pulled programs in `<root>/shaders`.
   final RenderAssets shaders;
 
@@ -203,6 +207,7 @@ class PulledLayout {
     this.materialTextures = const [],
     this.keepOrder = false,
     this.unculled = const {},
+    this.passPrefixes = const [],
     required this.uvTransforms,
     required this.cascadesBuffer,
     required this.frustumPlanes,
@@ -241,6 +246,22 @@ class PulledLayout {
   /// shadow atlas with a camera per tile: one view's planes would cull them
   /// wrongly, so their buckets draw every cluster.
   final Set<String> unculled;
+
+  /// The starts of the names of further passes drawn in pulled form: the
+  /// passes an application names per scene, such as a UI scene's own main
+  /// pass (`main <scene>`). Each takes its camera from its own draws.
+  final List<String> passPrefixes;
+
+  /// Whether pass [name] is drawn in pulled form: one of [passes] or one
+  /// that starts with one of [passPrefixes]. It allocates nothing, as every
+  /// pass of every frame asks it.
+  bool pulls(String name) {
+    if (passes.contains(name)) return true;
+    for (var i = 0; i < passPrefixes.length; i++) {
+      if (name.startsWith(passPrefixes[i])) return true;
+    }
+    return false;
+  }
 
   /// Whether [name] is a material texture. It allocates nothing, as the
   /// binds of every frame ask it.
