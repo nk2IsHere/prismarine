@@ -217,7 +217,13 @@ extension _RunnerPulledAdd on FrameRunner {
         ..camera = cb0 == null ? null : _frameBlocks[cb0] ?? cb0
         ..cameraSource = cb0;
     }
-    final objectBlock = d.vertexResources.blocks[layout.objectBlock];
+    // The row of the draw's object: its vertex stage's block, or its pixel
+    // stage's where only that one binds it (a skinned draw's vertex stage
+    // reads positions skinning put in the world, its pixel stage the
+    // object's colours).
+    final objectBlock =
+        d.vertexResources.blocks[layout.objectBlock] ??
+        d.pixelResources.blocks[layout.objectBlock];
     final ob = objectBlock == null
         ? _emptyObject
         : objectBlock.isEmpty
