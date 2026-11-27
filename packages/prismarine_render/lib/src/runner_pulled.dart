@@ -832,11 +832,15 @@ extension _RunnerPulled on FrameRunner {
         'pulledinstances' => instances,
         'pulledobjects' => objects,
         'pulledmaterials' => materials,
-        'skinout' => _bufferView(
-          BufferRef(
-            (d.geometry as DrawMeshGeometry).streams.values.first.$1.buffer,
+        // A program that can read a skinning output draws a draw without
+        // one too (its skin stride 0 in the instance row): a stand-in,
+        // unread. Skinned and unskinned draws never share a bucket.
+        'skinout' => switch ((d.geometry as DrawMeshGeometry).streams) {
+          final st when st.isNotEmpty => _bufferView(
+            BufferRef(st.values.first.$1.buffer),
           ),
-        ),
+          _ => _inline(_noSkinOutput),
+        },
         _ when n.startsWith('pool') => _poolStream(pool, n, id, name),
         _ => throw StateError('$id: unknown storage $name'),
       };
@@ -912,3 +916,6 @@ String _pulledVertexOf(Pulled p, DrawPlan d) =>
 /// The pulled pixel program of [d]: its merged form's when it has one.
 String? _pulledPixelOf(Pulled p, DrawPlan d) =>
     d.pixel == null ? null : p.merged[d.pixel]?.pixel ?? d.pixel;
+
+/// The skinning output a draw without one binds, unread.
+final _noSkinOutput = Uint8List(16);
