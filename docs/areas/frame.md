@@ -66,6 +66,10 @@ same: its programs, state, viewport, the bytes of its blocks, its textures and s
 each frame is bound by a frame role of the draw's slot. `keptRowSet` gives a pass's rows as last frame's set while its
 ids, plans, bounds and culling values hold.
 
+`FrameSlots` builds a view's frames in kept scratch: its targets, buffers and passes, each render pass in its
+slot's pass, and publishes the plan by comparison with the last frame's. Its role rings (`BlockRing`) give a role's
+bytes the block of three that holds them, so a block given to a plan is written again only three frames on.
+
 A skinning batch skins every skinned mesh of a frame in one compute dispatch of your program. `SkinSources` holds each
 mesh's source vertices once in one buffer. Its view is a new object whenever it grows, so the codec sends it again.
 `SkinGroups` gives each mesh whole 64-thread groups and keeps the bytes view of its table while the count holds.

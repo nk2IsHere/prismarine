@@ -55,6 +55,24 @@ void main() {
     });
   });
 
+  group('BlockRing', () {
+    test(
+      'gives the same block while the bytes hold and turns once a frame',
+      () {
+        final r = BlockRing();
+        final a = r.give(Uint8List.fromList([1, 2]), 0)!;
+        expect(identical(r.give(Uint8List.fromList([1, 2]), 0), a), isTrue);
+        final b = r.give(Uint8List.fromList([3, 4]), 1)!;
+        expect(identical(a, b), isFalse);
+        expect(b, [3, 4]);
+        // A second change in the same frame: written again, or none.
+        expect(r.give(Uint8List.fromList([5, 6]), 1, overwrite: false), isNull);
+        expect(identical(r.give(Uint8List.fromList([5, 6]), 1), b), isTrue);
+        expect(a, [1, 2]);
+      },
+    );
+  });
+
   group('keptRowSet', () {
     test('gives the same set while its lists hold', () {
       final plan = DrawPlan(
