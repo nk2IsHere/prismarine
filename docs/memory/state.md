@@ -31,6 +31,8 @@ precompiled Metal libraries and a command line. mcsm keeps the settings of its s
 `prismarine_render`, the runner that records frame plans behind a `RenderAssets` interface. Step 7 adds
 `prismarine_assets`, the glTF builder and checker, the KTX2 and PNG writers, the BC decoders and the geometry pools
 and texture arrays of the cook.
+`prismarine_frame` also holds the kept parts of a builder, moved from mcsm's one frame builder: kept draws and rows,
+the books of a skinning batch, and the frame slots with their role rings.
 `prismarine_replay` follows [the replay design](../specs/2026-11-23-replay-design.md). It holds route recording and
 replay with the hash chain, snapshot files with the schedule and pruning, the snapshot shadow and the corpus runner.
 mcsm registers its route and snapshot formats and its game on it.
