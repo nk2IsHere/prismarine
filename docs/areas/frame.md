@@ -58,6 +58,20 @@ stencil can hold from the replacing writes since its clear.
 
 `sameFloat32Bits` and `scratchFloats` compare and read float lists without an allocation per value.
 
+## Kept parts of a builder
+
+A builder that makes a plan every frame keeps what holds from the last frame, so the codec names it by id and the
+runner binds what it kept. `DrawKeep` gives last frame's draw or dispatch object again when everything it draws is the
+same: its programs, state, viewport, the bytes of its blocks, its textures and samplers. A block whose bytes change
+each frame is bound by a frame role of the draw's slot. `keptRowSet` gives a pass's rows as last frame's set while its
+ids, plans, bounds and culling values hold.
+
+A skinning batch skins every skinned mesh of a frame in one compute dispatch of your program. `SkinSources` holds each
+mesh's source vertices once in one buffer. Its view is a new object whenever it grows, so the codec sends it again.
+`SkinGroups` gives each mesh whole 64-thread groups and keeps the bytes view of its table while the count holds.
+`SkinDispatch` keeps the dispatch while its group count and its sources hold. Your builder gives the program, the
+source bytes and the rows of each mesh.
+
 ## Checks
 
 Run `dart test` in `packages/prismarine_frame`. The allocation lint covers the codec and the parts of the plan that a
