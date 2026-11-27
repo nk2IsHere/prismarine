@@ -196,8 +196,8 @@ class FrameRunner {
                 ..add(d.vertex)
                 ..add(d.pixel ?? _depthOnly(d));
             }
-            // alloc: a draw's first run
             for (final MapEntry(:key, value: t)
+                // alloc: a draw's first run
                 in d.pixelResources.textures.entries) {
               if (t is! FileTexture) continue;
               if (inPulled && pulled!.layout.isMaterialTexture(key)) continue;

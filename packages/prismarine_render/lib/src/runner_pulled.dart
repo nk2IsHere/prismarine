@@ -185,9 +185,9 @@ extension _RunnerPulled on FrameRunner {
     return _pulledForms[d] = _makePulled(d);
   }
 
+  // alloc-cold: a draw's first pulled form or load.
   /// Why draw [d] has no pulled form, from the draw alone (a cooked batch
   /// apart); null when it has one.
-  // alloc-cold: a draw's first pulled form or load.
   String? _refusal(DrawPlan d) {
     final p = pulled!;
     return switch (d.geometry) {
@@ -218,10 +218,10 @@ extension _RunnerPulled on FrameRunner {
     };
   }
 
+  // alloc-cold: a draw's first load.
   /// Whether draw [d] of a pulled pass draws in pulled form: it has one and
   /// its batch is cooked. Its loads then skip what only its record reads,
   /// the plain programs and the material textures' files.
-  // alloc-cold: a draw's first load.
   bool _drawsPulled(DrawPlan d) {
     final p = pulled;
     final g = d.geometry;
