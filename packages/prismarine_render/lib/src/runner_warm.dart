@@ -266,11 +266,12 @@ extension RunnerWarm on FrameRunner {
     final p = pulled;
     final g = d.geometry;
     if (p == null || g is! DrawMeshGeometry) return null;
-    if (_warm.shapesOf(d.vertex, pulled: true) == null) return null;
+    final v = _pulledVertexOf(p, d), f = _pulledPixelOf(p, d);
+    if (_warm.shapesOf(v, pulled: true) == null) return null;
     final shaders = p.shaders;
-    if (!shaders.hasShader(d.vertex)) return null;
-    if (d.pixel case final px? when !shaders.hasShader(px)) return null;
-    await p.shaders.loadShaders([d.vertex, ?d.pixel]);
+    if (!shaders.hasShader(v)) return null;
+    if (f case final px? when !shaders.hasShader(px)) return null;
+    await p.shaders.loadShaders([v, ?f]);
     await p.readAhead(
       g.mesh,
       g.firstIndex,
@@ -311,7 +312,11 @@ extension RunnerWarm on FrameRunner {
           (n == 0 || sw.elapsedMicroseconds < budgetMs * 1000)) {
         final (d, setup, pulledForm) = w.ready.removeFirst();
         n++;
-        final shapes = w.shapesOf(d.vertex, pulled: pulledForm);
+        final p = pulled;
+        final shapes = w.shapesOf(
+          pulledForm && p != null ? _pulledVertexOf(p, d) : d.vertex,
+          pulled: pulledForm,
+        );
         if (shapes == null) continue;
         for (final shape in shapes) {
           // A pass of another attachment count is not one of the draw, since

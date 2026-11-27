@@ -417,14 +417,19 @@ class FrameRunner {
       await p.shaders.loadShaders({
         _pulledCull,
         _pulledCascadeCull,
+        // A draw's pulled programs: its merged form's where it has one.
         for (final r in plan.passes.whereType<RenderPassPlan>())
           if (p.pulls(r.name))
             for (final d in r.allDraws)
-              if (p.shaders.hasShader(d.vertex)) d.vertex,
+              if (_pulledVertexOf(p, d) case final v
+                  when p.shaders.hasShader(v))
+                v,
         for (final r in plan.passes.whereType<RenderPassPlan>())
           if (p.pulls(r.name))
             for (final d in r.allDraws)
-              if (d.pixel case final px? when p.shaders.hasShader(px)) px,
+              if (_pulledPixelOf(p, d) case final px?
+                  when p.shaders.hasShader(px))
+                px,
       });
     }
     final record = Stopwatch()..start();
