@@ -35,6 +35,8 @@ object and instance rows of `prismarine_frame`. Material textures are named by a
 names when the programs name them by their function; a texture's layer slot is its number or its place in the list.
 With `keepOrder` a bucket holds one run of draws with the same key, so the buckets draw in the plan's order, for a game whose opaque draws test depth less-or-equal without a prepass. A draw left to its own record then ends the run before it and is drawn between the buckets made before and after it, and blended draws are pulled too, since their runs keep their place. A file texture that no array of the scene holds (a swapped texture, another scene's) binds as an array of its own, its plain texture viewed as one layer. A layout's `unculled` passes have draws with cameras of their own, such as a shadow atlas with a camera per tile: their buckets draw every cluster instead of culling by one view. The layout also gives the function that makes a view's frustum planes, which must be the builder's.
 
+`Pulled.merged` gives draws' programs a merged form (`MergedForm`, by the draw's pixel program): programs that hold the code of many, so that draws of different materials share a bucket. Such a draw is keyed and drawn with the merged programs; its layer block starts with a header of four words, the surface index and the flag bits the merged code reads, and its layers follow; a material input of the merged program that the draw lacks binds the zero stand-in, unread; the merged program's sampler slots take the samplers of the draw's own slots (`vertexSamplers`, `pixelSamplers`), and the bucket key holds them by the merged slots.
+
 | Variable | Effect |
 |---|---|
 | `PRISMARINE_PULLED_MAIN` | `1` draws the layout's main pass in pulled form too. |

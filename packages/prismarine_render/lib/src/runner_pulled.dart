@@ -204,10 +204,10 @@ extension _RunnerPulled on FrameRunner {
       DrawMeshGeometry()
           when !p.layout.keepOrder && d.state.blends.any((b) => b.enabled) =>
         'blended',
-      DrawMeshGeometry() when !p.shaders.hasShader(d.vertex) =>
+      DrawMeshGeometry() when !p.shaders.hasShader(_pulledVertexOf(p, d)) =>
         'no pulled vertex',
       DrawMeshGeometry()
-          when d.pixel != null && !p.shaders.hasShader(d.pixel!) =>
+          when d.pixel != null && !p.shaders.hasShader(_pulledPixelOf(p, d)!) =>
         'no pulled pixel',
       DrawMeshGeometry()
           when _pulledOnly != null &&
@@ -304,16 +304,29 @@ extension _RunnerPulled on FrameRunner {
     }
     // Every material input that the pulled pixel stage declares needs a
     // cooked array. A swapped texture or the texture of another scene may
-    // have none.
-    final pixel = d.pixel == null ? null : p.shaders.shaderRecord(d.pixel!);
+    // have none. A merged program declares the inputs of all its draws: one
+    // that this draw does not have samples the zero stand-in, unread.
+    final merged = p.merged[d.pixel];
+    final pixelId = _pulledPixelOf(p, d);
+    final pixel = pixelId == null ? null : p.shaders.shaderRecord(pixelId);
     for (final t in pixel?.textures ?? const <TextureSlot>[]) {
       if (layout.isMaterialTexture(t.name) && !arrays.containsKey(t.name)) {
-        return _PulledDraw.refused('texture not cooked');
+        if (merged == null) return _PulledDraw.refused('texture not cooked');
+        arrays[t.name] = _texture(null, 'texture2DArray');
+        arrayKey += '${t.name}=unread;';
       }
     }
-    final layerBytes = Uint8List((layers.length * 4 + 15) & ~15);
+    // A merged draw's header comes first, a uvec4.
+    final head = merged == null ? 0 : 16;
+    final layerBytes = Uint8List((head + layers.length * 4 + 15) & ~15);
+    final lb = layerBytes.buffer.asByteData();
+    if (merged != null) {
+      lb
+        ..setUint32(0, merged.surface, Endian.little)
+        ..setUint32(4, merged.flags, Endian.little);
+    }
     for (var i = 0; i < layers.length; i++) {
-      layerBytes.buffer.asByteData().setUint32(i * 4, layers[i], Endian.little);
+      lb.setUint32(head + i * 4, layers[i], Endian.little);
     }
     // The instance row holds the bytes of the instance block with the
     // texcoord transforms at identity, since the cooked UVs carry them. The
@@ -365,8 +378,8 @@ extension _RunnerPulled on FrameRunner {
       ..setUint32(instanceRow['indexCount'], batch.indexCount, Endian.little)
       ..setUint32(instanceRow['baseVertex'], batch.baseVertex, Endian.little);
     final key = (
-      d.vertex,
-      d.pixel,
+      _pulledVertexOf(p, d),
+      pixelId,
       skin?.$1.buffer,
       scene.dir,
       batch.pool,
@@ -374,12 +387,22 @@ extension _RunnerPulled on FrameRunner {
       _stateKey(d.state),
       d.viewport.join(','),
       arrayKey,
-      // The bucket binds the samplers and frame resources of its first draw.
-      [
-        for (final res in [d.vertexResources, d.pixelResources])
-          for (final MapEntry(:key, :value) in res.samplers.entries)
-            '$key:${_samplerKey(value)}',
-      ].join(';'),
+      // The bucket binds the samplers and frame resources of its first draw;
+      // a merged draw's by the merged program's slots.
+      merged == null
+          ? [
+              for (final res in [d.vertexResources, d.pixelResources])
+                for (final MapEntry(:key, :value) in res.samplers.entries)
+                  '$key:${_samplerKey(value)}',
+            ].join(';')
+          : [
+              for (final (own, slots) in [
+                (d.vertexResources, merged.vertexSamplers),
+                (d.pixelResources, merged.pixelSamplers),
+              ])
+                for (final MapEntry(:key, :value) in slots.entries)
+                  '$key:${_samplerKey(own.samplers[value] ?? defaultSampler)}',
+            ].join(';'),
       _IdentityKey([
         for (final res in [d.vertexResources, d.pixelResources]) ...[
           for (final MapEntry(:key, :value) in res.blocks.entries)
@@ -702,7 +725,7 @@ extension _RunnerPulled on FrameRunner {
     // object from frame to frame.
     final cache = _cacheOf(d);
     if (cache.pulledFixed == null && _Warm.on) {
-      _warm.learn(d.vertex, pulled: true);
+      _warm.learn(_pulledVertexOf(p, d), pulled: true);
     }
     final setup = cache.pulled ??= _pulledSetup(p, d);
     // alloc: the first draw of a bucket
@@ -733,9 +756,10 @@ extension _RunnerPulled on FrameRunner {
       ..[1] = instances
       ..[2] = objects
       ..[3] = materials;
-    _pulledStage(pass, host, b, pool, d, vs, d.vertex, d.vertexResources);
-    if (d.pixel != null) {
-      _pulledStage(pass, host, b, pool, d, fs, d.pixel!, d.pixelResources);
+    final v = _pulledVertexOf(p, d), f = _pulledPixelOf(p, d);
+    _pulledStage(pass, host, b, pool, d, vs, v, d.vertexResources);
+    if (f != null) {
+      _pulledStage(pass, host, b, pool, d, fs, f, d.pixelResources);
     }
     pass.drawIndirect(args);
   }
@@ -743,12 +767,10 @@ extension _RunnerPulled on FrameRunner {
   // alloc-cold: the first draw of a bucket, or a warm-up.
   /// Returns the shaders and pipeline of the draw of a pulled bucket.
   _DrawSetup _pulledSetup(Pulled p, DrawPlan d) {
-    final vs = p.shaders.shader(d.vertex);
-    final fs = d.pixel == null
-        ? assets.shader(_depthOnly(d))
-        : p.shaders.shader(d.pixel!);
-    final pipeline = _pipelines[('pulled', d.vertex, d.pixel)] ??= gpu
-        .gpuContext
+    final v = _pulledVertexOf(p, d), f = _pulledPixelOf(p, d);
+    final vs = p.shaders.shader(v);
+    final fs = f == null ? assets.shader(_depthOnly(d)) : p.shaders.shader(f);
+    final pipeline = _pipelines[('pulled', v, f)] ??= gpu.gpuContext
         .createRenderPipeline(
           vs,
           fs,
@@ -862,15 +884,31 @@ extension _RunnerPulled on FrameRunner {
       );
     }
     final samplers = info.samplers;
+    // A merged program's slots are named by their texture; the draw's own
+    // slot holds its sampler.
+    final merged = p.merged[d.pixel];
+    final own = merged == null
+        ? null
+        : id == merged.pixel
+        ? merged.pixelSamplers
+        : merged.vertexSamplers;
     for (var k = 0; k < samplers.length; k++) {
       final (slot, compare) = samplers[k];
       pass.bindSeparateSampler(
         _samplerSlot(shader, slot),
         _sampler(
-          res.samplers[slot] ??
+          res.samplers[own == null ? slot : own[slot]] ??
               (compare ? defaultCompareSampler : defaultSampler),
         ),
       );
     }
   }
 }
+
+/// The pulled vertex program of [d]: its merged form's when it has one.
+String _pulledVertexOf(Pulled p, DrawPlan d) =>
+    p.merged[d.pixel]?.vertex ?? d.vertex;
+
+/// The pulled pixel program of [d]: its merged form's when it has one.
+String? _pulledPixelOf(Pulled p, DrawPlan d) =>
+    d.pixel == null ? null : p.merged[d.pixel]?.pixel ?? d.pixel;

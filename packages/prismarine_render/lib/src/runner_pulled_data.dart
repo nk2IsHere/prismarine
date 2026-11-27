@@ -6,7 +6,10 @@ part of 'frame_runner.dart';
 /// the programs in `shaders/` and per scene its pools, texture arrays and
 /// `cooked.json`, loaded on first use.
 class Pulled {
-  Pulled(this.root, this.shaders, this.layout);
+  Pulled(this.root, this.shaders, this.layout, {this.merged = const {}});
+
+  /// The merged forms of draws' programs, by the draw's pixel program.
+  final Map<String, MergedForm> merged;
 
   final String root;
 
@@ -410,3 +413,27 @@ class _PoolGpu {
 /// The Vulkan sRGB formats among those of the cooked arrays, R8G8B8A8,
 /// B8G8R8A8, BC1 RGB and RGBA, BC2, BC3 and BC7.
 const _srgbFormats = {43, 50, 132, 134, 136, 138, 146};
+
+/// A draw's programs in merged form: programs that hold the code of many
+/// draws' programs, told apart per draw by the header that its layer block
+/// starts with, a uvec4 of [surface], [flags], 0 and 0.
+class MergedForm {
+  const MergedForm(
+    this.vertex,
+    this.pixel,
+    this.surface,
+    this.flags,
+    this.vertexSamplers,
+    this.pixelSamplers,
+  );
+
+  /// The merged programs' ids.
+  final String vertex, pixel;
+
+  /// The header's words: which of the merged code the draw runs and the
+  /// switches it reads.
+  final int surface, flags;
+
+  /// The draw's own sampler slot by the merged program's, per stage.
+  final Map<int, int> vertexSamplers, pixelSamplers;
+}
