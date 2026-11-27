@@ -29,6 +29,7 @@ part 'runner_present.dart';
 part 'runner_prepare.dart';
 part 'runner_pulled.dart';
 part 'runner_pulled_data.dart';
+part 'runner_pulled_draws.dart';
 part 'runner_pulled_parts.dart';
 part 'runner_record.dart';
 part 'runner_release.dart';
